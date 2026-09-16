@@ -1,0 +1,32 @@
+# WBM custom CRS — migrated to PROJ 9 via the legacy init-file mechanism.
+#
+# PROJ 9 dropped the bundled `epsg` init file, but it STILL honors
+# `+init=epsg:CODE` when an `epsg` init file is present in PROJ_DATA. Placing
+# this file at $PROJ_DATA/epsg restores the exact behavior the stock v2 (PROJ 6)
+# container got from `cat proj.txt >> /usr/share/proj/epsg`.
+#
+# Verified under GDAL 3.10.3 / PROJ 9.x: `+init=epsg:<CODE>` resolves and real
+# gdalwarp reprojection succeeds for all codes below. Full PROJ.4 strings (the
+# form WBM bakes into GDAL_test for 8001) also work natively in PROJ 9 with no
+# init file — this file is only needed for descriptors that reference the codes
+# as `+init=epsg:<CODE>`.
+#
+# NOTE — 7704 was corrected during migration. The original proj.txt defined it as
+#   +proj=stere +lat_0=90 +lat_ts=60 +lon_0=210 +k=90 ...
+# specifying BOTH +lat_ts=60 AND +k=90, which is contradictory (a Polar
+# Stereographic takes either a standard parallel OR a scale factor, and k=90 is
+# not a meaningful scale). PROJ 6 silently tolerated it; PROJ 9 rejects it
+# ("lat_ts != lat_0 and k != 1 not supported for Polar Stereographic"). The NDFD
+# Alaska grid uses the standard parallel at 60N, so +k=90 is dropped below.
+
+<900918> +proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6370997.0 +b=6370997.0 +units=m +no_defs <>
+#Pnet
+<7703> +proj=lcc +lat_1=25 +lat_2=25 +lat_0=0 +lon_0=265 +x_0=0 +y_0=0 +a=6371229 +b=6371229 +units=m +no_defs <>
+#Alaska Polar Stereographic NDFD (corrected: removed contradictory +k=90)
+<7704> +proj=stere +lat_0=90 +lat_ts=60 +lon_0=210 +x_0=0 +y_0=0 +a=6371229 +b=6371229 +units=m +no_defs <>
+#WRFGEO
+<8000> +proj=longlat +ellps=sphere +a=6370000 +b=6370000 +no_defs <>
+#WRFLAM-1SP with offset
+<8001> +proj=lcc +ellps=sphere +a=6370000.0 +b=6370000.0 +lat_1=41 +lat_0=41 +lon_0=-75 +k_0=1 +x_0=891000.92 +y_0=486000.15 +units=m +no_defs <>
+#WRFLAM-2SP with offset
+<8002> +proj=lcc +ellps=sphere +a=6370000.0 +b=6370000.0 +lat_1=41 +lat_2=41 +lat_0=41 +lon_0=-75 +x_0=891000.92 +y_0=486000.15 +units=m +no_defs <>

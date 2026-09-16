@@ -1,0 +1,56 @@
+name: openghm
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: openghm-mongo
+    restart: unless-stopped
+    ports:
+      - "27418:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: openghm
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: openghm-redis
+    restart: unless-stopped
+    ports:
+      - "6479:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: web-gateway/backend/Dockerfile
+    container_name: openghm-backend
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    environment:
+      # Override localhost URLs with Docker service names
+      MONGODB_URL: "mongodb://root:rootpassword@mongodb:27017/openghm?authSource=admin"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      # Mount source for hot reload in dev
+      - ../../web-gateway/backend:/app
+    command: ["bash", "-c", "pip install -r requirements.txt -q && uvicorn main:app --host 0.0.0.0 --port 8100 --reload"]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  mongo_data:
+  redis_data:

@@ -1,0 +1,42 @@
+{
+  "command": "network preclip",
+  "runtime": "singularity",
+  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "dryRun": true,
+  "exec": "singularity exec -c -e -B /snap/net:/data/network -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/networkTools -v /work/preclip.init",
+  "argv": [
+    "singularity",
+    "exec",
+    "-c",
+    "-e",
+    "-B",
+    "/snap/net:/data/network",
+    "-B",
+    "/scratch/work:/work",
+    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/wbm/utilities/networkTools",
+    "-v",
+    "/work/preclip.init"
+  ],
+  "mounts": [
+    {
+      "host": "/snap/net",
+      "container": "/data/network"
+    },
+    {
+      "host": "/scratch/work",
+      "container": "/work"
+    }
+  ],
+  "innerCmd": [
+    "/wbm/utilities/networkTools",
+    "-v",
+    "/work/preclip.init"
+  ],
+  "generatedFiles": [
+    {
+      "hostPath": "/scratch/work/preclip.init",
+      "content": "{\n  Net_file => '/data/network/05min_flwdir.tif',\n  preclip => {\n    output_file => '/work/preclip_test.asc',\n    truncation_check => 1,\n    trim_nodata => 0,\n    rectangle => { lonMin => -110, lonMax => -100, latMin => 40, latMax => 48 }\n  }\n}\n"
+    }
+  ]
+}

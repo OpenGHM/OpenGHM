@@ -1,0 +1,130 @@
+{
+  "$schema": "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
+  "id": "3f9c1a2b5d8e4f7a0c3b6d9e2f5a8c1b4d7e0f9a2c5b8d1e4f7a0c3b6d9e2f5a",
+  "slug": "wbm_storage_v1.0.0_wyoming",
+
+  "about": {
+    "name": "WBM v1.0.0 Wyoming_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Wyoming] [2000-2009]",
+    "description": "A WBM regional simulation over the Wyoming basin for 2022 model documentation paper.",
+    "datePublished": "2026-02-24",
+    "category": "publication",
+    "creator": [
+      { "name": "Danielle Grogan", "email": "danielle.grogan@unh.edu" },
+      { "name": "Shan Zuidema", "email": "shan.zuidema@unh.edu" }
+    ],
+    "license": "GPL-3.0-only",
+    "keywords": ["Water Balance Model", "Wyoming_tracking", "hydrology"],
+    "url": "https://openghm.org/snapshots/3f9c1a2b5d8e4f7a0c3b6d9e2f5a8c1b4d7e0f9a2c5b8d1e4f7a0c3b6d9e2f5a",
+    "relatedLink": [
+      {
+        "relation": "isDescribedBy",
+        "roleName": "Primary Publication",
+        "url": "https://gmd.copernicus.org/articles/15/7287/2022/",
+        "doi": "10.5194/gmd-15-7287-2022",
+        "description": "Primary publication describing the model methodology."
+      }
+    ]
+  },
+
+  "simulation": {
+    "init": "Wyoming_tracking.init",
+    "spatialCoverage": { "west": -123.75, "south": 28.9166, "east": -77.8333, "north": 52.9167, "crs": "EPSG:4326" },
+    "resolution": { "value": 5, "unit": "arc-minute" },
+    "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
+    "forcingData": {
+      "precipitation": "merra2_prectotcorr_d",
+      "airTemperature": "merra2_t2m_d"
+    },
+    "activeProcesses": [
+      "Reservoirs",
+      "Runoff from Glaciated Areas",
+      "Source water tracking by land area",
+      "Irrigated Crops",
+      "Primary water source tracking",
+      "Irrigation water re-use tracking"
+    ],
+    "variables": [
+      { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
+      { "name": "runoff_ps", "fullName": "Snowment Fraction in Runoff (p)", "unit": "fraction" },
+      { "name": "runoff_pu", "fullName": "Unsustainable water Fraction in Runoff (p)", "unit": "fraction" },
+      { "name": "runoff_pr", "fullName": "Rainwater Fraction in Runoff (p)", "unit": "fraction" },
+      { "name": "runoff_pg", "fullName": "Glacial Melt Fraction in Runoff (p)", "unit": "fraction" },
+      { "name": "irrRunoff", "fullName": "Runoff from inefficient irrigation", "unit": "mm/day" },
+      { "name": "glMelt", "fullName": "Glacier melt runoff in m3/sec", "unit": "m3/sec" },
+      { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" },
+      { "name": "discharge_ps", "fullName": "Snowment Fraction in Discharge (p)", "unit": "fraction" },
+      { "name": "discharge_pu", "fullName": "Unsustainable water Fraction in Discharge (p)", "unit": "fraction" },
+      { "name": "discharge_pr", "fullName": "Rainwater Fraction in Discharge (p)", "unit": "fraction" },
+      { "name": "soilMoist", "fullName": "Soil Moisture Water Equivalent", "unit": "mm" },
+      { "name": "soilMoist_ps", "fullName": "Snowment Fraction in soil moisture (p)", "unit": "fraction" },
+      { "name": "soilMoist_pg", "fullName": "Glacial Melt Fraction in soil moisture (p)", "unit": "fraction" },
+      { "name": "soilMoist_pr", "fullName": "Rainwater Fraction in soil moisture (p)", "unit": "fraction" },
+      { "name": "soilMoist_pu", "fullName": "Unsustainable water Fraction in soil moisture (p)", "unit": "fraction" },
+      { "name": "grdWater", "fullName": "Groundwater Storage", "unit": "mm" },
+      { "name": "grndWater_ps", "fullName": "Snowment Fraction in Groundwater (p)", "unit": "fraction" },
+      { "name": "grndWater_pu", "fullName": "Unsustainable water Fraction in Groundwater (p)", "unit": "fraction" },
+      { "name": "grndWater_pr", "fullName": "Rainwater Fraction in Groundwater (p)", "unit": "fraction" },
+      { "name": "grndWater_pg", "fullName": "Glacial Melt Fraction in Groundwater (p)", "unit": "fraction" },
+      { "name": "irrigationGross", "fullName": "Gross Irrigation", "unit": "mm/day" },
+      { "name": "GrossIrr_ps", "fullName": "Snowment Fraction in Gross Irrigation  (p)", "unit": "fraction" },
+      { "name": "GrossIrr_pu", "fullName": "Unsustainable water Fraction in Gross Irrigation  (p)", "unit": "fraction" },
+      { "name": "GrossIrr_pr", "fullName": "Rainwater Fraction in Gross Irrigation  (p)", "unit": "fraction" },
+      { "name": "GrossIrr_pg", "fullName": "Glacial Melt Fraction in Gross Irrigation  (p)", "unit": "fraction" },
+      { "name": "irrigationFlow", "fullName": "Irrigation from Flow", "unit": "mm/day" },
+      { "name": "IrrFlow_mm_ps", "fullName": "Snowment fraction in Irrigation from Flow (p)", "unit": "mm/day" },
+      { "name": "IrrFlow_mm_pg", "fullName": "Glacial Melt fraction in Irrigation from Flow (p)", "unit": "mm/day" },
+      { "name": "IrrFlow_mm_pr", "fullName": "Rainwater fraction in Irrigation from Flow (p)", "unit": "mm/day" },
+      { "name": "IrrFlow_mm_pu", "fullName": "Unsustainable water fraction in Irrigation from Flow (p)", "unit": "mm/day" },
+      { "name": "irrigationGrwt", "fullName": "Irrigation from Ground Water", "unit": "mm/day" },
+      { "name": "IrrGrwt_mm_ps", "fullName": "Snowment fraction in Irrigation from Ground Water (p)", "unit": "mm/day" },
+      { "name": "IrrGrwt_mm_pg", "fullName": "Glacial Melt fraction in Irrigation from Ground Water (p)", "unit": "mm/day" },
+      { "name": "IrrGrwt_mm_pr", "fullName": "Rainwater fraction in Irrigation from Ground Water (p)", "unit": "mm/day" },
+      { "name": "IrrGrwt_mm_pu", "fullName": "Unsustainable water fraction in Irrigation from Ground Water (p)", "unit": "mm/day" },
+      { "name": "irrigationExtra", "fullName": "Irrigation from Unsustainable Water", "unit": "mm/day" },
+      { "name": "etIrrCrops", "fullName": "Evapotranspiration from irrigated Crops", "unit": "mm/day" },
+      { "name": "etIrrCrops_mm_ps", "fullName": "Snowment Fraction in etIrrCrops (p)", "unit": "mm/day" },
+      { "name": "etIrrCrops_mm_pg", "fullName": "Glacier melt fraction in etIrrCrops (p), no glacier meltwater separation", "unit": "mm/day" },
+      { "name": "etIrrCrops_mm_pr", "fullName": "Rainwater fraction in etIrrCrops (p)", "unit": "mm/day" },
+      { "name": "etIrrCrops_mm_pu", "fullName": "Unsustainable water in ET from irr crops, mm", "unit": "mm/day" },
+      { "name": "runoff_pst", "fullName": "Pristine water fraction in runoff", "unit": "fraction" },
+      { "name": "runoff_irr", "fullName": "Irrigation return fraction in runoff", "unit": "fraction" },
+      { "name": "runoff_rlt", "fullName": "Relict water fraction in runoff", "unit": "fraction" },
+      { "name": "discharge_pst", "fullName": "Pristine water fraction in discharge", "unit": "fraction" },
+      { "name": "discharge_irr", "fullName": "Irrigation return fraction in discharge", "unit": "fraction" },
+      { "name": "discharge_rlt", "fullName": "Relict water fraction in discharge", "unit": "fraction" },
+      { "name": "grndWater_pst", "fullName": "Pristine water fraction in grd water", "unit": "fraction" },
+      { "name": "grndWater_irr", "fullName": "Irrigation return fraction in grd water", "unit": "fraction" },
+      { "name": "grndWater_rlt", "fullName": "Relict water fraction in grd water", "unit": "fraction" },
+      { "name": "dischMsk", "fullName": "Water from _NAME_ (ID= _ID_) in discharge", "unit": "fraction" },
+      { "name": "runoffMsk", "fullName": "Water from _NAME_ (ID= _ID_) in runoff", "unit": "fraction" },
+      { "name": "grndWtMsk", "fullName": "Water from _NAME_ (ID= _ID_) in shallow groundwater", "unit": "fraction" }
+    ],
+    "recommendedCompute": { "cores": 64, "walltime": "4:30:00" }
+  },
+
+  "uses": {
+    "container": {
+      "image": "wbm_opensource",
+      "version": "1.0.0",
+      "digest": "sha256:9f2c1e4a7b3d5e8f1a6c2b9d4e7f0a3c5b8d1e4f7a0c3b6d9e2f5a8c1b4d7e0f",
+      "oras": "oras://registry.openghm.org/openghm/wbm_opensource@sha256:9f2c1e4a7b3d5e8f1a6c2b9d4e7f0a3c5b8d1e4f7a0c3b6d9e2f5a8c1b4d7e0f",
+      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm_opensource/1.0.0/wbm_opensource-1.0.0.sif"
+    },
+    "modelInput": {
+      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d",
+      "mountAs": "Wyoming_tracking"
+    }
+  },
+
+  "runtime": {
+    "generatedAt": "2026-02-24T16:45:00Z",
+    "execution": {
+      "cluster": "anvil",
+      "cores": 64,
+      "elapsedWalltime": "3:52:14",
+      "startedAt": "2026-05-01T10:00:00Z",
+      "finishedAt": "2026-05-01T13:52:14Z",
+      "slurmJobId": "12345678"
+    }
+  }
+}

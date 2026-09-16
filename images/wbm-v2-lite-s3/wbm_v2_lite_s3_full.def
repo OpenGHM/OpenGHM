@@ -1,0 +1,104 @@
+# =============================================================================
+# WBM v2-lite-s3 — FULL variant (wbm_v2_lite_s3_full)
+#
+# Heavier alternative to wbm_v2_lite_s3.def: installs the full conda-forge `gdal`
+# (with Python bindings + NumPy/BLAS), so the SIF is ~489 MB vs the slim ~376 MB.
+# Identical WBM behavior — prefer the slim build unless you specifically need the
+# bundled GDAL Python bindings inside the container. Kept for reference.
+#
+# Goal: let WBM read its NetCDF input directly from S3-compatible object storage
+# (Anvil's Ceph RGW, https://s3.anvil.rcac.purdue.edu) via GDAL /vsicurl, with
+# true lazy HTTP range reads and FULL CF georeferencing — NO local pre-staging
+# of the input snapshot, NO per-file download shim.
+#
+# WHY a new GDAL: the stock v2 container ships Ubuntu-20.04 apt GDAL 3.0.4, whose
+# netCDF driver CANNOT open /vsicurl (it requires a local POSIX file); the HDF5
+# driver can stream /vsicurl but drops the geotransform. GDAL >= 3.x with the
+# conda-forge libgdal-netcdf plugin reads `NETCDF:"/vsicurl/<url>":<var>` with
+# the correct geotransform AND issues byte-range GETs (verified: a 864 KB daily
+# MERRA2 file is read with 3 range requests, not a full download).
+#
+# DESIGN — upgrade ONLY the GDAL/PROJ/netCDF C stack; keep everything else frozen
+# ------------------------------------------------------------------------------
+# The base is the EXISTING wbm_v2_lite.sif (Ubuntu 20.04 / perl 5.30 / PDL 2.063 /
+# FFI::Platypus 2.01 / Geo::GDAL::FFI 0.09+patch / FlexRaw patch / WBMQuiet). That
+# stack is pinned for a reason — the snapshot's prebuilt Inline cache (_Inline,
+# perl-5.30 .so) loads read-only only on perl 5.30, and PDL NiceSlice desyncs on
+# 2.08x. We do NOT touch it. We bolt a self-contained conda-forge GDAL 3.10 into
+# /opt/gdal and re-point the FFI shim + CLI + data dirs at it. Geo::GDAL::FFI 0.09
+# binds the libgdal C API (ABI-stable across GDAL 3.x), so it drives 3.10 fine
+# (verified: GDAL API version reported 3.10.3, GDAL_test reads pass).
+#
+# BUILD (rootless, on Anvil — no subuid needed, apptainer 1.4 uses a root-mapped
+# namespace + fakeroot for %post):
+#     apptainer build --fakeroot wbm_v2_lite_s3_full.sif wbm_v2_lite_s3_full.def
+#
+# The %post installs GDAL via micromamba (build host needs outbound HTTPS). The
+# in-session validated SIF was built by copying a pre-made `conda create -p
+# gdal-env -c conda-forge 'gdal>=3.9,<3.11' libgdal-netcdf libgdal-hdf5` into
+# /opt/gdal; the micromamba %post below produces an equivalent environment.
+# =============================================================================
+
+Bootstrap: localimage
+From: /home/x-openghm/apps/wbm/v2-lite/wbm_v2_lite.sif
+
+%post
+    set -e
+
+    # --- GDAL 3.10 stack (libgdal C lib + CLI + netCDF/HDF5 driver plugins + PROJ 9)
+    export MAMBA_ROOT_PREFIX=/opt/mamba
+    cd /tmp
+    wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj bin/micromamba
+    ./bin/micromamba create -y -p /opt/gdal -c conda-forge \
+        'gdal>=3.9,<3.11' libgdal-netcdf libgdal-hdf5 proj
+    rm -rf /opt/mamba /tmp/bin
+
+    # --- Point Geo::GDAL::FFI's Alien::gdal shim at the bundled GDAL 3.10
+    cat > /wbm/perllib/Alien/gdal.pm <<'STUB'
+package Alien::gdal;
+use strict; use warnings;
+our $VERSION = '1.44';
+sub _find_lib {
+    for my $pat ('/opt/gdal/lib/libgdal.so', '/opt/gdal/lib/libgdal.so.*') {
+        for my $p (glob $pat) { return $p if -e $p; }
+    }
+    return '/opt/gdal/lib/libgdal.so';
+}
+sub dynamic_libs { return (_find_lib()); }
+sub version { my $v = `/opt/gdal/bin/gdalinfo --version 2>/dev/null`; return $1 if defined $v && $v =~ /GDAL\s+([\d.]+)/; return "3.10.3"; }
+sub data_dir { "/opt/gdal/share/gdal" }
+sub dist_dir { "/opt/gdal" }
+sub cflags { "" } sub libs { "-lgdal" } sub install_type { "system" }
+1;
+STUB
+
+    # --- Make the bundled GDAL 3.10 THE system gdal. WBM's RIMS.conf hardcodes
+    #     $GDAL_path = '/usr/local/bin'; symlink the 3.10 tools over both
+    #     /usr/local/bin and /usr/bin so WBM (and anything else) uses one GDAL.
+    for t in /opt/gdal/bin/gdal* /opt/gdal/bin/ogr* /opt/gdal/bin/nearblack /opt/gdal/bin/gdaladdo; do
+        [ -e "$t" ] || continue
+        b=$(basename "$t")
+        ln -sf "$t" /usr/local/bin/"$b"
+        ln -sf "$t" /usr/bin/"$b"
+    done
+
+    # --- sanity
+    /usr/local/bin/gdalwarp --version
+    ls /opt/gdal/lib/gdalplugins/gdal_netCDF.so /opt/gdal/lib/gdalplugins/gdal_HDF5.so
+
+%environment
+    export PATH=/opt/gdal/bin:/wbm/model:/wbm/utilities:${PATH}
+    export LD_LIBRARY_PATH=/opt/gdal/lib:${LD_LIBRARY_PATH}
+    export GDAL_DATA=/opt/gdal/share/gdal
+    export PROJ_DATA=/opt/gdal/share/proj
+    export PROJ_LIB=/opt/gdal/share/proj
+    export GDAL_DRIVER_PATH=/opt/gdal/lib/gdalplugins
+    export GDAL_NETCDF_IGNORE_XY_AXIS_NAME_CHECKS=YES
+    # libcurl (conda) has no system CA bundle under `apptainer -c` (contain) —
+    # point it at conda's bundle, else HTTPS /vsicurl fails with "HTTP code 0".
+    export SSL_CERT_FILE=/opt/gdal/ssl/cacert.pem
+    export CURL_CA_BUNDLE=/opt/gdal/ssl/cacert.pem
+
+%labels
+    wbm_version 2.0.0-lite-s3-full
+    description "WBM v2-lite-s3 (full): GDAL 3.10 full conda-forge gdal (incl. python bindings) for direct /vsicurl S3 reads; perl5.30/PDL2.063/Geo::GDAL::FFI0.09 from wbm_v2_lite base"

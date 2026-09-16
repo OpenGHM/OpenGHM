@@ -1,0 +1,28 @@
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# MongoDB (async)
+motor==3.6.0
+pymongo>=4.9,<4.10
+
+# Auth / JWT
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1
+
+# Config management
+pydantic-settings==2.6.1
+pydantic[email]==2.9.2
+
+# HTTP client
+httpx==0.27.2
+
+# Transactional email (password reset, email verification)
+# [async] extra pulls in httpx>=0.24.0, satisfied by the httpx pin above
+resend[async]==2.35.0
+
+# HPC / Slurm — install from GitHub (local dev version, not published to PyPI)
+git+https://github.com/yirugi/slurmly.git@6c80af1125efc14c9eb5aec021edce0b69418b28
+
+# Dev utilities
+python-dotenv==1.0.1

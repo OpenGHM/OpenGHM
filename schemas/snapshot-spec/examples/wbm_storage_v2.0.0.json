@@ -1,0 +1,75 @@
+{
+  "$schema": "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
+  "id": "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89",
+  "slug": "wbm_storage_v2.0.0",
+
+  "about": {
+    "name": "WBM v2.0.0 simulation as tutorial: [Global] [2001]",
+    "description": "A simple WBM simulation that was used in 2023 user community WBM workshop",
+    "datePublished": "2026-02-24",
+    "category": "tutorial",
+    "creator": [
+      { "name": "Danielle Grogan", "email": "danielle.grogan@unh.edu" },
+      { "name": "Shan Zuidema", "email": "shan.zuidema@unh.edu" },
+      { "name": "Alex Prusevich", "email": "alex.proussevitch@unh.edu" }
+    ],
+    "license": "GPL-3.0-only",
+    "keywords": ["Water Balance Model", "WBM tutorial", "hydrology"],
+    "url": "https://openghm.org/snapshots/fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89",
+    "relatedLink": [
+      {
+        "relation": "isDescribedBy",
+        "roleName": "Primary Publication",
+        "url": "https://gmd.copernicus.org/articles/15/7287/2022/",
+        "doi": "10.5194/gmd-15-7287-2022",
+        "description": "Primary publication describing the model methodology."
+      }
+    ]
+  },
+
+  "simulation": {
+    "init": "wbm_test.init",
+    "spatialCoverage": { "west": -127.8334, "south": 21.75, "east": -60.5834, "north": 57.1667, "crs": "EPSG:4326" },
+    "resolution": { "value": 5, "unit": "arc-minute" },
+    "temporalCoverage": { "start": "2001-01-01", "end": "2001-12-31" },
+    "forcingData": {
+      "precipitation": "merra2_prectotcorr_d",
+      "airTemperature": "merra2_t2m_d"
+    },
+    "activeProcesses": [
+      "Evaporation from Open Water"
+    ],
+    "variables": [
+      { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
+      { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" },
+      { "name": "streamAge", "fullName": "Stream Age (water residence time)", "unit": "days" }
+    ],
+    "recommendedCompute": { "cores": 16, "walltime": "15:00" }
+  },
+
+  "uses": {
+    "container": {
+      "image": "wbm_opensource",
+      "version": "2.0.0",
+      "digest": "sha256:164e468a2ef8067aa981b4911eebdc884398437463569a83c0f37aa8a800d36c",
+      "oras": "oras://registry.openghm.org/openghm/wbm_opensource@sha256:164e468a2ef8067aa981b4911eebdc884398437463569a83c0f37aa8a800d36c",
+      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm_opensource/2.0.0/wbm_opensource-2.0.0.sif"
+    },
+    "modelInput": {
+      "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
+      "mountAs": "wbm_ancillary_data_v2.0.0"
+    }
+  },
+
+  "runtime": {
+    "generatedAt": "2026-02-24T16:45:00Z",
+    "execution": {
+      "cluster": "anvil",
+      "cores": 16,
+      "elapsedWalltime": "12:47",
+      "startedAt": "2026-05-01T10:00:00Z",
+      "finishedAt": "2026-05-01T10:12:47Z",
+      "slurmJobId": "12345680"
+    }
+  }
+}

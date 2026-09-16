@@ -1,0 +1,48 @@
+{
+  "command": "network subset",
+  "runtime": "singularity",
+  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "dryRun": true,
+  "exec": "singularity exec -c -e -B /snap/net:/data/network -B /snap/shp:/data/shp -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/networkTools -v /work/subset.init",
+  "argv": [
+    "singularity",
+    "exec",
+    "-c",
+    "-e",
+    "-B",
+    "/snap/net:/data/network",
+    "-B",
+    "/snap/shp:/data/shp",
+    "-B",
+    "/scratch/work:/work",
+    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/wbm/utilities/networkTools",
+    "-v",
+    "/work/subset.init"
+  ],
+  "mounts": [
+    {
+      "host": "/snap/net",
+      "container": "/data/network"
+    },
+    {
+      "host": "/snap/shp",
+      "container": "/data/shp"
+    },
+    {
+      "host": "/scratch/work",
+      "container": "/work"
+    }
+  ],
+  "innerCmd": [
+    "/wbm/utilities/networkTools",
+    "-v",
+    "/work/subset.init"
+  ],
+  "generatedFiles": [
+    {
+      "hostPath": "/scratch/work/subset.init",
+      "content": "{\n  Net_file => '/data/network/05min_flwdir.tif',\n  subset => {\n    output_file => '/work/subset_shp.asc',\n    trim_nodata => 0,\n    polygon => { file => '/data/shp/basins.shp', shp_var => 'BASIN_ID', polIDs => [1, 2, 3], proj => 'epsg:4326', inscribe => 1 }\n  }\n}\n"
+    }
+  ]
+}

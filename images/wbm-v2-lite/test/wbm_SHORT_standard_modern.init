@@ -1,0 +1,54 @@
+{
+ID	=> 'wbm_SHORT_standard',
+Comment	=> 'WBM standard run, short simulation (2 years, small network) - spinup block modernized for WBM 23.x',
+Project	=> 'WBM Installation',
+MT_Code_Name	=>  {
+          MT_ID      => 'wbm_short_standard_runoff',
+          Output_dir => '/wbm/wbm_output/wbm_short_standard/',
+          Run_Start  => '2000-01-01',
+          Run_End    => '2001-12-31'
+          },
+Spinup => {
+          State_ID => '',
+          Loops    => 1,
+          Start    => '2000-01-01',
+          End      => '2000-12-31',
+          },
+Output_vars	    =>  'runoff
+			 discharge
+                    	 snowPack
+		    	 evapotrans
+		    	 soilMoist
+		    	 grdWater',
+MT_Precip	    => { Primary => '/wbm/data/climate/precip/merra2_prectotcorr_d.init'},
+precipFraction	    => '',
+MT_airT	            => { Primary => '/wbm/data/climate/airTemp/merra2_t2m_d.init'},
+Network	            => '/wbm/data/network/Merrimack_stn210_Subset.asc',
+Projection	    => 'epsg:4326',
+Routing	            => 'LRR',
+wbmParam	    => {scrPrintScale => 1},
+ConnectivityNetwork => '',
+Reservoirs	    => '',
+soilAWCapacity	    => '/wbm/data/soil/SSURGO_AWC_1km.init',
+FieldCap	    => '',
+WiltingPoint	    => '',
+rootingDepth        => '/wbm/data/soil/root_depth.init',
+openWaterEvap	    => '/wbm/data/evap/freeWaterEvap/merra_evwater_d.init',
+snowBands	    => 0,
+lapseDownscale	    => '',
+Impervious	=> '',
+openWater	=> '',
+MT_LAI	        => '',
+WaterDemand	=> '',
+landCollapse	=> '',
+LandCover	=> '',
+Irrigation	=> '',
+PostProcessing	=>  {
+          Forks 		=> 8,
+          Polygon_Aggregation 	=> '',
+          Run 			=> 1,
+          TA_multi_year_start   => '',
+          TA_multi_year_timestep=> '',
+          Temporal_Aggregation  => 1
+        }
+}

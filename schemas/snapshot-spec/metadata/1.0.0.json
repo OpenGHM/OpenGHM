@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
+  "title": "OpenGHM snapshot metadata",
+  "description": "metadata.json for one WBM snapshot. Fields are grouped by where their contents come from: about (a person, at publish), simulation (derived from the selected .init), uses (the publisher, at publish), runtime (the system). See devdocs/reference/metadata-format.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "slug", "about", "simulation", "uses", "runtime"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "This document's own schema version URL, e.g. https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Minted at publish, 256 random bits as lowercase hex. Not derived from the snapshot's content (ADR 0014). The S3 key under snapshots/."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "description": "The human name at publish time. Not part of the S3 key; the catalog maps slug to id for browsing, and may remap it later without touching this file."
+    },
+    "about": { "$ref": "#/$defs/about" },
+    "simulation": { "$ref": "#/$defs/simulation" },
+    "uses": { "$ref": "#/$defs/uses" },
+    "runtime": { "$ref": "#/$defs/runtime" }
+  },
+  "$defs": {
+    "about": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "datePublished", "category", "creator", "license", "keywords", "url"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "datePublished": { "type": "string", "format": "date" },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Open vocabulary, not an enum. Observed values: publication, tutorial. A new value never needs a spec bump — see metadata-format.md#aboutcategory."
+        },
+        "creator": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "email": { "type": "string", "format": "email" },
+              "orcid": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$" }
+            }
+          }
+        },
+        "license": {
+          "type": "string",
+          "description": "A bare SPDX identifier, e.g. GPL-3.0-only. Not a URL."
+        },
+        "keywords": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The canonical gateway URL, built from id — never from slug, which can be renamed later (see metadata-format.md)."
+        },
+        "relatedLink": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["relation", "url"],
+            "properties": {
+              "relation": { "type": "string", "minLength": 1 },
+              "roleName": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "doi": { "type": ["string", "null"], "pattern": "^10\\.\\d{4,9}/\\S+$" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["init", "spatialCoverage", "resolution", "temporalCoverage", "forcingData", "activeProcesses", "variables", "recommendedCompute"],
+      "properties": {
+        "init": {
+          "type": "string",
+          "pattern": "^[^/].*\\.init$",
+          "description": "Path relative to wbm_init/, not a bare filename assumption — a snapshot can hold several .init files. Resolves to <snapshot>/wbm_init/<init>."
+        },
+        "spatialCoverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["west", "south", "east", "north", "crs"],
+          "properties": {
+            "west": { "type": "number", "minimum": -180, "maximum": 180 },
+            "south": { "type": "number", "minimum": -90, "maximum": 90 },
+            "east": { "type": "number", "minimum": -180, "maximum": 180 },
+            "north": { "type": "number", "minimum": -90, "maximum": 90 },
+            "crs": { "type": "string", "pattern": "^EPSG:[0-9]+$" }
+          }
+        },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit"],
+          "properties": {
+            "value": { "type": "number", "exclusiveMinimum": 0 },
+            "unit": { "type": "string", "enum": ["arc-minute", "arc-second", "degree"] }
+          }
+        },
+        "temporalCoverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string", "format": "date" },
+            "end": { "type": "string", "format": "date" }
+          }
+        },
+        "forcingData": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Open map, one entry per forcing time series the .init actually names — see metadata-format.md#forcing-roles. Not a fixed pair.",
+          "properties": {
+            "precipitation": { "type": "string" },
+            "precipitationFraction": { "type": "string" },
+            "airTemperature": { "type": "string" },
+            "windU": { "type": "string" },
+            "windV": { "type": "string" },
+            "cloudFraction": { "type": "string" },
+            "humidity": { "type": "string" },
+            "albedo": { "type": "string" },
+            "leafAreaIndex": { "type": "string" }
+          }
+        },
+        "activeProcesses": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "variables": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "fullName", "unit"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "fullName": { "type": "string", "minLength": 1 },
+              "unit": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "recommendedCompute": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cores", "walltime"],
+          "properties": {
+            "cores": { "type": "integer", "minimum": 1 },
+            "walltime": { "$ref": "#/$defs/slurmTime" }
+          }
+        }
+      }
+    },
+    "uses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container", "modelInput"],
+      "properties": {
+        "container": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "version", "digest", "oras", "https"],
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+            "oras": { "type": "string", "pattern": "^oras://" },
+            "https": { "type": "string", "format": "uri" }
+          }
+        },
+        "modelInput": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "mountAs"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Minted at publish, same rule as the snapshot id (ADR 0014). Two snapshots built from the same input data share this value."
+            },
+            "mountAs": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Selector, not a path: the data/ child this model input is materialised as. Resolves to <snapshot>/data/<mountAs>, mounted at /wbm/data."
+            }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generatedAt", "execution"],
+      "properties": {
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cluster", "cores", "elapsedWalltime", "startedAt", "finishedAt", "slurmJobId"],
+          "properties": {
+            "cluster": {
+              "type": "string",
+              "enum": ["anvil"],
+              "description": "Every compute-node fact in this project assumes one cluster today. A second cluster is an additive MINOR bump."
+            },
+            "cores": { "type": "integer", "minimum": 1 },
+            "elapsedWalltime": { "$ref": "#/$defs/slurmTime" },
+            "startedAt": { "type": "string", "format": "date-time" },
+            "finishedAt": { "type": "string", "format": "date-time" },
+            "slurmJobId": { "type": "string", "pattern": "^[0-9]+$" }
+          }
+        }
+      }
+    },
+    "slurmTime": {
+      "type": "string",
+      "pattern": "^([0-9]+-)?[0-9]{1,3}(:[0-9]{2}){0,2}$",
+      "description": "SLURM --time syntax, not an ISO 8601 duration: minutes, minutes:seconds, hours:minutes:seconds, days-hours[:minutes[:seconds]]. Hours are not capped at 24 (observed: 111:30:00)."
+    }
+  }
+}

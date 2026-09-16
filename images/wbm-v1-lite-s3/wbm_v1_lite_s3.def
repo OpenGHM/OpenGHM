@@ -1,0 +1,103 @@
+# =============================================================================
+# WBM v1-lite-s3 — ENVIRONMENT container for direct S3 reads  (wbm_v1_lite_s3)
+#
+# Purpose: let WBM v1 read its NetCDF forcing DIRECTLY from S3-compatible object
+# storage (Anvil's Ceph RGW, https://s3.anvil.rcac.purdue.edu) over GDAL
+# /vsicurl — lazy HTTP range reads, full CF georeferencing, no local staging.
+# The model-code patches the redirect needs are in patches/wbm_s3_direct_v1.md
+# (applied to the BOUND snapshot code, not here).
+#
+# WHY THIS DIFFERS FROM v2-lite-s3 — the SWIG problem
+# ------------------------------------------------------------------------------
+# v2 uses Geo::GDAL::FFI, which binds the libgdal *C API* (ABI-stable across GDAL
+# 3.x) — so v2 just re-points the FFI shim at a bundled GDAL 3.10 and everything
+# (in-process + CLI) runs on 3.10.
+#
+# v1 uses the SWIG `Geo::GDAL` Perl binding (apt libgdal-perl), a compiled XS
+# module ABI-LOCKED to the exact libgdal it was built against (3.0.4 here). You
+# cannot swap libgdal underneath it, and GDAL removed the SWIG Perl bindings
+# entirely after 3.4 — so a "Geo::GDAL for 3.10" does not exist. The v2 approach
+# is therefore impossible for v1.
+#
+# DESIGN — keep two GDALs side by side:
+#   * SYSTEM libgdal 3.0.4 + /usr/share/{gdal,proj} (PROJ 6) — untouched, so the
+#     SWIG Geo::GDAL perl module keeps working for WBM's in-process calls (these
+#     only ever touch LOCAL files: the network grid that defines the extent, and
+#     the local warped tmp tiffs).
+#   * BUNDLED GDAL 3.10 at /opt/gdal (libgdal-core + netCDF/HDF5 plugins + PROJ 9)
+#     — drives the read_GDAL `gdal_translate`/`gdalwarp` CLI shellouts that read
+#     the remote /vsicurl forcing into a local tmp tiff.
+#
+# Two rules make the coexistence safe (verified):
+#   1. Do NOT put /opt/gdal/lib on LD_LIBRARY_PATH — it would shadow the system
+#      libgdal 3.0.4 and break the ABI-locked SWIG module. The 3.10 CLI finds its
+#      libs via RPATH, so it needs no LD_LIBRARY_PATH.
+#   2. Route the CLI through a wrapper (extras/gdalcli) that sets PROJ 9 / GDAL
+#      3.10 data dirs PER-INVOCATION. The 3.10 CLI must NOT inherit the system
+#      PROJ 6 db (it errors: "proj.db ... from another PROJ installation"), and
+#      the SWIG path must NOT see PROJ 9. The wrapper keeps them apart.
+# RIMS.conf hardcodes GDAL_path=/usr/bin, so the wrapper symlinks land there.
+#
+# VALIDATED (Anvil): a Merrimack/Wyoming v1 run reading MERRA2 climate from S3 is
+# bit-for-bit identical (runoff, discharge checksums) to the same run reading the
+# climate locally.
+#
+# BUILD (rootless on Anvil; build host needs outbound HTTPS for micromamba):
+#   cd ../wbm-v1-lite && ./deploy_to_anvil.sh           # stage 1: build the v1-lite base
+#   apptainer build --fakeroot wbm_v1_lite_s3.sif wbm_v1_lite_s3.def
+# =============================================================================
+
+Bootstrap: localimage
+From: /home/x-openghm/apps/wbm/v1-lite/wbm_v1_lite.sif
+
+%files
+    extras/gdalcli          /opt/gdal/bin-wrap/gdalcli
+    extras/proj_epsg_custom /opt/gdal-epsg-custom
+
+%post
+    set -e
+
+    # --- bundled slim GDAL 3.10.3 (core + netCDF/HDF5 plugins + PROJ 9), NO python
+    export MAMBA_ROOT_PREFIX=/opt/mamba
+    cd /tmp
+    wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj bin/micromamba
+    ./bin/micromamba create -y -p /opt/gdal -c conda-forge \
+        'libgdal-core=3.10.3' 'libgdal-netcdf=3.10.3' 'libgdal-hdf5=3.10.3' proj ca-certificates
+    rm -rf /opt/mamba /tmp/bin
+
+    # --- strip build cruft (headers, static libs, cmake, sysroot, man/doc/locale, krb5 daemons)
+    cd /opt/gdal
+    rm -rf include x86_64-conda-linux-gnu cmake lib/cmake lib/pkgconfig \
+           share/man share/doc share/info man sbin libexec conda-meta \
+           share/locale share/terminfo share/icu etc/conda
+    find . -name '*.a' -delete; rm -f bin/*.py
+    find lib -name '*.so*' -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find bin -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find . -xtype l -delete
+
+    # --- custom-CRS migration: PROJ 9 legacy epsg init file (+init=epsg:<CODE>)
+    chmod +x /opt/gdal/bin-wrap/gdalcli
+    mv /opt/gdal-epsg-custom /opt/gdal/share/proj/epsg
+
+    # --- route ONLY the CLI (RIMS.conf GDAL_path=/usr/bin) to GDAL 3.10 via the
+    #     env-isolating wrapper. System libgdal 3.0.4 stays for the SWIG perl module.
+    for b in gdalwarp gdal_translate gdalinfo gdal_rasterize gdalbuildvrt gdaladdo \
+             gdalsrsinfo nearblack ogr2ogr ogrinfo ogrtindex; do
+        ln -sf /opt/gdal/bin-wrap/gdalcli /usr/bin/"$b"
+    done
+
+    # --- sanity: CLI is 3.10, SWIG perl still bound to 3.0.4
+    /usr/bin/gdalwarp --version
+    perl -MGeo::GDAL -e 'print "SWIG ", Geo::GDAL::VersionInfo("RELEASE_NAME"), "\n"'
+    ls /opt/gdal/lib/gdalplugins/gdal_netCDF.so /opt/gdal/share/proj/epsg
+
+%environment
+    # IMPORTANT: do NOT add /opt/gdal/lib to LD_LIBRARY_PATH — the SWIG Geo::GDAL
+    # perl module is ABI-bound to the system libgdal 3.0.4 and must keep finding
+    # it. The 3.10 CLI is self-contained via RPATH + the gdalcli wrapper, which
+    # sets its own GDAL_DATA/PROJ_DATA (PROJ 9) per invocation.
+    export PATH=/wbm/model:/wbm/utilities:${PATH}
+
+%labels
+    wbm_version 1.0.0-lite-s3
+    description "WBM v1-lite-s3: SWIG Geo::GDAL 3.0.4 kept for in-proc calls; GDAL 3.10.3 CLI (libgdal-core, PROJ9) wrapped onto /usr/bin for read_GDAL /vsicurl S3 reads; custom CRS via PROJ9 epsg init"

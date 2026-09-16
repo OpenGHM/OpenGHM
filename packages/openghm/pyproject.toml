@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openghm"
+version = "0.2.0"
+description = "WBM toolkit for Anvil HPC — a library + CLI wrapping the WBM tools-lite Singularity container"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "openghm" }]
+keywords = ["wbm", "hydrology", "hpc", "anvil", "singularity"]
+
+# All dependencies are pure-Python (no native extensions), so `pip install`
+# works cleanly on Anvil's `module load python/3.9.5` toolchain.
+dependencies = [
+  "click>=8.1",
+  "rich>=13",
+  "questionary>=2",
+  "tomli>=2 ; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+openghm = "openghm.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openghm"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

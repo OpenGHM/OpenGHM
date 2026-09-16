@@ -1,0 +1,12 @@
+#!/bin/sh
+# 3.10 CLI wrapper for the v1-lite-s3 container: isolates GDAL 3.10 + PROJ 9 data
+# from the system SWIG GDAL 3.0.4 / PROJ 6 (which keeps using /usr/share/{gdal,proj}).
+export GDAL_DATA=/opt/gdal/share/gdal
+export PROJ_DATA=/opt/gdal/share/proj
+export PROJ_LIB=/opt/gdal/share/proj
+export GDAL_DRIVER_PATH=/opt/gdal/lib/gdalplugins
+export GDAL_NETCDF_IGNORE_XY_AXIS_NAME_CHECKS=YES
+export SSL_CERT_FILE=/opt/gdal/ssl/cacert.pem
+export CURL_CA_BUNDLE=/opt/gdal/ssl/cacert.pem
+unset LD_LIBRARY_PATH
+exec /opt/gdal/bin/"$(basename "$0")" "$@"

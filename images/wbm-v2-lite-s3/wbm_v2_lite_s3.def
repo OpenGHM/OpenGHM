@@ -1,0 +1,100 @@
+# =============================================================================
+# WBM v2-lite-s3 — ENVIRONMENT container for direct S3 reads  (wbm_v2_lite_s3)
+#
+# Purpose: let WBM read its NetCDF input DIRECTLY from S3-compatible object
+# storage (Anvil's Ceph RGW, https://s3.anvil.rcac.purdue.edu) over GDAL
+# /vsicurl — lazy HTTP range reads, full CF georeferencing, no local staging.
+# This is the recommended (slim) build. A heavier full-conda-gdal variant is in
+# wbm_v2_lite_s3_full.def. The model-code patches that the S3 redirect needs are
+# in patches/wbm_s3_direct.md (applied to the BOUND snapshot code, not here).
+#
+# Built on `libgdal-core` instead of the full `gdal` package. This drops the
+# Python 3
+# bindings, NumPy and the OpenBLAS/LAPACK stack that `gdal` pulls in, plus all
+# build-time cruft (headers, static libs, cmake, the compiler sysroot, man/doc,
+# locales). It also bakes the custom-CRS migration (see extras/proj_epsg_custom).
+#
+# SIZE: /opt/gdal shrinks ~1.3 GB -> ~240 MB; the SIF goes 489 MB -> 376 MB.
+# (The floor is the frozen ~320 MB wbm_v2_lite base: Ubuntu 20.04 / perl 5.30 /
+# PDL 2.063 / FFI stack. The GDAL layer itself drops from ~170 MB to ~56 MB.)
+#
+# VALIDATED (Anvil, GDAL 3.10.3): identical WBM output to the stock 1.9 GB
+# wbm_opensource_v2.0.0 container — runoff/discharge/streamAge band checksums
+# match bit-for-bit; the only file difference is the GDAL/netCDF version strings
+# stamped into NC_GLOBAL metadata.
+#
+# BASE: this bootstraps wbm_v2_lite.sif (the frozen WBM v2 env: Ubuntu 20.04 /
+# perl 5.30 / PDL 2.063 / FFI::Platypus 2.01 / Geo::GDAL::FFI 0.09+patch). That
+# base is NOT in this dir — its recipe is ../wbm-v2-lite/Dockerfile + ../wbm-v2-lite/deploy_to_anvil.sh
+# (docker -> SIF at /home/x-openghm/apps/wbm/v2-lite/). Build the base first.
+#
+# BUILD (rootless on Anvil; build host needs outbound HTTPS for micromamba):
+#     cd ../wbm-v2-lite && ./deploy_to_anvil.sh            # stage 1: build the lite base
+#     apptainer build --fakeroot wbm_v2_lite_s3.sif wbm_v2_lite_s3.def
+#
+# Place extras/Alien_gdal_stub.pm and extras/proj_epsg_custom next to this .def
+# (the %files section copies them in).
+# =============================================================================
+
+Bootstrap: localimage
+From: /home/x-openghm/apps/wbm/v2-lite/wbm_v2_lite.sif
+
+%files
+    extras/Alien_gdal_stub.pm /wbm/perllib/Alien/gdal.pm
+    extras/proj_epsg_custom   /opt/gdal-epsg-custom
+
+%post
+    set -e
+
+    # --- slim GDAL 3.10.3 stack: core lib + CLI + netCDF/HDF5 driver plugins + PROJ 9
+    #     (NO `gdal` python package -> no python/numpy/openblas/lapack)
+    export MAMBA_ROOT_PREFIX=/opt/mamba
+    cd /tmp
+    wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj bin/micromamba
+    ./bin/micromamba create -y -p /opt/gdal -c conda-forge \
+        'libgdal-core=3.10.3' 'libgdal-netcdf=3.10.3' 'libgdal-hdf5=3.10.3' proj ca-certificates
+    rm -rf /opt/mamba /tmp/bin
+
+    # --- strip runtime-irrelevant bulk (headers, static libs, cmake, sysroot,
+    #     man/doc/locale/terminfo, krb5 daemons, debug symbols, python scripts)
+    cd /opt/gdal
+    rm -rf include x86_64-conda-linux-gnu cmake lib/cmake lib/pkgconfig \
+           share/man share/doc share/info man sbin libexec conda-meta \
+           share/locale share/terminfo share/icu etc/conda
+    find . -name '*.a' -delete
+    rm -f bin/*.py
+    find lib -name '*.so*' -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find bin -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find . -xtype l -delete            # drop now-dangling symlinks (e.g. lib/terminfo)
+
+    # --- custom-CRS migration: legacy epsg init file for +init=epsg:<CODE>
+    mv /opt/gdal-epsg-custom /opt/gdal/share/proj/epsg
+
+    # --- make the bundled GDAL 3.10 THE system gdal (WBM RIMS.conf hardcodes
+    #     /usr/local/bin); symlink the CLI over /usr/local/bin and /usr/bin
+    for t in /opt/gdal/bin/gdal* /opt/gdal/bin/ogr* /opt/gdal/bin/nearblack; do
+        [ -e "$t" ] || continue; b=$(basename "$t")
+        ln -sf "$t" /usr/local/bin/"$b"; ln -sf "$t" /usr/bin/"$b"
+    done
+
+    # --- sanity
+    /usr/local/bin/gdalwarp --version
+    perl -c /wbm/perllib/Alien/gdal.pm
+    ls /opt/gdal/lib/gdalplugins/gdal_netCDF.so /opt/gdal/lib/gdalplugins/gdal_HDF5.so /opt/gdal/share/proj/epsg
+
+%environment
+    export PATH=/opt/gdal/bin:/wbm/model:/wbm/utilities:${PATH}
+    export LD_LIBRARY_PATH=/opt/gdal/lib:${LD_LIBRARY_PATH}
+    export GDAL_DATA=/opt/gdal/share/gdal
+    export PROJ_DATA=/opt/gdal/share/proj
+    export PROJ_LIB=/opt/gdal/share/proj
+    export GDAL_DRIVER_PATH=/opt/gdal/lib/gdalplugins
+    export GDAL_NETCDF_IGNORE_XY_AXIS_NAME_CHECKS=YES
+    # libcurl (conda) has no system CA bundle under `apptainer -c` (contain) —
+    # point it at conda's bundle, else HTTPS /vsicurl fails with "HTTP code 0".
+    export SSL_CERT_FILE=/opt/gdal/ssl/cacert.pem
+    export CURL_CA_BUNDLE=/opt/gdal/ssl/cacert.pem
+
+%labels
+    wbm_version 2.0.0-lite-s3
+    description "WBM v2-lite-s3 (slim): GDAL 3.10.3 (libgdal-core + netCDF/HDF5 plugins, no python/blas); custom CRS via PROJ9 epsg init file; direct /vsicurl S3 reads; bootstraps wbm_v2_lite base"

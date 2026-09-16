@@ -1,0 +1,674 @@
+<title>Snapshot Package Layout</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, p, ul, ol, li, pre, figure, figcaption, table, hr { margin: 0; }
+
+  /* Committed to light mode — no dark palette, regardless of the viewer's
+     system theme or the artifact-viewer's own dark/light toggle. */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    --paper:   #F5F7F6;
+    --raised:  #FFFFFF;
+    --ink:     #131C1B;
+    --muted:   #5C6B69;
+    --faint:   #8A9997;
+    --accent:  #10695C;
+    --accent-soft: #E4EFEC;
+    --warn:    #A8532A;
+    --rule:    #DCE3E1;
+
+    --font-display: "Iowan Old Style", "Apple Garamond", Georgia, serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "Apple SD Gothic Neo", Pretendard, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 58rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1.15rem, 5vw, 3rem) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 3.5rem);
+  }
+
+  header { display: flex; flex-direction: column; gap: 1.1rem; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2rem, 5vw, 2.9rem);
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+  .deck { font-size: clamp(1.02rem, 2.2vw, 1.16rem); color: var(--muted); max-width: 52ch; }
+  header hr { border: 0; border-top: 1px solid var(--ink); margin-top: 0.4rem; }
+
+  h2 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  section { display: flex; flex-direction: column; gap: 1.1rem; }
+  p { max-width: 66ch; }
+  strong { font-weight: 650; }
+  code { font-family: var(--font-mono); font-size: 0.92em; }
+
+  /* ── the tree ── */
+  .panel {
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: clamp(1.15rem, 3vw, 1.8rem);
+    overflow-x: auto;
+  }
+  .tree {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.34rem 2.25rem;
+    align-items: baseline;
+    min-width: 30rem;
+  }
+  .t-row { display: contents; }
+  .tree code {
+    font-family: var(--font-mono);
+    font-size: 0.855rem;
+    white-space: pre;
+    color: var(--ink);
+    line-height: 1.85;
+  }
+  .tree .note {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.85;
+  }
+
+  .t-row.root code { font-weight: 700; }
+  .t-row.root .note { color: var(--ink); font-weight: 600; }
+  .t-row.head code { color: var(--accent); font-weight: 700; }
+  .t-row.head .note { color: var(--accent); }
+  .t-row.link code { color: var(--accent); }
+  .t-row.link .note { color: var(--accent); }
+  .t-row.self code { color: var(--muted); }
+  .t-row.excl code, .t-row.excl .note { color: var(--faint); }
+
+  .spacer { height: 0.5rem; grid-column: 1 / -1; }
+
+  @media (max-width: 42rem) {
+    .tree { grid-template-columns: minmax(0, 1fr); gap: 0; min-width: 26rem; }
+    .tree .note { padding: 0 0 0.55rem 2.2ch; line-height: 1.5; }
+  }
+
+  /* ── legend cards ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+  .card {
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--accent);
+    border-radius: 2px;
+    background: var(--raised);
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .card .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .card h3 { font-size: 0.98rem; font-weight: 700; }
+  .card p { font-size: 0.88rem; color: var(--muted); max-width: none; line-height: 1.6; }
+
+  /* ── table ── */
+  .scroll { overflow-x: auto; max-width: 100%; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 36rem;
+    font-size: 0.88rem;
+  }
+  th, td { text-align: left; padding: 0.66rem 0.85rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 500;
+    border-bottom-color: var(--ink);
+  }
+  td:first-child { font-weight: 650; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .in  { color: var(--ink);    font-weight: 650; }
+  .out { color: var(--accent); font-weight: 650; }
+  .opt { color: var(--faint);  font-weight: 650; }
+
+  /* ── node-edge diagram ── */
+  figure { display: flex; flex-direction: column; gap: 0.9rem; max-width: 100%; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figure .panel { padding: clamp(1rem, 3vw, 1.6rem); }
+  figcaption { font-size: 0.88rem; color: var(--muted); max-width: 66ch; }
+  .dgm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+  .dgm-legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .swatch { display: inline-block; width: 1.4rem; height: 0; border-top: 2px solid currentColor; }
+  .swatch.dash { border-top-style: dashed; }
+  .swatch.acc { color: var(--accent); }
+  .dgm-legend span:last-child { color: var(--faint); }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">openghm · packaging</div>
+    <h1>Snapshot Package Layout</h1>
+    <p class="deck">
+      One snapshot is the reproduction unit. It <strong>bundles</strong> what is small and
+      specific to the study, and <strong>pins</strong> what is large and shared across studies.
+    </p>
+    <hr>
+  </header>
+
+  <section>
+    <h2>The package</h2>
+    <div class="panel">
+      <div class="tree">
+
+        <div class="t-row root">
+          <code>wbm_storage_v2.0.0 @ v2</code>
+          <span class="note">the reproduction unit — immutable</span>
+        </div>
+
+        <div class="t-row">
+          <code>├── model/  utilities/</code>
+          <span class="note">bundled — ~1 MB, study-specific, sha256 recorded</span>
+        </div>
+
+        <div class="t-row">
+          <code>├── wbm_init/</code>
+          <span class="note">bundled — run configuration</span>
+        </div>
+
+        <div class="t-row">
+          <code>├── data/</code>
+          <span class="note">bundled — inputs unique to this study</span>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="t-row head">
+          <code>├── metadata.json</code>
+          <span class="note">identity + pins</span>
+        </div>
+
+        <div class="t-row link">
+          <code>│     ├── conformsTo   snapshot-spec 1.1.0</code>
+          <span class="note">→ spec repository · semver</span>
+        </div>
+
+        <div class="t-row link">
+          <code>│     ├── container    wbm-v2-lite@sha256:9f2c…</code>
+          <span class="note">→ image registry · digest</span>
+        </div>
+
+        <div class="t-row link">
+          <code>│     ├── rawData      merra2-forcing@v1</code>
+          <span class="note">→ shared data store · version</span>
+        </div>
+
+        <div class="t-row self">
+          <code>│     └── modelCode    sha256:3ab7… (WBM 2.0.0)</code>
+          <span class="note">↑ hash of the bundled code above</span>
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="t-row excl">
+          <code>├── spool/</code>
+          <span class="note">derived cache — excluded from identity</span>
+        </div>
+
+        <div class="t-row excl">
+          <code>└── wbm_output/</code>
+          <span class="note">published results — excluded from identity</span>
+        </div>
+
+      </div>
+    </div>
+    <p>
+      Three fields in <code>metadata.json</code> point outward; one points inward. That single
+      file is what makes the snapshot a reproduction unit — it is the only place from which
+      every other versioned artifact can be named.
+    </p>
+  </section>
+
+  <section>
+    <h2>How it assembles at run time</h2>
+    <p>
+      The tree above shows what is <em>on disk</em>. The graph below shows what actually
+      <strong>moves</strong>: four inputs reach the run, and everything the run produces lands in
+      a separate writable scratch directory. The snapshot is mounted read-only, so <strong>no
+      output ever goes back into it</strong> &mdash; including the output the snapshot already
+      carries, which is never mounted and never rewritten.
+    </p>
+    <figure>
+      <div class="panel">
+        <svg viewBox="190 0 820 800" role="img" aria-labelledby="dgm-title" aria-describedby="dgm-desc">
+  <title id="dgm-title">Snapshot assembly and run graph</title>
+  <desc id="dgm-desc">
+    A spec repository sits at the top. Below it a read-only snapshot folder holds metadata.json
+    above three sibling boxes: the published wbm_output, the bundled input content, and a dashed
+    spool cache. metadata.json makes two dashed pin edges — one up to the spec repository, one
+    right to a group of external stores holding the image registry and the shared data store.
+    The bundled content flows down into a WBM run on a solid edge; the spool flows down on a
+    dashed conditional edge; the external stores feed the run from the right. The run writes down
+    into a writable per-simulation scratch directory containing wbm_output, WBM_run_state and a
+    spool. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
+  </desc>
+
+  <!-- SVG <style> is not scoped, so every class is g- prefixed: this markup is
+       inlined into an HTML page and must not collide with the page's classes. -->
+  <style>
+    .g-b    { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    .g-m    { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+    .g-ink  { fill: #131C1B; }
+    .g-mut  { fill: #5C6B69; }
+    .g-fnt  { fill: #8A9997; }
+    .g-acc  { fill: #10695C; }
+    .g-bd   { font-weight: 700; }
+    .g-cap  { letter-spacing: 0.07em; }
+  </style>
+
+  <defs>
+    <marker id="g-ai" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#131C1B"/>
+    </marker>
+    <marker id="g-aa" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#10695C"/>
+    </marker>
+    <marker id="g-af" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#8A9997"/>
+    </marker>
+  </defs>
+
+  <!-- ── spec repository ─────────────────────────────────────────────────── -->
+  <rect x="390" y="14" width="210" height="60" rx="4" fill="none" stroke="#10695C" stroke-width="1.5"/>
+  <text class="g-b g-bd g-acc" x="495" y="40" text-anchor="middle" font-size="15">Spec repository</text>
+  <text class="g-m g-acc"      x="495" y="61" text-anchor="middle" font-size="11.5">snapshot-spec &#183; semver</text>
+
+  <!-- ── snapshot boundary (read-only) ───────────────────────────────────── -->
+  <rect x="215" y="120" width="560" height="268" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <text class="g-m g-fnt g-cap" x="223" y="110" font-size="12">SNAPSHOT &#8212; READ-ONLY</text>
+
+  <rect x="370" y="140" width="250" height="54" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
+  <text class="g-m g-ink g-bd" x="495" y="166" text-anchor="middle" font-size="14.5">metadata.json</text>
+  <text class="g-b g-mut"      x="495" y="184" text-anchor="middle" font-size="11.5">identity + pins</text>
+
+  <!-- s1 · reference output -->
+  <rect x="233" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-m g-ink g-bd" x="316" y="246" text-anchor="middle" font-size="12.5">wbm_output/</text>
+  <text class="g-b g-ink"      x="316" y="266" text-anchor="middle" font-size="11.5">published results</text>
+  <text class="g-b g-mut"      x="316" y="286" text-anchor="middle" font-size="11">&#8776;470 GB &#183; Global</text>
+  <text class="g-b g-mut"      x="316" y="312" text-anchor="middle" font-size="11">excluded from identity</text>
+  <text class="g-b g-mut"      x="316" y="330" text-anchor="middle" font-size="11">never mounted</text>
+
+  <!-- s2 · bundled input content -->
+  <rect x="412" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-ink g-bd" x="495" y="246" text-anchor="middle" font-size="13">bundled content</text>
+  <text class="g-m g-ink"      x="495" y="266" text-anchor="middle" font-size="11.5">model/  utilities/</text>
+  <text class="g-m g-ink"      x="495" y="284" text-anchor="middle" font-size="11.5">wbm_init/  data/</text>
+  <text class="g-b g-mut"      x="495" y="310" text-anchor="middle" font-size="11">49 GB &#183; Global</text>
+  <text class="g-b g-mut"      x="495" y="328" text-anchor="middle" font-size="11">defines identity</text>
+
+  <!-- s3 · spool cache -->
+  <rect x="591" y="222" width="166" height="132" rx="4" fill="none" stroke="#8A9997" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text class="g-m g-fnt g-bd" x="674" y="246" text-anchor="middle" font-size="12.5">spool/</text>
+  <text class="g-b g-fnt"      x="674" y="266" text-anchor="middle" font-size="11.5">warped-grid cache</text>
+  <text class="g-b g-fnt"      x="674" y="286" text-anchor="middle" font-size="11">490 GB &#183; Global</text>
+  <text class="g-b g-fnt"      x="674" y="312" text-anchor="middle" font-size="11">excluded from identity</text>
+  <text class="g-b g-fnt"      x="674" y="330" text-anchor="middle" font-size="11">regenerable</text>
+
+  <!-- ── WBM run ─────────────────────────────────────────────────────────── -->
+  <rect x="380" y="468" width="320" height="86" rx="4" fill="none" stroke="#131C1B" stroke-width="2.2"/>
+  <text class="g-b g-ink g-bd" x="540" y="503" text-anchor="middle" font-size="16">WBM run</text>
+  <text class="g-b g-mut"      x="540" y="525" text-anchor="middle" font-size="11.5">assembled at execution time</text>
+
+  <!-- ── external stores (pinned, not bundled) ───────────────────────────── -->
+  <rect x="800" y="430" width="200" height="175" rx="4" fill="none" stroke="#10695C" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <text class="g-m g-acc g-cap" x="808" y="416" font-size="11.5">EXTERNAL &#8212; PINNED</text>
+
+  <rect x="812" y="448" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
+  <text class="g-b g-bd g-acc" x="900" y="472" text-anchor="middle" font-size="13">Image registry</text>
+  <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 &#183; by digest</text>
+
+  <rect x="812" y="526" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
+  <text class="g-b g-bd g-acc" x="900" y="550" text-anchor="middle" font-size="13">Shared data store</text>
+  <text class="g-m g-acc"      x="900" y="570" text-anchor="middle" font-size="10.5">Anvil S3 &#183; by version</text>
+
+  <!-- ── per-sim scratch (writable) ──────────────────────────────────────── -->
+  <rect x="215" y="650" width="560" height="136" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-m g-ink g-cap" x="223" y="640" font-size="12">PER-SIM SCRATCH &#8212; WRITABLE</text>
+
+  <rect x="233" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-ink g-bd" x="316" y="698" text-anchor="middle" font-size="12">wbm_output/</text>
+  <text class="g-b g-mut"      x="316" y="718" text-anchor="middle" font-size="11">the run's results</text>
+
+  <rect x="412" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-ink g-bd" x="495" y="698" text-anchor="middle" font-size="12">WBM_run_state/</text>
+  <text class="g-b g-mut"      x="495" y="718" text-anchor="middle" font-size="11">resume state</text>
+
+  <rect x="591" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text class="g-m g-ink g-bd" x="674" y="698" text-anchor="middle" font-size="12">spool/</text>
+  <text class="g-b g-mut"      x="674" y="718" text-anchor="middle" font-size="11">seeded or built cold</text>
+
+  <text class="g-b g-mut" x="233" y="758" font-size="11.5">+ per-sim wbm_init/ copy &#183; simulation.json provenance &#183; slurm logs</text>
+  <text class="g-b g-mut" x="233" y="774" font-size="11.5">Nothing here is ever written back into the snapshot.</text>
+
+  <!-- ── pin edges (dashed accent — no bytes move) ───────────────────────── -->
+  <g fill="none" stroke="#10695C" stroke-width="1.5" stroke-dasharray="7 5">
+    <line x1="495" y1="140" x2="495" y2="80" marker-end="url(#g-aa)"/>
+    <polyline points="620,167 872,167 872,424" marker-end="url(#g-aa)"/>
+  </g>
+  <text class="g-m g-acc" x="507" y="112" font-size="12.5">conforms to</text>
+  <text class="g-m g-acc" x="882" y="296" font-size="12.5">pinned by</text>
+  <text class="g-m g-acc" x="882" y="312" font-size="12.5">digest / version</text>
+
+  <!-- ── external stores -> run ──────────────────────────────────────────── -->
+  <line x1="798" y1="518" x2="704" y2="518" stroke="#10695C" stroke-width="1.8" marker-end="url(#g-aa)"/>
+  <text class="g-m g-acc" x="751" y="492" text-anchor="middle" font-size="12">pulled at</text>
+  <text class="g-m g-acc" x="751" y="507" text-anchor="middle" font-size="12">run time</text>
+
+  <!-- ── bundled -> run ─────────────────────────────────────────────────── -->
+  <line x1="495" y1="354" x2="495" y2="464" stroke="#131C1B" stroke-width="2.2" marker-end="url(#g-ai)"/>
+  <text class="g-m g-ink" x="505" y="400" font-size="12.5">mounted</text>
+  <text class="g-m g-ink" x="505" y="416" font-size="12.5">read-only</text>
+
+  <!-- ── spool -> run (conditional; must be copied, snapshot is :ro) ─────── -->
+  <line x1="674" y1="354" x2="674" y2="464" stroke="#8A9997" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#g-af)"/>
+  <text class="g-m g-fnt" x="686" y="400" font-size="12.5">copied out</text>
+  <text class="g-m g-fnt" x="686" y="416" font-size="12.5">only if valid</text>
+
+  <!-- ── run -> scratch (lands in the gap between children: it writes all) ─ -->
+  <line x1="584" y1="554" x2="584" y2="646" stroke="#131C1B" stroke-width="2.6" marker-end="url(#g-ai)"/>
+  <text class="g-m g-ink g-bd" x="596" y="605" font-size="12.5">writes</text>
+
+        </svg>
+      </div>
+      <div class="dgm-legend">
+        <span><span class="swatch"></span> bundled or written — real bytes move</span>
+        <span><span class="swatch acc"></span> pulled from outside at run time</span>
+        <span><span class="swatch dash acc"></span> pin declared in metadata.json — no bytes move</span>
+        <span><span class="swatch dash"></span> conditional — only if the reuse envelope matches</span>
+      </div>
+      <figcaption>
+        Only <strong>five percent</strong> of a published snapshot is input data. On the Global
+        snapshot the <code>data/</code> store is 49&nbsp;GB against 490&nbsp;GB of
+        <code>spool/</code> and roughly 470&nbsp;GB of results — 1,009&nbsp;GB in total. The two
+        large directories are the ones that need their own rules.
+        <code>wbm_output/</code> appears on both sides for different reasons: inside the snapshot
+        it is the <strong>record of what was published</strong>, carried as-is with no identifier
+        of its own and never mounted; in scratch it is what this run produced. Nothing connects
+        them automatically. <code>spool/</code> appears twice as well: it ships read-only, so it
+        cannot be bound as the run's spool directory and has to be copied into writable scratch,
+        and only when its recorded reuse envelope matches the resolved run.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What you deploy</h2>
+    <p>
+      Almost nothing new. The <code>openghm</code> namespace on <strong>Anvil's Composable
+      Subsystem</strong> already runs the backend, frontend, MongoDB, and ingress-nginx with
+      cert-manager. You add <strong>two</strong> workloads to it &mdash; a
+      container registry (<strong>zot</strong>) and a static host for the schema files &mdash; and
+      reuse the certificate issuer that is already there. zot stores its blobs directly in Anvil
+      S3, so there is no new in-cluster storage to size or manage.
+    </p>
+    <figure>
+      <div class="panel">
+        <svg viewBox="0 0 830 660" role="img" aria-labelledby="dep-title" aria-describedby="dep-desc">
+  <title id="dep-title">What runs where — deployment topology</title>
+  <desc id="dep-desc">
+    Three tiers, all within Anvil except the git host. At the top, Purdue GitHub Enterprise holds one repository with the
+    application, the toolkit, the schemas and CI, and publishes downward into two places: the openghm namespace on
+    Anvil's Composable Subsystem, and the Anvil S3 bucket. The Composable Subsystem box lists two
+    new workloads — zot, an OCI registry for SIFs that stores its blobs directly in Anvil S3, and
+    a static JSON Schema host — plus one already running: ingress-nginx with cert-manager for TLS.
+    At the bottom, Anvil's HPC side consumes: a login node pulls from zot over the public internet
+    and stages onto GPFS, and SLURM compute nodes run the container and read raw data from Anvil
+    S3 over the internal network.
+  </desc>
+
+  <style>
+    .dg-b   { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    .dg-m   { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+    .dg-ink { fill: #131C1B; }
+    .dg-mut { fill: #5C6B69; }
+    .dg-fnt { fill: #8A9997; }
+    .dg-acc { fill: #10695C; }
+    .dg-wrn { fill: #A8532A; }
+    .dg-bd  { font-weight: 700; }
+    .dg-cap { letter-spacing: 0.07em; }
+  </style>
+
+  <defs>
+    <marker id="d-ai" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#131C1B"/>
+    </marker>
+  </defs>
+
+  <!-- ── tier 1 · publish ────────────────────────────────────────────────── -->
+  <rect x="250" y="16" width="500" height="76" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
+  <text class="dg-b dg-bd dg-ink" x="500" y="45" text-anchor="middle" font-size="15">GitHub Enterprise — the source of truth</text>
+  <text class="dg-m dg-mut"      x="500" y="68" text-anchor="middle" font-size="11.5">one repo &#183; app &#183; toolkit &#183; schemas &#183; Actions (CI)</text>
+
+  <!-- ── tier 2 · serve ──────────────────────────────────────────────────── -->
+  <rect x="20" y="150" width="450" height="216" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <text class="dg-m dg-fnt dg-cap" x="28" y="140" font-size="11.5">ANVIL COMPOSABLE SUBSYSTEM</text>
+
+  <rect x="38" y="178" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="dg-m dg-bd dg-acc" x="52"  y="200" font-size="13">zot</text>
+  <text class="dg-m dg-bd dg-acc dg-cap" x="438" y="199" text-anchor="end" font-size="10">NEW</text>
+  <text class="dg-b dg-acc"      x="52"  y="218" font-size="10.5">OCI registry for SIFs &#183; registry.openghm.org</text>
+
+  <rect x="38" y="240" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="dg-m dg-bd dg-acc" x="52"  y="262" font-size="13">schemas</text>
+  <text class="dg-m dg-bd dg-acc dg-cap" x="438" y="261" text-anchor="end" font-size="10">NEW</text>
+  <text class="dg-b dg-acc"      x="52"  y="280" font-size="10.5">schema host &#183; proxies S3 &#183; schemas.openghm.org</text>
+
+  <rect x="38" y="302" width="414" height="46" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="52" y="323" font-size="12.5">ingress-nginx + cert-manager</text>
+  <text class="dg-b dg-mut"      x="52" y="340" font-size="10.5">already running &#8212; TLS for both hostnames</text>
+
+  <rect x="500" y="150" width="222" height="86" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="dg-b dg-bd dg-ink" x="611" y="177" text-anchor="middle" font-size="13">Anvil S3</text>
+  <text class="dg-m dg-mut"      x="611" y="197" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
+  <text class="dg-b dg-mut"      x="611" y="216" text-anchor="middle" font-size="10.5">images, snapshots, code + zot storage</text>
+
+  <!-- ── tier 3 · consume ────────────────────────────────────────────────── -->
+  <rect x="250" y="520" width="500" height="120" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="dg-m dg-ink dg-cap" x="258" y="510" font-size="11.5">ANVIL HPC &#8212; WHERE RUNS HAPPEN</text>
+
+  <rect x="266" y="548" width="210" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="371" y="573" text-anchor="middle" font-size="12">login node</text>
+  <text class="dg-b dg-mut"      x="371" y="592" text-anchor="middle" font-size="10.5">pull + stage &#183; outbound HTTPS</text>
+
+  <rect x="520" y="548" width="214" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="627" y="573" text-anchor="middle" font-size="12">SLURM compute</text>
+  <text class="dg-b dg-mut"      x="627" y="592" text-anchor="middle" font-size="10.5">runs the container &#183; via Anvil S3</text>
+
+  <text class="dg-b dg-mut" x="266" y="631" font-size="10.5">Anvil S3 holds the published copy; GPFS is staging for runs.</text>
+
+  <!-- ── publish edges ───────────────────────────────────────────────────── -->
+  <g fill="none" stroke="#131C1B" stroke-width="1.8">
+    <line x1="300" y1="92" x2="300" y2="146" marker-end="url(#d-ai)"/>
+    <line x1="611" y1="92" x2="611" y2="146" marker-end="url(#d-ai)"/>
+  </g>
+  <text class="dg-m dg-ink" x="310" y="116" font-size="11.5">installs the chart,</text>
+  <text class="dg-m dg-ink" x="310" y="131" font-size="11.5">pushes the image</text>
+  <text class="dg-m dg-ink" x="620" y="116" font-size="11.5">copies the files</text>
+  <text class="dg-m dg-ink" x="620" y="131" font-size="11.5">(MinIO client)</text>
+
+  <!-- ── zot's storage backend (new — zot writes its blobs into Anvil S3) ─── -->
+  <polyline points="452,203 480,203 480,150 500,150" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="dg-m dg-acc" x="456" y="145" font-size="11">stores blobs</text>
+  <polyline points="452,265 510,265 510,240" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="dg-m dg-acc" x="516" y="258" font-size="11">reads from</text>
+
+  <!-- ── consume edges ───────────────────────────────────────────────────── -->
+  <g fill="none" stroke="#131C1B" stroke-width="1.8">
+    <polyline points="38,212 14,212 14,472 371,472 371,544" marker-end="url(#d-ai)"/>
+    <line x1="611" y1="236" x2="611" y2="544" marker-end="url(#d-ai)"/>
+    <line x1="480" y1="580" x2="516" y2="580" marker-end="url(#d-ai)"/>
+  </g>
+  <text class="dg-m dg-ink" x="22" y="436" font-size="11.5">installs a revision</text>
+  <text class="dg-m dg-ink" x="22" y="451" font-size="11.5">&#8212; once per image</text>
+  <text class="dg-m dg-ink" x="622" y="382" font-size="11.5">reads per run</text>
+  <text class="dg-b dg-mut" x="622" y="399" font-size="10.5">SIF mirror + snapshot/raw data</text>
+  <text class="dg-m dg-mut" x="498" y="570" text-anchor="middle" font-size="10.5">stage</text>
+        </svg>
+      </div>
+      <figcaption>
+        Three tiers, all within Anvil except GitHub: GitHub publishes; Anvil's Composable
+        Subsystem and Anvil S3 serve; Anvil's HPC side consumes.
+        The accented boxes are the only new workloads. Registry pulls happen on a login node;
+        SLURM compute nodes read from the Anvil S3 mirror instead, because it needs no
+        credentials and no <code>oras://</code> support, and everything a compute node needs is
+        already on GPFS or in Anvil S3.
+      </figcaption>
+    </figure>
+    <div class="cards">
+      <div class="card">
+        <div class="kicker">registry</div>
+        <h3>zot + ORAS</h3>
+        <p>
+          Single-binary OCI registry, Helm chart, blobs stored directly in Anvil S3.
+          <code>apptainer push oras://</code> stores the SIF as one blob, so a pull returns the
+          bytes that were verified. Search <em>zot registry helm chart</em>.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kicker">schema registry</div>
+        <h3>JSON Schema on a static host</h3>
+        <p>
+          Versioned files in git, published at immutable URLs, validated with
+          <code>check-jsonschema</code> and code-generated with
+          <code>datamodel-code-generator</code>. Apicurio Registry is the heavier option if the
+          schema ever needs an API or a UI.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kicker">stores</div>
+        <h3>Anvil S3</h3>
+        <p>
+          Snapshots and raw data sit in the existing Anvil <code>openghm</code> bucket under
+          immutable prefixes. No DOI minting for now &mdash; each version is just a serial
+          number, published once and never overwritten.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where the pinned artifacts live</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="kicker">contract · semver</div>
+        <h3>Spec repository</h3>
+        <p>
+          JSON Schema in git, published at versioned URLs. Covers both the folder layout and the
+          metadata fields as one contract, so there is no compatibility matrix between them.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kicker">content · digest</div>
+        <h3>Image registry</h3>
+        <p>
+          zot on Anvil's Composable Subsystem as the origin, with prebuilt SIFs mirrored to plain
+          Anvil S3 for credential-free HPC reads. Pinned by
+          digest, never by tag — a rebuilt tag is not the same image.
+        </p>
+      </div>
+      <div class="card">
+        <div class="kicker">dataset · serial</div>
+        <h3>Shared data store</h3>
+        <p>
+          Anvil S3 under immutable prefixes, described with HydroShare's CompositeResource
+          vocabulary (borrowed, not deployed). Shared by many snapshots, so it is referenced
+          rather than copied into each one.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What goes in, what stays out</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Item</th><th>Stored</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Model code + utilities</td>
+            <td class="in">inside</td>
+            <td>~1 MB, so deduplication saves nothing. Its <code>_Inline</code> directory holds
+                perl-5.30 objects tied to the container, so it is not cleanly shareable — and the
+                runtime already mounts it from the snapshot.</td>
+          </tr>
+          <tr>
+            <td>Run configuration</td>
+            <td class="in">inside</td>
+            <td>Small and unique to this snapshot.</td>
+          </tr>
+          <tr>
+            <td>Container image</td>
+            <td class="out">outside</td>
+            <td>~350 MB and shared across snapshots. Bundled physically only at publication, so a
+                deposited archive survives the registry.</td>
+          </tr>
+          <tr>
+            <td>Raw input data</td>
+            <td class="out">outside</td>
+            <td>TB-scale and shared across snapshots. Copying it per snapshot is not viable.</td>
+          </tr>
+          <tr>
+            <td>spool cache</td>
+            <td class="opt">optional</td>
+            <td>Regenerable, and derived from the environment as well as the data. Keeping it out
+                of the identity means dropping it does not change what the snapshot is.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>

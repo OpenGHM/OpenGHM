@@ -1,0 +1,19 @@
+{
+  "specVersion": "1.0.0",
+  "required": [
+    "metadata.json",
+    "model/",
+    "utilities/",
+    "wbm_init/",
+    "data/",
+    "data_init/",
+    "gdal_test_files/",
+    "wbm_output/"
+  ],
+  "optional": [
+    "SHA256SUMS",
+    "spool/",
+    "meta_data/",
+    "WBM_run_state/"
+  ]
+}

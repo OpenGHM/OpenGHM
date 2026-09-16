@@ -1,0 +1,30 @@
+#!/bin/sh
+# Thin launcher for the lightweight WBM utilities container.
+#
+# All WBM code (model, utilities, RIMS, the Inline cache) is embedded in the
+# image, so only real I/O is bound:
+#     -d DIR    data dir   -> /data   (read-only)   [optional, repeatable as -D]
+#     -D N:DIR  data dir   -> /data/N (read-only)   [for multiple data mounts]
+#     -w DIR    work dir   -> /work   (read-write)
+# Everything after `--` is the command run inside the container, e.g.
+#     wbm-tools -d /path/to/netdir -w /path/to/work -- \
+#         /wbm/utilities/networkTools -v /work/preclip.init
+#
+# Container paths used by your init / Magic Table must match these mounts
+# (/data, /data/<N>, /work). Env: SIF=/path/to/wbm_tools_lite.sif (default below).
+set -eu
+
+SIF=${SIF:-/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif}
+binds=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d) binds="$binds -B $2:/data";              shift 2 ;;
+    -D) name=${2%%:*}; dir=${2#*:};
+        binds="$binds -B $dir:/data/$name";      shift 2 ;;
+    -w) binds="$binds -B $2:/work";              shift 2 ;;
+    --) shift; break ;;
+    *)  echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+exec singularity exec -c -e $binds "$SIF" "$@"

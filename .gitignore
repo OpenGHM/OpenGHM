@@ -1,0 +1,41 @@
+# Python
+web-gateway/backend/.venv/
+web-gateway/backend/__pycache__/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+
+# Node
+web-gateway/frontend/node_modules/
+web-gateway/frontend/.next/
+web-gateway/frontend/out/
+
+# Environment files
+*.env
+!*.env.example
+!*.env.local.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+
+# Tools
+.playwright-mcp/
+
+# Logs
+*.log
+
+# The private openghm-ops repository is cloned here. It is its own git repo and
+# this one must never track it — see ADR 0016.
+/ops/
+
+# Claude Code — share the settings and commands, not the machine-local grants
+.claude/settings.local.json

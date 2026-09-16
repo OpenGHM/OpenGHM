@@ -1,0 +1,11 @@
+{
+  Net_file	=> '/data/05min_flwdir.tif',
+
+  preclip	=> {
+	output_file	=> '/work/preclip_test.asc',
+	truncation_check=> 1,
+	trim_nodata	=> 0,
+	rectangle	=> {	lonMin => -110.0, lonMax => -100.0,
+				latMin =>   40.0, latMax =>   48.0 }
+	   }
+}

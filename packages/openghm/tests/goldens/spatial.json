@@ -1,0 +1,55 @@
+{
+  "command": "spatial",
+  "runtime": "singularity",
+  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "dryRun": true,
+  "exec": "singularity exec -c -e -B /snap/gtout:/data/gt_output -B /snap/masks:/data/masks -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/spatial_aggregation.pl -v -f /work/US_states_6min.msk -mt /work/test.MT.csv Global_tracking_runoff_y US_states_6min /work/output_runoff_by_state.nc",
+  "argv": [
+    "singularity",
+    "exec",
+    "-c",
+    "-e",
+    "-B",
+    "/snap/gtout:/data/gt_output",
+    "-B",
+    "/snap/masks:/data/masks",
+    "-B",
+    "/scratch/work:/work",
+    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/wbm/utilities/spatial_aggregation.pl",
+    "-v",
+    "-f",
+    "/work/US_states_6min.msk",
+    "-mt",
+    "/work/test.MT.csv",
+    "Global_tracking_runoff_y",
+    "US_states_6min",
+    "/work/output_runoff_by_state.nc"
+  ],
+  "mounts": [
+    {
+      "host": "/snap/gtout",
+      "container": "/data/gt_output"
+    },
+    {
+      "host": "/snap/masks",
+      "container": "/data/masks"
+    },
+    {
+      "host": "/scratch/work",
+      "container": "/work"
+    }
+  ],
+  "innerCmd": [
+    "/wbm/utilities/spatial_aggregation.pl",
+    "-v",
+    "-f",
+    "/work/US_states_6min.msk",
+    "-mt",
+    "/work/test.MT.csv",
+    "Global_tracking_runoff_y",
+    "US_states_6min",
+    "/work/output_runoff_by_state.nc"
+  ],
+  "generatedFiles": []
+}

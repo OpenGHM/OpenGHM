@@ -1,0 +1,54 @@
+{
+  "command": "spatial",
+  "runtime": "docker",
+  "image": "wbm-lite:latest",
+  "dryRun": true,
+  "exec": "docker run --rm -v /snap/gtout:/data/gt_output -v /snap/masks:/data/masks -v /scratch/work:/work wbm-lite:latest /wbm/utilities/spatial_aggregation.pl -v -f /work/US_states_6min.msk -mt /work/test.MT.csv Global_tracking_runoff_y US_states_6min /work/output_runoff_by_state.nc",
+  "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "-v",
+    "/snap/gtout:/data/gt_output",
+    "-v",
+    "/snap/masks:/data/masks",
+    "-v",
+    "/scratch/work:/work",
+    "wbm-lite:latest",
+    "/wbm/utilities/spatial_aggregation.pl",
+    "-v",
+    "-f",
+    "/work/US_states_6min.msk",
+    "-mt",
+    "/work/test.MT.csv",
+    "Global_tracking_runoff_y",
+    "US_states_6min",
+    "/work/output_runoff_by_state.nc"
+  ],
+  "mounts": [
+    {
+      "host": "/snap/gtout",
+      "container": "/data/gt_output"
+    },
+    {
+      "host": "/snap/masks",
+      "container": "/data/masks"
+    },
+    {
+      "host": "/scratch/work",
+      "container": "/work"
+    }
+  ],
+  "innerCmd": [
+    "/wbm/utilities/spatial_aggregation.pl",
+    "-v",
+    "-f",
+    "/work/US_states_6min.msk",
+    "-mt",
+    "/work/test.MT.csv",
+    "Global_tracking_runoff_y",
+    "US_states_6min",
+    "/work/output_runoff_by_state.nc"
+  ],
+  "generatedFiles": []
+}

@@ -1,0 +1,154 @@
+"""Config: built-in Anvil defaults merged over ``~/.openghm/config.toml``.
+
+The file is lazily created on first load if absent (no separate ``init`` step).
+Unknown keys are ignored; an invalid ``runtime`` is rejected.
+
+A plain dataclass (not pydantic) keeps the dependency set pure-Python, which
+matters for a clean ``pip install`` on Anvil's older Spack toolchain — the config
+is tiny enough that validation by hand is trivial.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import os
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+from .errors import OpenghmError
+from .types import RUNTIMES
+
+if sys.version_info >= (3, 11):  # pragma: no cover - exercised by version
+    import tomllib
+else:  # Python 3.9 / 3.10 on Anvil → tomli backport
+    import tomli as tomllib
+
+#: Legacy Anvil shared-install layout. Kept as a fallback so an existing Anvil
+#: deployment keeps working with no config file, even though the portable
+#: defaults now point at a per-user cache (``sif_dir``).
+_ANVIL_APPS_WBM = "/home/x-openghm/apps/wbm"
+
+
+@dataclass(frozen=True)
+class Config:
+    """openghm configuration (portable defaults; Anvil legacy fallback in resolvers)."""
+
+    #: Container runtime used to run the tools-lite image.
+    runtime: str = "singularity"
+    #: SIF path for singularity/apptainer (the tools-lite image).
+    sif: str = "~/.openghm/sif/lite/wbm_tools_lite.sif"
+    #: Cache root for downloaded images (``openghm sif pull`` / ``openghm init``).
+    sif_dir: str = "~/.openghm/sif"
+    #: Image ref for the docker runtime (local builds).
+    docker_image: str = "wbm-lite:latest"
+
+    # Used by `sim submit` / `sim run` (SLURM defaults + per-sim work/output root).
+    # A snapshot is addressed by folder path, so no snapshot_root registry is needed.
+    output_base: str = "~/.openghm/runs"
+    account: str = "ees260008"
+    partition: str = "shared"
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "Config":
+        """Build from a parsed-TOML dict, ignoring unknown keys (like zod strip)."""
+        valid = {f.name for f in dataclasses.fields(cls)}
+        kwargs = {k: v for k, v in raw.items() if k in valid}
+        config = cls(**kwargs)
+        if config.runtime not in RUNTIMES:
+            raise OpenghmError(
+                f"invalid runtime in config: {config.runtime!r} "
+                f"(expected one of {', '.join(RUNTIMES)})"
+            )
+        return config
+
+    def resolve_sif(self) -> str:
+        """Absolute path to the tools-lite SIF.
+
+        Expands ``~`` in the configured path; if that file is absent but the
+        legacy Anvil shared install exists, use that instead (so Anvil keeps
+        working without a config file).
+        """
+        cache = os.path.expanduser(self.sif)
+        if not os.path.exists(cache):
+            legacy = f"{_ANVIL_APPS_WBM}/lite/wbm_tools_lite.sif"
+            if os.path.exists(legacy):
+                return legacy
+        return cache
+
+    def resolve_wbm_sif(self, version: str) -> str:
+        """Absolute path to the version-specific WBM model SIF (for ``sim``).
+
+        Derived from ``sif_dir`` (``<sif_dir>/wbm/<ver>/wbm_opensource_v<ver>.sif``),
+        with the same legacy Anvil fallback as :meth:`resolve_sif`.
+        """
+        base = os.path.expanduser(self.sif_dir)
+        cache = os.path.join(base, "wbm", version, f"wbm_opensource_v{version}.sif")
+        if not os.path.exists(cache):
+            legacy = f"{_ANVIL_APPS_WBM}/{version}/bin/wbm_opensource_v{version}.sif"
+            if os.path.exists(legacy):
+                return legacy
+        return cache
+
+    def resolve_output_base(self) -> str:
+        """Per-sim work/output root, with ``~`` expanded."""
+        return os.path.expanduser(self.output_base)
+
+
+def default_config_path() -> Path:
+    return Path.home() / ".openghm" / "config.toml"
+
+
+def _render_default_toml(c: Config) -> str:
+    """TOML written on first run (or by ``openghm init``); comments document each key."""
+    return "\n".join(
+        [
+            "# openghm config. Edit here or re-run `openghm init` to change it.",
+            "",
+            f'runtime       = "{c.runtime}"   # singularity | apptainer | docker',
+            f'sif           = "{c.sif}"   # tools-lite image (network/spatial/temporal)',
+            f'sif_dir       = "{c.sif_dir}"   # cache root for downloaded images',
+            f'docker_image  = "{c.docker_image}"',
+            "",
+            "# sim submit / sim run defaults (per-sim work/output root + SLURM):",
+            f'output_base   = "{c.output_base}"',
+            f'account       = "{c.account}"',
+            f'partition     = "{c.partition}"',
+            "",
+        ]
+    )
+
+
+@dataclass
+class LoadedConfig:
+    config: Config
+    path: str
+    #: Whether the file was just created.
+    created: bool
+
+
+def load_config(path: Optional[str] = None, *, create: bool = True) -> LoadedConfig:
+    """Load config from ``path`` (or ``~/.openghm/config.toml``).
+
+    If the file is absent and ``create`` is true, it is written with the Anvil
+    defaults. A read-only filesystem falls back to in-memory defaults silently.
+    """
+    p = Path(path) if path else default_config_path()
+
+    if p.exists():
+        with open(p, "rb") as fh:
+            raw = tomllib.load(fh)
+        return LoadedConfig(config=Config.from_dict(raw), path=str(p), created=False)
+
+    config = Config()
+    created = False
+    if create:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(_render_default_toml(config), encoding="utf-8")
+            created = True
+        except OSError:
+            # Read-only FS or perms — fall back to in-memory defaults silently.
+            pass
+    return LoadedConfig(config=config, path=str(p), created=created)

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "just",
+      "runtimeArgs": ["run"],
+      "port": 3100,
+      "host": "localhost"
+    }
+  ]
+}
