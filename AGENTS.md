@@ -18,10 +18,13 @@ this file.
 3. **Store artifacts, do not rebuild them.** A rebuild from the same recipe is
    not the same artifact. Images and snapshots are stored and retrieved
    byte-for-byte.
-4. **One source of truth, generated outward.** The snapshot spec lives in
-   `schemas/`. Backend models, frontend types and the copy bundled in the
-   `openghm` wheel are **generated** from it and never hand-edited. If two
-   places state the same fact, one is generated or one is wrong.
+4. **One source of truth.** The snapshot spec lives in `schemas/`. Backend
+   models and frontend types are meant to be **generated** from it; that
+   generator does not exist yet, so today they are hand-maintained and must be
+   updated by hand, in the same commit, every time the spec changes (see
+   [open items](docs/reference/open-items.md)). The `openghm` wheel bundles no
+   copy at all. If two places state the same fact and neither is generated,
+   one of them is wrong.
 5. **Verify what you claim.** Every statement of fact about the environment — a
    path, an endpoint, a version, a capability — is checkable, and was checked.
    Write what is true now. If something is unverified, mark it open rather than
