@@ -36,6 +36,11 @@ OpenGHM/
 
 ## Where to start
 
+Want to contribute? [`CONTRIBUTING.md`](CONTRIBUTING.md) has setup, how to
+verify a change, and pull request conventions. Found a security issue? See
+[`SECURITY.md`](SECURITY.md) instead of opening a public issue. Licensed under
+[MIT](LICENSE).
+
 One repository, not several, because a snapshot-spec change has to land
 atomically across the schema, the generated backend model, the generated
 frontend types and the wheel's bundled copy.
