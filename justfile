@@ -82,7 +82,10 @@ run env="dev":
     # Build backend image on first run only (no --build on subsequent runs).
     # requirements.txt changes are picked up automatically at container start via pip install.
     # Run 'just rebuild' only when the Dockerfile itself changes.
-    if [[ "$(docker images -q openghm-gateway-backend 2>/dev/null)" == "" ]]; then
+    # The name compose gives this image — `docker compose config --images`.
+    # It used to read `openghm-gateway-backend`, which nothing ever builds, so
+    # this branch was taken on every run and rebuilt the image every time.
+    if [[ "$(docker images -q openghm-backend 2>/dev/null)" == "" ]]; then
         echo "   (First run: building backend image...)"
         {{compose}} build backend
     fi
