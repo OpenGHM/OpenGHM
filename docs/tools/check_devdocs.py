@@ -15,8 +15,8 @@ Exits non-zero if anything fails. Four checks:
 Each check exists because the one before it cannot see the mistake. `links`
 proves a target resolves; `crosslinks` proves it resolves *somewhere else* — a
 `[doc.md](doc.md)` inside `doc.md` is a valid link and tells the reader
-nothing. `recipes` proves the name after `just` exists; the same name written
-bare in a sentence about recipes was proof of nothing until it was checked too.
+nothing. `recipes` proves the name after `` `just `` exists in the justfile —
+it does not check a bare backticked recipe name with no `just` in front of it.
 
 These documents were once checked far harder than this — every quantity a
 mission asserted about the repository, every name in every list, and the greps

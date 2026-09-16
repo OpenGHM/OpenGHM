@@ -4,13 +4,13 @@ Scripts `docs/` needs to keep itself honest.
 
 | Script | What it does |
 |---|---|
-| [check_devdocs.py](check_devdocs.py) | Verifies links and their anchors, repository paths, `just` recipes and the shelf indices. No dependencies; run it before merging a documentation change. |
+| [check_devdocs.py](check_devdocs.py) | Verifies links and their anchors, repository paths and `just` recipes. No dependencies; run it before merging a documentation change. |
 
 ```bash
 python3 docs/tools/check_devdocs.py
 ```
 
-## The five checks
+## The four checks
 
 `links` resolves every relative markdown link. `crosslinks` is the one it
 cannot do: it proves a link resolves *somewhere else*. A document that links to
@@ -29,14 +29,9 @@ directory there is a defect and stays one. Exempting them once blinded the
 check to the four `temp_datacatalogs/` lines in the root README, which is the
 opposite of what the map is for.
 
-`recipes` requires every `just <recipe>` to name a real recipe — and, on a line
-that enumerates recipes, every bare backticked name on it too. A line becomes
-an enumeration once two of its names are real recipes. Prose about the
-`justfile` named `restart` and `scale-up`; neither is a recipe.
-
-`indices` requires every document to be listed in its shelf's README, every ADR
-and mission in an index to exist, and each ADR's status in the index to match
-the status in the ADR itself.
+`recipes` requires every `` `just <recipe>` `` to name a real recipe. It does
+not check a bare backticked name with no `just` in front of it — prose that
+names a recipe without the command form is not covered.
 
 ## What is not checked, and why
 
