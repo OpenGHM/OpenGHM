@@ -9,8 +9,8 @@
     "datePublished": "2026-02-24",
     "category": "publication",
     "creator": [
-      { "name": "Danielle Grogan", "email": "danielle.grogan@unh.edu" },
-      { "name": "Shan Zuidema", "email": "shan.zuidema@unh.edu" }
+      { "name": "Jordan Rivera", "email": "jordan.rivera@example.edu" },
+      { "name": "Sam Whitfield", "email": "sam.whitfield@example.edu" }
     ],
     "license": "GPL-3.0-only",
     "keywords": ["Water Balance Model", "Global_tracking", "hydrology"],

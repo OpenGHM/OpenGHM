@@ -9,9 +9,9 @@
     "datePublished": "2026-02-24",
     "category": "tutorial",
     "creator": [
-      { "name": "Danielle Grogan", "email": "danielle.grogan@unh.edu" },
-      { "name": "Shan Zuidema", "email": "shan.zuidema@unh.edu" },
-      { "name": "Alex Prusevich", "email": "alex.proussevitch@unh.edu" }
+      { "name": "Jordan Rivera", "email": "jordan.rivera@example.edu" },
+      { "name": "Sam Whitfield", "email": "sam.whitfield@example.edu" },
+      { "name": "Casey Nolan", "email": "casey.nolan@example.edu" }
     ],
     "license": "GPL-3.0-only",
     "keywords": ["Water Balance Model", "WBM tutorial", "hydrology"],
