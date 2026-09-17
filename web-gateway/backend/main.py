@@ -15,7 +15,6 @@ from app.core import pending_sso, sessions
 from app.core.config import settings
 from app.core.database import close_db, get_client, get_db
 from app.core.roles import Role
-from app.db.seed_repository import seed_datasets
 from app.services.background_sync import run_background_sync
 from app.services.slurm import (
     close_slurm_client,
@@ -136,9 +135,6 @@ async def lifespan(app: FastAPI):
     await db.jobs.create_index([("created_at", -1)])
     # Registrations-per-day time series.
     await db.users.create_index([("created_at", -1)])
-
-    # Startup: seed example datasets if missing
-    await seed_datasets()
 
     # Startup: warm slurmly client (non-fatal — first job submission will retry)
     try:

@@ -109,12 +109,14 @@ that nothing else declares one.
 | `audit_events` | append-only, `auth` and `job` categories |
 | `datasets` | the browsable catalogue |
 
-`datasets` is not like the others. `seed_datasets()` runs on every startup and
-does `delete_many({})` before inserting three hard-coded documents from
-`web-gateway/backend/app/db/seed_repository.py`. The catalogue is source code:
-it cannot be edited through the API, and anything written into that collection
-is gone at the next pod restart. `Permission.REPO_MANAGE` exists and no
-endpoint uses it.
+`datasets` is not like the others. **Nothing populates it.** It used to be
+reset to three hard-coded documents on every startup by a seed function that
+has since been deleted — it carried real researchers' names and emails as
+demo data, not appropriate for a public instance, and it was the collection's
+*only* writer, so removing it rather than scrubbing it left nothing behind.
+`Permission.REPO_MANAGE` exists and no endpoint uses it — there is currently
+no way, through the API or otherwise, to add a dataset to the catalogue. See
+[open items](../reference/open-items.md).
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 (`ops/k8s/<env>/mongo.yml`). That is the one place cluster state exists, and

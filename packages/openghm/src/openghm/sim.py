@@ -6,8 +6,8 @@ submit it with ``sbatch``.
 
 The snapshot is a **self-describing folder**: the user points at it (defaults to the
 current directory) and a ``metadata.json`` at its root declares the representative
-init file and the rest of the run info (see ``scripts/export_snapshot_metadata.py``).
-There is no snapshot registry and no ``--init`` flag.
+init file and the rest of the run info. There is no snapshot registry and no
+``--init`` flag.
 
 Mount model is **split-mount** (from the job-submission testing, ``dev/
 openghm_jobrun_params.md``):
