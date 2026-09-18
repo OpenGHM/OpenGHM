@@ -114,6 +114,7 @@ and 0012 were folded into 0010 and the next ADR is 0017.
 | [0015](decisions/0015-model-input-is-a-published-artifact.md) | Model input is published on its own; snapshots link to it | accepted |
 | [0016](decisions/0016-split-public-and-ops-repositories.md) | The product is public; this instance's deployment is a separate private repository | accepted |
 | [0017](decisions/0017-the-spec-is-the-source-of-truth.md) | The snapshot spec is the source of truth; the gateway stores its shape | accepted |
+| [0018](decisions/0018-shared-definitions-and-no-renderings.md) | Specs share definitions from `schemas/common/`, and ship no generated renderings | accepted — amends 0006 |
 
 ## Missions
 
