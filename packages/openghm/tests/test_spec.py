@@ -85,6 +85,19 @@ def test_ref_into_common_is_actually_checked():
     assert any("license" in e for e in result.errors)
 
 
+def test_format_checking_is_actually_on():
+    """jsonschema does not enable format checking by default — without an
+    explicit format_checker, "format": "date" accepts a syntactically
+    string-shaped non-date like "1980-01-00" silently. This is a regression
+    test for exactly that: two records in the real model-input example
+    carried it (a day-00 placeholder) until a stricter generator caught it."""
+    bad = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    bad["simulation"]["temporalCoverage"]["start"] = "1980-01-00"
+    result = spec.validate_document(bad, spec="snapshot-spec")
+    assert not result.ok
+    assert any("start" in e for e in result.errors)
+
+
 # ---- validate_document — negative: schema shape -------------------------------
 
 

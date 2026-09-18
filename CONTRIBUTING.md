@@ -51,12 +51,20 @@ in local development requires it.
 ## Snapshot spec changes
 
 `schemas/` is the one source of truth for the snapshot spec
-([ADR 0001](docs/decisions/0001-unified-repository.md)); the backend model,
-frontend types, and the `openghm` wheel's bundled copy are meant to be
-generated from it, not hand-edited. That generator does not exist yet
-([open item](docs/reference/open-items.md)) — until it does, a spec change
-means updating all four by hand in the same pull request. Say so in the
-description so a reviewer checks all four moved together.
+([ADR 0001](docs/decisions/0001-unified-repository.md)). The backend model
+and frontend types are **generated** from it — never hand-edit
+`web-gateway/backend/app/models/generated/snapshot.py` or
+`web-gateway/frontend/lib/repository/generated.ts`, each says so in its own
+header. After editing `schemas/snapshot-spec/metadata/1.0.0.json`:
+
+```bash
+just codegen
+```
+
+Regenerates both files. Commit the diff they produce alongside the schema
+change — CI runs the same command and fails if it produces one you didn't
+commit. The `openghm` wheel's bundled copy (`packages/openghm/src/openghm/schemas`)
+needs no separate step: it is a symlink to the same `schemas/` tree, not a copy.
 
 ## Pull requests
 

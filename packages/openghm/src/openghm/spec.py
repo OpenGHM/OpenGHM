@@ -154,7 +154,15 @@ def validate_document(data: dict, *, spec: str, version: Optional[str] = None) -
     if not schema_path.is_file():
         raise OpenghmError(f"unknown {spec} version {version!r} (no {schema_path.name} under metadata/)")
     schema = _read_json(schema_path)
-    validator = jsonschema.Draft202012Validator(schema, registry=_registry())
+    # format_checker is not on by default in jsonschema — without it, "format":
+    # "date" accepts a syntactically-string-shaped non-date like "1980-01-00"
+    # silently. Found the hard way: two records in the model-input example
+    # carried exactly that (a day-00 placeholder distinct from the year-0000
+    # one already excluded), and nothing here caught it until a second,
+    # stricter generator (Pydantic) choked on it.
+    validator = jsonschema.Draft202012Validator(
+        schema, registry=_registry(), format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER
+    )
     found = sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.absolute_path])
     errors = [
         f"{'.'.join(str(p) for p in e.absolute_path) or '$'}: {e.message}" for e in found

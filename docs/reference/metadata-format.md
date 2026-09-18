@@ -342,6 +342,53 @@ means what the dataset reports, and a forcing series is an input to the run
 rather than something it measured. This file claims conformance to nothing but
 its own `$schema`.
 
+## The gateway's catalogue
+
+The repository UI's dataset shape ([`web-gateway/backend/app/models/repository.py`](../../web-gateway/backend/app/models/repository.py))
+used to be its own document — DCMI Box bounds, schema.org `variableMeasured`,
+title/creators/tag in the naming HydroShare's own catalogue uses — assembled by
+hand before this spec existed and never brought into line with it
+([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md),
+[open item 14](open-items.md)). Mission `2026-09-18-gateway-on-the-spec`
+(private, `ops/missions/`) replaced it, on one rule the maintainer gave in
+place of reconciling each field:
+**the schema is always the source of truth. The gateway is rebuilt around it,
+not migrated field by field.** A legacy field with no basis in the spec is
+dropped; one genuinely computable from spec fields is derived at read time and
+never stored; nothing was added to the spec to keep an old field alive.
+
+| Catalogue field | Spec source | How |
+|---|---|---|
+| `id`, `slug` | `id`, `slug` | direct |
+| `about` | `about` | direct (the shared block — [ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)) |
+| `spatialCoverage` | `simulation.spatialCoverage` | direct (DCMI Box — already the gateway's own shape, just nested differently) |
+| `spatialResolution` (a display label, e.g. `"5 arc-minute"`) | `simulation.resolution` | derived — `f"{value} {unit}"` |
+| `spatialResolutionDegrees` | `simulation.resolution` | derived — `value` converted to degrees by `unit` (arc-minute ÷ 60, arc-second ÷ 3600) |
+| `temporalCoverage` | `simulation.temporalCoverage` | direct |
+| `inputVariables` | `simulation.inputVariables` | direct — not shown by the legacy UI at all; added, since the spec carries it and `outputVariables` was already shown |
+| `activeProcesses` | `simulation.activeProcesses` | direct |
+| `outputVariables` | `simulation.outputVariables` | direct (was `variablesMeasured`, `unitText` → `unit`; `standardName` dropped — no CF-standard-name source exists anywhere in the toolkit's variable dictionary) |
+| `recommendedCompute` | `simulation.recommendedCompute` | direct (was a free-text list; now the spec's own `{cores, walltime}`) |
+| `uses` | `uses` | direct — the container's pinned digest/`oras`/`https` and the linked model input's id, not shown by the legacy UI at all |
+| `runtime` | `runtime` | direct — `generatedAt` and the real execution record (cluster, cores, walltime, SLURM job id), also newly shown |
+| `softwareVersion` | `uses.container.version` | derived. (The WBM *code* version is a separate, still-unpinned question — [open item 11](open-items.md) — not this field.) |
+| `licenseUrl` | `about.license` | derived — a static SPDX-id → URL mapping, same rule as `spatialResolutionDegrees`: computed, never stored |
+| `generatedAt` (was `lastUpdated`, the default sort key) | `runtime.generatedAt` | direct, renamed to match the spec's own spelling rather than kept as an internal alias |
+
+**Dropped outright, with why:**
+
+| Field | Why |
+|---|---|
+| `temporalResolution` | No spec field answers "how often is output written"; nothing to derive it from |
+| `fileSize`, `format` | Properties of the stored tree, not of `metadata.json` — and the backend holds no S3 credentials by design ([`gateway.md` §5](../architecture/gateway.md#5-the-two-paths-that-leave-the-cluster)), so computing them from S3 was never architecturally available either |
+| `spatialCoverage.riverNetworkSource`, `majorRivers` | The network file's identity belongs to a model input's `networks[]`, which this mission's catalogue does not join (model input is out of scope — [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
+| `spinupPeriod` | Matches the already-documented deliberate exclusion of `Spinup` (`.init` fields that are neither searchable nor part of the overview, [above](#where-simulation-comes-from)) |
+| `isBasedOn`, `datasetVersion` | No traceable source; legacy leftovers |
+| `processesOn` | Duplicated `activeProcesses` |
+| `variablesMeasured[].standardName` | A CF standard name is a controlled-vocabulary term; nothing populates it |
+| `datasetType` | The catalogue is snapshot-only for this mission — model input is out of scope. A discriminator with one possible value describes nothing; a later mission adds it against a real second case, not an imagined one |
+| `adminMetadata` (`conformsTo`, `metadataStandard`, …) | Replaced outright by the schema.org JSON-LD projection this file already describes ([Notes](#notes)), computed at render time rather than stored |
+
 ## Model input's `metadata.json`
 
 A published model input ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md))

@@ -204,10 +204,6 @@
       "name": "Glacier Discharge, model (v.2; 6min) ERA-Interim hindcast, monthly",
       "unit": "m3/sec",
       "timeSeries": "monthly",
-      "temporalCoverage": {
-        "start": "1980-01-00",
-        "end": "2012-12-00"
-      },
       "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
     },
     {
@@ -216,10 +212,6 @@
       "name": "Glacier Volume, model (v.2; 6min) ERA-Interim hindcast, yearly",
       "unit": "m3",
       "timeSeries": "yearly",
-      "temporalCoverage": {
-        "start": "1980-01-00",
-        "end": "2012-12-00"
-      },
       "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
     },
     {
