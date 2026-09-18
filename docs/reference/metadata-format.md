@@ -13,7 +13,7 @@ only division that stays stable as the system grows:
 | Block | Filled by | Holds |
 |---|---|---|
 | `about` | a person, at publish | citation metadata — title, authors, licence, links |
-| `simulation` | derived from the selected `.init` | what the run computes: extent, period, variables, processes |
+| `simulation` | derived from the selected `.init` | what the run is driven by and what it computes: extent, period, input and output variables, processes |
 | `uses` | the publisher, at publish | the two artifacts a run has to fetch from outside the snapshot |
 | `runtime` | the system | the document's own timestamp, and the record of a run that finished |
 
@@ -64,12 +64,17 @@ maps to ids for browsing.
     "spatialCoverage": { "west": -123.75, "south": 28.9166, "east": -77.8333, "north": 52.9167, "crs": "EPSG:4326" },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
-    "forcingData": { "precipitation": "merra2_prectotcorr_d", "airTemperature": "merra2_t2m_d" },
+    "inputVariables": [
+      { "role": "precipitation",  "dataset": "merra2_prectotcorr_d",
+        "fullName": "MERRA2 Total Surface Precipitation, bias corrected, Daily", "unit": "mm/day" },
+      { "role": "airTemperature", "dataset": "merra2_t2m_d",
+        "fullName": "MERRA2 Temperature at 2m, Daily", "unit": "C" }
+    ],
     "activeProcesses": [
       "Reservoirs", "Runoff from Glaciated Areas", "Source water tracking by land area",
       "Irrigated Crops", "Primary water source tracking", "Irrigation water re-use tracking"
     ],
-    "variables": [
+    "outputVariables": [
       { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
       { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" }
     ],
@@ -130,10 +135,10 @@ Every field in it except `recommendedCompute` is derived mechanically from the
 | Field | Source |
 |---|---|
 | `temporalCoverage` | `MT_Code_Name.Run_Start` / `Run_End` — dates, no time of day |
-| `forcingData` | the `MT_*` time series the `.init` names — see [the role vocabulary](#forcing-roles) |
+| `inputVariables` | the `MT_*` time series the `.init` names — see [the role vocabulary](#forcing-roles) |
 | `spatialCoverage` | the `.asc` header of the file `Network` points at: `xllcorner`, `yllcorner`, `ncols`/`nrows` × `cellsize`. `crs` is the `.init`'s `Projection`, normalised to uppercase |
 | `resolution` | the same header's `cellsize`, converted to `{ value, unit }` — 0.08333° → `{ 5, "arc-minute" }` |
-| `variables` | `Output_vars`, looked up in `model/WBM_dataCube_expand.csv` for `Full_name` and `Org_units` |
+| `outputVariables` | `Output_vars`, looked up in `model/WBM_dataCube_expand.csv` for `Full_name` and `Org_units` |
 | `activeProcesses` | which optional keys carry a value (`Reservoirs`, `Glaciers`, `Irrigation`, `Runoff_mask`, …), plus the suffixes present in `Output_vars`: `*_ps`/`_pg`/`_pr`/`_pu` mean primary water source tracking, `*_irr`/`_pst`/`_rlt` mean irrigation water re-use tracking |
 
 `recommendedCompute` is the exception: a person's a priori estimate for whoever
@@ -151,12 +156,13 @@ row with conflicting units (`glMelt`), which needs a documented tie-break.
 
 #### Forcing roles
 
-`forcingData` is an **open map**: one entry per forcing time series the run
-actually uses, keyed by role. It is not a fixed pair. WBM takes far more than
-precipitation and temperature — evapotranspiration alone needs humidity, wind
-and radiation — and a snapshot that drives those has to be able to say so.
+`inputVariables` holds one entry per forcing time series the run actually uses.
+It is **variable length, not a fixed pair** — WBM takes far more than
+precipitation and temperature, evapotranspiration alone needs humidity, wind
+and radiation, and a snapshot that drives those has to be able to say so — but
+`role` itself is a closed vocabulary:
 
-| Key | `.init` source | Units |
+| `role` | `.init` source | Units WBM expects |
 |---|---|---|
 | `precipitation` | `MT_Precip.Primary` | mm/(hour\|day\|month) |
 | `precipitationFraction` | `precipFraction` | fraction |
@@ -170,7 +176,54 @@ and radiation — and a snapshot that drives those has to be able to say so.
 Only roles the `.init` names appear; there are no null placeholders. The Wyoming
 example carries two because that `.init` sets two. Adding a role to this table is
 a MINOR bump ([snapshot-spec.md](snapshot-spec.md#version-rules)), which is the
-point of leaving the map open.
+point of leaving the length open while the vocabulary is fixed.
+
+A role appears **at most once**. An array cannot express that the way the map it
+replaced did for free, and JSON Schema has no way to say it, so the generator and
+the validator enforce it instead.
+
+#### Where an input variable's name and unit come from
+
+Each `MT_*` key in the `.init` points at an **MT record** — itself a `.init`
+file, under the snapshot's own `data/` tree:
+
+```perl
+MT_Precip => { Primary => '/wbm/data/climate/precip/merra2_prectotcorr_d.init' },
+MT_airT   => { Primary => '/wbm/data/climate/airTemp/merra2_t2m_d.init' },
+```
+
+`dataset` is that path's basename — the record's `Code_Name`. The record also
+carries `Name` and `Units`, which become `fullName` and `unit`. That mirrors how
+`outputVariables` resolves `Full_name` and `Org_units` out of the model's
+variable dictionary: the two sides of a run are described the same way on
+purpose.
+
+**`Units`, not `Orig_Units`.** Both are in the record and they routinely differ,
+because `Orig_Units` describes the file on disk and `Units` describes what WBM
+reads after applying `Var_Scale` and `Var_Offset`. Read off the three staged
+snapshots, where the same two records appear identically in all of them:
+
+| `dataset` | `Name` → `fullName` | `Units` → `unit` | `Orig_Units` | scaling |
+|---|---|---|---|---|
+| `merra2_prectotcorr_d` | MERRA2 Total Surface Precipitation, bias corrected, Daily | mm/day | kg/(m^2 s) | `Var_Scale` 86400 |
+| `merra2_t2m_d` | MERRA2 Temperature at 2m, Daily | C | K | `Var_Offset` −273.15 |
+
+`Orig_Units` would record kelvin for a series the model and every output treat as
+Celsius, so it is the wrong one to carry. The units column in the role table
+above is what WBM expects of a role in general; `unit` is what this snapshot's
+record actually declares.
+
+`fullName` and `unit` are **optional** for one reason: they are copied out of
+files that leave the bundle under
+[ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md). Recording
+them here is what keeps this document readable once those files are addressed by
+id somewhere else — and a generator that cannot reach the MT record writes the
+entry without them rather than guessing.
+
+Fields the record carries that this file deliberately does not: `Project`,
+`MetadataLink` and `citation` describe the *provenance* of a forcing dataset, and
+belong with model input once that has a spec of its own (ADR 0015) rather than
+being copied per snapshot.
 
 The bias-correction inputs (`WM_mod_precip`, `WM_obs_precip`, `WM_mod_airT`,
 `WM_obs_airT`) are deliberately excluded. They are reference series used to
@@ -224,9 +277,12 @@ JSON-LD island can be generated for Google Dataset Search at render time. That
 projection is **generated, never stored**: it drops `category`, maps
 `relatedLink` to `citation` with the DOI as a nested `identifier`
 (`PropertyValue`, `propertyID: "DOI"`), reaches into `simulation` for
-`spatialCoverage` / `temporalCoverage` / `variableMeasured`, and reshapes those
-to what schema.org expects (an ISO interval string, a `GeoShape.box`). This file
-claims conformance to nothing but its own `$schema`.
+`spatialCoverage`, `temporalCoverage` and `outputVariables`, and reshapes those
+to what schema.org expects (a `GeoShape.box`, an ISO interval string, and
+`variableMeasured`). Only the outputs project: schema.org's `variableMeasured`
+means what the dataset reports, and a forcing series is an input to the run
+rather than something it measured. This file claims conformance to nothing but
+its own `$schema`.
 
 ## Container lock record
 

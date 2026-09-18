@@ -31,10 +31,12 @@
     "spatialCoverage": { "west": -123.75, "south": 28.9166, "east": -77.8333, "north": 52.9167, "crs": "EPSG:4326" },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
-    "forcingData": {
-      "precipitation": "merra2_prectotcorr_d",
-      "airTemperature": "merra2_t2m_d"
-    },
+    "inputVariables": [
+      { "role": "precipitation",  "dataset": "merra2_prectotcorr_d",
+        "fullName": "MERRA2 Total Surface Precipitation, bias corrected, Daily", "unit": "mm/day" },
+      { "role": "airTemperature", "dataset": "merra2_t2m_d",
+        "fullName": "MERRA2 Temperature at 2m, Daily", "unit": "C" }
+    ],
     "activeProcesses": [
       "Reservoirs",
       "Runoff from Glaciated Areas",
@@ -43,7 +45,7 @@
       "Primary water source tracking",
       "Irrigation water re-use tracking"
     ],
-    "variables": [
+    "outputVariables": [
       { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
       { "name": "runoff_ps", "fullName": "Snowment Fraction in Runoff (p)", "unit": "fraction" },
       { "name": "runoff_pu", "fullName": "Unsustainable water Fraction in Runoff (p)", "unit": "fraction" },

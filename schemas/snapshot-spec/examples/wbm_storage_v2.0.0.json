@@ -32,14 +32,16 @@
     "spatialCoverage": { "west": -127.8334, "south": 21.75, "east": -60.5834, "north": 57.1667, "crs": "EPSG:4326" },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2001-01-01", "end": "2001-12-31" },
-    "forcingData": {
-      "precipitation": "merra2_prectotcorr_d",
-      "airTemperature": "merra2_t2m_d"
-    },
+    "inputVariables": [
+      { "role": "precipitation",  "dataset": "merra2_prectotcorr_d",
+        "fullName": "MERRA2 Total Surface Precipitation, bias corrected, Daily", "unit": "mm/day" },
+      { "role": "airTemperature", "dataset": "merra2_t2m_d",
+        "fullName": "MERRA2 Temperature at 2m, Daily", "unit": "C" }
+    ],
     "activeProcesses": [
       "Evaporation from Open Water"
     ],
-    "variables": [
+    "outputVariables": [
       { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
       { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" },
       { "name": "streamAge", "fullName": "Stream Age (water residence time)", "unit": "days" }

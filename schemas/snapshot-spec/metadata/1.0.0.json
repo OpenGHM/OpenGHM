@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
   "title": "OpenGHM snapshot metadata",
-  "description": "metadata.json for one WBM snapshot. Fields are grouped by where their contents come from: about (a person, at publish), simulation (derived from the selected .init), uses (the publisher, at publish), runtime (the system). See devdocs/reference/metadata-format.md.",
+  "description": "metadata.json for one WBM snapshot. Fields are grouped by where their contents come from: about (a person, at publish), simulation (derived from the selected .init), uses (the publisher, at publish), runtime (the system). See docs/reference/metadata-format.md.",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "id", "slug", "about", "simulation", "uses", "runtime"],
@@ -89,7 +89,7 @@
     "simulation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["init", "spatialCoverage", "resolution", "temporalCoverage", "forcingData", "activeProcesses", "variables", "recommendedCompute"],
+      "required": ["init", "spatialCoverage", "resolution", "temporalCoverage", "inputVariables", "activeProcesses", "outputVariables", "recommendedCompute"],
       "properties": {
         "init": {
           "type": "string",
@@ -126,21 +126,45 @@
             "end": { "type": "string", "format": "date" }
           }
         },
-        "forcingData": {
-          "type": "object",
-          "additionalProperties": false,
-          "minProperties": 1,
-          "description": "Open map, one entry per forcing time series the .init actually names — see metadata-format.md#forcing-roles. Not a fixed pair.",
-          "properties": {
-            "precipitation": { "type": "string" },
-            "precipitationFraction": { "type": "string" },
-            "airTemperature": { "type": "string" },
-            "windU": { "type": "string" },
-            "windV": { "type": "string" },
-            "cloudFraction": { "type": "string" },
-            "humidity": { "type": "string" },
-            "albedo": { "type": "string" },
-            "leafAreaIndex": { "type": "string" }
+        "inputVariables": {
+          "type": "array",
+          "minItems": 1,
+          "description": "What the run is driven by: one entry per forcing time series the .init actually names — see metadata-format.md#forcing-roles. Variable length, not a fixed pair, but `role` is a closed vocabulary and a new role is an additive MINOR bump. `role` is unique within the array; JSON Schema cannot express that, so the generator and the validator enforce it.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "dataset"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "precipitation",
+                  "precipitationFraction",
+                  "airTemperature",
+                  "windU",
+                  "windV",
+                  "cloudFraction",
+                  "humidity",
+                  "albedo",
+                  "leafAreaIndex"
+                ]
+              },
+              "dataset": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The MT record driving this role, named by its Code_Name — the basename of the .init the run's MT_* key points at (e.g. merra2_prectotcorr_d for /wbm/data/climate/precip/merra2_prectotcorr_d.init)."
+              },
+              "fullName": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The MT record's Name, e.g. 'MERRA2 Temperature at 2m, Daily'. Optional because it is copied out of a file that leaves the bundle under ADR 0015 — recording it here is what keeps this document readable without that file."
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The MT record's Units — what WBM reads the series as, after Var_Scale and Var_Offset. NOT Orig_Units, which is the unit of the file on disk before scaling (e.g. K, not C; kg/(m^2 s), not mm/day). Optional for the same reason as fullName."
+              }
+            }
           }
         },
         "activeProcesses": {
@@ -148,17 +172,18 @@
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
         },
-        "variables": {
+        "outputVariables": {
           "type": "array",
           "minItems": 1,
+          "description": "What the run computes: one entry per name in the .init's Output_vars, resolved through the model's variable dictionary — see metadata-format.md.",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "required": ["name", "fullName", "unit"],
             "properties": {
               "name": { "type": "string", "minLength": 1 },
-              "fullName": { "type": "string", "minLength": 1 },
-              "unit": { "type": "string", "minLength": 1 }
+              "fullName": { "type": "string", "minLength": 1, "description": "The dictionary's Full_name." },
+              "unit": { "type": "string", "minLength": 1, "description": "The dictionary's Org_units[0] — the native unit, not an aggregated one." }
             }
           }
         },
