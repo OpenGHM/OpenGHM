@@ -342,6 +342,103 @@ means what the dataset reports, and a forcing series is an input to the run
 rather than something it measured. This file claims conformance to nothing but
 its own `$schema`.
 
+## Model input's `metadata.json`
+
+A published model input ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md))
+carries the ancillary/reference data a WBM run reads besides its climate
+forcing and network — crop calendars, glacier area, irrigation efficiency,
+soil capacity. `schemas/model-input-spec/metadata/1.0.0.json` is its schema,
+shaped the same way as the snapshot's: `about` is the identical shared block
+([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)),
+`coverage` and `datasets` are derived from the input's own `data_init/`
+records, and `networks` describes the river-network files it carries.
+
+```json
+{
+  "$schema": "https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json",
+  "id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "slug": "wbm_ancillary_data_v2.0.0",
+
+  "about": { "…": "the shared block — see above" },
+
+  "coverage": {
+    "spatialCoverage": {
+      "northlimit": 57.1667, "southlimit": 21.75, "eastlimit": -60.5833, "westlimit": -127.8333,
+      "units": "Decimal degrees", "projection": "EPSG:4326"
+    }
+  },
+
+  "networks": [
+    {
+      "file": "network/hyd_5m_CONUS_mississippi_patched.asc",
+      "spatialCoverage": { "…": "same shape as coverage.spatialCoverage" },
+      "resolution": { "value": 5, "unit": "arc-minute" }
+    },
+    { "file": "network/Merrimack_stn210_Subset.tif" }
+  ],
+
+  "datasets": [
+    {
+      "code": "merra2_prectotcorr_d",
+      "init": "data_init/climate/merra2_prectotcorr_d.init",
+      "name": "MERRA2 Total Surface Precipitation, bias corrected, Daily",
+      "unit": "mm/day",
+      "timeSeries": "daily",
+      "temporalCoverage": { "start": "1980-01-01", "end": "2018-12-31" },
+      "project": "MERRA2",
+      "metadataLink": "https://gmao.gsfc.nasa.gov/reanalysis/MERRA-2/",
+      "citation": "The Modern-Era Retrospective Analysis for Research and Applications, Version 2 (MERRA-2), Ronald Gelaro, et al., 2017, J. Clim., doi: 10.1175/JCLI-D-16-0758.1"
+    }
+  ]
+}
+```
+
+The full example, generated from the real ancillary data staged on Anvil
+rather than invented, is
+[`schemas/model-input-spec/examples/wbm_ancillary_data_v2.0.0.json`](../../schemas/model-input-spec/examples/wbm_ancillary_data_v2.0.0.json).
+
+### Where `datasets` comes from
+
+One entry per **MT record** under `data_init/` — the same kind of file a
+snapshot's `MT_*` keys point at (see
+[where an input variable's name and unit come from](#where-an-input-variables-name-and-unit-come-from)),
+just read here directly rather than through a run's forcing keys:
+
+| Field | Source | Present when |
+|---|---|---|
+| `code` | the record's own `Code_Name` | always — this is what makes it a dataset entry at all |
+| `init` | the file's own path, relative to the model input's root | always |
+| `name` | `Name` | the record has one |
+| `unit` | `Units` (not `Orig_Units` — same rule as a snapshot's `inputVariables[].unit`) | the value isn't the empty string |
+| `timeSeries` | `Time_Series` | the record has one |
+| `temporalCoverage` | `Start_Date` / `End_Date` | neither uses WBM's `0000`-year "no real date" placeholder |
+| `project` | `Project` | present — only the climate forcing records in the staged data carry one |
+| `metadataLink` | `MetadataLink` | present |
+| `citation` | `citation` | present — kept as the free string it already is; some carry a DOI inline as text |
+
+**`code` is read from inside the file, never assumed from its filename.**
+Confirmed necessary, not a defensive habit: four of the 28 records in the
+staged ancillary data declare a `Code_Name` that differs from their file's
+basename, and two separate files declare the *same* `Code_Name`
+(`global_rgi6_glaciers_area_1km`) with near-identical but not byte-identical
+content — a duplicate in the source data itself. `code` is unique within the
+array; JSON Schema cannot express that (the same limitation already noted for
+a snapshot's `inputVariables[].role`), so the generator and the validator
+(`openghm.spec`) enforce it.
+
+**Not every file under `data_init/` fits this shape.** One file in the staged
+data, a dams database, has no `Code_Name` at all — a point-feature reference
+table (location, capacity, catchment area) with its own `DOI`, `Author` and
+`Citation`, not a time series. It is excluded from `datasets` rather than
+forced in with fabricated fields; see [open items](open-items.md).
+
+`unit` and `temporalCoverage` are **omitted, not transcribed as empty or
+fake**, when the source has nothing real to report: several crop-coefficient
+records declare `Units` as the empty string (the quantity is genuinely
+dimensionless), and most non-climate records use the `0000`-year placeholder
+because they are climatological — a repeating annual cycle, not a dated
+series — rather than measured over a real period.
+
 ## Container lock record
 
 One per image revision, committed alongside the recipe — for the v2 image

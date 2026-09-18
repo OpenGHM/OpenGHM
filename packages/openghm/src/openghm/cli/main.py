@@ -6,11 +6,13 @@ contract; the core owns command construction; ``render`` presents the result.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from datetime import datetime, timezone
-from typing import Callable, List
+from pathlib import Path
+from typing import Callable, List, Optional
 
 import click
 
@@ -499,6 +501,73 @@ def wizard_cmd() -> None:
     from .wizard import run_wizard
 
     run_wizard()
+
+
+# ---- spec validation ---------------------------------------------------------
+
+
+def _validate_cmd(spec: str):
+    """One implementation shared by ``snapshot validate`` and ``model-input
+    validate`` — the two specs are checked identically, only the spec name and
+    the folder's vocabulary (a snapshot vs. a model input) differ."""
+
+    @click.argument("path", default=".", metavar="[PATH]")
+    @click.option("--version", default=None, metavar="VERSION",
+                  help=f"{spec} version to check against (default: current)")
+    @click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output")
+    def cmd(path: str, version: Optional[str], as_json: bool) -> None:
+        from .. import spec as specmod
+
+        folder = Path(path)
+        try:
+            result = specmod.validate_folder(folder, spec=spec, version=version)
+        except OpenghmError as e:
+            click.echo(f"openghm: {e}", err=True)
+            raise SystemExit(2)
+        if as_json:
+            click.echo(json.dumps({
+                "spec": result.spec,
+                "version": result.version,
+                "ok": result.ok,
+                "document": {"ok": result.document.ok, "errors": result.document.errors},
+                "layout": None if result.layout is None else
+                    {"ok": result.layout.ok, "missing_required": result.layout.missing_required},
+            }, indent=2))
+        else:
+            click.echo(f"{spec} {result.version} — {folder}")
+            if result.document.ok:
+                click.echo("  metadata.json: ok")
+            else:
+                click.echo("  metadata.json: FAILED")
+                for e in result.document.errors:
+                    click.echo(f"    {e}")
+            if result.layout is not None:
+                if result.layout.ok:
+                    click.echo("  layout: ok")
+                else:
+                    click.echo("  layout: FAILED")
+                    for p in result.layout.missing_required:
+                        click.echo(f"    missing required path: {p}")
+        if not result.ok:
+            raise SystemExit(1)
+
+    return cmd
+
+
+@cli.group("snapshot")
+def snapshot_group() -> None:
+    """validate a snapshot folder against the published snapshot spec."""
+
+
+snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
+
+
+@cli.group("model-input")
+def model_input_group() -> None:
+    """validate a model input folder against the published model-input spec (ADR 0015)."""
+
+
+model_input_group.command("validate")(_validate_cmd("model-input-spec"))
 
 
 # ---- setup: init + image download -------------------------------------------
