@@ -195,8 +195,13 @@ MT_Precip => { Primary => '/wbm/data/climate/precip/merra2_prectotcorr_d.init' }
 MT_airT   => { Primary => '/wbm/data/climate/airTemp/merra2_t2m_d.init' },
 ```
 
-`dataset` is that path's basename — the record's `Code_Name`. The record also
-carries `Name` and `Units`, which become `fullName` and `unit`. That mirrors how
+`dataset` is the record's own `Code_Name` field — read from inside that file,
+**not** assumed from its path's basename. The two happen to agree for both
+climate records above, but not in general: several records in the staged
+ancillary data declare a `Code_Name` that differs from their filename (one
+pair even has two different files declaring the *same* `Code_Name`), which is
+exactly why this is read rather than derived. The record also carries `Name`
+and `Units`, which become `fullName` and `unit`. That mirrors how
 `outputVariables` resolves `Full_name` and `Org_units` out of the model's
 variable dictionary: the two sides of a run are described the same way on
 purpose.

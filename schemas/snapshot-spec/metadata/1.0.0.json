@@ -22,70 +22,12 @@
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "description": "The human name at publish time. Not part of the S3 key; the catalog maps slug to id for browsing, and may remap it later without touching this file."
     },
-    "about": { "$ref": "#/$defs/about" },
+    "about": { "$ref": "../../common/about/1.0.0.json" },
     "simulation": { "$ref": "#/$defs/simulation" },
     "uses": { "$ref": "#/$defs/uses" },
     "runtime": { "$ref": "#/$defs/runtime" }
   },
   "$defs": {
-    "about": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "description", "datePublished", "category", "creator", "license", "keywords", "url"],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string", "minLength": 1 },
-        "datePublished": { "type": "string", "format": "date" },
-        "category": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Open vocabulary, not an enum. Observed values: publication, tutorial. A new value never needs a spec bump — see metadata-format.md#aboutcategory."
-        },
-        "creator": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["name"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "email": { "type": "string", "format": "email" },
-              "orcid": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$" }
-            }
-          }
-        },
-        "license": {
-          "type": "string",
-          "description": "A bare SPDX identifier, e.g. GPL-3.0-only. Not a URL."
-        },
-        "keywords": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "url": {
-          "type": "string",
-          "format": "uri",
-          "description": "The canonical gateway URL, built from id — never from slug, which can be renamed later (see metadata-format.md)."
-        },
-        "relatedLink": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["relation", "url"],
-            "properties": {
-              "relation": { "type": "string", "minLength": 1 },
-              "roleName": { "type": "string" },
-              "url": { "type": "string", "format": "uri" },
-              "doi": { "type": ["string", "null"], "pattern": "^10\\.\\d{4,9}/\\S+$" },
-              "description": { "type": "string" }
-            }
-          }
-        }
-      }
-    },
     "simulation": {
       "type": "object",
       "additionalProperties": false,
@@ -96,28 +38,7 @@
           "pattern": "^[^/].*\\.init$",
           "description": "Path relative to wbm_init/, not a bare filename assumption — a snapshot can hold several .init files. Resolves to <snapshot>/wbm_init/<init>."
         },
-        "spatialCoverage": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "DCMI Box element names — see metadata-format.md#spatialcoverage. The DCMI `box`, `name`, `uplimit`, `downlimit` and `zunits` elements are deliberately absent: `box` restates the four limits, and the rest describe a vertical extent WBM does not model.",
-          "required": ["northlimit", "southlimit", "eastlimit", "westlimit", "units", "projection"],
-          "properties": {
-            "northlimit": { "type": "number", "minimum": -90, "maximum": 90 },
-            "southlimit": { "type": "number", "minimum": -90, "maximum": 90 },
-            "eastlimit": { "type": "number", "minimum": -180, "maximum": 180 },
-            "westlimit": { "type": "number", "minimum": -180, "maximum": 180 },
-            "units": {
-              "type": "string",
-              "enum": ["Decimal degrees"],
-              "description": "The unit the four limits are expressed in. One value today, because WBM refuses to run a network that is not geographic — same reasoning as runtime.execution.cluster. A second unit is an additive MINOR bump."
-            },
-            "projection": {
-              "type": "string",
-              "enum": ["EPSG:4326"],
-              "description": "The coordinate reference system of the simulation grid. One value, because WBM dies on any other — see metadata-format.md#spatialcoverage. The .init's Projection may be an EPSG code, a Proj4 string or WKT, so the generator recognises the CRS and emits this form, rather than transcribing the .init's spelling. A second value is an additive MINOR bump, and would come with a native-CRS block rather than alone."
-            }
-          }
-        },
+        "spatialCoverage": { "$ref": "../../common/spatial-coverage/1.0.0.json" },
         "resolution": {
           "type": "object",
           "additionalProperties": false,
@@ -162,7 +83,7 @@
               "dataset": {
                 "type": "string",
                 "minLength": 1,
-                "description": "The MT record driving this role, named by its Code_Name — the basename of the .init the run's MT_* key points at (e.g. merra2_prectotcorr_d for /wbm/data/climate/precip/merra2_prectotcorr_d.init)."
+                "description": "The MT record driving this role, named by its own Code_Name field — read from inside the .init the run's MT_* key points at, not assumed from that file's basename. The two agree for the climate forcing used today (merra2_prectotcorr_d.init declares Code_Name merra2_prectotcorr_d) but not in general: several records in the staged ancillary data declare a Code_Name that differs from their filename (see model-input-spec's datasets[].code)."
               },
               "fullName": {
                 "type": "string",

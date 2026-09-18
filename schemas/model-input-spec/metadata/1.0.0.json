@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json",
+  "title": "OpenGHM model input metadata",
+  "description": "metadata.json for one published model input (ADR 0015) — the ancillary/reference data a WBM run reads besides its climate forcing and network. Grouped the same way the snapshot spec is: about (a person, at publish), coverage and datasets (derived from the input's own data_init/ records), networks (the river-network files it carries). See docs/reference/metadata-format.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "slug", "about", "coverage", "datasets"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "This document's own schema version URL, e.g. https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Minted at publish, same rule as a snapshot's id (ADR 0014): 256 random bits as lowercase hex, not derived from content. Two snapshots built from the same input data cite this same value in their uses.modelInput.id."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "description": "The human name at publish time. Not part of the S3 key; a catalog maps slug to id for browsing, same rule as a snapshot's slug."
+    },
+    "about": { "$ref": "../../common/about/1.0.0.json" },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spatialCoverage"],
+      "description": "The extent of the input as a whole — the union of what its networks and datasets cover. temporalCoverage is optional because a model input can be a static/climatological reference (soil properties, crop coefficients) with no real calendar period at all; when every dataset the input carries is climatological, there is nothing true to put here.",
+      "properties": {
+        "spatialCoverage": { "$ref": "../../common/spatial-coverage/1.0.0.json" },
+        "temporalCoverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string", "format": "date" },
+            "end": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+    "networks": {
+      "type": "array",
+      "description": "River-network / grid-definition files this input carries under network/ — what a snapshot's simulation.spatialCoverage and resolution are actually computed from when its Network key points into a linked model input rather than a bundled copy.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path relative to this input's root, e.g. network/hyd_5m_CONUS_mississippi_patched.asc."
+          },
+          "spatialCoverage": { "$ref": "../../common/spatial-coverage/1.0.0.json" },
+          "resolution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "unit"],
+            "properties": {
+              "value": { "type": "number", "exclusiveMinimum": 0 },
+              "unit": { "type": "string", "enum": ["arc-minute", "arc-second", "degree"] }
+            }
+          }
+        }
+      }
+    },
+    "datasets": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per MT record under data_init/ — the reference/ancillary time series and static fields a WBM run reads besides climate forcing (crop calendars, glacier area, irrigation efficiency, soil capacity, ...). `code` is unique within the array; JSON Schema cannot express that, so the generator and the validator enforce it, the same limitation as inputVariables[].role in the snapshot spec. Not every file under data_init/ is an MT record in this shape — one observed in the staged ancillary data (a point-feature reference table with its own DOI and no Code_Name at all) does not fit here and is not modelled by 1.0.0; see open-items.md.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "init"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's own Code_Name field. Not assumed from its filename — several records in the staged ancillary data declare a Code_Name that differs from their file's basename."
+          },
+          "init": {
+            "type": "string",
+            "pattern": "^[^/].*\\.init$",
+            "description": "Path relative to this input's root, e.g. data_init/climate/merra2_prectotcorr_d.init. Resolves to <model-input>/data_init/<...>."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's Name field. Optional: present on ordinary MT records, but not guaranteed on every shape this array may need to describe in future."
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's Units field, same rule as a snapshot's inputVariables[].unit — not Orig_Units. Optional and, deliberately, never an empty string: several staged records (crop coefficients, added-water fractions) declare Units as the empty string because the quantity is dimensionless, and an absent field says that more plainly than a quoted nothing."
+          },
+          "timeSeries": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's Time_Series field, e.g. daily, monthly, yearly, daily_clim, yearly_clim — a _clim suffix marks a climatology (a repeating annual cycle, not a dated series). Free text, not an enum: the staged data already uses more values than the snapshot spec's forcing-role table anticipated, and this array describes ancillary data in general, not only forcing."
+          },
+          "temporalCoverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end"],
+            "description": "Omitted for a climatological record: the staged data marks 'no real date' with a 0000 placeholder year, which is not a valid date and is not carried here rather than being transcribed.",
+            "properties": {
+              "start": { "type": "string", "format": "date" },
+              "end": { "type": "string", "format": "date" }
+            }
+          },
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's Project field. Present on the climate forcing records (e.g. MERRA2); most other ancillary records in the staged data do not carry one."
+          },
+          "metadataLink": {
+            "type": "string",
+            "format": "uri",
+            "description": "The record's MetadataLink field, when it has one."
+          },
+          "citation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The record's citation field, kept as the free string it already is rather than parsed into a structured reference — some carry a DOI inline as text, most carry none at all."
+          }
+        }
+      }
+    }
+  }
+}

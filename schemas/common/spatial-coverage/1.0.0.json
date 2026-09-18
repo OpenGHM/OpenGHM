@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openghm.org/common/spatial-coverage/1.0.0.json",
+  "title": "OpenGHM spatial coverage",
+  "description": "A bounding box in DCMI Box element names, shared by every OpenGHM artifact spec (ADR 0018) — see metadata-format.md#spatialcoverage for why. The DCMI `box`, `name`, `uplimit`, `downlimit` and `zunits` elements are deliberately absent: `box` restates the four limits, and the rest describe a vertical extent WBM does not model.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["northlimit", "southlimit", "eastlimit", "westlimit", "units", "projection"],
+  "properties": {
+    "northlimit": { "type": "number", "minimum": -90, "maximum": 90 },
+    "southlimit": { "type": "number", "minimum": -90, "maximum": 90 },
+    "eastlimit": { "type": "number", "minimum": -180, "maximum": 180 },
+    "westlimit": { "type": "number", "minimum": -180, "maximum": 180 },
+    "units": {
+      "type": "string",
+      "enum": ["Decimal degrees"],
+      "description": "The unit the four limits are expressed in. One value today, because WBM refuses to run a network that is not geographic — same reasoning as runtime.execution.cluster. A second unit is an additive MINOR bump."
+    },
+    "projection": {
+      "type": "string",
+      "enum": ["EPSG:4326"],
+      "description": "The coordinate reference system of the grid this coverage describes. One value, because WBM dies on any other — see metadata-format.md#spatialcoverage. A source projection may be an EPSG code, a Proj4 string or WKT, so the generator recognises the CRS and emits this form, rather than transcribing the source's spelling. A second value is an additive MINOR bump, and would come with a native-CRS block rather than alone."
+    }
+  }
+}

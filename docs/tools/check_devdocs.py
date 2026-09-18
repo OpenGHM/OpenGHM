@@ -54,14 +54,8 @@ FUTURE = {
     # three exist now. They were removed in 0016 because a blanket `deploy`
     # prefix silently allowed `deploy/k8s/...` long after it had moved to
     # `ops/k8s/`, which is exactly the kind of stale path this check is for.
-    "schemas/snapshot-spec/docs": "0000",
-    "schemas/snapshot-spec/index.json": "0000",
-    "schemas/snapshot-spec/metadata/1.0.0.json": "0001",
-    "schemas/snapshot-spec/layout/1.0.0.json": "0001",
-    "packages/openghm/src/openghm/spec.py": "0001",
-    "packages/openghm/tests/test_spec.py": "0001",
-    "schemas/model-input-spec": "2026-09-18-complete-the-spec-tree",
-    "schemas/common": "2026-09-18-complete-the-spec-tree — ADR 0018's shared definitions",
+    "packages/openghm/src/openghm/spec.py": "2026-09-18-complete-the-spec-tree",
+    "packages/openghm/tests/test_spec.py": "2026-09-18-complete-the-spec-tree",
     "deploy/services": "0004 — third-party config, an empty placeholder until then",
     ".github": "0003",
     "container/v2/lock/2.0.0-r3.lock.json": "0005",
@@ -97,6 +91,7 @@ REMOVED = {
     # Never existed: a layout ADR 0010 considered and rejected. An ADR is
     # append-only, so the alternatives it weighed stay named in it forever.
     "images/wbm-v1-lite/s3": "0010 — rejected alternative, never created",
+    "schemas/snapshot-spec/docs": "2026-09-18-complete-the-spec-tree — ADR 0018, empty since 0006, never generated into",
 }
 # not repository paths: URI schemes, absolute host paths, S3 keys, snapshot
 # internals, Lmod module names (`python/3.9.5`), the archived pre-merge

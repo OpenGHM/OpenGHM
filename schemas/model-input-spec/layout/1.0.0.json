@@ -1,0 +1,11 @@
+{
+  "specVersion": "1.0.0",
+  "required": [
+    "metadata.json",
+    "data_init/"
+  ],
+  "optional": [
+    "SHA256SUMS",
+    "network/"
+  ]
+}

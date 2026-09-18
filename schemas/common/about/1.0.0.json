@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.openghm.org/common/about/1.0.0.json",
+  "title": "OpenGHM citation block",
+  "description": "The 'who published this, and how to cite it' block, shared by every OpenGHM artifact spec (snapshot, model input) rather than defined once per spec (ADR 0018). Field names are schema.org/Dataset property names on purpose, so a JSON-LD island can be generated for Google Dataset Search at render time (see metadata-format.md#notes) — that projection is generated, never stored.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "datePublished", "category", "creator", "license", "keywords", "url"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "datePublished": { "type": "string", "format": "date" },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Open vocabulary, not an enum. A new value never needs a spec bump — see metadata-format.md#aboutcategory."
+    },
+    "creator": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "email": { "type": "string", "format": "email" },
+          "orcid": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$" }
+        }
+      }
+    },
+    "license": {
+      "type": "string",
+      "description": "A bare SPDX identifier, e.g. GPL-3.0-only. Not a URL."
+    },
+    "keywords": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "The canonical gateway URL, built from the artifact's minted id — never from its slug, which can be renamed later (see metadata-format.md)."
+    },
+    "relatedLink": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relation", "url"],
+        "properties": {
+          "relation": { "type": "string", "minLength": 1 },
+          "roleName": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "doi": { "type": ["string", "null"], "pattern": "^10\\.\\d{4,9}/\\S+$" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

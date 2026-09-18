@@ -83,18 +83,22 @@ registry is the signal that those are remote
 
 ## Generated files
 
-Four artifacts are produced from `schemas/snapshot-spec/metadata/<ver>.json`
-and are never hand-edited. **None of them exists yet** — the source arrives
-with mission 0001 and the generators with mission 0002; this is the shape they
-take:
+Three artifacts are produced from `schemas/snapshot-spec/metadata/<ver>.json`
+and are never hand-edited. **None of them exists yet** — the exact generated
+filenames are the codegen mission's own decision
+(`ops/missions/2026-09-18-gateway-on-the-spec/`, private); this is the shape:
 
 ```
 schemas/snapshot-spec/metadata/<ver>.json
-   ├─ datamodel-codegen ──▶ web-gateway/backend/app/models/snapshot_generated.py
-   ├─ json2ts ────────────▶ web-gateway/frontend/src/types/snapshot.d.ts
-   ├─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
-   └─ generate-schema-doc ▶ schemas/snapshot-spec/docs/<ver>/
+   ├─ datamodel-codegen ──▶ web-gateway/backend/app/models/…
+   ├─ json2ts ────────────▶ web-gateway/frontend/lib/repository/…
+   └─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
 ```
+
+A fourth artifact, generated HTML documentation, is deliberately not on this
+list: [ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)
+decided against it. Each schema's own `description` fields are the
+documentation.
 
 This is the whole reason the repository is unified: a spec bump is one commit,
 and CI can assert that regenerating produces no diff. Split across

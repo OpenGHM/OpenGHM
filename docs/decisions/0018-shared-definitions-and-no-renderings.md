@@ -59,7 +59,7 @@ incidental, so `mc cp` to `s3://openghm/schemas/`
 never flattens it.
 
 **A shared definition is versioned on its own** and each `$ref` pins a version.
-Changing `about` means adding `schemas/common/about/1.1.0.json`; a spec adopts it by
+Changing `about` means adding a new version file under `schemas/common/about/`; a spec adopts it by
 repointing its `$ref`, which is that spec's own bump to make. Neither spec is
 dragged along by the other's schedule.
 
