@@ -361,8 +361,8 @@ never stored; nothing was added to the spec to keep an old field alive.
 |---|---|---|
 | `id`, `slug` | `id`, `slug` | direct |
 | `about` | `about` | direct (the shared block — [ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)) |
+| `simulation` (`init`, `resolution`, …) | `simulation` | direct, whole — the legacy free-text `spatialResolution` label (`"5 arc-minute"`) is not reproduced; `resolution.value` and `resolution.unit` are already in the response for a client to format however it needs |
 | `spatialCoverage` | `simulation.spatialCoverage` | direct (DCMI Box — already the gateway's own shape, just nested differently) |
-| `spatialResolution` (a display label, e.g. `"5 arc-minute"`) | `simulation.resolution` | derived — `f"{value} {unit}"` |
 | `spatialResolutionDegrees` | `simulation.resolution` | derived — `value` converted to degrees by `unit` (arc-minute ÷ 60, arc-second ÷ 3600) |
 | `temporalCoverage` | `simulation.temporalCoverage` | direct |
 | `inputVariables` | `simulation.inputVariables` | direct — not shown by the legacy UI at all; added, since the spec carries it and `outputVariables` was already shown |

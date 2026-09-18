@@ -1,105 +1,83 @@
+"""The catalogue's dataset shape.
+
+``OpenGHMSnapshotMetadata`` (``app/models/generated/snapshot.py``) is
+generated from ``schemas/snapshot-spec/metadata/1.0.0.json`` and is the
+document as stored: a `datasets` Mongo document is that shape, verbatim,
+plus the `_id` Mongo itself requires (mirroring the spec's own ``id``).
+
+``DatasetResponse`` is what the API actually returns: every field of the
+spec document, plus the handful of values the catalogue UI needs that are
+genuinely computable from it and are never stored — see
+``docs/reference/metadata-format.md#the-gateways-catalogue`` for why each one
+is here and not in the spec.
+"""
+
 from __future__ import annotations
 
-from enum import Enum
-from typing import Annotated, Union
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from pydantic import BaseModel, Field
+from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
 
-
-class DatasetType(str, Enum):
-    snapshot = "snapshot"
-    raw_data = "raw_data"
-
-
-class CreatorModel(BaseModel):
-    name: str
-    email: str | None = None
+#: WBM's own grid-resolution vocabulary (metadata-format.md#resolution),
+#: not a general unit-conversion library — there are exactly three values,
+#: fixed by the schema's own enum.
+_DEGREES_PER_UNIT = {"arc-minute": 1 / 60, "arc-second": 1 / 3600, "degree": 1.0}
 
 
-class RelatedLinkModel(BaseModel):
-    type: str | None = None
-    roleName: str
-    url: str
-    doi: str | None = None
-    description: str
+def resolution_to_degrees(resolution: Resolution) -> float:
+    """``simulation.resolution`` as a single comparable number, for the
+    resolution range filter. Computed, never stored."""
+    return resolution.value * _DEGREES_PER_UNIT[resolution.unit.value]
 
 
-class SpatialCoverageModel(BaseModel):
-    box: str
-    northlimit: float
-    southlimit: float
-    eastlimit: float
-    westlimit: float
-    units: str
-    projection: str
-    riverNetworkSource: str | None = None
-    majorRivers: list[str] | None = None
+def license_url(spdx_id: str) -> str:
+    """A display link for ``about.license``'s bare SPDX identifier.
+
+    A real mapping (SPDX ids to their canonical page) would need the SPDX
+    license-list data as a dependency for one derived link; this covers the
+    two licenses every snapshot and the toolkit itself actually use today
+    (GPL-3.0-only, MIT) and falls back to SPDX's own site search rather than
+    guessing a URL for an id it doesn't recognise.
+    """
+    known = {
+        "MIT": "https://spdx.org/licenses/MIT.html",
+        "GPL-3.0-only": "https://spdx.org/licenses/GPL-3.0-only.html",
+        "GPL-3.0-or-later": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+    }
+    return known.get(spdx_id, f"https://spdx.org/licenses/{spdx_id}")
 
 
-class VariableMeasuredModel(BaseModel):
-    name: str
-    unitText: str
-    standardName: str | None = None
+class DatasetResponse(OpenGHMSnapshotMetadata):
+    """A snapshot as the catalogue returns it."""
 
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-class AdminMetadataModel(BaseModel):
-    generatedAt: str
-    lastUpdated: str
-    metadataStandard: str
-    metadataVersion: str
-    conformsTo: list[str] = []
-    applicationContext: str
+    #: ``simulation.resolution`` converted to a single number of degrees.
+    spatialResolutionDegrees: float
+    #: derived from ``about.license`` — see :func:`license_url`.
+    licenseUrl: str
+    #: ``runtime.generatedAt``, exposed under the spec's own name at the top
+    #: level too — this is the catalogue's default sort key.
+    generatedAt: AwareDatetime
 
-
-class BaseDatasetResponse(BaseModel):
-    id: str
-    slug: str | None = None
-    datasetType: DatasetType
-    title: str
-    description: str
-    creators: list[CreatorModel] = []
-    license: str
-    licenseUrl: str | None = None
-    keywords: list[str] = []
-    tag: str
-    relatedLinks: list[RelatedLinkModel] = []
-    yearPublished: int | None = None
-    spatialResolution: str
-    spatialResolutionDegrees: float | None = None
-    spatialCoverage: SpatialCoverageModel | None = None
-    temporalCoverage: str
-    temporalResolution: str | None = None
-    datasetVersion: str | None = None
-    format: str = "NetCDF"
-    fileSize: str = "N/A"
-    lastUpdated: str
-    adminMetadata: AdminMetadataModel | None = None
-
-
-class SnapshotDatasetResponse(BaseDatasetResponse):
-    datasetType: DatasetType = DatasetType.snapshot
-    softwareVersion: str
-    isBasedOn: str | None = None
-    spinupPeriod: str | None = None
-    processesOn: list[str] = []
-    activeProcesses: list[str] = []
-    variablesMeasured: list[VariableMeasuredModel] = []
-    recommendedComputeSetting: list[str] | None = None
-
-
-class RawDatasetResponse(BaseDatasetResponse):
-    datasetType: DatasetType = DatasetType.raw_data
-
-
-# Discriminated union for FastAPI response
-DatasetResponse = Annotated[
-    Union[SnapshotDatasetResponse, RawDatasetResponse],
-    Field(discriminator="datasetType"),
-]
+    @classmethod
+    def from_metadata_json(cls, doc: dict) -> "DatasetResponse":
+        """Build from a ``datasets`` Mongo document (or any dict matching
+        ``metadata.json``'s shape) — a Mongo ``_id``, if present, is dropped
+        first; the spec's own ``id`` field is what the response carries."""
+        doc = {k: v for k, v in doc.items() if k != "_id"}
+        meta = OpenGHMSnapshotMetadata.model_validate(doc)
+        payload = meta.model_dump(by_alias=True, mode="json")
+        payload["spatialResolutionDegrees"] = resolution_to_degrees(meta.simulation.resolution)
+        payload["licenseUrl"] = license_url(meta.about.license)
+        payload["generatedAt"] = meta.runtime.generatedAt
+        return cls.model_validate(payload)
 
 
 class RepositoryListResponse(BaseModel):
-    items: list[SnapshotDatasetResponse | RawDatasetResponse]
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DatasetResponse]
     totalCount: int
     totalPages: int
     page: int

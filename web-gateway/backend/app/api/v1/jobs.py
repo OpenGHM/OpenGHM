@@ -110,12 +110,15 @@ async def submit_job(
 ):
     db = get_db()
 
-    # Resolve dataset title (best-effort — the repo endpoint loads from JSON files)
+    # Resolve dataset title from the catalogue (best-effort — falls back to
+    # the bare id if the dataset isn't there, rather than failing the submit).
+    # `db.catalog` doesn't exist — datasets live in `db.datasets`
+    # (app/api/v1/repository.py); `about.name` is the spec's name field, not
+    # the legacy `title`.
     dataset_title = body.dataset_id  # fallback
-    # Try to look up from the catalog/temp data if available
-    dataset_doc = await db.catalog.find_one({"_id": body.dataset_id})
+    dataset_doc = await db.datasets.find_one({"_id": body.dataset_id})
     if dataset_doc:
-        dataset_title = dataset_doc.get("title", body.dataset_id)
+        dataset_title = dataset_doc.get("about", {}).get("name", body.dataset_id)
 
     # Build slurm config with server defaults
     slurm_cfg = SlurmConfig(

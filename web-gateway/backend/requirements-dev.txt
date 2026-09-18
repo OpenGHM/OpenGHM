@@ -1,5 +1,10 @@
 # Dev-only tools. Not installed in the deployed container — see requirements.txt
-# for that. `just codegen` installs this on the host before regenerating.
+# for that.
+
+# tests/ — there was no backend test suite before this. See tests/test_repository.py.
+pytest>=8
+
+# `just codegen` installs this on the host before regenerating.
 
 # Generates app/models/generated/snapshot.py from schemas/snapshot-spec/metadata/1.0.0.json.
 # --allow-remote-refs and --use-title-as-name are both load-bearing, not
