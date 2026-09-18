@@ -24,7 +24,10 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 # The goldens were captured with the Node CLI's fixed Anvil SIF path; pin it here
 # so this parity gate is independent of the (now portable, per-user) default.
-_NODE_SIF = "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif"
+# The literal value only needs to be *some* fixed absolute path — it was
+# genericized from the real Anvil install path the Node CLI actually used, to
+# avoid publishing that allocation's username in a public test fixture.
+_NODE_SIF = "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif"
 SING = RuntimeContext.from_config(Config(sif=_NODE_SIF))  # singularity, pinned SIF
 DOCKER = RuntimeContext.from_config(Config(sif=_NODE_SIF), runtime="docker")  # wbm-lite:latest
 

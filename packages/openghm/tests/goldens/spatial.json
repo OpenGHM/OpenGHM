@@ -1,9 +1,9 @@
 {
   "command": "spatial",
   "runtime": "singularity",
-  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "image": "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
   "dryRun": true,
-  "exec": "singularity exec -c -e -B /snap/gtout:/data/gt_output -B /snap/masks:/data/masks -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/spatial_aggregation.pl -v -f /work/US_states_6min.msk -mt /work/test.MT.csv Global_tracking_runoff_y US_states_6min /work/output_runoff_by_state.nc",
+  "exec": "singularity exec -c -e -B /snap/gtout:/data/gt_output -B /snap/masks:/data/masks -B /scratch/work:/work /home/example-user/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/spatial_aggregation.pl -v -f /work/US_states_6min.msk -mt /work/test.MT.csv Global_tracking_runoff_y US_states_6min /work/output_runoff_by_state.nc",
   "argv": [
     "singularity",
     "exec",
@@ -15,7 +15,7 @@
     "/snap/masks:/data/masks",
     "-B",
     "/scratch/work:/work",
-    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
     "/wbm/utilities/spatial_aggregation.pl",
     "-v",
     "-f",

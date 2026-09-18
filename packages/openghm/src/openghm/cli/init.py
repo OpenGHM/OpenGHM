@@ -35,11 +35,15 @@ PROBE_TOOLS = ("sbatch", "sacct", "scancel", "singularity", "apptainer", "docker
 
 #: Non-interactive presets (``openghm init --non-interactive --preset <name>``).
 PRESETS: Dict[str, dict] = {
+    # `account` and `output_base` are deliberately absent: both name a specific
+    # allocation and username, and no allocation is correct for a stranger's
+    # install. `openghm init` (interactive) prompts for them; a non-interactive
+    # `--preset anvil` install gets the portable Config defaults for them and
+    # is expected to pass `--account`/`--output-base` explicitly per invocation,
+    # or edit the written config.toml afterward.
     "anvil": {
         "runtime": "singularity",
-        "account": "ees260008",
         "partition": "shared",
-        "output_base": "/anvil/scratch/x-openghm/simulations",
     },
     "local": {
         "runtime": "docker",
@@ -238,7 +242,7 @@ def _ask_slurm(console, questionary, ask, hint, env: Dict[str, bool]) -> dict:
     out: dict = {}
 
     hint("\nSLURM account — the allocation you are billed against.")
-    account = ask(questionary.text("Account (e.g. ees260008)", default="")).strip()
+    account = ask(questionary.text("Account (e.g. abc123456)", default="")).strip()
     if account:
         out["account"] = account
         if env["sacct"]:

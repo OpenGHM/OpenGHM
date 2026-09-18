@@ -27,8 +27,12 @@ else:  # Python 3.9 / 3.10 on Anvil → tomli backport
 
 #: Legacy Anvil shared-install layout. Kept as a fallback so an existing Anvil
 #: deployment keeps working with no config file, even though the portable
-#: defaults now point at a per-user cache (``sif_dir``).
-_ANVIL_APPS_WBM = "/home/x-openghm/apps/wbm"
+#: defaults now point at a per-user cache (``sif_dir``). The path is
+#: allocation-specific, so it is never hardcoded here — set
+#: ``OPENGHM_ANVIL_LEGACY_WBM`` in the environment of a deployment that needs
+#: it. Unset (the default for every other install), the fallback simply never
+#: resolves, which is the correct behavior off that one shared install.
+_ANVIL_APPS_WBM = os.environ.get("OPENGHM_ANVIL_LEGACY_WBM", "")
 
 
 @dataclass(frozen=True)
@@ -46,8 +50,13 @@ class Config:
 
     # Used by `sim submit` / `sim run` (SLURM defaults + per-sim work/output root).
     # A snapshot is addressed by folder path, so no snapshot_root registry is needed.
+    # `account` has no default: it names a specific allocation, and no allocation
+    # is correct for a stranger's install. `openghm init` prompts for it; without
+    # one set, `sim submit`/`sim run` pass an empty --account and SLURM itself
+    # rejects the job with a clear error, rather than silently billing someone
+    # else's allocation.
     output_base: str = "~/.openghm/runs"
-    account: str = "ees260008"
+    account: str = ""
     partition: str = "shared"
 
     @classmethod
@@ -71,7 +80,7 @@ class Config:
         working without a config file).
         """
         cache = os.path.expanduser(self.sif)
-        if not os.path.exists(cache):
+        if not os.path.exists(cache) and _ANVIL_APPS_WBM:
             legacy = f"{_ANVIL_APPS_WBM}/lite/wbm_tools_lite.sif"
             if os.path.exists(legacy):
                 return legacy
@@ -85,7 +94,7 @@ class Config:
         """
         base = os.path.expanduser(self.sif_dir)
         cache = os.path.join(base, "wbm", version, f"wbm_opensource_v{version}.sif")
-        if not os.path.exists(cache):
+        if not os.path.exists(cache) and _ANVIL_APPS_WBM:
             legacy = f"{_ANVIL_APPS_WBM}/{version}/bin/wbm_opensource_v{version}.sif"
             if os.path.exists(legacy):
                 return legacy

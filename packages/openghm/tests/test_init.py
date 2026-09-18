@@ -39,8 +39,11 @@ def test_apply_answers_overlays_and_ignores_unknown():
 
 def test_presets_apply():
     anvil = initmod.apply_answers(initmod.PRESETS["anvil"])
-    assert anvil.runtime == "singularity" and anvil.account == "ees260008"
-    assert anvil.output_base == "/anvil/scratch/x-openghm/simulations"
+    assert anvil.runtime == "singularity" and anvil.partition == "shared"
+    # No allocation is correct for a stranger's install — account and
+    # output_base are the portable Config defaults, not Anvil-specific.
+    assert anvil.account == Config().account == ""
+    assert anvil.output_base == Config().output_base
     local = initmod.apply_answers(initmod.PRESETS["local"])
     assert local.runtime == "docker" and local.output_base == "~/.openghm/runs"
 

@@ -1,9 +1,9 @@
 {
   "command": "network preclip",
   "runtime": "singularity",
-  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "image": "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
   "dryRun": true,
-  "exec": "singularity exec -c -e -B /snap/net:/data/network -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/networkTools -v /work/preclip.init",
+  "exec": "singularity exec -c -e -B /snap/net:/data/network -B /scratch/work:/work /home/example-user/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/networkTools -v /work/preclip.init",
   "argv": [
     "singularity",
     "exec",
@@ -13,7 +13,7 @@
     "/snap/net:/data/network",
     "-B",
     "/scratch/work:/work",
-    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
     "/wbm/utilities/networkTools",
     "-v",
     "/work/preclip.init"

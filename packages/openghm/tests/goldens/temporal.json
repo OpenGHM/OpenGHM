@@ -1,9 +1,9 @@
 {
   "command": "temporal",
   "runtime": "singularity",
-  "image": "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+  "image": "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
   "dryRun": true,
-  "exec": "singularity exec -c -e -B /snap/gtout:/data/gt_output -B /scratch/work:/work /home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/temporal_aggregation.pl -v -ndc -sd 2000-01-01 -ed 2002-12-31 -mt /work/test.MT.csv Global_tracking_runoff_m test_runoff_yearly",
+  "exec": "singularity exec -c -e -B /snap/gtout:/data/gt_output -B /scratch/work:/work /home/example-user/apps/wbm/lite/wbm_tools_lite.sif /wbm/utilities/temporal_aggregation.pl -v -ndc -sd 2000-01-01 -ed 2002-12-31 -mt /work/test.MT.csv Global_tracking_runoff_m test_runoff_yearly",
   "argv": [
     "singularity",
     "exec",
@@ -13,7 +13,7 @@
     "/snap/gtout:/data/gt_output",
     "-B",
     "/scratch/work:/work",
-    "/home/x-openghm/apps/wbm/lite/wbm_tools_lite.sif",
+    "/home/example-user/apps/wbm/lite/wbm_tools_lite.sif",
     "/wbm/utilities/temporal_aggregation.pl",
     "-v",
     "-ndc",

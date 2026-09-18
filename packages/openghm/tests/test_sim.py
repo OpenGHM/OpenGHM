@@ -68,7 +68,7 @@ def _make_snapshot(root: Path, *, metadata=_METADATA, init_name="wbm_test.init",
 
 def _config(tmp_path: Path) -> Config:
     return Config(output_base=str(tmp_path / "out"), sif_dir=str(tmp_path / "sif"),
-                  account="ees260008", partition="shared")
+                  account="abc123456", partition="shared")
 
 
 def _find(built, container):
@@ -150,7 +150,7 @@ def test_sbatch_script_has_slurm_directives(tmp_path):
     sb = _gen(built, ".sbatch").content
     assert "#SBATCH --cpus-per-task=32" in sb          # CLI override wins over metadata
     assert "#SBATCH --time=2:00:00" in sb
-    assert "#SBATCH --account=ees260008" in sb
+    assert "#SBATCH --account=abc123456" in sb
     assert "singularity exec -B " in sb
     assert "wbm_opensource_v2.0.0.sif /wbm/model/wbm.pl /wbm/wbm_init/wbm_test.init" in sb
 
