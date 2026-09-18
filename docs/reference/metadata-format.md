@@ -139,7 +139,7 @@ Every field in it except `recommendedCompute` is derived mechanically from the
 |---|---|
 | `temporalCoverage` | `MT_Code_Name.Run_Start` / `Run_End` — dates, no time of day |
 | `inputVariables` | the `MT_*` time series the `.init` names — see [the role vocabulary](#forcing-roles) |
-| `spatialCoverage` | the `.asc` header of the file `Network` points at: `xllcorner`, `yllcorner`, `ncols`/`nrows` × `cellsize`. `projection` is the `.init`'s `Projection`, normalised to uppercase |
+| `spatialCoverage` | the `.asc` header of the file `Network` points at: `xllcorner`, `yllcorner`, `ncols`/`nrows` × `cellsize`. `projection` comes from the `.init`'s `Projection`, [recognised rather than transcribed](#spatialcoverage) |
 | `resolution` | the same header's `cellsize`, converted to `{ value, unit }` — 0.08333° → `{ 5, "arc-minute" }` |
 | `outputVariables` | `Output_vars`, looked up in `model/WBM_dataCube_expand.csv` for `Full_name` and `Org_units` |
 | `activeProcesses` | which optional keys carry a value (`Reservoirs`, `Glaciers`, `Irrigation`, `Runoff_mask`, …), plus the suffixes present in `Output_vars`: `*_ps`/`_pg`/`_pr`/`_pu` mean primary water source tracking, `*_irr`/`_pst`/`_rlt` mean irrigation water re-use tracking |
@@ -252,10 +252,31 @@ in order of weight:
   standard already answers the question of whether a coordinate system belongs
   inside the bounding box or beside the grid description.
 
-`units` is carried because DCMI Box carries it, even though every snapshot says
-`Decimal degrees` and will for as long as WBM refuses a non-geographic network.
-Following the vocabulary is worth more than pruning one predictable field, and
-the enum documents the reality the same way `runtime.execution.cluster` does.
+`units` and `projection` are both **single-value enums** — `Decimal degrees` and
+`EPSG:4326` — for the same reason `runtime.execution.cluster` is: WBM refuses to
+run anything else, so a closed set records reality instead of inventing a
+constraint. A schema that accepted `EPSG:3408` would be calling a snapshot valid
+that the model will not start on:
+
+```perl
+# images/wbm-tools-lite/wbm/model/wbm.pl:925
+die "Fix code below for non-geographical projections. Aborting...\n\n"
+	if $$extent{projection} ne 'epsg:4326';
+```
+
+`units` is carried at all because DCMI Box carries it — following the vocabulary
+beats pruning one predictable field.
+
+**The generator recognises the CRS; it does not transcribe it.** A `.init`'s
+`Projection` can be an EPSG code, a Proj4 string or WKT
+(`images/wbm-tools-lite/wbm/model/RIMS.pm`), so there is no textual
+transformation that works — uppercasing `+proj=lcc … +units=m` corrupts it.
+The rule is: resolve the value, confirm it is WGS84, emit `EPSG:4326`; anything
+else is refused rather than recorded.
+
+If WBM ever gains projected-network support, the addition is a native-CRS block
+beside limits that stay WGS84 — the shape GeoJSON, schema.org and STAC all
+converge on — not a second unit on the limits themselves.
 
 DCMI's `box`, `name`, `uplimit`, `downlimit` and `zunits` are **not** carried.
 `box` is a string restating the four limits, which rule 4 forbids; the other

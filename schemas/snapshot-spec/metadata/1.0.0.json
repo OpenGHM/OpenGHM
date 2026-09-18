@@ -113,8 +113,8 @@
             },
             "projection": {
               "type": "string",
-              "pattern": "^EPSG:[0-9]+$",
-              "description": "The coordinate reference system of the simulation grid, from the .init's Projection, uppercased. See open item 14: this pattern admits codes WBM cannot actually run."
+              "enum": ["EPSG:4326"],
+              "description": "The coordinate reference system of the simulation grid. One value, because WBM dies on any other — see metadata-format.md#spatialcoverage. The .init's Projection may be an EPSG code, a Proj4 string or WKT, so the generator recognises the CRS and emits this form, rather than transcribing the .init's spelling. A second value is an additive MINOR bump, and would come with a native-CRS block rather than alone."
             }
           }
         },
