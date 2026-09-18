@@ -1,20 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useTransition, useState } from "react";
-import { FilterState, RepositoryListResponse, Dataset } from "@/lib/repository/types";
+import { FilterState, RepositoryListResponse } from "@/lib/repository/types";
 import { fetchDatasets } from "@/lib/repository/actions";
 import { RepositorySidebar } from "./repository-sidebar";
 import { RepositoryResults } from "./repository-results";
 
 const INITIAL_FILTERS: FilterState = {
   searchQuery: "",
-  datasetTypes: [],
-  variableTypes: [],
   temporalCoverageStart: null,
   temporalCoverageEnd: null,
   spatialResMin: null,
   spatialResMax: null,
-  temporalResolutions: [],
   sortBy: "relevance",
   page: 1,
 };
@@ -86,7 +83,7 @@ export function RepositoryClient({
         onClearAll={handleClearAll}
       />
       <RepositoryResults
-        datasets={result.items as Dataset[]}
+        datasets={result.items}
         totalCount={result.totalCount}
         sortBy={filters.sortBy}
         onSortChange={(sortBy) => handleFiltersChange({ sortBy })}

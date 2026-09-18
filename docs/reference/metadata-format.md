@@ -371,7 +371,7 @@ never stored; nothing was added to the spec to keep an old field alive.
 | `recommendedCompute` | `simulation.recommendedCompute` | direct (was a free-text list; now the spec's own `{cores, walltime}`) |
 | `uses` | `uses` | direct — the container's pinned digest/`oras`/`https` and the linked model input's id, not shown by the legacy UI at all |
 | `runtime` | `runtime` | direct — `generatedAt` and the real execution record (cluster, cores, walltime, SLURM job id), also newly shown |
-| `softwareVersion` | `uses.container.version` | derived. (The WBM *code* version is a separate, still-unpinned question — [open item 11](open-items.md) — not this field.) |
+| `softwareVersion` (legacy name) | `uses.container.version` | not a separate field — `uses` is served whole, so a client reads `uses.container.version` directly rather than the catalogue duplicating it under a second name. (The WBM *code* version is a separate, still-unpinned question — [open item 11](open-items.md) — not this field.) |
 | `licenseUrl` | `about.license` | derived — a static SPDX-id → URL mapping, same rule as `spatialResolutionDegrees`: computed, never stored |
 | `generatedAt` (was `lastUpdated`, the default sort key) | `runtime.generatedAt` | direct, renamed to match the spec's own spelling rather than kept as an internal alias |
 

@@ -121,7 +121,7 @@ moves, 1.0.0 describes the bundle as it is.
 
 `SHA256SUMS` is optional because **no staged snapshot has one yet** — see
 [snapshot-layout.md](snapshot-layout.md#generate-sha256sums). Requiring it is
-Next item 6's MAJOR bump, not this version's.
+Next item 5's MAJOR bump, not this version's.
 
 ## Version rules
 

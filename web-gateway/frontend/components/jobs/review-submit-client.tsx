@@ -6,19 +6,10 @@ import { toast } from "sonner";
 import { Loader2, AlertCircle, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { submitJob } from "@/lib/jobs/actions";
-import type { SnapshotDataset } from "@/lib/repository/types";
+import type { Dataset } from "@/lib/repository/types";
 
 interface ReviewSubmitClientProps {
-  snapshot: SnapshotDataset;
-}
-
-function parseDateRange(temporalCoverage: string): { start: string; end: string } | null {
-  // Format: "YYYY-MM-DD/YYYY-MM-DD"
-  const parts = temporalCoverage.split("/");
-  if (parts.length === 2) {
-    return { start: parts[0], end: parts[1] };
-  }
-  return null;
+  snapshot: Dataset;
 }
 
 export function ReviewSubmitClient({ snapshot }: ReviewSubmitClientProps) {
@@ -31,14 +22,13 @@ export function ReviewSubmitClient({ snapshot }: ReviewSubmitClientProps) {
     setError(null);
 
     try {
-      const dateRange = parseDateRange(snapshot.temporalCoverage);
-      const variables = snapshot.variablesMeasured.map((v) => v.name);
+      const variables = snapshot.simulation.outputVariables.map((v) => v.name);
 
       const result = await submitJob({
         dataset_id: snapshot.id,
         parameters: {
-          temporal_range_start: dateRange?.start ?? "2000-01-01",
-          temporal_range_end: dateRange?.end ?? "2010-12-31",
+          temporal_range_start: snapshot.simulation.temporalCoverage.start,
+          temporal_range_end: snapshot.simulation.temporalCoverage.end,
           spatial_domain: null,
           variables,
           custom_params: null,

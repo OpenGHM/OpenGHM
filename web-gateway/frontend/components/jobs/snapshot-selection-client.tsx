@@ -7,17 +7,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { fetchSnapshots } from "@/lib/jobs/actions";
 import type { RepositoryListResponse, Dataset } from "@/lib/repository/types";
 import Link from "next/link";
-import { Calendar, Grid3X3, FileType, HardDrive, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Grid3X3, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function SnapshotCard({ dataset }: { dataset: Dataset }) {
+  const { start, end } = dataset.simulation.temporalCoverage;
+  const { value, unit } = dataset.simulation.resolution;
+
   return (
     <Link href={`/simulations/new/review?snapshot_id=${dataset.id}`} className="block">
       <Card className="h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-[#006994]/40">
         <CardContent className="flex h-full flex-col p-5">
           <div className="mb-2 flex items-start justify-between gap-3">
             <h3 className="text-sm font-semibold leading-snug text-foreground">
-              {dataset.title}
+              {dataset.about.name}
             </h3>
             <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
               Snapshot
@@ -27,27 +30,19 @@ function SnapshotCard({ dataset }: { dataset: Dataset }) {
           <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Calendar className="size-3" />
-              {dataset.temporalCoverage === "static" ? "Static" : dataset.temporalCoverage}
+              {start} – {end}
             </span>
             <span className="inline-flex items-center gap-1">
               <Grid3X3 className="size-3" />
-              {dataset.spatialResolution}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <HardDrive className="size-3" />
-              {dataset.fileSize}
+              {value} {unit}
             </span>
           </div>
 
           <p className="line-clamp-2 flex-1 text-xs text-muted-foreground leading-relaxed">
-            {dataset.description}
+            {dataset.about.description}
           </p>
 
-          <div className="mt-4 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <FileType className="size-3" />
-              {dataset.format}
-            </span>
+          <div className="mt-4 flex items-center justify-end">
             <span className="rounded-md bg-[#006994] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#005a7a]">
               Select →
             </span>
@@ -138,7 +133,7 @@ export function SnapshotSelectionClient({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {result.items.map((dataset) => (
-            <SnapshotCard key={dataset.id} dataset={dataset as Dataset} />
+            <SnapshotCard key={dataset.id} dataset={dataset} />
           ))}
         </div>
       )}

@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitJob } from "@/lib/jobs/actions";
-import type { SnapshotDataset } from "@/lib/repository/types";
+import type { Dataset } from "@/lib/repository/types";
 
 interface Props {
-  dataset: SnapshotDataset;
+  dataset: Dataset;
 }
 
 /**
@@ -26,12 +26,11 @@ export function SubmitJobDialog({ dataset }: Props) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // -- Form state ---------------------------------------------------------
-  const defaultTemporal = parseTemporal(dataset.temporalCoverage);
-  const [startDate, setStartDate] = useState(defaultTemporal.start);
-  const [endDate, setEndDate] = useState(defaultTemporal.end);
+  const [startDate, setStartDate] = useState(dataset.simulation.temporalCoverage.start);
+  const [endDate, setEndDate] = useState(dataset.simulation.temporalCoverage.end);
 
   const [selectedVars, setSelectedVars] = useState<Set<string>>(
-    () => new Set(dataset.variablesMeasured.map((v) => v.name))
+    () => new Set(dataset.simulation.outputVariables.map((v) => v.name))
   );
 
   const [walltime, setWalltime] = useState("02:00:00");
@@ -58,14 +57,12 @@ export function SubmitJobDialog({ dataset }: Props) {
           parameters: {
             temporal_range_start: startDate,
             temporal_range_end: endDate,
-            spatial_domain: dataset.spatialCoverage
-              ? {
-                  north: dataset.spatialCoverage.northlimit,
-                  south: dataset.spatialCoverage.southlimit,
-                  east: dataset.spatialCoverage.eastlimit,
-                  west: dataset.spatialCoverage.westlimit,
-                }
-              : null,
+            spatial_domain: {
+              north: dataset.simulation.spatialCoverage.northlimit,
+              south: dataset.simulation.spatialCoverage.southlimit,
+              east: dataset.simulation.spatialCoverage.eastlimit,
+              west: dataset.simulation.spatialCoverage.westlimit,
+            },
             variables: Array.from(selectedVars),
             custom_params: null,
           },
@@ -128,9 +125,9 @@ export function SubmitJobDialog({ dataset }: Props) {
             <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-5">
               {/* Dataset info */}
               <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                <p className="font-medium text-foreground">{dataset.title}</p>
+                <p className="font-medium text-foreground">{dataset.about.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {dataset.format} &middot; {dataset.spatialResolution}
+                  {dataset.simulation.resolution.value} {dataset.simulation.resolution.unit}
                 </p>
               </div>
 
@@ -158,14 +155,14 @@ export function SubmitJobDialog({ dataset }: Props) {
               </div>
 
               {/* Output variables */}
-              {dataset.variablesMeasured.length > 0 && (
+              {dataset.simulation.outputVariables.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
                     Output Variables ({selectedVars.size}/
-                    {dataset.variablesMeasured.length})
+                    {dataset.simulation.outputVariables.length})
                   </Label>
                   <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto rounded-lg border p-3">
-                    {dataset.variablesMeasured.map((v) => (
+                    {dataset.simulation.outputVariables.map((v) => (
                       <label
                         key={v.name}
                         className="flex items-center gap-2 text-sm cursor-pointer"
@@ -266,22 +263,4 @@ export function SubmitJobDialog({ dataset }: Props) {
       )}
     </>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function parseTemporal(temporal: string): { start: string; end: string } {
-  // "2000-01-01/2010-12-31" or "static" or "2000 - 2010"
-  const isoMatch = temporal.match(
-    /(\d{4}-\d{2}-\d{2})\s*[/–-]\s*(\d{4}-\d{2}-\d{2})/
-  );
-  if (isoMatch) return { start: isoMatch[1], end: isoMatch[2] };
-
-  const yearMatch = temporal.match(/(\d{4})\s*[-–]\s*(\d{4})/);
-  if (yearMatch)
-    return { start: `${yearMatch[1]}-01-01`, end: `${yearMatch[2]}-12-31` };
-
-  return { start: "2000-01-01", end: "2020-12-31" };
 }

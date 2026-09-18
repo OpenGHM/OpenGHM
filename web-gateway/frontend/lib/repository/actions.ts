@@ -17,7 +17,7 @@ export async function fetchDatasets(
 ): Promise<RepositoryListResponse> {
   const client = await getApiClient();
 
-  const params: Record<string, string | number | string[]> = {
+  const params: Record<string, string | number> = {
     sort: filters.sortBy,
     page: filters.page,
     page_size: 5,
@@ -25,11 +25,6 @@ export async function fetchDatasets(
 
   if (filters.searchQuery.trim()) {
     params.q = filters.searchQuery.trim();
-  }
-  if (filters.datasetTypes.length === 1) {
-    // Only filter by type when exactly one type is selected;
-    // if both or neither, return all types.
-    params.type = filters.datasetTypes[0];
   }
   if (filters.temporalCoverageStart != null) {
     params.year_start = filters.temporalCoverageStart;
@@ -42,9 +37,6 @@ export async function fetchDatasets(
   }
   if (filters.spatialResMax !== null) {
     params.spatial_res_max = filters.spatialResMax;
-  }
-  if (filters.temporalResolutions.length > 0) {
-    params.temporal_resolutions = filters.temporalResolutions;
   }
   const response = await client.get<RepositoryListResponse>(
     "/api/v1/repository/datasets",

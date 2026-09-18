@@ -26,24 +26,24 @@ function formatAuthorBibTeX(name: string): string {
 }
 
 function buildAPA(dataset: Dataset): string {
-  const year = new Date(dataset.lastUpdated).getFullYear();
-  const authors = dataset.creators.map((c) => formatAuthorAPA(c.name)).join(", ");
-  const title = dataset.title;
+  const year = new Date(dataset.about.datePublished).getFullYear();
+  const authors = dataset.about.creator.map((c) => formatAuthorAPA(c.name)).join(", ");
+  const title = dataset.about.name;
   const publisher = "OpenGHM";
-  const pub = dataset.relatedLinks.find((l) => l.doi);
+  const pub = dataset.about.relatedLink?.find((l) => l.doi);
   const doi = pub ? `https://doi.org/${pub.doi}` : "";
   return `${authors} (${year}). ${title} [Dataset]. ${publisher}.${doi ? ` ${doi}` : ""}`;
 }
 
 function buildBibTeX(dataset: Dataset): string {
-  const year = new Date(dataset.lastUpdated).getFullYear();
-  const authors = dataset.creators.map((c) => formatAuthorBibTeX(c.name)).join(" and ");
+  const year = new Date(dataset.about.datePublished).getFullYear();
+  const authors = dataset.about.creator.map((c) => formatAuthorBibTeX(c.name)).join(" and ");
   const key = dataset.id.replace(/[^a-zA-Z0-9_]/g, "_");
-  const pub = dataset.relatedLinks.find((l) => l.doi);
+  const pub = dataset.about.relatedLink?.find((l) => l.doi);
   const doiLine = pub ? `\n  doi       = {${pub.doi}},` : "";
   return `@dataset{${key},
   author    = {${authors}},
-  title     = {${dataset.title}},
+  title     = {${dataset.about.name}},
   year      = {${year}},
   publisher = {OpenGHM},${doiLine}
 }`;

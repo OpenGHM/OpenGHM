@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { fetchDatasetById } from "@/lib/repository/actions";
-import { isSnapshot } from "@/lib/repository/types";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,13 +10,10 @@ import {
   ArrowLeft,
   Calendar,
   Grid3X3,
-  FileType,
-  HardDrive,
   ExternalLink,
   Tag,
   Users,
   Scale,
-  Clock,
   Globe,
   Container,
   Timer,
@@ -25,17 +21,15 @@ import {
   Info,
   Zap,
   Layers,
-  MapPin,
   BookOpen,
   Shield,
-  Database,
-  Play,
-  Quote,
   Cpu,
+  Server,
 } from "lucide-react";
 import { CitationCard } from "@/components/repository/citation-card";
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
+import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 
 export default async function DatasetDetailPage({
   params,
@@ -46,11 +40,14 @@ export default async function DatasetDetailPage({
   const dataset = await fetchDatasetById(id);
   if (!dataset) notFound();
 
-  const snapshot = isSnapshot(dataset) ? dataset : null;
+  const { about, simulation, uses, runtime } = dataset;
+  const temporalLabel = `${simulation.temporalCoverage.start} – ${simulation.temporalCoverage.end}`;
+  const resolutionLabel = `${simulation.resolution.value} ${simulation.resolution.unit}`;
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+      <DatasetJsonLd dataset={dataset} />
 
       {/* Breadcrumb */}
       <div className="bg-muted/50 border-b">
@@ -59,7 +56,7 @@ export default async function DatasetDetailPage({
             Data Repository
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-foreground">{dataset.title}</span>
+          <span className="text-foreground">{about.name}</span>
         </div>
       </div>
 
@@ -67,31 +64,17 @@ export default async function DatasetDetailPage({
       <div className="bg-gradient-to-r from-[#0a192f] to-[#006994] py-12">
         <div className="mx-auto max-w-[1280px] px-10">
           <div className="mb-3 flex items-center gap-3">
-            <span
-              className={`rounded-full px-3 py-0.5 text-xs font-semibold ${
-                dataset.datasetType === "snapshot"
-                  ? "bg-emerald-500/80 text-white"
-                  : "bg-amber-500/80 text-white"
-              }`}
-            >
-              {dataset.datasetType === "snapshot" ? "Model Snapshot" : "Model Inputs"}
+            <span className="rounded-full bg-emerald-500/80 px-3 py-0.5 text-xs font-semibold text-white">
+              {about.category}
             </span>
           </div>
           <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
-            {dataset.title}
+            {about.name}
           </h1>
           <div className="flex flex-wrap gap-4">
             {[
-              {
-                icon: <Calendar className="size-4" />,
-                text:
-                  dataset.temporalCoverage === "static"
-                    ? "Static"
-                    : dataset.temporalCoverage,
-              },
-              { icon: <Grid3X3 className="size-4" />, text: dataset.spatialResolution },
-              { icon: <FileType className="size-4" />, text: dataset.format },
-              { icon: <HardDrive className="size-4" />, text: dataset.fileSize },
+              { icon: <Calendar className="size-4" />, text: temporalLabel },
+              { icon: <Grid3X3 className="size-4" />, text: resolutionLabel },
             ].map((item) => (
               <span
                 key={item.text}
@@ -115,7 +98,7 @@ export default async function DatasetDetailPage({
                 Back to Repository
               </Link>
             </Button>
-            {snapshot && <SubmitJobDialog dataset={snapshot} />}
+            <SubmitJobDialog dataset={dataset} />
           </div>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
@@ -133,49 +116,41 @@ export default async function DatasetDetailPage({
                 </CardHeader>
                 <CardContent className="pt-5 pb-6">
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    {dataset.description}
+                    {about.description}
                   </p>
                 </CardContent>
               </Card>
 
               {/* Spatial Coverage */}
-              {dataset.spatialCoverage && (
-                <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-                  <CardHeader className="border-b bg-gradient-to-r from-sky-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                      <div className="flex size-8 items-center justify-center rounded-lg bg-sky-500/10">
-                        <Globe className="size-4 text-sky-600" />
-                      </div>
-                      Spatial Coverage
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-5 pb-6 space-y-4">
-                    <BoundingBoxMap
-                      north={dataset.spatialCoverage.northlimit}
-                      south={dataset.spatialCoverage.southlimit}
-                      east={dataset.spatialCoverage.eastlimit}
-                      west={dataset.spatialCoverage.westlimit}
-                    />
-                    <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-muted-foreground">
-                      <span><span className="font-medium text-foreground">N</span> {dataset.spatialCoverage.northlimit}°</span>
-                      <span><span className="font-medium text-foreground">S</span> {dataset.spatialCoverage.southlimit}°</span>
-                      <span><span className="font-medium text-foreground">E</span> {dataset.spatialCoverage.eastlimit}°</span>
-                      <span><span className="font-medium text-foreground">W</span> {dataset.spatialCoverage.westlimit}°</span>
-                      <span className="text-slate-400">·</span>
-                      <span>{dataset.spatialCoverage.projection}</span>
-                      {dataset.spatialCoverage.riverNetworkSource && (
-                        <>
-                          <span className="text-slate-400">·</span>
-                          <span className="font-mono">{dataset.spatialCoverage.riverNetworkSource}</span>
-                        </>
-                      )}
+              <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+                <CardHeader className="border-b bg-gradient-to-r from-sky-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-sky-500/10">
+                      <Globe className="size-4 text-sky-600" />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    Spatial Coverage
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-5 pb-6 space-y-4">
+                  <BoundingBoxMap
+                    north={simulation.spatialCoverage.northlimit}
+                    south={simulation.spatialCoverage.southlimit}
+                    east={simulation.spatialCoverage.eastlimit}
+                    west={simulation.spatialCoverage.westlimit}
+                  />
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-muted-foreground">
+                    <span><span className="font-medium text-foreground">N</span> {simulation.spatialCoverage.northlimit}°</span>
+                    <span><span className="font-medium text-foreground">S</span> {simulation.spatialCoverage.southlimit}°</span>
+                    <span><span className="font-medium text-foreground">E</span> {simulation.spatialCoverage.eastlimit}°</span>
+                    <span><span className="font-medium text-foreground">W</span> {simulation.spatialCoverage.westlimit}°</span>
+                    <span className="text-slate-400">·</span>
+                    <span>{simulation.spatialCoverage.projection}</span>
+                  </div>
+                </CardContent>
+              </Card>
 
-              {/* Output Variables — Snapshot only */}
-              {snapshot && snapshot.variablesMeasured.length > 0 && (
+              {/* Output Variables */}
+              {simulation.outputVariables.length > 0 && (
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardHeader className="border-b bg-gradient-to-r from-emerald-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -186,13 +161,13 @@ export default async function DatasetDetailPage({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-5 pb-6">
-                    <OutputVariablesTable variables={snapshot.variablesMeasured} />
+                    <OutputVariablesTable variables={simulation.outputVariables} />
                   </CardContent>
                 </Card>
               )}
 
-              {/* Active Processes — Snapshot only */}
-              {snapshot && snapshot.activeProcesses && snapshot.activeProcesses.length > 0 && (
+              {/* Active Processes */}
+              {simulation.activeProcesses.length > 0 && (
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardHeader className="border-b bg-gradient-to-r from-amber-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -204,7 +179,7 @@ export default async function DatasetDetailPage({
                   </CardHeader>
                   <CardContent className="pt-5 pb-6">
                     <div className="flex flex-wrap gap-2">
-                      {snapshot.activeProcesses.map((process) => (
+                      {simulation.activeProcesses.map((process) => (
                         <span
                           key={process}
                           className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800"
@@ -218,7 +193,7 @@ export default async function DatasetDetailPage({
               )}
 
               {/* Related Links */}
-              {dataset.relatedLinks.length > 0 && (
+              {about.relatedLink && about.relatedLink.length > 0 && (
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -230,7 +205,7 @@ export default async function DatasetDetailPage({
                   </CardHeader>
                   <CardContent className="pt-5 pb-6">
                     <ul className="space-y-3">
-                      {dataset.relatedLinks.map((link) => (
+                      {about.relatedLink.map((link) => (
                         <li
                           key={link.url}
                           className="rounded-lg border border-violet-100 bg-violet-50/50 p-4"
@@ -244,7 +219,7 @@ export default async function DatasetDetailPage({
                                 rel="noopener noreferrer"
                                 className="text-sm font-semibold text-violet-700 transition-colors hover:text-violet-900"
                               >
-                                {link.roleName}
+                                {link.roleName ?? link.relation}
                               </a>
                               {link.description && (
                                 <p className="mt-1 text-sm text-muted-foreground">
@@ -268,63 +243,36 @@ export default async function DatasetDetailPage({
               {/* Citation */}
               <CitationCard dataset={dataset} />
 
-              {/* Admin / Provenance Metadata */}
-              {dataset.adminMetadata && (
-                <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-                  <CardHeader className="border-b bg-gradient-to-r from-slate-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                      <div className="flex size-8 items-center justify-center rounded-lg bg-slate-500/10">
-                        <Shield className="size-4 text-slate-600" />
-                      </div>
-                      Provenance &amp; Standards
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-5 pb-6">
-                    <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-                      {[
-                        { label: "Metadata Standard", value: dataset.adminMetadata.metadataStandard },
-                        { label: "Metadata Version", value: dataset.adminMetadata.metadataVersion },
-                        {
-                          label: "Generated At",
-                          value: new Date(
-                            dataset.adminMetadata.generatedAt
-                          ).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          }),
-                        },
-                      ].map((item) => (
-                        <div key={item.label} className="rounded-lg bg-slate-50 p-3">
-                          <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                            {item.label}
-                          </dt>
-                          <dd className="mt-1 font-medium text-foreground">{item.value}</dd>
-                        </div>
-                      ))}
-                      <div className="rounded-lg bg-slate-50 p-3 sm:col-span-2">
-                        <dt className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                          Conforms To
+              {/* Container & Execution — uses/runtime, not shown by the legacy UI at all */}
+              <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+                <CardHeader className="border-b bg-gradient-to-r from-slate-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-slate-500/10">
+                      <Shield className="size-4 text-slate-600" />
+                    </div>
+                    Container &amp; Execution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-5 pb-6">
+                  <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                    {[
+                      { label: "Container Image", value: `${uses.container.image}:${uses.container.version}` },
+                      { label: "Digest", value: uses.container.digest },
+                      { label: "Cluster", value: runtime.execution.cluster },
+                      { label: "Cores", value: String(runtime.execution.cores) },
+                      { label: "Elapsed Walltime", value: runtime.execution.elapsedWalltime },
+                      { label: "SLURM Job ID", value: runtime.execution.slurmJobId },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-lg bg-slate-50 p-3">
+                        <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                          {item.label}
                         </dt>
-                        <dd className="space-y-1.5">
-                          {dataset.adminMetadata.conformsTo.map((uri) => (
-                            <a
-                              key={uri}
-                              href={uri}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 break-all text-xs font-medium text-[#006994] transition-colors hover:text-[#00b4d8]"
-                            >
-                              <ExternalLink className="size-3 shrink-0" />
-                              {uri}
-                            </a>
-                          ))}
-                        </dd>
+                        <dd className="mt-1 break-all font-mono text-xs font-medium text-foreground">{item.value}</dd>
                       </div>
-                    </dl>
-                  </CardContent>
-                </Card>
-              )}
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Right Column (Sidebar) */}
@@ -340,102 +288,62 @@ export default async function DatasetDetailPage({
                 <CardContent className="pt-5 pb-6">
                   <dl className="space-y-3">
                     <InfoRow
-                      icon={<Database className="size-4" />}
-                      label="Dataset Type"
-                      value={dataset.datasetType === "snapshot" ? "Model Snapshot" : "Model Inputs"}
-                      iconColor={dataset.datasetType === "snapshot" ? "text-emerald-500" : "text-amber-500"}
+                      icon={<Tag className="size-4" />}
+                      label="Software Version"
+                      value={uses.container.version}
+                      iconColor="text-[#006994]"
                     />
-                    {dataset.datasetVersion && (
-                      <InfoRow
-                        icon={<Tag className="size-4" />}
-                        label="Dataset Version"
-                        value={`v${dataset.datasetVersion}`}
-                        iconColor="text-[#006994]"
-                      />
-                    )}
-                    {snapshot && (
-                      <InfoRow
-                        icon={<Tag className="size-4" />}
-                        label="Software Version"
-                        value={snapshot.softwareVersion}
-                        iconColor="text-[#006994]"
-                      />
-                    )}
                     <InfoRow
                       icon={<Scale className="size-4" />}
                       label="License"
-                      value={dataset.license}
+                      value={about.license}
                       href={dataset.licenseUrl}
                       iconColor="text-emerald-500"
                     />
                     <InfoRow
-                      icon={<FileType className="size-4" />}
-                      label="Format"
-                      value={dataset.format}
-                      iconColor="text-violet-500"
-                    />
-                    <InfoRow
-                      icon={<HardDrive className="size-4" />}
-                      label="File Size"
-                      value={dataset.fileSize}
-                      iconColor="text-amber-500"
-                    />
-                    <InfoRow
                       icon={<Grid3X3 className="size-4" />}
                       label="Spatial Resolution"
-                      value={dataset.spatialResolution}
+                      value={resolutionLabel}
                       iconColor="text-sky-500"
                     />
-                    {dataset.temporalCoverage && (
-                      <InfoRow
-                        icon={<Calendar className="size-4" />}
-                        label="Temporal Coverage"
-                        value={
-                          dataset.temporalCoverage === "static"
-                            ? "Static"
-                            : dataset.temporalCoverage
-                        }
-                        iconColor="text-indigo-500"
-                      />
-                    )}
                     <InfoRow
-                      icon={<Clock className="size-4" />}
-                      label="Last Updated"
-                      value={dataset.lastUpdated}
+                      icon={<Calendar className="size-4" />}
+                      label="Temporal Coverage"
+                      value={temporalLabel}
+                      iconColor="text-indigo-500"
+                    />
+                    <InfoRow
+                      icon={<Timer className="size-4" />}
+                      label="Generated At"
+                      value={new Date(dataset.generatedAt).toLocaleDateString("en-US", {
+                        year: "numeric", month: "long", day: "numeric",
+                      })}
                       iconColor="text-rose-500"
                     />
-                    {snapshot?.spinupPeriod && (
-                      <InfoRow
-                        icon={<Timer className="size-4" />}
-                        label="Spin-up Period"
-                        value={snapshot.spinupPeriod}
-                        iconColor="text-orange-500"
-                      />
-                    )}
-                    {snapshot?.isBasedOn && (
-                      <InfoRow
-                        icon={<Container className="size-4" />}
-                        label="Container Image"
-                        value={
-                          snapshot.isBasedOn.split("/").pop() || snapshot.isBasedOn
-                        }
-                        iconColor="text-teal-500"
-                      />
-                    )}
-                    {snapshot?.recommendedComputeSetting && snapshot.recommendedComputeSetting.length >= 2 && (
-                      <InfoRow
-                        icon={<Cpu className="size-4" />}
-                        label="Recommended Compute"
-                        value={`${snapshot.recommendedComputeSetting[0]} CPUs · ${snapshot.recommendedComputeSetting[1]}`}
-                        iconColor="text-purple-500"
-                      />
-                    )}
+                    <InfoRow
+                      icon={<Container className="size-4" />}
+                      label="Model Input"
+                      value={uses.modelInput.mountAs}
+                      iconColor="text-teal-500"
+                    />
+                    <InfoRow
+                      icon={<Cpu className="size-4" />}
+                      label="Recommended Compute"
+                      value={`${simulation.recommendedCompute.cores} cores · ${simulation.recommendedCompute.walltime}`}
+                      iconColor="text-purple-500"
+                    />
+                    <InfoRow
+                      icon={<Server className="size-4" />}
+                      label="Model Input Init"
+                      value={simulation.init}
+                      iconColor="text-orange-500"
+                    />
                   </dl>
                 </CardContent>
               </Card>
 
               {/* Keywords */}
-              {dataset.keywords.length > 0 && (
+              {about.keywords.length > 0 && (
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardHeader className="border-b bg-gradient-to-r from-[#00b4d8]/10 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -445,7 +353,7 @@ export default async function DatasetDetailPage({
                   </CardHeader>
                   <CardContent className="pt-4 pb-6">
                     <div className="flex flex-wrap gap-2">
-                      {dataset.keywords.map((kw, i) => {
+                      {about.keywords.map((kw, i) => {
                         const colors = [
                           "bg-sky-100 text-sky-700 border-sky-200",
                           "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -468,7 +376,7 @@ export default async function DatasetDetailPage({
               )}
 
               {/* Creators */}
-              {dataset.creators.length > 0 && (
+              {about.creator.length > 0 && (
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -478,7 +386,7 @@ export default async function DatasetDetailPage({
                   </CardHeader>
                   <CardContent className="pt-4 pb-6">
                     <ul className="space-y-3">
-                      {dataset.creators.map((creator, i) => (
+                      {about.creator.map((creator, i) => (
                         <li
                           key={i}
                           className="flex items-start gap-3 rounded-lg bg-slate-50 p-3 text-sm"

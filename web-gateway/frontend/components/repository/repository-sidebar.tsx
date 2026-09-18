@@ -5,9 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { FilterGroup } from "./filter-group";
-import { DatasetType, FilterState } from "@/lib/repository/types";
+import { FilterState } from "@/lib/repository/types";
 import {
-  ALL_VARIABLE_TYPES,
   SPATIAL_RES_PRESETS,
   TEMPORAL_RANGE_BOUNDS,
 } from "@/lib/repository/data";
@@ -19,11 +18,6 @@ const UNIT_OPTIONS: { value: SpatialUnit; label: string; symbol: string; multipl
   { value: "deg",    label: "Degrees",     symbol: "°",  multiplier: 1    },
   { value: "arcmin", label: "Arc-minutes", symbol: "′",  multiplier: 60   },
   { value: "arcsec", label: "Arc-seconds", symbol: "″",  multiplier: 3600 },
-];
-
-const DATASET_TYPE_OPTIONS: { value: DatasetType; label: string; description: string }[] = [
-  { value: "snapshot", label: "Model Snapshot", description: "Simulation outputs with full provenance" },
-  { value: "raw_data", label: "Model Inputs",   description: "Forcing data files used as model inputs" },
 ];
 
 // ─── Reusable checkbox-with-All helper ───────────────────────────────────────
@@ -54,44 +48,6 @@ function CheckboxItem({
         )}
       </span>
     </label>
-  );
-}
-
-function CheckboxFilterWithAll<T extends string>({
-  options,
-  selected,
-  onChange,
-}: {
-  options: { value: T; label: string; description?: string }[];
-  selected: T[];
-  onChange: (next: T[]) => void;
-}) {
-  const allChecked = selected.length === 0;
-
-  const toggle = (value: T) => {
-    const next = selected.includes(value)
-      ? selected.filter((v) => v !== value)
-      : [...selected, value];
-    onChange(next);
-  };
-
-  return (
-    <>
-      <CheckboxItem
-        checked={allChecked}
-        onChange={() => onChange([])}
-        label="All"
-      />
-      {options.map((o) => (
-        <CheckboxItem
-          key={o.value}
-          checked={selected.includes(o.value)}
-          onChange={() => toggle(o.value)}
-          label={o.label}
-          description={o.description}
-        />
-      ))}
-    </>
   );
 }
 
@@ -138,9 +94,6 @@ export function RepositorySidebar({
   // ── hasActiveFilters (drives "Clear All Filters" button) ──
   const hasActiveFilters =
     !!filters.searchQuery ||
-    filters.datasetTypes.length > 0 ||
-    filters.variableTypes.length > 0 ||
-    filters.temporalResolutions.length > 0 ||
     filters.spatialResMin !== null ||
     filters.spatialResMax !== null ||
     filters.temporalCoverageStart !== null ||
@@ -160,24 +113,6 @@ export function RepositorySidebar({
             className="pl-9"
           />
         </div>
-
-        {/* Dataset Type */}
-        <FilterGroup title="Dataset Type">
-          <CheckboxFilterWithAll
-            options={DATASET_TYPE_OPTIONS}
-            selected={filters.datasetTypes}
-            onChange={(next) => onFiltersChange({ datasetTypes: next })}
-          />
-        </FilterGroup>
-
-        {/* Variable Type */}
-        <FilterGroup title="Variable Type">
-          <CheckboxFilterWithAll
-            options={ALL_VARIABLE_TYPES.map((v) => ({ value: v, label: v }))}
-            selected={filters.variableTypes}
-            onChange={(next) => onFiltersChange({ variableTypes: next })}
-          />
-        </FilterGroup>
 
         {/* Temporal Coverage */}
         <FilterGroup title="Temporal Coverage">

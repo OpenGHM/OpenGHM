@@ -4,20 +4,6 @@
  * that returns live aggregates from the backend.
  */
 
-// Known variable types (from current WBM datasets)
-export const ALL_VARIABLE_TYPES = [
-  "Discharge",
-  "Evapotranspiration",
-].sort();
-
-// Temporal resolution options
-export const ALL_TEMPORAL_RESOLUTIONS = [
-  { value: "hourly", label: "Hourly" },
-  { value: "daily", label: "Daily" },
-  { value: "monthly", label: "Monthly" },
-  { value: "annual", label: "Annual" },
-];
-
 // Common spatial resolution presets (label → degrees)
 export const SPATIAL_RES_PRESETS = [
   { label: "30 arc-sec", degrees: 30 / 3600 },

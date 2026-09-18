@@ -109,14 +109,17 @@ that nothing else declares one.
 | `audit_events` | append-only, `auth` and `job` categories |
 | `datasets` | the browsable catalogue |
 
-`datasets` is not like the others. **Nothing populates it.** It used to be
-reset to three hard-coded documents on every startup by a seed function that
-has since been deleted — it carried real researchers' names and emails as
-demo data, not appropriate for a public instance, and it was the collection's
-*only* writer, so removing it rather than scrubbing it left nothing behind.
-`Permission.REPO_MANAGE` exists and no endpoint uses it — there is currently
-no way, through the API or otherwise, to add a dataset to the catalogue. See
-[open items](../reference/open-items.md).
+Each `datasets` document is a snapshot's `metadata.json`
+([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md)) — the
+spec's own shape, verbatim, plus the `_id` Mongo requires (mirroring the
+spec's own `id`). `POST /api/v1/repository/datasets` is the write path;
+Mongo's unique `_id` rejects a repeat of the same snapshot with `409` rather
+than silently overwriting it, which would break rule 1. Before this, nothing
+populated the collection at all: a seed function reset it to three hard-coded
+documents on every startup, carrying real researchers' names and emails as
+demo data — not appropriate for a public instance — and was the collection's
+*only* writer, so removing it rather than scrubbing it left nothing behind
+until this write path replaced it.
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 (`ops/k8s/<env>/mongo.yml`). That is the one place cluster state exists, and

@@ -6,7 +6,6 @@ import { Footer } from "@/components/landing/footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReviewSubmitClient } from "@/components/jobs/review-submit-client";
 import { fetchDatasetById } from "@/lib/repository/actions";
-import { isSnapshot } from "@/lib/repository/types";
 import {
   ChevronRight,
   ArrowLeft,
@@ -14,8 +13,7 @@ import {
   Globe,
   Layers,
   Cpu,
-  Clock,
-  Database,
+  Tag,
 } from "lucide-react";
 
 export default async function ReviewSimulationPage({
@@ -31,18 +29,13 @@ export default async function ReviewSimulationPage({
 
   if (!snapshotId) redirect("/simulations/new");
 
-  const dataset = await fetchDatasetById(snapshotId).catch(() => null);
+  const snapshot = await fetchDatasetById(snapshotId).catch(() => null);
 
-  if (!dataset || !isSnapshot(dataset)) redirect("/simulations/new");
+  if (!snapshot) redirect("/simulations/new");
 
-  const snapshot = dataset;
-
-  // Parse temporal coverage for display
-  const coverageParts = snapshot.temporalCoverage.split("/");
-  const coverageDisplay =
-    coverageParts.length === 2
-      ? `${coverageParts[0]} → ${coverageParts[1]}`
-      : snapshot.temporalCoverage;
+  const { start, end } = snapshot.simulation.temporalCoverage;
+  const coverageDisplay = `${start} → ${end}`;
+  const { value: resolutionValue, unit: resolutionUnit } = snapshot.simulation.resolution;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -96,20 +89,18 @@ export default async function ReviewSimulationPage({
                 <Card>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
-                      <CardTitle className="text-base">{snapshot.title}</CardTitle>
+                      <CardTitle className="text-base">{snapshot.about.name}</CardTitle>
                       <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                        Model Snapshot
+                        {snapshot.about.category}
                       </span>
                     </div>
-                    {snapshot.softwareVersion && (
-                      <p className="mt-1 font-mono text-xs text-muted-foreground">
-                        {snapshot.softwareVersion}
-                      </p>
-                    )}
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {snapshot.uses.container.image}:{snapshot.uses.container.version}
+                    </p>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
                     <p className="text-muted-foreground leading-relaxed">
-                      {snapshot.description}
+                      {snapshot.about.description}
                     </p>
 
                     <div className="grid gap-3 pt-2 sm:grid-cols-2">
@@ -128,37 +119,24 @@ export default async function ReviewSimulationPage({
                           <p className="text-xs font-medium text-muted-foreground">
                             Spatial Resolution
                           </p>
-                          <p className="font-medium">{snapshot.spatialResolution}</p>
+                          <p className="font-medium">{resolutionValue} {resolutionUnit}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-2">
-                        <Database className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        <Tag className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                         <div>
                           <p className="text-xs font-medium text-muted-foreground">
-                            Format / Size
+                            License
                           </p>
-                          <p className="font-medium">
-                            {snapshot.format} · {snapshot.fileSize}
-                          </p>
+                          <p className="font-medium">{snapshot.about.license}</p>
                         </div>
                       </div>
-                      {snapshot.spinupPeriod && (
-                        <div className="flex items-start gap-2">
-                          <Clock className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground">
-                              Spin-up Period
-                            </p>
-                            <p className="font-medium">{snapshot.spinupPeriod}</p>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Output variables */}
-                {snapshot.variablesMeasured.length > 0 && (
+                {snapshot.simulation.outputVariables.length > 0 && (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center gap-2 text-base">
@@ -177,19 +155,19 @@ export default async function ReviewSimulationPage({
                               <th className="px-3 py-2 text-left font-medium">Variable</th>
                               <th className="px-3 py-2 text-left font-medium">Unit</th>
                               <th className="px-3 py-2 text-left font-medium hidden sm:table-cell">
-                                Standard Name
+                                Full Name
                               </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y">
-                            {snapshot.variablesMeasured.map((v, i) => (
+                            {snapshot.simulation.outputVariables.map((v, i) => (
                               <tr key={i} className="hover:bg-muted/20">
                                 <td className="px-3 py-2 font-medium">{v.name}</td>
                                 <td className="px-3 py-2 text-muted-foreground font-mono text-xs">
-                                  {v.unitText}
+                                  {v.unit}
                                 </td>
                                 <td className="px-3 py-2 text-muted-foreground text-xs hidden sm:table-cell">
-                                  {v.standardName ?? "—"}
+                                  {v.fullName}
                                 </td>
                               </tr>
                             ))}

@@ -5,8 +5,8 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface Variable {
   name: string;
-  unitText: string;
-  standardName?: string | null;
+  fullName: string;
+  unit: string;
 }
 
 const INITIAL_ROWS = 5;
@@ -25,7 +25,7 @@ export function OutputVariablesTable({ variables }: { variables: Variable[] }) {
             <tr className="text-left">
               <th className="rounded-l-lg bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Name</th>
               <th className="bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Unit</th>
-              <th className="rounded-r-lg bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Standard Name</th>
+              <th className="rounded-r-lg bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Full Name</th>
             </tr>
           </thead>
           <tbody>
@@ -34,11 +34,11 @@ export function OutputVariablesTable({ variables }: { variables: Variable[] }) {
                 <td className="px-3 py-2.5 font-medium text-foreground">{v.name}</td>
                 <td className="px-3 py-2.5">
                   <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
-                    {v.unitText}
+                    {v.unit}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                  {v.standardName || "—"}
+                <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                  {v.fullName}
                 </td>
               </tr>
             ))}

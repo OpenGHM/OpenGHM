@@ -25,13 +25,10 @@ export default async function RepositoryPage() {
   try {
     initialData = await fetchDatasets({
       searchQuery: "",
-      datasetTypes: [],
-      variableTypes: [],
       temporalCoverageStart: TEMPORAL_RANGE_BOUNDS.min,
       temporalCoverageEnd: TEMPORAL_RANGE_BOUNDS.max,
       spatialResMin: null,
       spatialResMax: null,
-      temporalResolutions: [],
       sortBy: "relevance",
       page: 1,
     });

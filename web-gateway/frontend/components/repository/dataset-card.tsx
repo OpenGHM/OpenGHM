@@ -1,22 +1,11 @@
 import Link from "next/link";
 import { Dataset } from "@/lib/repository/types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calendar, Grid3X3, FileType, HardDrive } from "lucide-react";
-
-const DATASET_TYPE_COLORS: Record<string, string> = {
-  snapshot: "bg-green-100 text-green-700",
-  raw_data: "bg-amber-100 text-amber-700",
-};
-
-const DATASET_TYPE_LABELS: Record<string, string> = {
-  snapshot: "Model Snapshot",
-  raw_data: "Model Inputs",
-};
+import { Calendar, Grid3X3 } from "lucide-react";
 
 export function DatasetCard({ dataset }: { dataset: Dataset }) {
-  const typeColor =
-    DATASET_TYPE_COLORS[dataset.datasetType] || "bg-muted text-muted-foreground";
-  const typeLabel = DATASET_TYPE_LABELS[dataset.datasetType] || dataset.datasetType;
+  const { start, end } = dataset.simulation.temporalCoverage;
+  const { value, unit } = dataset.simulation.resolution;
 
   return (
     <Link href={`/repository/${dataset.id}`} className="block">
@@ -24,36 +13,26 @@ export function DatasetCard({ dataset }: { dataset: Dataset }) {
         <CardContent className="p-5">
           <div className="mb-2 flex items-start justify-between gap-3">
             <h3 className="text-base font-semibold leading-snug text-foreground">
-              {dataset.title}
+              {dataset.about.name}
             </h3>
-            <span
-              className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${typeColor}`}
-            >
-              {typeLabel}
+            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+              {dataset.about.category}
             </span>
           </div>
 
           <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Calendar className="size-3.5" />
-              {dataset.temporalCoverage === "static" ? "Static" : dataset.temporalCoverage}
+              {start} – {end}
             </span>
             <span className="inline-flex items-center gap-1">
               <Grid3X3 className="size-3.5" />
-              {dataset.spatialResolution}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <FileType className="size-3.5" />
-              {dataset.format}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <HardDrive className="size-3.5" />
-              {dataset.fileSize}
+              {value} {unit}
             </span>
           </div>
 
           <p className="line-clamp-2 text-sm text-muted-foreground leading-relaxed">
-            {dataset.description}
+            {dataset.about.description}
           </p>
         </CardContent>
       </Card>
