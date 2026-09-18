@@ -28,7 +28,10 @@
 
   "simulation": {
     "init": "Wyoming_tracking.init",
-    "spatialCoverage": { "west": -123.75, "south": 28.9166, "east": -77.8333, "north": 52.9167, "crs": "EPSG:4326" },
+    "spatialCoverage": {
+      "northlimit": 52.9167, "southlimit": 28.9166, "eastlimit": -77.8333, "westlimit": -123.75,
+      "units": "Decimal degrees", "projection": "EPSG:4326"
+    },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
     "inputVariables": [

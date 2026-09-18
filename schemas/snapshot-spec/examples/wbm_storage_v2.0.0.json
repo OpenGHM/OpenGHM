@@ -29,7 +29,10 @@
 
   "simulation": {
     "init": "wbm_test.init",
-    "spatialCoverage": { "west": -127.8334, "south": 21.75, "east": -60.5834, "north": 57.1667, "crs": "EPSG:4326" },
+    "spatialCoverage": {
+      "northlimit": 57.1667, "southlimit": 21.75, "eastlimit": -60.5834, "westlimit": -127.8334,
+      "units": "Decimal degrees", "projection": "EPSG:4326"
+    },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2001-01-01", "end": "2001-12-31" },
     "inputVariables": [

@@ -99,13 +99,23 @@
         "spatialCoverage": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["west", "south", "east", "north", "crs"],
+          "description": "DCMI Box element names — see metadata-format.md#spatialcoverage. The DCMI `box`, `name`, `uplimit`, `downlimit` and `zunits` elements are deliberately absent: `box` restates the four limits, and the rest describe a vertical extent WBM does not model.",
+          "required": ["northlimit", "southlimit", "eastlimit", "westlimit", "units", "projection"],
           "properties": {
-            "west": { "type": "number", "minimum": -180, "maximum": 180 },
-            "south": { "type": "number", "minimum": -90, "maximum": 90 },
-            "east": { "type": "number", "minimum": -180, "maximum": 180 },
-            "north": { "type": "number", "minimum": -90, "maximum": 90 },
-            "crs": { "type": "string", "pattern": "^EPSG:[0-9]+$" }
+            "northlimit": { "type": "number", "minimum": -90, "maximum": 90 },
+            "southlimit": { "type": "number", "minimum": -90, "maximum": 90 },
+            "eastlimit": { "type": "number", "minimum": -180, "maximum": 180 },
+            "westlimit": { "type": "number", "minimum": -180, "maximum": 180 },
+            "units": {
+              "type": "string",
+              "enum": ["Decimal degrees"],
+              "description": "The unit the four limits are expressed in. One value today, because WBM refuses to run a network that is not geographic — same reasoning as runtime.execution.cluster. A second unit is an additive MINOR bump."
+            },
+            "projection": {
+              "type": "string",
+              "pattern": "^EPSG:[0-9]+$",
+              "description": "The coordinate reference system of the simulation grid, from the .init's Projection, uppercased. See open item 14: this pattern admits codes WBM cannot actually run."
+            }
           }
         },
         "resolution": {

@@ -61,7 +61,10 @@ maps to ids for browsing.
 
   "simulation": {
     "init": "Wyoming_tracking.init",
-    "spatialCoverage": { "west": -123.75, "south": 28.9166, "east": -77.8333, "north": 52.9167, "crs": "EPSG:4326" },
+    "spatialCoverage": {
+      "northlimit": 52.9167, "southlimit": 28.9166, "eastlimit": -77.8333, "westlimit": -123.75,
+      "units": "Decimal degrees", "projection": "EPSG:4326"
+    },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
     "inputVariables": [
@@ -136,7 +139,7 @@ Every field in it except `recommendedCompute` is derived mechanically from the
 |---|---|
 | `temporalCoverage` | `MT_Code_Name.Run_Start` / `Run_End` — dates, no time of day |
 | `inputVariables` | the `MT_*` time series the `.init` names — see [the role vocabulary](#forcing-roles) |
-| `spatialCoverage` | the `.asc` header of the file `Network` points at: `xllcorner`, `yllcorner`, `ncols`/`nrows` × `cellsize`. `crs` is the `.init`'s `Projection`, normalised to uppercase |
+| `spatialCoverage` | the `.asc` header of the file `Network` points at: `xllcorner`, `yllcorner`, `ncols`/`nrows` × `cellsize`. `projection` is the `.init`'s `Projection`, normalised to uppercase |
 | `resolution` | the same header's `cellsize`, converted to `{ value, unit }` — 0.08333° → `{ 5, "arc-minute" }` |
 | `outputVariables` | `Output_vars`, looked up in `model/WBM_dataCube_expand.csv` for `Full_name` and `Org_units` |
 | `activeProcesses` | which optional keys carry a value (`Reservoirs`, `Glaciers`, `Irrigation`, `Runoff_mask`, …), plus the suffixes present in `Output_vars`: `*_ps`/`_pg`/`_pr`/`_pu` mean primary water source tracking, `*_irr`/`_pst`/`_rlt` mean irrigation water re-use tracking |
@@ -230,6 +233,34 @@ The bias-correction inputs (`WM_mod_precip`, `WM_obs_precip`, `WM_mod_airT`,
 correct a forcing, not the forcing the simulation is driven by, and folding them
 in here would make the field answer two questions at once.
 
+#### `spatialCoverage`
+
+The element names are **DCMI Box**'s — `northlimit`, `southlimit`, `eastlimit`,
+`westlimit`, `units`, `projection` — not a spelling of our own. Three reasons,
+in order of weight:
+
+- This file is a catalogue record, and DCMI Box is a metadata vocabulary for
+  exactly that. The JSON-native alternative, a GeoJSON/STAC `bbox` array, is
+  built for geometry a map draws, where positional order is worth the
+  readability it costs. Nothing here draws geometry.
+- It is the vocabulary this project already used. The `metadata.json` staged
+  beside each snapshot on Anvil carries these same element names, alongside
+  `hsterms:`-prefixed link types — i.e. it was written against HydroShare, the
+  repository this domain's data actually lands in. The gateway's own models
+  ([open item 15](open-items.md)) still read them.
+- It settles where the CRS lives. `projection` is a DCMI Box element, so the
+  standard already answers the question of whether a coordinate system belongs
+  inside the bounding box or beside the grid description.
+
+`units` is carried because DCMI Box carries it, even though every snapshot says
+`Decimal degrees` and will for as long as WBM refuses a non-geographic network.
+Following the vocabulary is worth more than pruning one predictable field, and
+the enum documents the reality the same way `runtime.execution.cluster` does.
+
+DCMI's `box`, `name`, `uplimit`, `downlimit` and `zunits` are **not** carried.
+`box` is a string restating the four limits, which rule 4 forbids; the other
+three describe a vertical extent WBM does not model.
+
 #### `resolution`
 
 A structured pair, not the free string `"5 arc-minute"` every real snapshot
@@ -278,8 +309,9 @@ projection is **generated, never stored**: it drops `category`, maps
 `relatedLink` to `citation` with the DOI as a nested `identifier`
 (`PropertyValue`, `propertyID: "DOI"`), reaches into `simulation` for
 `spatialCoverage`, `temporalCoverage` and `outputVariables`, and reshapes those
-to what schema.org expects (a `GeoShape.box`, an ISO interval string, and
-`variableMeasured`). Only the outputs project: schema.org's `variableMeasured`
+to what schema.org expects — a `GeoShape.box`, built as the string
+`"<southlimit> <westlimit> <northlimit> <eastlimit>"`, an ISO interval string,
+and `variableMeasured`. Only the outputs project: schema.org's `variableMeasured`
 means what the dataset reports, and a forcing series is an input to the run
 rather than something it measured. This file claims conformance to nothing but
 its own `$schema`.

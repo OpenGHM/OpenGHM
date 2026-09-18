@@ -28,7 +28,10 @@
 
   "simulation": {
     "init": "Global_tracking.init",
-    "spatialCoverage": { "west": -180.0, "south": -90.0, "east": 180.0, "north": 90.0, "crs": "EPSG:4326" },
+    "spatialCoverage": {
+      "northlimit": 90.0, "southlimit": -90.0, "eastlimit": 180.0, "westlimit": -180.0,
+      "units": "Decimal degrees", "projection": "EPSG:4326"
+    },
     "resolution": { "value": 5, "unit": "arc-minute" },
     "temporalCoverage": { "start": "2000-01-01", "end": "2009-12-31" },
     "inputVariables": [
