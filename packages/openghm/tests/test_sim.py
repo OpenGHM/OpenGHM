@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from openghm import Config
+from openghm import Config, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.sim import (
@@ -21,8 +21,6 @@ from openghm.sim import (
     build_sacct_argv, parse_sacct, sacct_primary, build_scancel_argv,
     slurm_log_path, tail_lines,
 )
-
-REPO = Path(__file__).resolve().parents[1]
 
 _INIT_TEMPLATE = """{
   MT_Code_Name => {
@@ -36,19 +34,16 @@ _INIT_TEMPLATE = """{
 }
 """
 
+#: The snapshot spec's shape, trimmed to what ``sim submit`` reads. The full
+#: documents live in ``schemas/snapshot-spec/examples/`` and are exercised by
+#: ``test_spec_examples_submit`` below.
 _METADATA = {
     "slug": "wbm_storage_v2.0.0",
-    "datasetType": "snapshot",
-    "title": "WBM v2.0.0 tutorial",
-    "softwareVersion": "WBM v2.0.0",
-    "recommendedComputeSetting": ["16", "15:00"],
-    "jobSubmission": {
+    "simulation": {
         "init": "wbm_test.init",
-        "wbmVersion": "2.0.0",
-        "dataSubdir": "wbm_ancillary_data_v2.0.0",
-        "cores": 16,
-        "walltime": "15:00",
+        "recommendedCompute": {"cores": 16, "walltime": "15:00"},
     },
+    "uses": {"container": {"version": "2.0.0"}},
 }
 
 
@@ -177,16 +172,6 @@ def test_cwd_default(tmp_path, monkeypatch):
     assert _find(built, "/wbm/data").host == str(snap / "data" / "wbm_ancillary_data_v2.0.0")
 
 
-def test_metadata_derivation_fallback(tmp_path):
-    # No jobSubmission wbmVersion/dataSubdir → derive from softwareVersion + single data/ subdir
-    meta = json.loads(json.dumps(_METADATA))
-    meta["jobSubmission"] = {"init": "wbm_test.init"}
-    snap = _make_snapshot(tmp_path, metadata=meta)
-    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
-    assert _ctx.image.endswith("wbm_opensource_v2.0.0.sif")
-    assert _find(built, "/wbm/data").host.endswith("wbm_ancillary_data_v2.0.0")
-
-
 # ── real host staging (no sbatch spawn) ────────────────────────────────────────
 
 
@@ -253,11 +238,37 @@ def test_missing_init_file(tmp_path):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
 
-def test_no_job_submission_block(tmp_path):
-    meta = {"slug": "x", "softwareVersion": "WBM v2.0.0"}
-    snap = _make_snapshot(tmp_path, metadata=meta)
-    with pytest.raises(OpenghmError, match="jobSubmission"):
+def test_no_simulation_block(tmp_path):
+    snap = _make_snapshot(tmp_path, metadata={"slug": "x"})
+    with pytest.raises(OpenghmError, match="simulation block"):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+
+
+def test_missing_container_version(tmp_path):
+    meta = json.loads(json.dumps(_METADATA))
+    del meta["uses"]
+    snap = _make_snapshot(tmp_path, metadata=meta)
+    with pytest.raises(OpenghmError, match="uses.container.version"):
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+
+
+def test_missing_recommended_compute(tmp_path):
+    meta = json.loads(json.dumps(_METADATA))
+    del meta["simulation"]["recommendedCompute"]
+    snap = _make_snapshot(tmp_path, metadata=meta)
+    with pytest.raises(OpenghmError, match="recommendedCompute"):
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+
+
+def test_cli_overrides_recommended_compute(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", cores=4, walltime="0:30:00"),
+        _config(tmp_path),
+    )
+    sbatch = _gen(built, ".sbatch").content
+    assert "--cpus-per-task=4" in sbatch or "-c 4" in sbatch
+    assert "0:30:00" in sbatch
 
 
 def test_bad_sim_id(tmp_path):
@@ -268,28 +279,41 @@ def test_bad_sim_id(tmp_path):
 
 @pytest.mark.parametrize("subdirs", [(), ("a", "b")])
 def test_ambiguous_data_subdir(tmp_path, subdirs):
-    meta = json.loads(json.dumps(_METADATA))
-    meta["jobSubmission"] = {"init": "wbm_test.init", "wbmVersion": "2.0.0"}  # force derivation
-    snap = _make_snapshot(tmp_path, metadata=meta, data_subdirs=subdirs)
+    # The spec has no dataSubdir field, so data/ having exactly one child is
+    # the only thing that can answer this.
+    snap = _make_snapshot(tmp_path, data_subdirs=subdirs)
     with pytest.raises(OpenghmError, match="exactly one subdirectory"):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
 
-# ── shipped metadata.json files ────────────────────────────────────────────────
+# ── the shipped example metadata.json files ───────────────────────────────────
 
 
 @pytest.mark.parametrize("name", [
     "wbm_storage_v2.0.0", "wbm_storage_v1.0.0_Global", "wbm_storage_v1.0.0_Wyoming",
 ])
-def test_exported_metadata_files_valid(name):
-    path = REPO / "snapshots_metadata" / f"{name}.json"
-    meta = json.loads(path.read_text())
-    job = meta["jobSubmission"]
-    assert job["init"].endswith(".init")
-    assert job["wbmVersion"] and job["dataSubdir"]
-    assert job["cores"] and job["walltime"]
-    # full doc carried verbatim
-    assert meta["datasetType"] == "snapshot" and "variablesMeasured" in meta
+def test_spec_examples_submit(tmp_path, name):
+    """Every shipped example is readable by ``sim submit``, not just by the validator.
+
+    ``test_spec.py`` checks these against the schema. This checks the other
+    half — that the fields the toolkit reaches for are the ones the spec
+    actually defines — which is the divergence that went unnoticed while the
+    gateway moved onto the spec and the toolkit did not.
+    """
+    meta = json.loads(
+        (spec.schemas_root() / "snapshot-spec" / "examples" / f"{name}.json").read_text()
+    )
+    snap = _make_snapshot(tmp_path, metadata=meta, init_name=meta["simulation"]["init"])
+
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path)
+    )
+
+    compute = meta["simulation"]["recommendedCompute"]
+    sbatch = _gen(built, ".sbatch").content
+    assert str(compute["cores"]) in sbatch and compute["walltime"] in sbatch
+    assert _ctx.image.endswith(f"wbm_opensource_v{meta['uses']['container']['version']}.sif")
+    assert _gen(built, meta["simulation"]["init"])
 
 
 # ── management: list / status / logs / cancel (local, no SLURM) ─────────────────

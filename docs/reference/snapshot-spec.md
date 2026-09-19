@@ -23,7 +23,7 @@ schemas/
     metadata/1.0.0.json     # metadata.json's schema, $id = its published URL, about by $ref
     layout/1.0.0.json       # required/optional snapshot paths
     index.json              # { "versions": [...], "current": ..., "deprecated": [...] }
-    examples/*.json         # real metadata.json files, byte-identical to the staged ones
+    examples/*.json         # the three staged snapshots, in the spec's shape
   model-input-spec/
     metadata/1.0.0.json     # a published model input's metadata.json schema
     layout/1.0.0.json       # required/optional model-input paths
@@ -31,14 +31,18 @@ schemas/
     examples/*.json
 ```
 
-`schemas/common/` and `schemas/model-input-spec/` do not exist yet — mission
-`2026-09-18-complete-the-spec-tree` (private, `ops/missions/`) creates both.
-Everything else in the tree above exists. There is deliberately no `docs/`
+Every path in the tree above exists. There is deliberately no `docs/`
 subfolder: [ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)
 removed the one `snapshot-spec/` had, which sat empty since
 [ADR 0006](../decisions/0006-spec-is-two-files.md) reserved it and never got a
 generator. The examples are flat rather than per-version because they are
 exhibits of what real snapshots carry, not fixtures owned by one spec version.
+
+The examples describe the three snapshots staged on Anvil, but they are **not
+copies of the `metadata.json` files sitting in those folders**. The staged
+files predate the spec and still carry the pre-spec shape; the examples are
+what those snapshots look like once described by 1.0.0, and replacing the
+staged files with them is outstanding work, not something already done.
 
 These files live at the top of the **`OpenGHM` repository**, which holds the
 application, the toolkit and the spec together
@@ -121,7 +125,7 @@ moves, 1.0.0 describes the bundle as it is.
 
 `SHA256SUMS` is optional because **no staged snapshot has one yet** — see
 [snapshot-layout.md](snapshot-layout.md#generate-sha256sums). Requiring it is
-Next item 4's MAJOR bump, not this version's.
+Next item 5's MAJOR bump, not this version's.
 
 ## Version rules
 

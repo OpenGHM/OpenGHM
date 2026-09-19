@@ -28,9 +28,11 @@ _INIT_TEMPLATE = """{
 """
 
 _METADATA = {
-    "softwareVersion": "WBM v2.0.0",
-    "jobSubmission": {"init": "wbm_test.init", "wbmVersion": "2.0.0",
-                      "dataSubdir": "wbm_ancillary_data_v2.0.0", "cores": 16, "walltime": "15:00"},
+    "simulation": {
+        "init": "wbm_test.init",
+        "recommendedCompute": {"cores": 16, "walltime": "15:00"},
+    },
+    "uses": {"container": {"version": "2.0.0"}},
 }
 
 

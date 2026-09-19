@@ -41,11 +41,7 @@ from .types import BuiltCommand, DirCopy, GeneratedFile, Mount
 WBM_MODEL = "/wbm/model/wbm.pl"
 METADATA_FILENAME = "metadata.json"
 
-DEFAULT_CORES = 8
-DEFAULT_WALLTIME = "1:00:00"
-
 _SIM_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-_VERSION_RE = re.compile(r"(\d+\.\d+\.\d+)")
 #: ``sbatch`` prints "Submitted batch job <N>" on success.
 _JOBID_RE = re.compile(r"Submitted batch job (\d+)")
 SIDECAR_NAME = "simulation.json"
@@ -124,20 +120,23 @@ def record_slurm_job_id(built: BuiltCommand, job_id: str) -> Optional[str]:
     return path
 
 
-def _derive_version(meta: dict, snapshot_dir: str) -> str:
-    """Fallback: parse the WBM version from ``softwareVersion`` or the folder name."""
-    for candidate in (meta.get("softwareVersion"), os.path.basename(os.path.normpath(snapshot_dir))):
-        if candidate:
-            m = _VERSION_RE.search(str(candidate))
-            if m:
-                return m.group(1)
-    raise OpenghmError(
-        "cannot determine WBM version: set jobSubmission.wbmVersion in metadata.json"
-    )
+def _container_version(meta: dict) -> str:
+    """The WBM version, from the container the snapshot pins."""
+    version = (meta.get("uses") or {}).get("container", {}).get("version")
+    if not version:
+        raise OpenghmError(
+            "uses.container.version is missing in metadata.json "
+            "(run `openghm snapshot validate` on this folder)"
+        )
+    return str(version)
 
 
 def _derive_data_subdir(snapshot_dir: str) -> str:
-    """Fallback: the single subdirectory under ``<snapshot>/data/``."""
+    """The single subdirectory under ``<snapshot>/data/``.
+
+    The spec has no field for this, deliberately: a snapshot bundles exactly one,
+    and ADR 0015 moves ``data/`` out to a linked model input entirely.
+    """
     data_dir = os.path.join(snapshot_dir, "data")
     try:
         subdirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
@@ -145,8 +144,7 @@ def _derive_data_subdir(snapshot_dir: str) -> str:
         raise OpenghmError(f"no data/ directory under {snapshot_dir!r}")
     if len(subdirs) != 1:
         raise OpenghmError(
-            f"expected exactly one subdirectory under {data_dir} (found {len(subdirs)}); "
-            "set jobSubmission.dataSubdir in metadata.json"
+            f"expected exactly one subdirectory under {data_dir} (found {len(subdirs)})"
         )
     return subdirs[0]
 
@@ -286,23 +284,36 @@ def _resolve_run(
         raise OpenghmError(f"snapshot folder not found: {snap}")
 
     meta = load_metadata(snap)
-    job = meta.get("jobSubmission")
-    if not isinstance(job, dict):
-        raise OpenghmError(f"{METADATA_FILENAME} has no jobSubmission block (regenerate it)")
+    simulation = meta.get("simulation")
+    if not isinstance(simulation, dict):
+        raise OpenghmError(
+            f"{METADATA_FILENAME} has no simulation block; it does not follow the "
+            "snapshot spec (run `openghm snapshot validate` on this folder)"
+        )
 
-    init_filename = job.get("init")
+    init_filename = simulation.get("init")
     if not init_filename:
-        raise OpenghmError("jobSubmission.init is missing in metadata.json")
+        raise OpenghmError("simulation.init is missing in metadata.json")
     init_template_path = os.path.join(snap, "wbm_init", init_filename)
     if not os.path.isfile(init_template_path):
         raise OpenghmError(f"init file not found: {init_template_path}")
 
-    version = job.get("wbmVersion") or _derive_version(meta, snap)
-    data_subdir = job.get("dataSubdir") or _derive_data_subdir(snap)
+    version = _container_version(meta)
+    # No spec field: a snapshot's data/ has exactly one subdirectory, and
+    # ADR 0015 moves data/ out to a linked model input, at which point the
+    # question goes away rather than needing one.
+    data_subdir = _derive_data_subdir(snap)
 
-    rcs = meta.get("recommendedComputeSetting") or []
-    cores = opts.cores or job.get("cores") or (int(rcs[0]) if len(rcs) >= 1 else None) or DEFAULT_CORES
-    walltime = opts.walltime or job.get("walltime") or (rcs[1] if len(rcs) >= 2 else None) or DEFAULT_WALLTIME
+    # The spec requires both, so there is nothing to fall back to. --cores and
+    # --walltime still override; that is a user's choice, not a default.
+    compute = simulation.get("recommendedCompute") or {}
+    cores = opts.cores or compute.get("cores")
+    walltime = opts.walltime or compute.get("walltime")
+    if not cores or not walltime:
+        raise OpenghmError(
+            "simulation.recommendedCompute must set both cores and walltime "
+            "(run `openghm snapshot validate` on this folder)"
+        )
     account = opts.account or config.account
     partition = opts.partition or config.partition
     output_base = opts.output_base or config.resolve_output_base()
