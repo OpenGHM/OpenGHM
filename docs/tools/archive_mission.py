@@ -56,6 +56,16 @@ def main(argv):
                  "Finish the verification — including anything an operator has to run — first.")
 
     out, missing = [], []
+
+    def _demote_headings(text: str) -> str:
+        lines, in_fence = text.split("\n"), False
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+            elif not in_fence and line.startswith("#"):
+                lines[i] = "#" + line
+        return "\n".join(lines)
+
     for name, heading in PARTS:
         f = src / name
         if not f.exists():
@@ -63,8 +73,10 @@ def main(argv):
             continue
         text = f.read_text().strip()
         if heading:
-            # demote every heading one level so the merged file has one h1
-            text = re.sub(r"^#", "##", text, flags=re.M)
+            # Demote every heading one level so the merged file has one h1 —
+            # but not inside fenced code, where `# …` is a shell comment and
+            # `##` is a silent corruption of a command someone will paste.
+            text = _demote_headings(text)
             text = re.sub(r"^## Mission [^\n]*\n+", "", text)
             text = f"## {heading}\n\n{text}"
         out.append(text)
