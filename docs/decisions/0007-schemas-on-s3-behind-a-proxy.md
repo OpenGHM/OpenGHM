@@ -5,6 +5,7 @@
 | **Status** | accepted |
 | **Date** | 2026-09-04 |
 | **Affects** | Composable Subsystem workloads, `schemas/` |
+| **Completed by** | [0019](0019-publishing-infrastructure-is-a-single-instance.md) — which namespace the proxy runs in, left unsaid here |
 
 ## Context
 

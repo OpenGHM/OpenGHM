@@ -17,7 +17,7 @@ openghm/
   wbm-code/<name>/<version>/…        # model/ + utilities/
   containers/<image>/<version>/…     # plain-S3 SIF mirror
   registry/…                         # zot's own blob store, content-addressed, opaque
-  schemas/snapshot-spec/…            # the spec's published files (snapshot-spec), proxied by nginx
+  schemas/…                          # common/, snapshot-spec/, model-input-spec/ — proxied by nginx
 ```
 
 | Prefix | Keyed by | Namespace | Mutable objects | Written by |
