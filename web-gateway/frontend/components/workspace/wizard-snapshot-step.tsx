@@ -1,22 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useTransition, useState } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Calendar, Grid3X3, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { fetchSnapshots } from "@/lib/jobs/actions";
 import type { RepositoryListResponse, Dataset } from "@/lib/repository/types";
-import Link from "next/link";
-import { Calendar, Grid3X3, ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
-function SnapshotCard({ dataset }: { dataset: Dataset }) {
+const EMPTY_RESULT: RepositoryListResponse = {
+  items: [],
+  totalCount: 0,
+  totalPages: 1,
+  page: 1,
+};
+
+function SnapshotCard({
+  dataset,
+  selected,
+  onSelect,
+}: {
+  dataset: Dataset;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const { start, end } = dataset.simulation.temporalCoverage;
   const { value, unit } = dataset.simulation.resolution;
 
   return (
-    <Link href={`/workspace/new/review?snapshot_id=${dataset.id}`} className="block">
-      <Card className="h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-[#006994]/40">
+    <button type="button" onClick={onSelect} className="block h-full w-full text-left">
+      <Card
+        className={`h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+          selected
+            ? "border-[#006994] ring-2 ring-[#006994]/30"
+            : "hover:border-[#006994]/40"
+        }`}
+      >
         <CardContent className="flex h-full flex-col p-5">
           <div className="mb-2 flex items-start justify-between gap-3">
             <h3 className="text-sm font-semibold leading-snug text-foreground">
@@ -43,49 +62,52 @@ function SnapshotCard({ dataset }: { dataset: Dataset }) {
           </p>
 
           <div className="mt-4 flex items-center justify-end">
-            <span className="rounded-md bg-[#006994] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#005a7a]">
-              Select →
+            <span
+              className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                selected ? "bg-[#006994] text-white" : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {selected ? "Selected ✓" : "Select →"}
             </span>
           </div>
         </CardContent>
       </Card>
-    </Link>
+    </button>
   );
 }
 
-const EMPTY_RESULT: RepositoryListResponse = {
-  items: [],
-  totalCount: 0,
-  totalPages: 1,
-  page: 1,
-};
-
-export function SnapshotSelectionClient({
+export function WizardSnapshotStep({
   initialData,
+  selectedId,
+  onSelect,
 }: {
   initialData: RepositoryListResponse;
+  selectedId: string | null;
+  onSelect: (dataset: Dataset) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<RepositoryListResponse>(initialData);
   const [isPending, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
 
-  const doFetch = useCallback(
-    (query: string, p: number) => {
-      startTransition(async () => {
-        try {
-          const data = await fetchSnapshots(query, p);
-          setResult(data);
-        } catch {
-          setResult(EMPTY_RESULT);
-        }
-      });
-    },
-    []
-  );
+  const doFetch = useCallback((query: string, p: number) => {
+    startTransition(async () => {
+      try {
+        const data = await fetchSnapshots(query, p);
+        setResult(data);
+      } catch {
+        setResult(EMPTY_RESULT);
+      }
+    });
+  }, []);
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doFetch(searchQuery, page), 300);
     return () => {
@@ -115,12 +137,10 @@ export function SnapshotSelectionClient({
         )}
       </div>
 
-      {/* Count */}
       <p className="mb-4 text-sm text-muted-foreground">
         {result.totalCount} snapshot{result.totalCount !== 1 ? "s" : ""} available
       </p>
 
-      {/* Grid */}
       {result.items.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
@@ -133,12 +153,16 @@ export function SnapshotSelectionClient({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {result.items.map((dataset) => (
-            <SnapshotCard key={dataset.id} dataset={dataset} />
+            <SnapshotCard
+              key={dataset.id}
+              dataset={dataset}
+              selected={dataset.id === selectedId}
+              onSelect={() => onSelect(dataset)}
+            />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
       {result.totalPages > 1 && (
         <div className="mt-8 flex items-center justify-center gap-4">
           <Button
