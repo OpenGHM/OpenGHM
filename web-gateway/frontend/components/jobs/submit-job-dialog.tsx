@@ -75,7 +75,7 @@ export function SubmitJobDialog({ dataset }: Props) {
 
         setOpen(false);
         toast.success("Simulation submitted.");
-        router.push(`/simulations/${res.job_id}`);
+        router.push(`/workspace/${res.job_id}`);
       } catch (err: unknown) {
         const msg =
           err instanceof Error ? err.message : "Submission failed";

@@ -5,8 +5,8 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { JobStatusPanel } from "@/components/jobs/job-status-panel";
-import { JobLogsPanel } from "@/components/jobs/job-logs-panel";
+import { JobStatusPanel } from "@/components/workspace/job-status-panel";
+import { JobLogsPanel } from "@/components/workspace/job-logs-panel";
 import { fetchJob } from "@/lib/jobs/actions";
 import {
   ArrowLeft,
@@ -37,7 +37,7 @@ export default async function JobDetailPage({
       <div className="border-b bg-muted/50">
         <div className="mx-auto max-w-[1280px] px-10 py-3 text-sm text-muted-foreground">
           <Link
-            href="/simulations"
+            href="/workspace"
             className="transition-colors hover:text-foreground"
           >
             My Simulations
@@ -66,7 +66,7 @@ export default async function JobDetailPage({
         <div className="mx-auto max-w-[1280px] px-10 py-10">
           <div className="mb-6">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/simulations">
+              <Link href="/workspace">
                 <ArrowLeft className="mr-1.5 size-4" />
                 Back to Simulations
               </Link>

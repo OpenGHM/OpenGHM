@@ -15,7 +15,7 @@ function SnapshotCard({ dataset }: { dataset: Dataset }) {
   const { value, unit } = dataset.simulation.resolution;
 
   return (
-    <Link href={`/simulations/new/review?snapshot_id=${dataset.id}`} className="block">
+    <Link href={`/workspace/new/review?snapshot_id=${dataset.id}`} className="block">
       <Card className="h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-[#006994]/40">
         <CardContent className="flex h-full flex-col p-5">
           <div className="mb-2 flex items-start justify-between gap-3">

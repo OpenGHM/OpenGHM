@@ -1,6 +1,9 @@
+import type { OpenGHMCitationBlock } from "@/lib/repository/generated";
+
 // ─── Job status ──────────────────────────────────────────────────────────────
 
 export type JobStatus =
+  | "DRAFT"
   | "PENDING"
   | "SUBMITTED"
   | "RUNNING"
@@ -41,6 +44,13 @@ export interface SlurmConfig {
   memory: string | null;
 }
 
+// ─── `about` — a simulation's citation block, editable one field at a time
+// while it is a DRAFT. Derived from the generated `OpenGHMCitationBlock`
+// (rule 4) rather than restated — mirrors app/models/job.py's PartialAbout
+// on the backend. ────────────────────────────────────────────────────────────
+
+export type PartialAbout = Partial<OpenGHMCitationBlock>;
+
 // ─── API models ──────────────────────────────────────────────────────────────
 
 export interface JobStatsResponse {
@@ -56,6 +66,8 @@ export interface Job {
   user_id: string;
   dataset_id: string;
   dataset_title: string;
+  slug: string | null;
+  about: PartialAbout | null;
   slurm_job_id: number | null;
   slurm_job_name: string;
   status: JobStatus;
@@ -63,6 +75,7 @@ export interface Job {
   parameters: JobParameters;
   slurm_config: SlurmConfig;
   created_at: string;
+  updated_at: string | null;
   submitted_at: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -85,6 +98,19 @@ export interface JobSubmitRequest {
 export interface JobSubmitResponse {
   job_id: string;
   status: JobStatus;
+}
+
+/** POST /jobs/derive/{dataset_id} body. */
+export interface SimulationDeriveRequest {
+  slug?: string | null;
+}
+
+/** PATCH /jobs/{job_id} body — only the fields supplied are changed.
+ * Refused (409) once the simulation has moved past DRAFT. */
+export interface SimulationUpdateRequest {
+  slug?: string | null;
+  about?: PartialAbout | null;
+  parameters?: JobParameters | null;
 }
 
 export interface JobStatusResponse {

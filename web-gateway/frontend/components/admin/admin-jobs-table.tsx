@@ -34,7 +34,7 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
         {jobs.map((job) => (
           <TableRow key={job.id}>
             <TableCell>
-              <Link href={`/simulations/${job.id}`} className="font-mono text-xs text-primary hover:underline">
+              <Link href={`/workspace/${job.id}`} className="font-mono text-xs text-primary hover:underline">
                 {job.sim_id || job.id.slice(0, 12)}
               </Link>
             </TableCell>

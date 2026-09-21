@@ -36,7 +36,7 @@ export function ReviewSubmitClient({ snapshot }: ReviewSubmitClientProps) {
       });
 
       toast.success("Simulation submitted.");
-      router.push(`/simulations/${result.job_id}`);
+      router.push(`/workspace/${result.job_id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to submit simulation";
       setError(msg);

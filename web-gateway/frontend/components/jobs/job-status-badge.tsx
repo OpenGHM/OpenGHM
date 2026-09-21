@@ -1,6 +1,7 @@
 import type { JobStatus } from "@/lib/jobs/types";
 
 const STYLE_MAP: Record<JobStatus, string> = {
+  DRAFT: "bg-violet-100 text-violet-700 border-violet-200",
   PENDING: "bg-slate-100 text-slate-600 border-slate-200",
   SUBMITTED: "bg-blue-100 text-blue-700 border-blue-200",
   RUNNING: "bg-amber-100 text-amber-700 border-amber-200 animate-pulse",
@@ -11,6 +12,7 @@ const STYLE_MAP: Record<JobStatus, string> = {
 };
 
 const LABEL_MAP: Record<JobStatus, string> = {
+  DRAFT: "Draft",
   PENDING: "Pending",
   SUBMITTED: "Submitted",
   RUNNING: "Running",

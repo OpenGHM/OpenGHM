@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 // "/dashboard" has no index page anymore — only its "/dashboard/profile"
 // child route exists — but the prefix match below still protects it.
-const PROTECTED_PATHS = ["/dashboard", "/simulations", "/admin"];
+const PROTECTED_PATHS = ["/dashboard", "/workspace", "/admin"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

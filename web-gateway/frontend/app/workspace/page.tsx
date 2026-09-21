@@ -5,8 +5,8 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SimulationCard } from "@/components/jobs/simulation-card";
-import { JobsStatsRow } from "@/components/jobs/jobs-stats-row";
+import { SimulationTable } from "@/components/workspace/simulation-table";
+import { JobsStatsRow } from "@/components/workspace/jobs-stats-row";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
 import { STATUS_TABS } from "@/lib/jobs/filters";
 import type { JobStatsResponse } from "@/lib/jobs/types";
@@ -19,7 +19,7 @@ import {
 
 const EMPTY_STATS: JobStatsResponse = { total: 0, running: 0, completed: 0, failed: 0 };
 
-export default async function SimulationsPage({
+export default async function WorkspacePage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string; status?: string }>;
@@ -49,18 +49,19 @@ export default async function SimulationsPage({
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="mb-1 text-sm font-medium text-white/60 uppercase tracking-wider">
-                  HPC Jobs
+                  Workspace &middot; Private &amp; unpublished
                 </p>
                 <h1 className="text-3xl font-bold text-white">My Simulations</h1>
                 <p className="mt-2 text-sm text-white/70">
-                  Submit and track hydrologic model simulations on Anvil HPC
+                  Working configurations only you can see. Nothing here is a
+                  published snapshot.
                 </p>
               </div>
               <Button
                 asChild
                 className="shrink-0 bg-white text-[#006994] hover:bg-white/90 font-semibold"
               >
-                <Link href="/simulations/new">
+                <Link href="/workspace/new">
                   <Plus className="mr-1.5 size-4" />
                   New Simulation
                 </Link>
@@ -81,8 +82,8 @@ export default async function SimulationsPage({
                   statusFilter === tab.value ||
                   (!statusFilter && tab.value === undefined);
                 const href = tab.value
-                  ? `/simulations?status=${tab.value}`
-                  : "/simulations";
+                  ? `/workspace?status=${tab.value}`
+                  : "/workspace";
                 return (
                   <Link key={tab.label} href={href}>
                     <span
@@ -121,7 +122,7 @@ export default async function SimulationsPage({
                       : "Select a model snapshot to run your first simulation."}
                   </p>
                   <Button asChild size="sm" className="bg-[#006994] hover:bg-[#005a7a]">
-                    <Link href="/simulations/new">
+                    <Link href="/workspace/new">
                       <Plus className="mr-1.5 size-4" />
                       New Simulation
                     </Link>
@@ -130,16 +131,18 @@ export default async function SimulationsPage({
               </Card>
             ) : (
               <div className="space-y-3">
-                {jobData.items.map((job) => (
-                  <SimulationCard key={job.id} job={job} />
-                ))}
+                <Card className="py-0">
+                  <CardContent className="p-0">
+                    <SimulationTable jobs={jobData.items} />
+                  </CardContent>
+                </Card>
 
                 {/* Pagination */}
                 {jobData.total_pages > 1 && (
                   <div className="flex items-center justify-center gap-4 pt-4">
                     {page > 1 ? (
                       <Link
-                        href={`/simulations?page=${page - 1}${statusFilter ? `&status=${statusFilter}` : ""}`}
+                        href={`/workspace?page=${page - 1}${statusFilter ? `&status=${statusFilter}` : ""}`}
                       >
                         <Button variant="ghost" size="sm">
                           <ChevronLeft className="mr-1 size-4" />
@@ -159,7 +162,7 @@ export default async function SimulationsPage({
 
                     {page < jobData.total_pages ? (
                       <Link
-                        href={`/simulations?page=${page + 1}${statusFilter ? `&status=${statusFilter}` : ""}`}
+                        href={`/workspace?page=${page + 1}${statusFilter ? `&status=${statusFilter}` : ""}`}
                       >
                         <Button variant="ghost" size="sm">
                           Next

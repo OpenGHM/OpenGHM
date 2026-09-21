@@ -19,7 +19,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const NAV_ITEMS_BEFORE = [
   { label: "Home", href: "/" },
   { label: "Data Repository", href: "/repository" },
-  { label: "Simulation", href: "/simulations" },
+  { label: "Workspace", href: "/workspace" },
 ];
 
 const NAV_ITEMS_AFTER = [

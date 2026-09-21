@@ -5,6 +5,7 @@ import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import type { Job, JobStatus } from "@/lib/jobs/types";
 
 const BORDER_COLOR: Record<JobStatus, string> = {
+  DRAFT: "border-l-violet-300",
   PENDING: "border-l-slate-300",
   SUBMITTED: "border-l-blue-400",
   RUNNING: "border-l-amber-400",
@@ -30,7 +31,7 @@ export function SimulationCard({ job }: { job: Job }) {
   const displayId = job.sim_id || job.id.slice(0, 12);
 
   return (
-    <Link href={`/simulations/${job.id}`} className="block">
+    <Link href={`/workspace/${job.id}`} className="block">
       <Card
         className={`gap-0 overflow-hidden border-l-4 py-0 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${borderColor}`}
       >

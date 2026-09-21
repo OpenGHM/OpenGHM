@@ -26,25 +26,25 @@ export function JobsStatsRow({ stats }: { stats: JobStatsResponse }) {
       <StatChip
         label="Total"
         value={stats.total}
-        href="/simulations"
+        href="/workspace"
         colorClass="text-white"
       />
       <StatChip
         label="Running"
         value={stats.running}
-        href="/simulations?status=active"
+        href="/workspace?status=active"
         colorClass="text-amber-300"
       />
       <StatChip
         label="Completed"
         value={stats.completed}
-        href="/simulations?status=COMPLETED"
+        href="/workspace?status=COMPLETED"
         colorClass="text-emerald-300"
       />
       <StatChip
         label="Failed"
         value={stats.failed}
-        href="/simulations?status=FAILED"
+        href="/workspace?status=FAILED"
         colorClass="text-red-300"
       />
     </div>

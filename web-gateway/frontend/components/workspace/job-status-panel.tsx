@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-import { useJobStatus } from "@/lib/jobs/use-job-status";
+import { useJobStatus } from "@/lib/workspace/use-job-status";
 import { cancelJob } from "@/lib/jobs/actions";
 import type { JobStatus, JobStatusResponse } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";

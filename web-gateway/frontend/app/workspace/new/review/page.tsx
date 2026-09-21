@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ReviewSubmitClient } from "@/components/jobs/review-submit-client";
+import { ReviewSubmitClient } from "@/components/workspace/review-submit-client";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import {
   ChevronRight,
@@ -27,11 +27,11 @@ export default async function ReviewSimulationPage({
   const params = await searchParams;
   const snapshotId = params.snapshot_id;
 
-  if (!snapshotId) redirect("/simulations/new");
+  if (!snapshotId) redirect("/workspace/new");
 
   const snapshot = await fetchDatasetById(snapshotId).catch(() => null);
 
-  if (!snapshot) redirect("/simulations/new");
+  if (!snapshot) redirect("/workspace/new");
 
   const { start, end } = snapshot.simulation.temporalCoverage;
   const coverageDisplay = `${start} → ${end}`;
@@ -46,11 +46,11 @@ export default async function ReviewSimulationPage({
           <div className="mx-auto max-w-[1024px]">
             {/* Breadcrumb */}
             <nav className="mb-4 flex items-center gap-1.5 text-xs text-white/60">
-              <Link href="/simulations" className="hover:text-white/90 transition-colors">
+              <Link href="/workspace" className="hover:text-white/90 transition-colors">
                 My Simulations
               </Link>
               <ChevronRight className="size-3" />
-              <Link href="/simulations/new" className="hover:text-white/90 transition-colors">
+              <Link href="/workspace/new" className="hover:text-white/90 transition-colors">
                 New Simulation
               </Link>
               <ChevronRight className="size-3" />
@@ -74,7 +74,7 @@ export default async function ReviewSimulationPage({
           <div className="mx-auto max-w-[1024px]">
             <div className="mb-6">
               <Link
-                href="/simulations/new"
+                href="/workspace/new"
                 className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="size-3.5" />

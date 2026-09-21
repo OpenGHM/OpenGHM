@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
-import { SnapshotSelectionClient } from "@/components/jobs/snapshot-selection-client";
+import { SnapshotSelectionClient } from "@/components/workspace/snapshot-selection-client";
 import { fetchSnapshots } from "@/lib/jobs/actions";
 import type { RepositoryListResponse } from "@/lib/repository/types";
 import { ChevronRight } from "lucide-react";
@@ -35,7 +35,7 @@ export default async function NewSimulationPage() {
           <div className="mx-auto max-w-[1024px]">
             {/* Breadcrumb */}
             <nav className="mb-4 flex items-center gap-1.5 text-xs text-white/60">
-              <Link href="/simulations" className="hover:text-white/90 transition-colors">
+              <Link href="/workspace" className="hover:text-white/90 transition-colors">
                 My Simulations
               </Link>
               <ChevronRight className="size-3" />
