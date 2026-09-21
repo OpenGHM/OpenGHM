@@ -171,36 +171,50 @@ logs-all:
 
 # ─── Codegen ────────────────────────────────────────────────────────────────
 
-# Regenerate the backend models and frontend types from schemas/snapshot-spec/
-# (rule 4 — one source of truth). Idempotent: run it twice, get the same
-# files. CI runs this and fails on a diff.
+# Regenerate the backend models and frontend types from schemas/*-spec/
+# (rule 4 — one source of truth). One recipe covers every spec that has a
+# generated view — today snapshot-spec and model-input-spec — rather than a
+# second recipe someone forgets to run. Idempotent: run it twice, get the
+# same files. CI runs this and fails on a diff.
 codegen:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "🐍  Backend models (datamodel-code-generator)..."
     python3 -m pip install --quiet -r web-gateway/backend/requirements-dev.txt
-    python3 -m datamodel_code_generator \
-        --input schemas/snapshot-spec/metadata/1.0.0.json \
-        --input-file-type jsonschema \
-        --output web-gateway/backend/app/models/generated/snapshot.py \
-        --output-model-type pydantic_v2.BaseModel \
-        --allow-remote-refs \
-        --use-schema-description \
-        --use-title-as-name \
-        --disable-timestamp \
-        --custom-file-header $'# GENERATED -- do not edit by hand. Run \'just codegen\' to regenerate.\n# Source: schemas/snapshot-spec/metadata/1.0.0.json'
-
-    echo "🟦  Frontend types (json-schema-to-typescript)..."
     if [ ! -d web-gateway/frontend/node_modules ]; then
         (cd web-gateway/frontend && npm install)
     fi
-    {
-        printf '/* GENERATED -- do not edit by hand. Run "just codegen" to regenerate.\n * Source: schemas/snapshot-spec/metadata/1.0.0.json */\n\n'
-        web-gateway/frontend/node_modules/.bin/json2ts \
-            -i schemas/snapshot-spec/metadata/1.0.0.json \
-            --cwd schemas/snapshot-spec/metadata \
-            --bannerComment ""
-    } > web-gateway/frontend/lib/repository/generated.ts
+
+    # spec-name : backend-output : frontend-output
+    specs=(
+        "schemas/snapshot-spec/metadata/1.0.0.json:web-gateway/backend/app/models/generated/snapshot.py:web-gateway/frontend/lib/repository/generated.ts"
+        "schemas/model-input-spec/metadata/1.0.0.json:web-gateway/backend/app/models/generated/model_input.py:web-gateway/frontend/lib/repository/generated-model-input.ts"
+    )
+
+    for entry in "${specs[@]}"; do
+        IFS=':' read -r source backend_out frontend_out <<< "$entry"
+        cwd="$(dirname "$source")"
+
+        echo "🐍  Backend models (datamodel-code-generator) — $source ..."
+        python3 -m datamodel_code_generator \
+            --input "$source" \
+            --input-file-type jsonschema \
+            --output "$backend_out" \
+            --output-model-type pydantic_v2.BaseModel \
+            --allow-remote-refs \
+            --use-schema-description \
+            --use-title-as-name \
+            --disable-timestamp \
+            --custom-file-header $'# GENERATED -- do not edit by hand. Run \'just codegen\' to regenerate.\n# Source: '"$source"
+
+        echo "🟦  Frontend types (json-schema-to-typescript) — $source ..."
+        {
+            printf '/* GENERATED -- do not edit by hand. Run "just codegen" to regenerate.\n * Source: %s */\n\n' "$source"
+            web-gateway/frontend/node_modules/.bin/json2ts \
+                -i "$source" \
+                --cwd "$cwd" \
+                --bannerComment ""
+        } > "$frontend_out"
+    done
 
     echo "✅  Done. 'git diff --exit-code' is clean when nothing needed regenerating."
 
