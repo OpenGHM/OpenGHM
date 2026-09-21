@@ -1,6 +1,6 @@
 {
   "$schema": "https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json",
-  "id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
   "slug": "wbm_ancillary_data_v2.0.0",
   "about": {
     "name": "University of New Hampshire Water Balance Model Ancillary Data",
@@ -29,7 +29,7 @@
       "MIRCA2000",
       "RGI-6 glaciers"
     ],
-    "url": "https://openghm.org/model-inputs/0000000000000000000000000000000000000000000000000000000000000000"
+    "url": "https://openghm.org/model-inputs/52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d"
   },
   "coverage": {
     "spatialCoverage": {
