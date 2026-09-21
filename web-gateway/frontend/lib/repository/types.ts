@@ -7,6 +7,7 @@
  * dropped or where it's derived from instead.
  */
 import type { OpenGHMSnapshotMetadata } from "./generated";
+import type { OpenGHMModelInputMetadata } from "./generated-model-input";
 
 export type SortOption = "relevance" | "newest" | "title-az" | "title-za";
 
@@ -40,6 +41,32 @@ export interface FilterState {
 
 export interface RepositoryListResponse {
   items: Dataset[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+}
+
+// ─── Model input ───────────────────────────────────────────────────────────────
+
+/**
+ * A model input as the API returns it: every spec field, unchanged, plus
+ * the one value the backend computes and never stores — see
+ * `app/models/repository.py`'s `ModelInputResponse`. Sibling of `Dataset`
+ * (ADR 0015, spec.md Decision 2) — both are published, immutable, citable
+ * artifacts under the Data Repository.
+ */
+export interface ModelInput extends OpenGHMModelInputMetadata {
+  licenseUrl: string;
+}
+
+export interface ModelInputFilterState {
+  searchQuery: string;
+  sortBy: SortOption;
+  page: number;
+}
+
+export interface ModelInputListResponse {
+  items: ModelInput[];
   totalCount: number;
   totalPages: number;
   page: number;

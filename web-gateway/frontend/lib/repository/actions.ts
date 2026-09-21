@@ -5,6 +5,9 @@ import {
   RepositoryListResponse,
   Dataset,
   FilterState,
+  ModelInput,
+  ModelInputFilterState,
+  ModelInputListResponse,
 } from "@/lib/repository/types";
 
 /**
@@ -55,6 +58,59 @@ export async function fetchDatasetById(id: string): Promise<Dataset | null> {
     const client = await getApiClient();
     const response = await client.get<Dataset>(
       `/api/v1/repository/datasets/${encodeURIComponent(id)}`
+    );
+    return response.data;
+  } catch (error: unknown) {
+    // 404 → return null so the page can call notFound()
+    const axiosError = error as { response?: { status?: number } };
+    if (axiosError?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetch a paginated, filtered list of model inputs from FastAPI (ADR 0015).
+ * Sibling of `fetchDatasets` — same envelope, no spatial/temporal filters:
+ * a model input has no single top-level resolution to filter on the way a
+ * snapshot's `simulation.resolution` does (see `ModelInputResponse`'s
+ * docstring in `app/models/repository.py`).
+ */
+export async function fetchModelInputs(
+  filters: ModelInputFilterState
+): Promise<ModelInputListResponse> {
+  const client = await getApiClient();
+
+  const params: Record<string, string | number> = {
+    sort: filters.sortBy,
+    page: filters.page,
+    page_size: 5,
+  };
+
+  if (filters.searchQuery.trim()) {
+    params.q = filters.searchQuery.trim();
+  }
+
+  const response = await client.get<ModelInputListResponse>(
+    "/api/v1/repository/model-inputs",
+    { params }
+  );
+
+  return response.data;
+}
+
+/**
+ * Fetch a single model input by ID.
+ * Used by the detail page `/repository/model-inputs/[id]`.
+ */
+export async function fetchModelInputById(
+  id: string
+): Promise<ModelInput | null> {
+  try {
+    const client = await getApiClient();
+    const response = await client.get<ModelInput>(
+      `/api/v1/repository/model-inputs/${encodeURIComponent(id)}`
     );
     return response.data;
   } catch (error: unknown) {

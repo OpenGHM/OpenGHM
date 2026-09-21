@@ -95,7 +95,7 @@ expects are deliberately absent, and §6 says which.
 
 ## 4. Where state lives
 
-One MongoDB database, `openghm`. Six collections, and every index on them is
+One MongoDB database, `openghm`. Seven collections, and every index on them is
 created at startup in `web-gateway/backend/main.py` — that file is the
 schema, in the sense
 that nothing else declares one.
@@ -107,7 +107,8 @@ that nothing else declares one.
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
 | `pending_sso_signups` | half-finished SSO sign-ups, 30-minute TTL |
 | `audit_events` | append-only, `auth` and `job` categories |
-| `datasets` | the browsable catalogue |
+| `datasets` | the browsable catalogue of published snapshots |
+| `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 
 Each `datasets` document is a snapshot's `metadata.json`
 ([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md)) — the
@@ -135,6 +136,28 @@ finished simulation is not itself in `datasets` until someone publishes it —
 a step that does not exist yet ([open items
 9](../reference/open-items.md) and [10](../reference/open-items.md), **Next**
 list *job output reaches S3*).
+
+`model_inputs` holds the same kind of document for the other published
+artifact: a model input's own `metadata.json`, written by
+`POST /api/v1/repository/model-inputs`, which is **admin-only** — the same
+boundary as uploading the bytes themselves. Both write paths store the
+document with `exclude_none=True`, and that is not a detail: dumping the
+model without it materialises every declared-but-absent optional field as
+`null`, and an absent field and a `null` are different things to JSON
+Schema. Both collections held documents that failed validation against
+their own spec until this was fixed — `about.creator[].orcid` and
+`about.relatedLink` were the visible cases — so "verbatim" above is a
+property the write path has to actively preserve, not one it gets for free.
+
+**Registering an artifact does not prove it exists.** The backend has no S3
+client and no credentials by design (§5), so it cannot discover what has
+been published, nor verify that the bytes behind a document are really in
+the bucket. Registration is always "someone tells the gateway", never "the
+gateway finds out", and the catalogue and the bucket can drift. Nothing
+today produces what gets registered either: no code mints an artifact id,
+and `openghm model-input publish` does not exist — only `validate`. The
+write paths are the receiving end of a chain whose earlier links are still
+to be built.
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 (`ops/k8s/<env>/mongo.yml`). That is the one place cluster state exists, and
