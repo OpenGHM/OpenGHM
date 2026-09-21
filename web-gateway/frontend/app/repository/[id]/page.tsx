@@ -6,6 +6,7 @@ import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubmitJobDialog } from "@/components/jobs/submit-job-dialog";
+import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
 import {
   ArrowLeft,
   Calendar,
@@ -98,7 +99,10 @@ export default async function DatasetDetailPage({
                 Back to Repository
               </Link>
             </Button>
-            <SubmitJobDialog dataset={dataset} />
+            <div className="flex items-center gap-3">
+              <DeriveSimulationButton datasetId={dataset.id} />
+              <SubmitJobDialog dataset={dataset} />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">

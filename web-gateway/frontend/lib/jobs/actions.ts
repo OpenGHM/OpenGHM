@@ -9,6 +9,8 @@ import type {
   JobStatusResponse,
   JobSubmitRequest,
   JobSubmitResponse,
+  SimulationDeriveRequest,
+  SimulationUpdateRequest,
 } from "@/lib/jobs/types";
 import type { RepositoryListResponse } from "@/lib/repository/types";
 
@@ -43,6 +45,41 @@ export async function fetchJobs(
 }
 
 /**
+ * Create a new DRAFT simulation pre-filled from a published snapshot
+ * (T4/T9) — the only creation path for a simulation short of the existing
+ * immediate-submit flow. The source dataset is only ever read.
+ */
+export async function deriveSimulation(
+  datasetId: string,
+  request: SimulationDeriveRequest = {}
+): Promise<Job> {
+  const client = await getApiClient();
+  const res = await client.post<Job>(
+    `/api/v1/jobs/derive/${encodeURIComponent(datasetId)}`,
+    request
+  );
+  return res.data;
+}
+
+/**
+ * Edit a simulation while it is still a DRAFT. The backend returns 409
+ * once the status has moved past DRAFT — callers should check
+ * `job.status` before offering the control rather than relying on this
+ * throwing.
+ */
+export async function updateSimulation(
+  jobId: string,
+  request: SimulationUpdateRequest
+): Promise<Job> {
+  const client = await getApiClient();
+  const res = await client.patch<Job>(
+    `/api/v1/jobs/${encodeURIComponent(jobId)}`,
+    request
+  );
+  return res.data;
+}
+
+/**
  * Fetch a single job by ID.
  */
 export async function fetchJob(jobId: string): Promise<Job | null> {
@@ -52,7 +89,14 @@ export async function fetchJob(jobId: string): Promise<Job | null> {
     return res.data;
   } catch (error: unknown) {
     const axiosError = error as { response?: { status?: number } };
-    if (axiosError?.response?.status === 404) return null;
+    // The existing (non-draft) job routes return 403 for a non-owner
+    // rather than 404 — a different contract than the new draft routes,
+    // which use 404 to avoid leaking existence. Not reconciled here (see
+    // docs/reference/open-items.md); treated the same as "not found" so
+    // visiting someone else's job from the Workspace table degrades to
+    // the page's normal notFound() instead of an unhandled error.
+    const status = axiosError?.response?.status;
+    if (status === 404 || status === 403) return null;
     throw error;
   }
 }

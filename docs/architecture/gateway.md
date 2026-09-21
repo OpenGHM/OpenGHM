@@ -103,7 +103,7 @@ that nothing else declares one.
 | Collection | Holds |
 |---|---|
 | `users` | accounts; `email` is unique |
-| `jobs` | one document per submission, including the SLURM ids |
+| `jobs` | one document per **simulation** — draft or submitted, including the SLURM ids once it runs |
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
 | `pending_sso_signups` | half-finished SSO sign-ups, 30-minute TTL |
 | `audit_events` | append-only, `auth` and `job` categories |
@@ -120,6 +120,21 @@ documents on every startup, carrying real researchers' names and emails as
 demo data — not appropriate for a public instance — and was the collection's
 *only* writer, so removing it rather than scrubbing it left nothing behind
 until this write path replaced it.
+
+A `jobs` document is a **simulation**: mutable while its `status` is `DRAFT`,
+read-only from the moment it is submitted (mission `2026-09-20-simulations`,
+private). `POST /api/v1/jobs/derive/{dataset_id}` creates a draft pre-filled
+from a published snapshot's parameters — the only creation path, since
+starting one from nothing would need a model-input catalogue the gateway
+does not have yet. `PATCH`/`DELETE /api/v1/jobs/{id}` refuse with `409` once
+the status has moved past `DRAFT`, so a finished run's own record cannot be
+rewritten under it. A simulation and a snapshot are deliberately not the same
+document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
+and `slurmJobId`, none of which a draft can honestly carry, and a
+finished simulation is not itself in `datasets` until someone publishes it —
+a step that does not exist yet ([open items
+9](../reference/open-items.md) and [10](../reference/open-items.md), **Next**
+list *job output reaches S3*).
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 (`ops/k8s/<env>/mongo.yml`). That is the one place cluster state exists, and
