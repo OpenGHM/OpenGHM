@@ -24,6 +24,11 @@ interface Props {
   jobId: string;
   initialStatus: JobStatus;
   initialData?: Partial<JobStatusResponse>;
+  /** Rendering fixture data (see lib/workspace/preview.ts) — no real job
+   *  behind `jobId`, so polling and cancelling would only hit the backend
+   *  with an id it has never heard of. Freezes the panel on `initialData`
+   *  and turns Cancel into a no-op explanation instead. */
+  preview?: boolean;
 }
 
 function TimelineRow({
@@ -47,7 +52,7 @@ function TimelineRow({
   );
 }
 
-export function JobStatusPanel({ jobId, initialStatus, initialData }: Props) {
+export function JobStatusPanel({ jobId, initialStatus, initialData, preview = false }: Props) {
   const {
     status,
     slurmJobId,
@@ -57,11 +62,15 @@ export function JobStatusPanel({ jobId, initialStatus, initialData }: Props) {
     statusReason,
     isPolling,
     refresh,
-  } = useJobStatus(jobId, initialStatus, initialData);
+  } = useJobStatus(jobId, initialStatus, initialData, { disabled: preview });
 
   const [cancelling, startCancel] = useTransition();
 
   const handleCancel = () => {
+    if (preview) {
+      toast.info("Preview data — there is no real job to cancel.");
+      return;
+    }
     startCancel(async () => {
       try {
         await cancelJob(jobId);
@@ -152,7 +161,7 @@ export function JobStatusPanel({ jobId, initialStatus, initialData }: Props) {
               Cancel Job
             </Button>
           )}
-          {!isTerminalStatus(status) && (
+          {!preview && !isTerminalStatus(status) && (
             <Button variant="ghost" size="sm" onClick={refresh}>
               <RefreshCw className="mr-1.5 size-4" />
               Refresh

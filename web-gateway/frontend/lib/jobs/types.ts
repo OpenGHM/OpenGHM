@@ -68,6 +68,13 @@ export interface Job {
   dataset_title: string;
   slug: string | null;
   about: PartialAbout | null;
+  /** Set to run against an input other than the base snapshot's. Null means
+   *  inherit — see `effective_model_input_state` for which case applies. */
+  model_input_id: string | null;
+  effective_model_input_id: string | null;
+  /** `inherited-missing` means the base snapshot cites an input the
+   *  catalogue does not hold, which is common in the shipped examples. */
+  effective_model_input_state: "inherited" | "chosen" | "inherited-missing";
   slurm_job_id: number | null;
   slurm_job_name: string;
   status: JobStatus;
@@ -103,6 +110,10 @@ export interface JobSubmitResponse {
 /** POST /jobs/derive/{dataset_id} body. */
 export interface SimulationDeriveRequest {
   slug?: string | null;
+  /** Optional model-input override, set at creation time instead of only
+   *  by a later PATCH. Absent means inherit from the base snapshot, same
+   *  as everywhere else this field appears (app/models/job.py). */
+  model_input_id?: string | null;
 }
 
 /** PATCH /jobs/{job_id} body — only the fields supplied are changed.
@@ -111,6 +122,10 @@ export interface SimulationUpdateRequest {
   slug?: string | null;
   about?: PartialAbout | null;
   parameters?: JobParameters | null;
+  /** Set to override the base snapshot's model input, or explicitly to
+   *  `null` to clear an override and go back to inheriting. Omitting the
+   *  key entirely leaves whatever was there untouched. */
+  model_input_id?: string | null;
 }
 
 export interface JobStatusResponse {

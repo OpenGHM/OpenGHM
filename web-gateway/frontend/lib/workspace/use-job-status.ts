@@ -33,8 +33,10 @@ export interface UseJobStatusResult {
 export function useJobStatus(
   jobId: string,
   initialStatus: JobStatus,
-  initialData?: Partial<JobStatusResponse>
+  initialData?: Partial<JobStatusResponse>,
+  options?: { disabled?: boolean }
 ): UseJobStatusResult {
+  const disabled = options?.disabled ?? false;
   const [status, setStatus] = useState<JobStatus>(initialStatus);
   const [slurmJobId, setSlurmJobId] = useState<number | null>(
     initialData?.slurm_job_id ?? null
@@ -51,12 +53,13 @@ export function useJobStatus(
   const [statusReason, setStatusReason] = useState<string | null>(
     initialData?.status_reason ?? null
   );
-  const [isPolling, setIsPolling] = useState(!isTerminalStatus(initialStatus));
+  const [isPolling, setIsPolling] = useState(!disabled && !isTerminalStatus(initialStatus));
 
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const doFetch = useCallback(async () => {
+    if (disabled) return;
     if (!mountedRef.current) return;
     try {
       const data = await pollJobStatus(jobId);
@@ -80,13 +83,13 @@ export function useJobStatus(
       // Retry after a delay on error
       timerRef.current = setTimeout(doFetch, SLOW_INTERVAL);
     }
-  }, [jobId]);
+  }, [jobId, disabled]);
 
   // Start polling on mount
   useEffect(() => {
     mountedRef.current = true;
 
-    if (!isTerminalStatus(initialStatus)) {
+    if (!disabled && !isTerminalStatus(initialStatus)) {
       timerRef.current = setTimeout(doFetch, intervalFor(initialStatus));
     }
 
@@ -94,12 +97,13 @@ export function useJobStatus(
       mountedRef.current = false;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [doFetch, initialStatus]);
+  }, [doFetch, initialStatus, disabled]);
 
   const refresh = useCallback(() => {
+    if (disabled) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     doFetch();
-  }, [doFetch]);
+  }, [doFetch, disabled]);
 
   return {
     status,

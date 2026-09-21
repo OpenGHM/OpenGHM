@@ -1,0 +1,183 @@
+/**
+ * Fake data for the simulation lifecycle UI.
+ *
+ * Everything a real run would produce is invented here: SLURM ids, timings,
+ * stdout/stderr, output files, progress. None of it is fetched, because none
+ * of it exists — nothing runs real WBM ([open item 9]), nothing writes output
+ * to S3 (Next 8), and no route returns a result listing.
+ *
+ * What is *not* invented is shape. Simulations are `Job`, logs are
+ * `JobLogsResponse`, and any snapshot or model-input metadata comes from the
+ * generated spec types. A field name that does not exist in the spec does not
+ * exist here either: the point of building this UI ahead of the plumbing is
+ * that the plumbing can be built to fit it, which only works if the shapes are
+ * already right.
+ *
+ * Delete this module when the routes behind it are real. Anything importing it
+ * is, by definition, not yet connected.
+ */
+import type { Job, JobLogsResponse, JobStatus } from "@/lib/jobs/types";
+
+/** A file a finished run would have written. No route returns these yet. */
+export interface FakeOutputFile {
+  /** Path relative to the run's output root, e.g. `wbm_output/discharge_2001.nc`. */
+  path: string;
+  sizeBytes: number;
+  /** What a download link would point at once job output reaches S3 (Next 8). */
+  href: string | null;
+}
+
+/** Coarse progress for a running simulation. SLURM reports no percentage; this
+ *  is derived from elapsed-vs-requested walltime, which is the honest proxy. */
+export interface FakeProgress {
+  elapsed: string;
+  requested: string;
+  /** 0–1, elapsed/requested, clamped. Not a measure of work done. */
+  fraction: number;
+  /** The step a WBM run is in, as its stdout would report it. */
+  stage: string;
+}
+
+const HOUR = 3_600_000;
+
+function iso(msAgo: number): string {
+  return new Date(Date.now() - msAgo).toISOString();
+}
+
+/** The parameters every fixture starts from — a plausible one-year global run. */
+const BASE_PARAMETERS: Job["parameters"] = {
+  temporal_range_start: "2001-01-01",
+  temporal_range_end: "2001-12-31",
+  spatial_domain: null,
+  variables: ["discharge", "runoff", "streamAge"],
+  custom_params: null,
+};
+
+const BASE_SLURM: Job["slurm_config"] = {
+  partition: "shared",
+  account: null,
+  walltime: "15:00",
+  nodes: 1,
+  ntasks: 16,
+  memory: null,
+};
+
+/**
+ * A simulation in a given state, with the fields that state would actually
+ * have — a queued run has no `started_at`, a failed one has a `status_reason`,
+ * and only a finished one has an `output_s3_key`.
+ */
+export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}): Job {
+  const submitted = status === "DRAFT" ? null : iso(3 * HOUR);
+  const started =
+    status === "DRAFT" || status === "PENDING" || status === "SUBMITTED"
+      ? null
+      : iso(2 * HOUR);
+  const completed =
+    status === "COMPLETED" || status === "FAILED" || status === "CANCELLED"
+      ? iso(HOUR)
+      : null;
+
+  return {
+    id: `fake-${status.toLowerCase()}`,
+    sim_id: status === "DRAFT" ? "" : `sim-20260921-${status.slice(0, 4).toLowerCase()}`,
+    user_id: "mock-user-001",
+    dataset_id: "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89",
+    dataset_title: "WBM v2.0.0 simulation as tutorial: [Global] [2001]",
+    slug: null,
+    about: null,
+    model_input_id: null,
+    effective_model_input_id: null,
+    effective_model_input_state: "inherited",
+    slurm_job_id: status === "DRAFT" ? null : 12345680,
+    slurm_job_name: status === "DRAFT" ? "" : "wbm-sim",
+    status,
+    status_reason:
+      status === "FAILED"
+        ? "wbm.pl exited 1 — see stderr"
+        : status === "CANCELLED"
+          ? "Cancelled by the user"
+          : null,
+    parameters: BASE_PARAMETERS,
+    slurm_config: BASE_SLURM,
+    created_at: iso(4 * HOUR),
+    submitted_at: submitted,
+    started_at: started,
+    completed_at: completed,
+    updated_at: completed ?? started ?? submitted ?? iso(4 * HOUR),
+    output_s3_key: status === "COMPLETED" ? "outputs/sim-20260921-comp/" : null,
+    ...overrides,
+  };
+}
+
+/** stdout as a WBM run under SLURM would leave it. */
+export function fakeLogs(status: JobStatus, jobId: string): JobLogsResponse {
+  if (status === "FAILED") {
+    return {
+      job_id: jobId,
+      stdout: [
+        "Loading network: hyd_5m_global.asc",
+        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
+        "Run: 2001-01-01 .. 2001-12-31",
+        "  2001-01 .. done",
+        "  2001-02 .. done",
+        "  2001-03 ..",
+      ].join("\n"),
+      stderr: [
+        "Use of uninitialized value in numeric lt (<) at /wbm/model/wbm.pl line 2841.",
+        "ERROR: cannot open data_init/climate/merra2_prectotcorr_d.init: No such file or directory",
+        "  at /wbm/model/RIMS.pm line 1184.",
+        "wbm.pl exited with status 1",
+      ].join("\n"),
+      truncated: false,
+    };
+  }
+  if (status === "COMPLETED") {
+    return {
+      job_id: jobId,
+      stdout: [
+        "Loading network: hyd_5m_global.asc",
+        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
+        "Run: 2001-01-01 .. 2001-12-31",
+        ...Array.from({ length: 12 }, (_, i) =>
+          `  2001-${String(i + 1).padStart(2, "0")} .. done`),
+        "Writing wbm_output/ (3 variables, monthly + yearly aggregates)",
+        "Elapsed: 12:47",
+      ].join("\n"),
+      stderr: "",
+      truncated: false,
+    };
+  }
+  if (status === "RUNNING" || status === "COMPLETING") {
+    return {
+      job_id: jobId,
+      stdout: [
+        "Loading network: hyd_5m_global.asc",
+        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
+        "Run: 2001-01-01 .. 2001-12-31",
+        "  2001-01 .. done",
+        "  2001-02 .. done",
+        "  2001-03 .. done",
+        "  2001-04 ..",
+      ].join("\n"),
+      stderr: "",
+      truncated: true,
+    };
+  }
+  return { job_id: jobId, stdout: "", stderr: "", truncated: false };
+}
+
+/** What a finished run would have written. Nothing serves these files. */
+export function fakeOutputFiles(): FakeOutputFile[] {
+  return [
+    { path: "wbm_output/discharge_2001_monthly.nc", sizeBytes: 184_320_000, href: null },
+    { path: "wbm_output/runoff_2001_monthly.nc", sizeBytes: 176_128_000, href: null },
+    { path: "wbm_output/streamAge_2001_monthly.nc", sizeBytes: 168_960_000, href: null },
+    { path: "wbm_output/discharge_2001_yearly.nc", sizeBytes: 15_360_000, href: null },
+    { path: "slurm-12345680.out", sizeBytes: 4_096, href: null },
+  ];
+}
+
+export function fakeProgress(): FakeProgress {
+  return { elapsed: "4:18", requested: "15:00", fraction: 4.3 / 15, stage: "Run: 2001-04" };
+}

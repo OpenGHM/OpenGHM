@@ -5,19 +5,23 @@ import { Terminal, ChevronDown, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchJobLogs } from "@/lib/jobs/actions";
-import type { JobStatus } from "@/lib/jobs/types";
+import type { JobLogsResponse, JobStatus } from "@/lib/jobs/types";
 
 interface Props {
   jobId: string;
   jobStatus: JobStatus;
+  /** Fixture logs (see lib/workspace/fixtures.ts / lib/workspace/preview.ts)
+   *  — there is no real job behind `jobId`, so this is shown immediately
+   *  instead of a "Load Logs" fetch that would 404 against the real API. */
+  previewLogs?: JobLogsResponse;
 }
 
-export function JobLogsPanel({ jobId, jobStatus }: Props) {
-  const [stdout, setStdout] = useState<string | null>(null);
-  const [stderr, setStderr] = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
+export function JobLogsPanel({ jobId, jobStatus, previewLogs }: Props) {
+  const [stdout, setStdout] = useState<string | null>(previewLogs?.stdout ?? null);
+  const [stderr, setStderr] = useState<string | null>(previewLogs?.stderr ?? null);
+  const [truncated, setTruncated] = useState(previewLogs?.truncated ?? false);
   const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(previewLogs !== undefined);
   const [loading, startLoad] = useTransition();
   const [tab, setTab] = useState<"stdout" | "stderr">("stdout");
 
@@ -25,6 +29,13 @@ export function JobLogsPanel({ jobId, jobStatus }: Props) {
     jobStatus !== "PENDING" && jobStatus !== "SUBMITTED";
 
   const handleLoad = () => {
+    if (previewLogs) {
+      setStdout(previewLogs.stdout);
+      setStderr(previewLogs.stderr);
+      setTruncated(previewLogs.truncated);
+      setLoaded(true);
+      return;
+    }
     setError(null);
     startLoad(async () => {
       try {

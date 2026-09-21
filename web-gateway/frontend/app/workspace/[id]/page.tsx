@@ -11,6 +11,14 @@ import { SimulationEditor } from "@/components/workspace/simulation-editor";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
 import { fetchJob } from "@/lib/jobs/actions";
 import { fetchDatasetById } from "@/lib/repository/actions";
+import { fakeSimulation, fakeLogs, fakeOutputFiles, fakeProgress } from "@/lib/workspace/fixtures";
+import { resolvePreviewStatus } from "@/lib/workspace/preview";
+import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
+import { QueuedNoticeCard } from "@/components/workspace/queued-notice-card";
+import { RunningProgressCard } from "@/components/workspace/running-progress-card";
+import { CompletedResultsCard } from "@/components/workspace/completed-results-card";
+import { FailedNextStepsCard } from "@/components/workspace/failed-next-steps-card";
+import { CancelledNoticeCard } from "@/components/workspace/cancelled-notice-card";
 import {
   ArrowLeft,
   Calendar,
@@ -23,17 +31,23 @@ import {
 
 export default async function JobDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const session = await auth();
   if (!session) redirect("/auth/signin");
 
   const { id } = await params;
-  const job = await fetchJob(id);
+  const { preview: previewRaw } = await searchParams;
+  const previewStatus = resolvePreviewStatus(previewRaw);
+
+  const job = previewStatus ? fakeSimulation(previewStatus, { id }) : await fetchJob(id);
   if (!job) notFound();
 
   const isDraft = job.status === "DRAFT";
+  const isPreview = previewStatus !== null;
 
   // Only needed while editable — gives the parameter editor the snapshot's
   // own output variables to choose from, in addition to whatever the
@@ -42,9 +56,16 @@ export default async function JobDetailPage({
   const dataset = isDraft ? await fetchDatasetById(job.dataset_id).catch(() => null) : null;
   const availableVariables = dataset?.simulation.outputVariables.map((v) => v.name) ?? [];
 
+  const previewLogs = isPreview ? fakeLogs(job.status, job.id) : undefined;
+  const previewParam = previewStatus ? `?preview=${previewStatus}` : "";
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
+
+      {process.env.NODE_ENV !== "production" && (
+        <DevPreviewSwitcher jobId={id} active={previewStatus} />
+      )}
 
       {/* Breadcrumb */}
       <div className="border-b bg-muted/50">
@@ -228,7 +249,11 @@ export default async function JobDetailPage({
                 </Card>
 
                 {/* Logs */}
-                <JobLogsPanel jobId={job.id} jobStatus={job.status} />
+                <JobLogsPanel
+                  jobId={job.id}
+                  jobStatus={job.status}
+                  previewLogs={previewLogs}
+                />
               </div>
 
               {/* Right column — Status */}
@@ -243,7 +268,41 @@ export default async function JobDetailPage({
                     completed_at: job.completed_at,
                     status_reason: job.status_reason,
                   }}
+                  preview={isPreview}
                 />
+
+                {(job.status === "PENDING" || job.status === "SUBMITTED") && (
+                  <QueuedNoticeCard status={job.status} />
+                )}
+
+                {(job.status === "RUNNING" || job.status === "COMPLETING") && (
+                  <RunningProgressCard
+                    progress={isPreview ? fakeProgress() : undefined}
+                    startedAt={job.started_at}
+                  />
+                )}
+
+                {job.status === "COMPLETED" && (
+                  <CompletedResultsCard
+                    jobId={job.id}
+                    files={fakeOutputFiles()}
+                    publishHref={`/workspace/${job.id}/publish${previewParam}`}
+                  />
+                )}
+
+                {job.status === "FAILED" && (
+                  <FailedNextStepsCard
+                    statusReason={job.status_reason}
+                    datasetId={job.dataset_id}
+                  />
+                )}
+
+                {job.status === "CANCELLED" && (
+                  <CancelledNoticeCard
+                    statusReason={job.status_reason}
+                    datasetId={job.dataset_id}
+                  />
+                )}
 
                 {/* Dataset link */}
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
