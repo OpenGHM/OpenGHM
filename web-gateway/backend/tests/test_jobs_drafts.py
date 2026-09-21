@@ -31,6 +31,7 @@ from app.api.v1.jobs import (
     _is_owner,
     _job_scope_query,
     _new_draft_document,
+    _resolve_model_input,
 )
 from app.core.roles import Permission, Role
 from app.models.job import JobParameters
@@ -321,3 +322,88 @@ def test_draft_document_carries_updated_at():
     not just fall back to created_at."""
     doc = _draft_doc("job-1")
     assert doc["updated_at"] == doc["created_at"]
+
+
+# ---- _resolve_model_input: the three states (T1) --------------------------
+#
+# Real catalogue examples, not invented fixtures: `wbm_storage_v2.0.0`'s
+# `uses.modelInput.id` really does resolve to the shipped
+# `wbm_ancillary_data_v2.0.0` model input, and the two `wbm_storage_v1.0.0_*`
+# examples really do cite `ff0ba2e5…`, a v1-era input this repository ships
+# no example for — both true today in the dev database (mission prompt.md),
+# not a scenario made up for the test.
+
+V2_DATASET = _dataset_doc("wbm_storage_v2.0.0.json")
+V1_DATASET = _dataset_doc("wbm_storage_v1.0.0_Global.json")
+
+V2_MODEL_INPUT_ID = V2_DATASET["uses"]["modelInput"]["id"]
+V1_MODEL_INPUT_ID = V1_DATASET["uses"]["modelInput"]["id"]
+
+#: Stands in for "what's actually in the `model_inputs` catalogue" — the
+#: shipped `wbm_ancillary_data_v2.0.0` example, and nothing else, exactly as
+#: `_resolve_effective_model_input` would compute it from a real `db.model_inputs`
+#: lookup for this dataset. `_resolve_model_input` itself is pure and takes
+#: this as a plain `set`, so no Mongo is needed to exercise all three states.
+CATALOGUE_WITH_V2_ONLY = {V2_MODEL_INPUT_ID}
+
+
+def _draft(dataset_id: str = "wbm_storage_v2.0.0", model_input_id: str | None = None, status: str = "DRAFT") -> dict:
+    return {"_id": "job-1", "dataset_id": dataset_id, "status": status, "model_input_id": model_input_id}
+
+
+def test_resolve_inherited_when_the_base_snapshots_input_is_in_the_catalogue():
+    """`wbm_storage_v2.0.0`, no override — the base snapshot's input really
+    is published, so this is an ordinary inheritance."""
+    effective_id, state = _resolve_model_input(_draft(), V2_DATASET, CATALOGUE_WITH_V2_ONLY)
+    assert state == "inherited"
+    assert effective_id == V2_MODEL_INPUT_ID
+
+
+def test_resolve_inherited_missing_when_the_base_snapshots_input_has_no_catalogue_entry():
+    """A `wbm_storage_v1.0.0` example, no override — its cited input
+    (`ff0ba2e5…`) is not in the catalogue. This is the *ordinary* case in
+    the dev database today (two of three shipped snapshot examples), not an
+    edge case, and it must say so rather than silently resolving to nothing
+    or crashing on a missing id."""
+    effective_id, state = _resolve_model_input(_draft(), V1_DATASET, CATALOGUE_WITH_V2_ONLY)
+    assert state == "inherited-missing"
+    assert effective_id == V1_MODEL_INPUT_ID
+
+
+def test_resolve_inherited_missing_when_there_is_no_base_snapshot_at_all():
+    """Defensive: a dataset lookup that came back empty degrades to the
+    same honest "missing" state rather than raising."""
+    effective_id, state = _resolve_model_input(_draft(), None, CATALOGUE_WITH_V2_ONLY)
+    assert state == "inherited-missing"
+    assert effective_id is None
+
+
+def test_resolve_chosen_when_an_override_is_set():
+    """An override always wins over the base snapshot's own citation, and
+    is reported as "chosen" — distinct from either inherited state — even
+    against a base snapshot whose own input is missing from the catalogue."""
+    effective_id, state = _resolve_model_input(
+        _draft(model_input_id=V2_MODEL_INPUT_ID), V1_DATASET, CATALOGUE_WITH_V2_ONLY
+    )
+    assert state == "chosen"
+    assert effective_id == V2_MODEL_INPUT_ID
+
+
+def test_resolve_clearing_an_override_returns_to_inherited():
+    """The override field, once cleared back to `None`, is exactly the
+    no-override case again — no separate "was cleared" state to track."""
+    still_set = _resolve_model_input(_draft(model_input_id=V2_MODEL_INPUT_ID), V2_DATASET, CATALOGUE_WITH_V2_ONLY)
+    cleared = _resolve_model_input(_draft(model_input_id=None), V2_DATASET, CATALOGUE_WITH_V2_ONLY)
+    assert still_set == (V2_MODEL_INPUT_ID, "chosen")
+    assert cleared == (V2_MODEL_INPUT_ID, "inherited")
+
+
+# ---- a submitted simulation refuses a model-input change ------------------
+
+
+def test_submitted_simulation_is_not_editable_even_just_for_the_model_input():
+    """No new rule (tasks.md T3): setting or clearing `model_input_id` is
+    just another field on `SimulationUpdateRequest`, guarded by the same
+    `_is_editable` every other draft field already goes through."""
+    submitted = _draft(status="SUBMITTED")
+    assert _is_editable(submitted) is False

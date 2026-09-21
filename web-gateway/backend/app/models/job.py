@@ -38,6 +38,18 @@ PartialAbout = _partial_model(OpenGHMCitationBlock)
 TERMINAL_STATUSES: set[str] = {"COMPLETED", "FAILED", "CANCELLED"}
 CANCELLABLE_STATUSES: set[str] = {"PENDING", "SUBMITTED", "RUNNING", "COMPLETING"}
 
+#: The three states `app.api.v1.jobs._resolve_model_input` (T1) can produce
+#: for "which model input does this simulation use" — distinguished at the
+#: source rather than reconstructed in the UI (mission 2026-09-21, plan.md):
+#:   - "chosen": the simulation carries its own `model_input_id` override.
+#:   - "inherited": no override; the base snapshot's `uses.modelInput.id`
+#:     resolves to a `model_inputs` catalogue entry.
+#:   - "inherited-missing": no override; that id is not in the catalogue —
+#:     the ordinary case today, not an edge case (two of the three shipped
+#:     snapshot examples cite a v1-era input this repository ships no
+#:     example for).
+ModelInputState = Literal["inherited", "chosen", "inherited-missing"]
+
 
 # --- Nested value objects ---
 
@@ -96,6 +108,15 @@ class JobDB(BaseModel):
     slug: str | None = None
     about: PartialAbout | None = None
 
+    # Which published model input this simulation runs against, overriding
+    # the one its base snapshot (`dataset_id`) cites. Absent/None means
+    # "inherit from the base snapshot" — every simulation created before
+    # this mission is exactly that, so no migration and no behaviour change
+    # for anything already stored. Resolving the *effective* id (and which
+    # of the three states produced it) is `app.api.v1.jobs._resolve_model_input`
+    # — this field is only ever the raw override, never the resolved value.
+    model_input_id: str | None = None
+
     # Slurm identifiers (slurm_job_id stored as str — slurmly returns string ids)
     slurm_job_id: str | None = None
     slurm_job_name: str = ""
@@ -127,7 +148,11 @@ class JobDB(BaseModel):
     completed_at: datetime | None = None
     updated_at: datetime
 
-    model_config = {"populate_by_name": True}
+    # protected_namespaces=() — pydantic reserves the "model_" prefix for
+    # its own config namespace by default; `model_input_id` is a real field
+    # name from the domain (not ours to rename to dodge the warning), so it
+    # is opted out here and on every other model below that carries it.
+    model_config = {"populate_by_name": True, "protected_namespaces": ()}
 
 
 # --- API request / response models ---
@@ -148,7 +173,13 @@ class SimulationDeriveRequest(BaseModel):
     starting a simulation from scratch (spec.md) — there is no route that
     takes a bare `dataset_id` here."""
 
+    model_config = {"protected_namespaces": ()}
+
     slug: str | None = None
+    #: Optional model-input override, set at creation time instead of only
+    #: by a later PATCH. Absent means inherit from the base snapshot, same
+    #: as everywhere else this field appears.
+    model_input_id: str | None = None
 
 
 class SimulationUpdateRequest(BaseModel):
@@ -157,9 +188,17 @@ class SimulationUpdateRequest(BaseModel):
     state, not a full replacement. Refused once the simulation has moved
     past `DRAFT` (app/api/v1/jobs.py)."""
 
+    model_config = {"protected_namespaces": ()}
+
     slug: str | None = None
     about: PartialAbout | None = None
     parameters: JobParameters | None = None
+    #: Set to override the base snapshot's model input, or explicitly to
+    #: `null` to clear an override and go back to inheriting — `exclude_unset`
+    #: in `update_simulation` means only a field actually present in the
+    #: PATCH body changes anything, so omitting this key leaves whatever
+    #: was there untouched, same as every other field here.
+    model_input_id: str | None = None
 
 
 class JobSubmitResponse(BaseModel):
@@ -172,6 +211,8 @@ class JobSubmitResponse(BaseModel):
 class JobResponse(BaseModel):
     """Single job detail returned to the frontend."""
 
+    model_config = {"protected_namespaces": ()}
+
     id: str
     sim_id: str = ""
     user_id: str
@@ -179,6 +220,17 @@ class JobResponse(BaseModel):
     dataset_title: str
     slug: str | None = None
     about: PartialAbout | None = None
+    #: The raw override, if any — never the resolved value. `None` here
+    #: means "inherits from the base snapshot", regardless of what
+    #: `effective_model_input_state` below says.
+    model_input_id: str | None = None
+    #: The model input this simulation actually uses, resolved by
+    #: `app.api.v1.jobs._resolve_model_input` (T1) — and which of the three
+    #: states produced it. Only resolved on single-simulation routes
+    #: (derive, get, patch); `None` on the list route, which does not fan
+    #: out a per-row resolve (plan.md's second risk).
+    effective_model_input_id: str | None = None
+    effective_model_input_state: ModelInputState | None = None
     slurm_job_id: str | None = None
     slurm_job_name: str = ""
     status: JobStatus

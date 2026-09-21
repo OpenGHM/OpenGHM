@@ -25,6 +25,7 @@ from app.models.job import (
     JobStatsResponse,
     JobStatusResponse,
     JobSubmitResponse,
+    ModelInputState,
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
@@ -48,7 +49,63 @@ def _generate_sim_id(now: datetime) -> str:
     return f"sim-{date_part}-{rand_part}"
 
 
-def _doc_to_response(doc: dict) -> JobResponse:
+def _resolve_model_input(
+    job_doc: dict, dataset_doc: dict | None, catalogue_ids: set[str]
+) -> tuple[str | None, ModelInputState]:
+    """Which model input `job_doc` effectively uses, and which of the three
+    states (`app.models.job.ModelInputState`) produced that answer (T1).
+    Pure — a plain dict standing in for `db.jobs`, another for `db.datasets`,
+    a plain `set` standing in for a `model_inputs` existence check — so the
+    states are tested directly with no Mongo (tests/test_jobs_drafts.py).
+    Written first and kept pure deliberately: the frontend's three-state
+    display (next commit) depends on these being distinguished here, not
+    reconstructed from a single id in the UI (plan.md).
+
+    - `job_doc["model_input_id"]` set -> "chosen", that id, regardless of
+      whether it happens to also be in the catalogue (this mission does not
+      validate an override against it — the picker that supplies one,
+      next commit, only ever offers catalogue entries).
+    - unset, and the base snapshot's `uses.modelInput.id` is in
+      `catalogue_ids` -> "inherited", that id.
+    - unset, and that id is not in `catalogue_ids` (or there is no base
+      snapshot to read it from at all) -> "inherited-missing" — the
+      ordinary case in the dev database today, not an edge case.
+    """
+    override = job_doc.get("model_input_id")
+    if override:
+        return override, "chosen"
+
+    inherited_id = ((dataset_doc or {}).get("uses") or {}).get("modelInput", {}).get("id")
+    if inherited_id is not None and inherited_id in catalogue_ids:
+        return inherited_id, "inherited"
+    return inherited_id, "inherited-missing"
+
+
+async def _resolve_effective_model_input(doc: dict) -> tuple[str | None, ModelInputState]:
+    """`_resolve_model_input`'s Mongo-fetching half — kept separate so the
+    decision itself stays pure and testable. Only called for a single
+    simulation (derive/get/patch), never per-row from `list_jobs`
+    (plan.md's second risk: N resolves on the list page)."""
+    db = get_db()
+    dataset_doc = await db.datasets.find_one({"_id": doc["dataset_id"]})
+
+    catalogue_ids: set[str] = set()
+    if not doc.get("model_input_id"):
+        inherited_id = ((dataset_doc or {}).get("uses") or {}).get("modelInput", {}).get("id")
+        if inherited_id is not None:
+            exists = await db.model_inputs.find_one({"_id": inherited_id})
+            if exists is not None:
+                catalogue_ids = {inherited_id}
+
+    return _resolve_model_input(doc, dataset_doc, catalogue_ids)
+
+
+def _doc_to_response(
+    doc: dict,
+    *,
+    effective: tuple[str | None, ModelInputState] | None = None,
+) -> JobResponse:
+    effective_id, effective_state = effective if effective is not None else (None, None)
     return JobResponse(
         id=doc["_id"],
         sim_id=doc.get("sim_id", ""),
@@ -57,6 +114,9 @@ def _doc_to_response(doc: dict) -> JobResponse:
         dataset_title=doc["dataset_title"],
         slug=doc.get("slug"),
         about=doc.get("about"),
+        model_input_id=doc.get("model_input_id"),
+        effective_model_input_id=effective_id,
+        effective_model_input_state=effective_state,
         slurm_job_id=doc.get("slurm_job_id"),
         slurm_job_name=doc.get("slurm_job_name", ""),
         status=doc["status"],
@@ -119,6 +179,7 @@ def _new_draft_document(
     slug: str | None,
     user: TokenPayload,
     now: datetime,
+    model_input_id: str | None = None,
 ) -> dict:
     """Build a fresh draft's Mongo document. Pure — no Mongo, no request —
     so the property that matters is directly testable: `sim_id` is a real
@@ -137,6 +198,7 @@ def _new_draft_document(
         "dataset_title": dataset_title,
         "slug": slug,
         "about": None,
+        "model_input_id": model_input_id,
         "slurm_job_id": None,
         "slurm_job_name": "",
         "status": "DRAFT",
@@ -332,6 +394,7 @@ async def derive_simulation(
         slug=body.slug,
         user=user,
         now=now,
+        model_input_id=body.model_input_id,
     )
     await db.jobs.insert_one(doc)
 
@@ -344,7 +407,8 @@ async def derive_simulation(
         detail={"dataset_id": dataset_id},
     )
 
-    return _doc_to_response(doc)
+    effective = await _resolve_effective_model_input(doc)
+    return _doc_to_response(doc, effective=effective)
 
 
 # ---------------------------------------------------------------------------
@@ -375,12 +439,14 @@ async def update_simulation(
 
     changes = body.model_dump(exclude_unset=True, mode="json")
     if not changes:
-        return _doc_to_response(doc)
+        effective = await _resolve_effective_model_input(doc)
+        return _doc_to_response(doc, effective=effective)
 
     changes["updated_at"] = datetime.now(timezone.utc)
     await db.jobs.update_one({"_id": job_id}, {"$set": changes})
     updated = await db.jobs.find_one({"_id": job_id})
-    return _doc_to_response(updated)
+    effective = await _resolve_effective_model_input(updated)
+    return _doc_to_response(updated, effective=effective)
 
 
 # ---------------------------------------------------------------------------
@@ -484,7 +550,8 @@ async def get_job(
     user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
 ):
     doc = await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
-    return _doc_to_response(doc)
+    effective = await _resolve_effective_model_input(doc)
+    return _doc_to_response(doc, effective=effective)
 
 
 # ---------------------------------------------------------------------------
