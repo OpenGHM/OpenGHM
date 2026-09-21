@@ -27,10 +27,14 @@ class Role(StrEnum):
 
 
 class Permission(StrEnum):
-    # jobs
+    # jobs (a simulation is a job document that can exist before submission —
+    # see mission 2026-09-20-simulations — so its draft-lifecycle verbs live
+    # here rather than under a separate namespace)
     JOB_SUBMIT = "job:submit"
     JOB_VIEW_OWN = "job:view:own"
     JOB_CANCEL_OWN = "job:cancel:own"
+    JOB_EDIT_OWN = "job:edit:own"
+    JOB_DELETE_OWN = "job:delete:own"
     JOB_VIEW_ANY = "job:view:any"
     JOB_CANCEL_ANY = "job:cancel:any"
     # users
@@ -48,11 +52,17 @@ _USER: frozenset[Permission] = _GUEST | {
     Permission.JOB_SUBMIT,
     Permission.JOB_VIEW_OWN,
     Permission.JOB_CANCEL_OWN,
+    Permission.JOB_EDIT_OWN,
+    Permission.JOB_DELETE_OWN,
 }
 _STAFF: frozenset[Permission] = _USER | {
     Permission.JOB_VIEW_ANY,
     Permission.JOB_CANCEL_ANY,
     Permission.USER_VIEW_ANY,
+    # Deliberately no JOB_EDIT_ANY / JOB_DELETE_ANY: a simulation is private,
+    # unpublished work, and JOB_VIEW_ANY (an operator's dashboard) does not
+    # imply a right to mutate it — mirrors the abandoned snapshot-drafts
+    # mission's DRAFT_VIEW_ANY-without-edit design.
 }
 _ADMIN: frozenset[Permission] = _STAFF | {
     Permission.USER_MANAGE,

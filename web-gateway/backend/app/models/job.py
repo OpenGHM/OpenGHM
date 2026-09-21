@@ -1,11 +1,23 @@
-"""Pydantic models for HPC job submission, status tracking, and API contracts."""
+"""Pydantic models for HPC job submission, status tracking, and API contracts.
+
+A *simulation* (mission 2026-09-20-simulations) is this same document, one
+shape with a status rather than a second collection: a "DRAFT" status
+precedes the existing SLURM lifecycle, and the routes in
+`app/api/v1/jobs.py` — not a separate model — enforce which fields may
+change once a draft has moved past it (spec.md's "Two entities, not
+three").
+"""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.generated.snapshot import OpenGHMCitationBlock
+from app.models.partial import _partial_model
+
 JobStatus = Literal[
+    "DRAFT",
     "PENDING",
     "SUBMITTED",
     "RUNNING",
@@ -14,6 +26,14 @@ JobStatus = Literal[
     "FAILED",
     "CANCELLED",
 ]
+
+#: A simulation's `about` block, editable one field at a time while it is a
+#: draft — derived from the generated `OpenGHMCitationBlock` (rule 4) rather
+#: than hand-restated, the way the abandoned snapshot-drafts mission's
+#: `PartialSnapshotMetadata` was for the whole document. Only `about` needs
+#: this here: `JobParameters` below is already the gateway's own model, not
+#: a spec block, so it has no generated counterpart to derive from.
+PartialAbout = _partial_model(OpenGHMCitationBlock)
 
 TERMINAL_STATUSES: set[str] = {"COMPLETED", "FAILED", "CANCELLED"}
 CANCELLABLE_STATUSES: set[str] = {"PENDING", "SUBMITTED", "RUNNING", "COMPLETING"}
@@ -59,11 +79,22 @@ class JobDB(BaseModel):
     """Shape of a document stored in the MongoDB jobs collection."""
 
     id: str = Field(alias="_id")
-    sim_id: str = ""
+    # Only a submitted simulation has a real one (`_generate_sim_id`, minted
+    # by `submit_job`) — a draft document omits the field entirely rather
+    # than defaulting it to `""`, because `db.jobs`'s `sim_id` index is
+    # `unique=True, sparse=True`: sparse only excludes a *missing* field, so
+    # any shared non-missing value (including `""`) collides across drafts.
+    sim_id: str | None = None
     user_id: str
     user_email: str
     dataset_id: str
     dataset_title: str
+
+    # Descriptive half a citable snapshot will eventually need (spec.md's
+    # "Two entities, not three") — present from the moment a simulation is
+    # created as a draft, editable only while it stays one.
+    slug: str | None = None
+    about: PartialAbout | None = None
 
     # Slurm identifiers (slurm_job_id stored as str — slurmly returns string ids)
     slurm_job_id: str | None = None
@@ -110,6 +141,27 @@ class JobCreateRequest(BaseModel):
     slurm_config: SlurmConfig | None = None
 
 
+class SimulationDeriveRequest(BaseModel):
+    """POST /jobs/derive/{dataset_id} body — everything else about a new
+    simulation is inherited from the snapshot named in the path, so the
+    only thing left to say up front is what to call it. Out of scope:
+    starting a simulation from scratch (spec.md) — there is no route that
+    takes a bare `dataset_id` here."""
+
+    slug: str | None = None
+
+
+class SimulationUpdateRequest(BaseModel):
+    """PATCH /jobs/{job_id} body. Every field is optional and only the ones
+    supplied are changed — a "save" button posting the editor's current
+    state, not a full replacement. Refused once the simulation has moved
+    past `DRAFT` (app/api/v1/jobs.py)."""
+
+    slug: str | None = None
+    about: PartialAbout | None = None
+    parameters: JobParameters | None = None
+
+
 class JobSubmitResponse(BaseModel):
     """Returned after POST /jobs."""
 
@@ -125,6 +177,8 @@ class JobResponse(BaseModel):
     user_id: str
     dataset_id: str
     dataset_title: str
+    slug: str | None = None
+    about: PartialAbout | None = None
     slurm_job_id: str | None = None
     slurm_job_name: str = ""
     status: JobStatus
@@ -135,6 +189,7 @@ class JobResponse(BaseModel):
     submitted_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    updated_at: datetime | None = None
     output_s3_key: str | None = None
 
 

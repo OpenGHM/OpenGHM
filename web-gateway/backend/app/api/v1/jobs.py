@@ -20,10 +20,13 @@ from app.models.job import (
     JobCreateRequest,
     JobListResponse,
     JobLogsResponse,
+    JobParameters,
     JobResponse,
     JobStatsResponse,
     JobStatusResponse,
     JobSubmitResponse,
+    SimulationDeriveRequest,
+    SimulationUpdateRequest,
     SlurmConfig,
 )
 from app.models.user import TokenPayload
@@ -52,6 +55,8 @@ def _doc_to_response(doc: dict) -> JobResponse:
         user_id=doc["user_id"],
         dataset_id=doc["dataset_id"],
         dataset_title=doc["dataset_title"],
+        slug=doc.get("slug"),
+        about=doc.get("about"),
         slurm_job_id=doc.get("slurm_job_id"),
         slurm_job_name=doc.get("slurm_job_name", ""),
         status=doc["status"],
@@ -62,8 +67,23 @@ def _doc_to_response(doc: dict) -> JobResponse:
         submitted_at=doc.get("submitted_at"),
         started_at=doc.get("started_at"),
         completed_at=doc.get("completed_at"),
+        updated_at=doc.get("updated_at"),
         output_s3_key=doc.get("output_s3_key"),
     )
+
+
+def _is_owner(doc: dict, user: TokenPayload) -> bool:
+    """Pure ownership check against an already-fetched document."""
+    return doc["user_id"] == user.sub
+
+
+def _can_access_job(doc: dict, user: TokenPayload, escalated: Permission) -> bool:
+    """Whether `user` may act on `doc`: its owner, or a holder of
+    `escalated`. Pure — a dict standing in for a Mongo document, a
+    TokenPayload standing in for the authenticated caller — so the second-
+    user isolation guarantee (spec.md's acceptance criteria) is testable
+    without Mongo or a request (tests/test_jobs_drafts.py)."""
+    return _is_owner(doc, user) or can(user, escalated)
 
 
 async def _get_job_for(job_id: str, user: TokenPayload, escalated: Permission) -> dict:
@@ -77,9 +97,80 @@ async def _get_job_for(job_id: str, user: TokenPayload, escalated: Permission) -
     doc = await db.jobs.find_one({"_id": job_id})
     if doc is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if doc["user_id"] != user.sub and not can(user, escalated):
+    if not _can_access_job(doc, user, escalated):
         raise HTTPException(status_code=403, detail="Not authorised")
     return doc
+
+
+def _is_editable(doc: dict) -> bool:
+    """A simulation may only be created, edited or deleted through the
+    draft routes while it is still a draft (spec.md: "becomes read-only the
+    moment it is submitted"). Pure — no Mongo, no request — so the refusal
+    rule is testable directly (tests/test_jobs_drafts.py)."""
+    return doc["status"] == "DRAFT"
+
+
+def _new_draft_document(
+    *,
+    job_id: str,
+    dataset_id: str,
+    dataset_title: str,
+    parameters: JobParameters,
+    slug: str | None,
+    user: TokenPayload,
+    now: datetime,
+) -> dict:
+    """Build a fresh draft's Mongo document. Pure — no Mongo, no request —
+    so the property that matters is directly testable: `sim_id` is a real
+    simulation id only once a draft is actually submitted (`submit_job`
+    mints one via `_generate_sim_id`), so a draft has to omit the field
+    entirely rather than default it to `""`. `db.jobs`'s `sim_id` index is
+    `unique=True, sparse=True` — sparse only excludes documents where the
+    field is *missing*, not merely falsy or null, so `sim_id: ""` (or even
+    `sim_id: None`) on every draft would collide with the first draft ever
+    created and 500 on the second (found in review of this commit)."""
+    return {
+        "_id": job_id,
+        "user_id": user.sub,
+        "user_email": user.email,
+        "dataset_id": dataset_id,
+        "dataset_title": dataset_title,
+        "slug": slug,
+        "about": None,
+        "slurm_job_id": None,
+        "slurm_job_name": "",
+        "status": "DRAFT",
+        "status_reason": None,
+        "parameters": parameters.model_dump(),
+        "slurm_config": SlurmConfig().model_dump(),
+        "internal_job_id": None,
+        "remote_job_dir": None,
+        "remote_script_path": None,
+        "stdout_path": None,
+        "stderr_path": None,
+        "slurmly_submitted_at": None,
+        "output_s3_key": None,
+        "created_at": now,
+        "submitted_at": None,
+        "started_at": None,
+        "completed_at": None,
+        "updated_at": now,
+    }
+
+
+def _derive_simulation_parameters(dataset_doc: dict) -> JobParameters:
+    """Build a new simulation's parameters from a published catalogue entry
+    (T4): the temporal coverage and output variables it was run with become
+    the starting point a user overrides, rather than a blank form. Pure —
+    takes a plain dict, returns a new model, touches no Mongo — the source
+    document is read here and nowhere written back to."""
+    simulation = dataset_doc.get("simulation", {})
+    temporal = simulation.get("temporalCoverage", {})
+    return JobParameters(
+        temporal_range_start=str(temporal.get("start", "")),
+        temporal_range_end=str(temporal.get("end", "")),
+        variables=[v["name"] for v in simulation.get("outputVariables", [])],
+    )
 
 
 def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
@@ -196,6 +287,122 @@ async def submit_job(
         job_id=job_id,
         status=resolved_status,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /jobs/derive/{dataset_id}  —  New simulation from a snapshot
+# ---------------------------------------------------------------------------
+#
+# A simulation's only creation path in this mission (spec.md, "Out of
+# scope": starting one from scratch needs a model-input catalogue the
+# gateway does not have yet). It is created as a draft — no Slurm
+# submission happens here — inheriting its dataset, title and parameters
+# from the published catalogue entry named in the path. `datasets` is only
+# ever read by this route, never written to: the source snapshot is
+# untouched by deriving from it.
+
+
+@router.post(
+    "/derive/{dataset_id}",
+    response_model=JobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def derive_simulation(
+    dataset_id: str,
+    body: SimulationDeriveRequest = SimulationDeriveRequest(),
+    user: TokenPayload = Depends(require_permission(Permission.JOB_SUBMIT)),
+):
+    db = get_db()
+    dataset_doc = await db.datasets.find_one({"_id": dataset_id})
+    if dataset_doc is None:
+        raise HTTPException(
+            status_code=404, detail=f"Dataset '{dataset_id}' not found"
+        )
+
+    dataset_title = dataset_doc.get("about", {}).get("name", dataset_id)
+    parameters = _derive_simulation_parameters(dataset_doc)
+
+    now = datetime.now(timezone.utc)
+    job_id = str(uuid.uuid4())
+    doc = _new_draft_document(
+        job_id=job_id,
+        dataset_id=dataset_id,
+        dataset_title=dataset_title,
+        parameters=parameters,
+        slug=body.slug,
+        user=user,
+        now=now,
+    )
+    await db.jobs.insert_one(doc)
+
+    await log_event(
+        "simulation_derived",
+        actor_id=user.sub,
+        actor_email=user.email,
+        target_id=job_id,
+        category=AuditCategory.JOB,
+        detail={"dataset_id": dataset_id},
+    )
+
+    return _doc_to_response(doc)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /jobs/{job_id}  —  Edit while draft
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/{job_id}", response_model=JobResponse)
+async def update_simulation(
+    job_id: str,
+    body: SimulationUpdateRequest,
+    user: TokenPayload = Depends(require_permission(Permission.JOB_EDIT_OWN)),
+):
+    db = get_db()
+    doc = await db.jobs.find_one({"_id": job_id})
+    if doc is None or not _is_owner(doc, user):
+        # Not an "any" edit permission: mutating someone else's private,
+        # unpublished simulation is out of scope (see app.core.roles). A
+        # mismatch here is treated the same as a nonexistent simulation
+        # rather than a 403, so existence isn't leaked to a caller who only
+        # holds JOB_VIEW_ANY.
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not _is_editable(doc):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot edit a simulation in state {doc['status']}",
+        )
+
+    changes = body.model_dump(exclude_unset=True, mode="json")
+    if not changes:
+        return _doc_to_response(doc)
+
+    changes["updated_at"] = datetime.now(timezone.utc)
+    await db.jobs.update_one({"_id": job_id}, {"$set": changes})
+    updated = await db.jobs.find_one({"_id": job_id})
+    return _doc_to_response(updated)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /jobs/{job_id}  —  Delete while draft
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_simulation(
+    job_id: str,
+    user: TokenPayload = Depends(require_permission(Permission.JOB_DELETE_OWN)),
+):
+    db = get_db()
+    doc = await db.jobs.find_one({"_id": job_id})
+    if doc is None or not _is_owner(doc, user):
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not _is_editable(doc):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete a simulation in state {doc['status']}",
+        )
+    await db.jobs.delete_one({"_id": job_id})
 
 
 # ---------------------------------------------------------------------------
