@@ -61,6 +61,12 @@ async def lifespan(app: FastAPI):
     await db.jobs.create_index("user_id")
     await db.jobs.create_index([("user_id", 1), ("status", 1)])
 
+    # `datasets` and `model_inputs` (ADR 0015) need no index beyond the one
+    # Mongo already gives every collection for free: `_id`, unique by
+    # default, is what POST /api/v1/repository/{datasets,model-inputs}
+    # relies on for the 409-on-duplicate-id behaviour (rule 1). Nothing
+    # else queries either collection by anything but `_id` yet.
+
     # Startup: users.email must be unique — previously only enforced by the
     # seed scripts (which run once, on an empty data dir) and an app-level
     # find-then-insert check in POST /auth/register that's racy under

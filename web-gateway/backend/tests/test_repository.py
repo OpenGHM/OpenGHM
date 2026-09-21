@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.api.v1.repository import filter_datasets, paginate, sort_datasets
+from app.models.generated.snapshot import OpenGHMSnapshotMetadata
 from app.models.repository import DatasetResponse, license_url, resolution_to_degrees
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[3] / "schemas" / "snapshot-spec" / "examples"
@@ -172,3 +173,47 @@ def test_paginate_empty_list():
     assert page.items == []
     assert page.totalCount == 0
     assert page.totalPages == 1  # max(1, ...) — never zero pages for an empty list
+
+
+# ---- create_dataset's write-path transform: stored doc == source file ----
+#
+# Regression for a real bug, caught in review: `metadata.model_dump(by_alias=True,
+# mode="json")` without `exclude_none=True` writes an explicit `null` for
+# every optional field the source document simply omits. An absent field
+# and a `null` are not the same thing in JSON Schema — the spec types these
+# as `string`/`array` with no `null` allowed — so the previously-stored
+# shape failed the spec's own validation on the way back out
+# (`about.creator[].orcid`, `about.relatedLink`, ...), directly contradicting
+# gateway.md's "the spec's own shape, verbatim". Checked here by exact
+# equality to the source file rather than importing `openghm.spec.
+# validate_document` — the toolkit must not become a backend dependency —
+# but the source file is itself spec-valid (packages/openghm/tests/test_spec.py),
+# so exact equality to it stands in for validating the stored document.
+
+
+def _stored_dataset_document(name: str) -> tuple[dict, dict]:
+    """Mirrors `create_dataset`'s actual transform exactly, so this test
+    fails the moment that route's `model_dump` call regresses."""
+    data = json.loads((EXAMPLES_DIR / name).read_text())
+    metadata = OpenGHMSnapshotMetadata.model_validate(data)
+    stored = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
+    stored["_id"] = stored["id"]
+    return stored, data
+
+
+def test_stored_dataset_document_matches_the_source_file_exactly():
+    stored, data = _stored_dataset_document(V2)
+    round_tripped = {k: v for k, v in stored.items() if k != "_id"}
+    assert round_tripped == data
+
+
+def test_stored_dataset_document_round_trips_through_the_response_model():
+    """The other half of the acceptance criterion: read back (via
+    `DatasetResponse.from_metadata_json`, what `GET .../datasets/{id}` uses)
+    is equal to the source file once the response model's own always-present
+    `null`s for genuinely absent fields are excluded — those are a response
+    *shape* decision (every field always present), not a storage one."""
+    stored, data = _stored_dataset_document(V2)
+    d = DatasetResponse.from_metadata_json(stored)
+    dumped = d.model_dump(by_alias=True, mode="json", exclude={"spatialResolutionDegrees", "licenseUrl", "generatedAt"}, exclude_none=True)
+    assert dumped == data

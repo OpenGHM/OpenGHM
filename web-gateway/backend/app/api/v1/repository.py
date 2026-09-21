@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from math import ceil
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
+from app.core.authz import require_permission
 from app.core.database import get_db
+from app.core.roles import Permission
+from app.models.generated.model_input import OpenGHMModelInputMetadata
 from app.models.generated.snapshot import OpenGHMSnapshotMetadata
-from app.models.repository import DatasetResponse, RepositoryListResponse
+from app.models.repository import (
+    DatasetResponse,
+    ModelInputListResponse,
+    ModelInputResponse,
+    RepositoryListResponse,
+)
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -112,12 +120,127 @@ async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
     """Add a snapshot to the catalogue (open item 13 — this collection had no
     writer at all before this endpoint). The body is exactly one
     ``metadata.json`` document; Mongo's own ``_id`` mirrors the spec's ``id``.
+
+    ``exclude_none=True`` matters here, not just for tidiness: an absent
+    optional field and a present ``null`` are different things in JSON
+    Schema, and the spec types these fields (e.g. ``about.creator[].orcid``,
+    ``about.relatedLink``) as ``string``/``array`` with no ``null`` allowed.
+    Without it, a round-tripped document fails its own spec's validation —
+    caught in review of the model-input route this was mirrored into.
     """
     db = get_db()
-    doc = metadata.model_dump(by_alias=True, mode="json")
+    doc = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
     doc["_id"] = doc["id"]
     try:
         await db["datasets"].insert_one(doc)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail=f"Dataset '{metadata.id}' already exists")
     return DatasetResponse.from_metadata_json(doc)
+
+
+# ---- model inputs (ADR 0015) --------------------------------------------
+#
+# Mirrors the `datasets` catalogue above: the document is the spec's shape
+# plus `_id` (mirroring the spec's own `id`), a repeat of the same id is a
+# 409 rather than an overwrite (rule 1), and the filter/sort/paginate steps
+# are pure functions so they test without Mongo. Registration is admin-only
+# (spec.md Decision 3) — the read routes stay open to anyone with
+# Permission.REPO_VIEW, same as the dataset ones (no explicit gate below,
+# same as `list_datasets` / `get_dataset`).
+
+
+async def _load_all_model_inputs() -> list[ModelInputResponse]:
+    db = get_db()
+    cursor = db["model_inputs"].find({})
+    docs = await cursor.to_list(length=None)
+    return [ModelInputResponse.from_metadata_json(doc) for doc in docs]
+
+
+def filter_model_inputs(
+    model_inputs: list[ModelInputResponse],
+    *,
+    q: str | None = None,
+) -> list[ModelInputResponse]:
+    """Pure — no Mongo, no request object — so it's testable directly against
+    the shipped example (``tests/test_model_inputs.py``)."""
+    if q:
+        q_lower = q.lower()
+        model_inputs = [
+            m for m in model_inputs
+            if q_lower in m.about.name.lower()
+            or q_lower in m.about.description.lower()
+            or any(q_lower in kw.root.lower() for kw in m.about.keywords)
+        ]
+    return model_inputs
+
+
+def sort_model_inputs(model_inputs: list[ModelInputResponse], sort: str) -> list[ModelInputResponse]:
+    """Pure, and not in-place — callers (and tests) keep their own list."""
+    model_inputs = list(model_inputs)
+    if sort == "newest":
+        model_inputs.sort(key=lambda m: m.about.datePublished, reverse=True)
+    elif sort == "title-az":
+        model_inputs.sort(key=lambda m: m.about.name.lower())
+    elif sort == "title-za":
+        model_inputs.sort(key=lambda m: m.about.name.lower(), reverse=True)
+    # "relevance": no ranking signal exists yet (no full-text index) — order stands.
+    return model_inputs
+
+
+def paginate_model_inputs(
+    model_inputs: list[ModelInputResponse], *, page: int, page_size: int
+) -> ModelInputListResponse:
+    total_count = len(model_inputs)
+    total_pages = max(1, ceil(total_count / page_size))
+    start = (page - 1) * page_size
+    items = model_inputs[start : start + page_size]
+    return ModelInputListResponse(items=items, totalCount=total_count, totalPages=total_pages, page=page)
+
+
+@router.get("/model-inputs", response_model=ModelInputListResponse)
+async def list_model_inputs(
+    q: str | None = Query(default=None, description="Full-text search (about.name, about.description, about.keywords)"),
+    sort: str = Query(default="relevance", pattern="^(relevance|newest|title-az|title-za)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=5, ge=1, le=100),
+) -> ModelInputListResponse:
+    model_inputs = await _load_all_model_inputs()
+    model_inputs = filter_model_inputs(model_inputs, q=q)
+    model_inputs = sort_model_inputs(model_inputs, sort)
+    return paginate_model_inputs(model_inputs, page=page, page_size=page_size)
+
+
+@router.get("/model-inputs/{model_input_id}")
+async def get_model_input(model_input_id: str) -> ModelInputResponse:
+    db = get_db()
+    doc = await db["model_inputs"].find_one({"_id": model_input_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return ModelInputResponse.from_metadata_json(doc)
+
+
+@router.post(
+    "/model-inputs",
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.REPO_MANAGE))],
+)
+async def create_model_input(metadata: OpenGHMModelInputMetadata) -> ModelInputResponse:
+    """Register a published model input (ADR 0015, spec.md Decision 3 —
+    admin-only, matching who actually uploads one to S3). The body is
+    exactly one ``metadata.json`` document; Mongo's own ``_id`` mirrors the
+    spec's own ``id``, and a repeat is refused with ``409`` rather than
+    overwriting it (rule 1).
+
+    ``exclude_none=True`` — see ``create_dataset``'s docstring for why: an
+    absent optional field and a stored ``null`` are not the same thing, and
+    the spec permits only the former for fields like ``about.creator[].orcid``
+    or ``datasets[].unit``.
+    """
+    db = get_db()
+    doc = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
+    doc["_id"] = doc["id"]
+    try:
+        await db["model_inputs"].insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail=f"Model input '{metadata.id}' already exists")
+    return ModelInputResponse.from_metadata_json(doc)
