@@ -33,7 +33,7 @@ maps to ids for browsing.
 ```json
 {
   "$schema": "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
-  "id": "3f9c1a2b5d8e4f7a0c3b6d9e2f5a8c1b4d7e0f9a2c5b8d1e4f7a0c3b6d9e2f5a",
+  "id": "245430dee68a5a97c11100a66dd09fa9b44c09ef3665717b4da1bf24877f1a58",
   "slug": "wbm_storage_v1.0.0_wyoming",
 
   "about": {
@@ -47,7 +47,7 @@ maps to ids for browsing.
     ],
     "license": "GPL-3.0-only",
     "keywords": ["Water Balance Model", "Wyoming_tracking", "hydrology"],
-    "url": "https://openghm.org/snapshots/3f9c1a2b…",
+    "url": "https://openghm.org/snapshots/245430de…",
     "relatedLink": [
       {
         "relation": "isDescribedBy",
