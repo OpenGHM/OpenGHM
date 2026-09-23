@@ -158,6 +158,20 @@ a step that does not exist yet ([open items
 9](../reference/open-items.md) and [10](../reference/open-items.md), **Next**
 list *job output reaches S3*).
 
+A draft's `model_input_id` is optional and, while `DRAFT`, editable —
+mission `2026-09-21-choose-a-model-input`. Absent means the simulation
+inherits whichever model input its base snapshot's own `uses.modelInput.id`
+names; set, it overrides that. `_resolve_effective_model_input()` in
+`app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
+or `inherited-missing` (the base snapshot cites an id the `model_inputs`
+catalogue does not hold, which is the common case among the shipped
+examples, not an edge case) — and both the reopened draft's own page and the
+new-simulation wizard render all three distinctly, so an override never
+looks identical to an inheritance. The override changes nothing about how a
+run would be invoked: nothing mints a real `apptainer` command yet ([open
+item 9](../reference/open-items.md)), so this is recorded and displayed, not
+yet consumed.
+
 `model_inputs` holds the same envelope shape for the other published
 artifact: a model input's own `metadata.json` under `document`, written by
 `POST /api/v1/repository/model-inputs`, which is **admin-only** — the same

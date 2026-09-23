@@ -110,7 +110,7 @@ export default async function JobDetailPage({
           {isDraft ? (
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
               {/* Left column — editable while DRAFT */}
-              <SimulationEditor job={job} availableVariables={availableVariables} />
+              <SimulationEditor job={job} availableVariables={availableVariables} dataset={dataset} />
 
               {/* Right column */}
               <div className="space-y-6">

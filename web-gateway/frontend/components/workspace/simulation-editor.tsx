@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Info } from "lucide-react";
@@ -9,7 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { updateSimulation } from "@/lib/jobs/actions";
+import { fetchModelInputById } from "@/lib/repository/actions";
 import type { Job, JobParameters, PartialAbout } from "@/lib/jobs/types";
+import type { Dataset } from "@/lib/repository/types";
+import { ModelInputSection, type ModelInputSectionChoice } from "@/components/workspace/model-input-section";
 
 interface CreatorRow {
   name: string;
@@ -67,13 +70,46 @@ function buildAboutPayload(state: {
 export function SimulationEditor({
   job,
   availableVariables,
+  dataset,
 }: {
   job: Job;
   availableVariables: string[];
+  /** The base snapshot, for `uses.modelInput.id` — the id a draft with no
+   *  override inherits from. Best-effort fetched by the page; null when the
+   *  snapshot itself couldn't be loaded. */
+  dataset: Dataset | null;
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // -- Model input form state -------------------------------------------------
+  // `modelInputChoice.mode === "chosen"` is the PATCH payload's source of
+  // truth for `model_input_id` (the id alone, known synchronously — the
+  // `modelInput` object is display-only and may still be resolving).
+  // "inherit" always PATCHes `model_input_id: null`, same as the wizard's
+  // revert-to-inherit control.
+  const [modelInputChoice, setModelInputChoice] = useState<ModelInputSectionChoice>(
+    job.model_input_id ? { mode: "chosen", id: job.model_input_id, modelInput: null } : { mode: "inherit" }
+  );
+  useEffect(() => {
+    if (!job.model_input_id) return;
+    let cancelled = false;
+    fetchModelInputById(job.model_input_id)
+      .then((mi) => {
+        if (cancelled) return;
+        setModelInputChoice((prev) =>
+          prev.mode === "chosen" && prev.id === job.model_input_id ? { ...prev, modelInput: mi } : prev
+        );
+      })
+      .catch(() => {
+        /* leave modelInput null — the section renders the "no longer resolves" fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.model_input_id]);
 
   // -- About form state -----------------------------------------------------
   const [name, setName] = useState(job.about?.name ?? "");
@@ -133,8 +169,9 @@ export function SimulationEditor({
         custom_params: job.parameters.custom_params,
       };
       const about = buildAboutPayload({ name, description, category, license, keywords, creators });
+      const model_input_id = modelInputChoice.mode === "chosen" ? modelInputChoice.id : null;
 
-      await updateSimulation(job.id, { about, parameters });
+      await updateSimulation(job.id, { about, parameters, model_input_id });
       toast.success("Saved.");
       router.refresh();
     } catch (err) {
@@ -237,6 +274,19 @@ export function SimulationEditor({
           </div>
         </CardContent>
       </Card>
+
+      {/* Model input — only choosable while DRAFT (mirrors the server's
+          `_is_editable`, which 409s a PATCH once the simulation has moved
+          past DRAFT; this page only renders SimulationEditor for a draft at
+          all, but the gate is kept explicit here too rather than relying on
+          the caller). */}
+      {job.status === "DRAFT" && (
+        <ModelInputSection
+          inheritedId={dataset?.uses.modelInput.id ?? null}
+          choice={modelInputChoice}
+          onChoiceChange={setModelInputChoice}
+        />
+      )}
 
       {/* Parameters */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
