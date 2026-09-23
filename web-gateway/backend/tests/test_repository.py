@@ -6,25 +6,63 @@ filter/sort/paginate functions in `app.api.v1.repository` are pure, so they
 are tested directly against the three real spec examples. There is no
 backend test suite to plug into yet (CONTRIBUTING.md says so) — this is the
 first of it, scoped to what this mission actually rewrote.
+
+The `create_dataset` write-path tests (below `_write_dataset_via_route`) are
+the one exception: they call the real route coroutine directly, with
+`app.api.v1.repository.get_db` monkeypatched to `_FakeDB` — still no real
+Mongo and no FastAPI TestClient/HTTP layer, but a real call to `create_dataset`
+rather than a copy of what it does. See that section's block comment for why
+a hand-copied transform doesn't actually guard the route.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
+from app.api.v1 import repository as repository_router
 from app.api.v1.repository import filter_datasets, paginate, sort_datasets
 from app.models.generated.snapshot import OpenGHMSnapshotMetadata
-from app.models.repository import DatasetResponse, license_url, resolution_to_degrees
+from app.models.repository import DatasetResponse, build_envelope, license_url, resolution_to_degrees
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[3] / "schemas" / "snapshot-spec" / "examples"
 
 
+# ---- a fake Mongo collection, for calling the real route function without
+# a real database --------------------------------------------------------
+#
+# There is no TestClient/fixture harness in this suite (see the module
+# docstring) and this mission does not build a general one — but a route
+# that stores something has to be called for real at least once, or a test
+# that claims to guard its write transform is guarding a copy of it instead
+# of the thing itself. `_FakeCollection`/`_FakeDB` are the minimum needed to
+# call `create_dataset` (below) as the actual coroutine FastAPI would run,
+# with `app.api.v1.repository.get_db` monkeypatched to return them instead
+# of a real `AsyncIOMotorDatabase`.
+
+
+class _FakeCollection:
+    def __init__(self) -> None:
+        self.inserted: dict | None = None
+
+    async def insert_one(self, doc: dict) -> None:
+        self.inserted = doc
+
+
+class _FakeDB:
+    def __init__(self) -> None:
+        self._collections: dict[str, _FakeCollection] = {}
+
+    def __getitem__(self, name: str) -> _FakeCollection:
+        return self._collections.setdefault(name, _FakeCollection())
+
+
 def _load(name: str) -> DatasetResponse:
     data = json.loads((EXAMPLES_DIR / name).read_text())
-    return DatasetResponse.from_metadata_json(data)
+    return DatasetResponse.from_metadata_json(build_envelope(data))
 
 
 GLOBAL = "wbm_storage_v1.0.0_Global.json"
@@ -79,10 +117,13 @@ def test_license_url_known_and_fallback():
     assert license_url("Apache-2.0") == "https://spdx.org/licenses/Apache-2.0"
 
 
-def test_mongo_id_is_stripped_not_required():
+def test_envelopes_own_fields_are_ignored_by_the_response():
+    """`owner_user_id`/`visibility`/`registered_at` (mission
+    2026-09-23-catalogue-envelope) are the gateway's own bookkeeping, not
+    part of the spec document — the response is built from `document` alone."""
     data = json.loads((EXAMPLES_DIR / V2).read_text())
-    with_mongo_id = {**data, "_id": data["id"]}
-    d = DatasetResponse.from_metadata_json(with_mongo_id)
+    envelope = build_envelope(data, owner_user_id="someone", visibility="private")
+    d = DatasetResponse.from_metadata_json(envelope)
     assert d.id == data["id"]
 
 
@@ -184,36 +225,62 @@ def test_paginate_empty_list():
 # as `string`/`array` with no `null` allowed — so the previously-stored
 # shape failed the spec's own validation on the way back out
 # (`about.creator[].orcid`, `about.relatedLink`, ...), directly contradicting
-# gateway.md's "the spec's own shape, verbatim". Checked here by exact
-# equality to the source file rather than importing `openghm.spec.
-# validate_document` — the toolkit must not become a backend dependency —
-# but the source file is itself spec-valid (packages/openghm/tests/test_spec.py),
-# so exact equality to it stands in for validating the stored document.
+# gateway.md's "the spec's own shape, verbatim".
+#
+# Since mission 2026-09-23-catalogue-envelope, the stored Mongo record is an
+# envelope ({_id, document, owner_user_id, visibility, registered_at}) built
+# by `app.models.repository.build_envelope`. The three tests below call the
+# real `create_dataset` coroutine — not a copy of its transform — with
+# `get_db` monkeypatched to `_FakeDB` (above), so what's asserted on is
+# exactly what the route itself handed to `insert_one`. An earlier version
+# of this file called `build_envelope` directly from the test instead of
+# going through the route, which independently satisfies pydantic's
+# `exclude_none=True` contract but proves nothing about whether the *route*
+# still calls `build_envelope` at all — confirmed empirically: substituting
+# `dict(doc, _id=doc["id"])` (the pre-mission flat shape) for `build_envelope(doc)`
+# in both write paths left that version of the suite green. This version
+# does not: see review.md for the failing/passing output.
 
 
-def _stored_dataset_document(name: str) -> tuple[dict, dict]:
-    """Mirrors `create_dataset`'s actual transform exactly, so this test
-    fails the moment that route's `model_dump` call regresses."""
+def _write_dataset_via_route(monkeypatch: pytest.MonkeyPatch, name: str) -> tuple[dict, dict]:
+    """Calls the real `POST /repository/datasets` handler (`create_dataset`)
+    as the coroutine FastAPI would run, capturing what it actually inserts."""
+    fake_db = _FakeDB()
+    monkeypatch.setattr(repository_router, "get_db", lambda: fake_db)
     data = json.loads((EXAMPLES_DIR / name).read_text())
     metadata = OpenGHMSnapshotMetadata.model_validate(data)
-    stored = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
-    stored["_id"] = stored["id"]
-    return stored, data
+    asyncio.run(repository_router.create_dataset(metadata))
+    envelope = fake_db["datasets"].inserted
+    assert envelope is not None, "create_dataset did not call insert_one"
+    return envelope, data
 
 
-def test_stored_dataset_document_matches_the_source_file_exactly():
-    stored, data = _stored_dataset_document(V2)
-    round_tripped = {k: v for k, v in stored.items() if k != "_id"}
-    assert round_tripped == data
+def test_stored_dataset_document_matches_the_source_file_exactly(monkeypatch):
+    envelope, data = _write_dataset_via_route(monkeypatch, V2)
+    assert envelope["document"] == data
+    assert envelope["_id"] == data["id"]
 
 
-def test_stored_dataset_document_round_trips_through_the_response_model():
+def test_stored_dataset_document_round_trips_through_the_response_model(monkeypatch):
     """The other half of the acceptance criterion: read back (via
     `DatasetResponse.from_metadata_json`, what `GET .../datasets/{id}` uses)
     is equal to the source file once the response model's own always-present
     `null`s for genuinely absent fields are excluded — those are a response
     *shape* decision (every field always present), not a storage one."""
-    stored, data = _stored_dataset_document(V2)
-    d = DatasetResponse.from_metadata_json(stored)
+    envelope, data = _write_dataset_via_route(monkeypatch, V2)
+    d = DatasetResponse.from_metadata_json(envelope)
     dumped = d.model_dump(by_alias=True, mode="json", exclude={"spatialResolutionDegrees", "licenseUrl", "generatedAt"}, exclude_none=True)
     assert dumped == data
+
+
+def test_stored_dataset_document_validates_against_its_own_spec(monkeypatch):
+    """The mission's one-sentence definition of done:
+    `openghm.spec.validate_document` passes on what comes straight out of
+    Mongo (`envelope["document"]`), with nothing deleted first. Goes through
+    the real route (`_write_dataset_via_route`), not a hand-copied
+    approximation of its transform — see the block comment above."""
+    from openghm import spec as openghm_spec
+
+    envelope, _ = _write_dataset_via_route(monkeypatch, V2)
+    result = openghm_spec.validate_document(envelope["document"], spec="snapshot-spec")
+    assert result.ok, result.errors

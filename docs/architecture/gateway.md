@@ -110,17 +110,38 @@ that nothing else declares one.
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 
-Each `datasets` document is a snapshot's `metadata.json`
-([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md)) — the
-spec's own shape, verbatim, plus the `_id` Mongo requires (mirroring the
-spec's own `id`). `POST /api/v1/repository/datasets` is the write path;
-Mongo's unique `_id` rejects a repeat of the same snapshot with `409` rather
-than silently overwriting it, which would break rule 1. Before this, nothing
-populated the collection at all: a seed function reset it to three hard-coded
-documents on every startup, carrying real researchers' names and emails as
-demo data — not appropriate for a public instance — and was the collection's
-*only* writer, so removing it rather than scrubbing it left nothing behind
-until this write path replaced it.
+Each `datasets` document is an **envelope**
+(mission `2026-09-23-catalogue-envelope`):
+
+```
+{ _id, document: {…the spec's own metadata.json, verbatim, no _id inside it…},
+  owner_user_id, visibility, registered_at }
+```
+
+`document` is a snapshot's `metadata.json`
+([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md)), and
+nothing else — `_id` mirrors `document["id"]`, same as before; `owner_user_id`,
+`visibility` and `registered_at` are the gateway's own record of *this*
+registration, not properties of the artifact (the same snapshot mirrored to a
+second gateway would have a different uploader). Both specs set
+`additionalProperties: false` at their root, so a gateway-side field folded
+into the document rather than kept beside it would make that document fail
+its own spec — which is what happened before this mission, tolerated only
+because nobody wrote it down. `app.models.repository.build_envelope()` is
+the one place that assembles this shape; `from_metadata_json()` is the one
+place that reads it back out. Today every document is written
+`owner_user_id: null`, `visibility: "public"`, and no route filters on
+either — the fields exist so "my snapshots" and private snapshots have
+somewhere to go, not because anything reads them yet.
+
+`POST /api/v1/repository/datasets` is the write path; Mongo's unique `_id`
+rejects a repeat of the same snapshot with `409` rather than silently
+overwriting it, which would break rule 1. Before the write path existed at
+all, a seed function reset the collection to three hard-coded documents on
+every startup, carrying real researchers' names and emails as demo data —
+not appropriate for a public instance — and was the collection's *only*
+writer, so removing it rather than scrubbing it left nothing behind until
+this write path replaced it.
 
 A `jobs` document is a **simulation**: mutable while its `status` is `DRAFT`,
 read-only from the moment it is submitted (mission `2026-09-20-simulations`,
@@ -137,16 +158,16 @@ a step that does not exist yet ([open items
 9](../reference/open-items.md) and [10](../reference/open-items.md), **Next**
 list *job output reaches S3*).
 
-`model_inputs` holds the same kind of document for the other published
-artifact: a model input's own `metadata.json`, written by
+`model_inputs` holds the same envelope shape for the other published
+artifact: a model input's own `metadata.json` under `document`, written by
 `POST /api/v1/repository/model-inputs`, which is **admin-only** — the same
-boundary as uploading the bytes themselves. Both write paths store the
-document with `exclude_none=True`, and that is not a detail: dumping the
+boundary as uploading the bytes themselves. Both write paths build
+`document` with `exclude_none=True`, and that is not a detail: dumping the
 model without it materialises every declared-but-absent optional field as
 `null`, and an absent field and a `null` are different things to JSON
 Schema. Both collections held documents that failed validation against
 their own spec until this was fixed — `about.creator[].orcid` and
-`about.relatedLink` were the visible cases — so "verbatim" above is a
+`about.relatedLink` were the visible cases — so `document`'s "verbatim" is a
 property the write path has to actively preserve, not one it gets for free.
 
 **Registering an artifact does not prove it exists.** The backend has no S3

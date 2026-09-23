@@ -357,6 +357,19 @@ not migrated field by field.** A legacy field with no basis in the spec is
 dropped; one genuinely computable from spec fields is derived at read time and
 never stored; nothing was added to the spec to keep an old field alive.
 
+Nothing was added to the spec *document* even for fields the gateway
+genuinely needs and cannot derive — `owner_user_id`, `visibility`,
+`registered_at`. Since mission `2026-09-23-catalogue-envelope` these live
+beside the document in an envelope, not inside it: the stored Mongo record is
+`{ _id, document, owner_user_id, visibility, registered_at }`, and only
+`document` — the spec's own shape, verbatim — is what this table describes.
+`registered_at` is deliberately not the same value as `document`'s own
+`runtime.generatedAt` or `about.datePublished`: those answer when the science
+happened, `registered_at` answers when this gateway learned about it. A
+snapshot mirrored to a second gateway would carry the same
+`runtime.generatedAt` but a different `registered_at` (and a different
+`owner_user_id`) — proof neither belongs in the spec document itself.
+
 | Catalogue field | Spec source | How |
 |---|---|---|
 | `id`, `slug` | `id`, `slug` | direct |

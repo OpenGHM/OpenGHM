@@ -2,22 +2,69 @@
 
 ``OpenGHMSnapshotMetadata`` (``app/models/generated/snapshot.py``) is
 generated from ``schemas/snapshot-spec/metadata/1.0.0.json`` and is the
-document as stored: a `datasets` Mongo document is that shape, verbatim,
-plus the `_id` Mongo itself requires (mirroring the spec's own ``id``).
+document as stored — but not the whole Mongo document. Since mission
+2026-09-23-catalogue-envelope, a `datasets`/`model_inputs` Mongo document is
+an **envelope**:
+
+    { _id, document: {…the spec document, verbatim, no _id inside it…},
+      owner_user_id, visibility, registered_at }
+
+``document`` is the spec's own shape, unmodified; ``_id`` mirrors
+``document["id"]`` (Mongo's own requirement); ``owner_user_id``,
+``visibility`` and ``registered_at`` are the gateway's record of how the
+artifact came to be in *this* catalogue, not properties of the artifact
+itself — see ``spec.md`` in that mission for why they can't live inside
+``document`` (both specs set ``additionalProperties: false`` at the root).
+``build_envelope()`` is the one place that assembles this shape; both write
+paths (``app/api/v1/repository.py``) and the round-trip tests
+(``tests/test_repository.py``, ``tests/test_model_inputs.py``) call it rather
+than each re-building it by hand.
 
 ``DatasetResponse`` is what the API actually returns: every field of the
 spec document, plus the handful of values the catalogue UI needs that are
 genuinely computable from it and are never stored — see
 ``docs/reference/metadata-format.md#the-gateways-catalogue`` for why each one
-is here and not in the spec.
+is here and not in the spec. The envelope's own fields
+(``owner_user_id``/``visibility``/``registered_at``) are not in this response
+either — nothing reads them yet (spec.md, out of scope: no behaviour change).
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from .generated.model_input import OpenGHMModelInputMetadata
 from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
+
+
+def build_envelope(
+    document: dict[str, Any],
+    *,
+    owner_user_id: str | None = None,
+    visibility: str = "public",
+    registered_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Wrap a spec document (already ``model_dump(by_alias=True,
+    mode="json", exclude_none=True)``'d) as a catalogue Mongo record.
+
+    ``_id`` mirrors ``document["id"]``, same as the pre-envelope shape did —
+    Mongo's unique index on ``_id`` is still what turns a repeat registration
+    into a ``409`` (rule 1). ``registered_at`` defaults to now, in UTC; it is
+    deliberately not the same value as ``document``'s own
+    ``runtime.generatedAt``/``about.datePublished`` — one is when the science
+    happened, this is when this gateway learned about it
+    (spec.md, open question 3).
+    """
+    return {
+        "_id": document["id"],
+        "document": document,
+        "owner_user_id": owner_user_id,
+        "visibility": visibility,
+        "registered_at": (registered_at or datetime.now(timezone.utc)),
+    }
 
 #: WBM's own grid-resolution vocabulary (metadata-format.md#resolution),
 #: not a general unit-conversion library — there are exactly three values,
@@ -62,11 +109,13 @@ class DatasetResponse(OpenGHMSnapshotMetadata):
     generatedAt: AwareDatetime
 
     @classmethod
-    def from_metadata_json(cls, doc: dict) -> "DatasetResponse":
-        """Build from a ``datasets`` Mongo document (or any dict matching
-        ``metadata.json``'s shape) — a Mongo ``_id``, if present, is dropped
-        first; the spec's own ``id`` field is what the response carries."""
-        doc = {k: v for k, v in doc.items() if k != "_id"}
+    def from_metadata_json(cls, envelope: dict) -> "DatasetResponse":
+        """Build from a ``datasets`` Mongo envelope
+        (``{_id, document, owner_user_id, visibility, registered_at}`` —
+        see the module docstring). Only ``envelope["document"]`` — the spec's
+        own shape — feeds the response; the envelope's own fields are not
+        exposed here (spec.md, out of scope: no behaviour change yet)."""
+        doc = envelope["document"]
         meta = OpenGHMSnapshotMetadata.model_validate(doc)
         payload = meta.model_dump(by_alias=True, mode="json")
         payload["spatialResolutionDegrees"] = resolution_to_degrees(meta.simulation.resolution)
@@ -102,11 +151,13 @@ class ModelInputResponse(OpenGHMModelInputMetadata):
     licenseUrl: str
 
     @classmethod
-    def from_metadata_json(cls, doc: dict) -> "ModelInputResponse":
-        """Build from a ``model_inputs`` Mongo document (or any dict matching
-        ``metadata.json``'s shape) — a Mongo ``_id``, if present, is dropped
-        first; the spec's own ``id`` field is what the response carries."""
-        doc = {k: v for k, v in doc.items() if k != "_id"}
+    def from_metadata_json(cls, envelope: dict) -> "ModelInputResponse":
+        """Build from a ``model_inputs`` Mongo envelope
+        (``{_id, document, owner_user_id, visibility, registered_at}`` —
+        see the module docstring). Only ``envelope["document"]`` — the spec's
+        own shape — feeds the response; the envelope's own fields are not
+        exposed here (spec.md, out of scope: no behaviour change yet)."""
+        doc = envelope["document"]
         meta = OpenGHMModelInputMetadata.model_validate(doc)
         payload = meta.model_dump(by_alias=True, mode="json")
         payload["licenseUrl"] = license_url(meta.about.license)

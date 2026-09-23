@@ -87,7 +87,13 @@ async def _resolve_effective_model_input(doc: dict) -> tuple[str | None, ModelIn
     simulation (derive/get/patch), never per-row from `list_jobs`
     (plan.md's second risk: N resolves on the list page)."""
     db = get_db()
-    dataset_doc = await db.datasets.find_one({"_id": doc["dataset_id"]})
+    # `datasets`/`model_inputs` documents are envelopes since mission
+    # 2026-09-23-catalogue-envelope ({_id, document, owner_user_id,
+    # visibility, registered_at}) — unwrap to the spec document right after
+    # the fetch, so everything below keeps working on the shape it always has
+    # (app.models.repository.build_envelope / .from_metadata_json).
+    dataset_envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+    dataset_doc = (dataset_envelope or {}).get("document")
 
     catalogue_ids: set[str] = set()
     if not doc.get("model_input_id"):
@@ -267,9 +273,12 @@ async def submit_job(
     # the bare id if the dataset isn't there, rather than failing the submit).
     # `db.catalog` doesn't exist — datasets live in `db.datasets`
     # (app/api/v1/repository.py); `about.name` is the spec's name field, not
-    # the legacy `title`.
+    # the legacy `title`. The stored record is an envelope
+    # ({_id, document, owner_user_id, visibility, registered_at}, mission
+    # 2026-09-23-catalogue-envelope) — unwrap to the spec document.
     dataset_title = body.dataset_id  # fallback
-    dataset_doc = await db.datasets.find_one({"_id": body.dataset_id})
+    dataset_envelope = await db.datasets.find_one({"_id": body.dataset_id})
+    dataset_doc = (dataset_envelope or {}).get("document")
     if dataset_doc:
         dataset_title = dataset_doc.get("about", {}).get("name", body.dataset_id)
 
@@ -375,11 +384,14 @@ async def derive_simulation(
     user: TokenPayload = Depends(require_permission(Permission.JOB_SUBMIT)),
 ):
     db = get_db()
-    dataset_doc = await db.datasets.find_one({"_id": dataset_id})
-    if dataset_doc is None:
+    # Envelope shape (mission 2026-09-23-catalogue-envelope) — unwrap to the
+    # spec document.
+    dataset_envelope = await db.datasets.find_one({"_id": dataset_id})
+    if dataset_envelope is None:
         raise HTTPException(
             status_code=404, detail=f"Dataset '{dataset_id}' not found"
         )
+    dataset_doc = dataset_envelope["document"]
 
     dataset_title = dataset_doc.get("about", {}).get("name", dataset_id)
     parameters = _derive_simulation_parameters(dataset_doc)

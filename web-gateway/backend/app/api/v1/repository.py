@@ -15,6 +15,7 @@ from app.models.repository import (
     ModelInputListResponse,
     ModelInputResponse,
     RepositoryListResponse,
+    build_envelope,
 )
 
 router = APIRouter(prefix="/repository", tags=["repository"])
@@ -119,7 +120,11 @@ async def get_dataset(dataset_id: str) -> DatasetResponse:
 async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
     """Add a snapshot to the catalogue (open item 13 — this collection had no
     writer at all before this endpoint). The body is exactly one
-    ``metadata.json`` document; Mongo's own ``_id`` mirrors the spec's ``id``.
+    ``metadata.json`` document, stored under ``document`` in an envelope
+    beside the gateway's own record of the registration
+    (mission 2026-09-23-catalogue-envelope; see
+    ``app.models.repository.build_envelope``). Mongo's own ``_id`` mirrors
+    the spec's ``id``.
 
     ``exclude_none=True`` matters here, not just for tidiness: an absent
     optional field and a present ``null`` are different things in JSON
@@ -130,12 +135,12 @@ async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
     """
     db = get_db()
     doc = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
-    doc["_id"] = doc["id"]
+    envelope = build_envelope(doc)
     try:
-        await db["datasets"].insert_one(doc)
+        await db["datasets"].insert_one(envelope)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail=f"Dataset '{metadata.id}' already exists")
-    return DatasetResponse.from_metadata_json(doc)
+    return DatasetResponse.from_metadata_json(envelope)
 
 
 # ---- model inputs (ADR 0015) --------------------------------------------
@@ -227,8 +232,11 @@ async def get_model_input(model_input_id: str) -> ModelInputResponse:
 async def create_model_input(metadata: OpenGHMModelInputMetadata) -> ModelInputResponse:
     """Register a published model input (ADR 0015, spec.md Decision 3 —
     admin-only, matching who actually uploads one to S3). The body is
-    exactly one ``metadata.json`` document; Mongo's own ``_id`` mirrors the
-    spec's own ``id``, and a repeat is refused with ``409`` rather than
+    exactly one ``metadata.json`` document, stored under ``document`` in an
+    envelope beside the gateway's own record of the registration
+    (mission 2026-09-23-catalogue-envelope; see
+    ``app.models.repository.build_envelope``). Mongo's own ``_id`` mirrors
+    the spec's own ``id``, and a repeat is refused with ``409`` rather than
     overwriting it (rule 1).
 
     ``exclude_none=True`` — see ``create_dataset``'s docstring for why: an
@@ -238,9 +246,9 @@ async def create_model_input(metadata: OpenGHMModelInputMetadata) -> ModelInputR
     """
     db = get_db()
     doc = metadata.model_dump(by_alias=True, mode="json", exclude_none=True)
-    doc["_id"] = doc["id"]
+    envelope = build_envelope(doc)
     try:
-        await db["model_inputs"].insert_one(doc)
+        await db["model_inputs"].insert_one(envelope)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail=f"Model input '{metadata.id}' already exists")
-    return ModelInputResponse.from_metadata_json(doc)
+    return ModelInputResponse.from_metadata_json(envelope)

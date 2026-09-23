@@ -152,6 +152,14 @@ migrate-roles:
 migrate-sessions:
     {{compose}} exec -T mongodb mongosh "mongodb://root:rootpassword@localhost:27017/admin?authSource=admin" --quiet < deploy/local/mongo/migrate_sessions.js
 
+# Migrate `datasets`/`model_inputs` documents from the flat shape (the spec
+# document plus `_id`) to the envelope shape mission
+# 2026-09-23-catalogue-envelope introduced ({_id, document, owner_user_id,
+# visibility, registered_at}). Idempotent — safe to run against a DB that's
+# already migrated.
+migrate-catalogue-envelope:
+    {{compose}} exec -T mongodb mongosh "mongodb://root:rootpassword@localhost:27017/admin?authSource=admin" --quiet < deploy/local/mongo/migrate_envelope.js
+
 # Force-rebuild the backend image without cache
 rebuild:
     {{compose}} build --no-cache backend

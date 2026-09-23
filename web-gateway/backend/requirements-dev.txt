@@ -4,6 +4,17 @@
 # tests/ — there was no backend test suite before this. See tests/test_repository.py.
 pytest>=8
 
+# tests/test_repository.py and tests/test_model_inputs.py call
+# openghm.spec.validate_document to check a stored catalogue document
+# against its own spec (mission 2026-09-23-catalogue-envelope's round-trip
+# test). Test-only: never in requirements.txt, never imported from app/ —
+# the toolkit must not become a backend runtime dependency.
+#
+# Path is relative to wherever `pip install -r` is invoked from — today
+# that's always the repository root (see the `codegen` recipe in the
+# root justfile, the only place this file is installed from).
+-e packages/openghm
+
 # `just codegen` installs this on the host before regenerating.
 
 # Generates app/models/generated/snapshot.py from schemas/snapshot-spec/metadata/1.0.0.json.
