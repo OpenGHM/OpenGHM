@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useTransition, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FilterState, RepositoryListResponse } from "@/lib/repository/types";
-import { fetchDatasets } from "@/lib/repository/actions";
+import { fetchDatasets, fetchModelInputIds } from "@/lib/repository/actions";
+import { datasetFiltersToParams, parseDatasetFilters } from "@/lib/repository/url-filters";
+import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
 import { RepositorySidebar } from "./repository-sidebar";
 import { RepositoryResults } from "./repository-results";
 
@@ -24,72 +26,60 @@ const EMPTY_RESULT: RepositoryListResponse = {
 };
 
 export function RepositoryClient({
+  initialFilters,
   initialData,
 }: {
+  initialFilters?: FilterState;
   initialData: RepositoryListResponse;
 }) {
-  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
-  const [result, setResult] = useState<RepositoryListResponse>(initialData);
-  const [isPending, startTransition] = useTransition();
-
-  // Skip the very first effect run — initialData from SSR is already correct.
-  // Without this, hydration triggers a redundant fetch 300ms after mount, causing a flicker.
-  const isFirstRender = useRef(true);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const doFetch = useCallback((nextFilters: FilterState) => {
-    startTransition(async () => {
-      try {
-        const data = await fetchDatasets(nextFilters);
-        setResult(data);
-      } catch {
-        setResult(EMPTY_RESULT);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doFetch(filters), 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [filters, doFetch]);
-
-  const handleFiltersChange = useCallback((updates: Partial<FilterState>) => {
-    setFilters((prev) => {
-      const next = { ...prev, ...updates };
-      // Reset to page 1 on any filter change (except page itself)
-      if (!("page" in updates)) {
-        next.page = 1;
-      }
-      return next;
-    });
-  }, []);
+  const { filters, setFilters, result, isPending } = useUrlSyncedFilters<
+    FilterState,
+    RepositoryListResponse
+  >({
+    initialFilters: initialFilters ?? INITIAL_FILTERS,
+    initialResult: initialData,
+    emptyResult: EMPTY_RESULT,
+    parse: parseDatasetFilters,
+    serialize: datasetFiltersToParams,
+    fetcher: fetchDatasets,
+  });
 
   const handleClearAll = useCallback(() => {
     setFilters(INITIAL_FILTERS);
+  }, [setFilters]);
+
+  const [modelInputIds, setModelInputIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelInputIds()
+      .then((ids) => {
+        if (!cancelled) setModelInputIds(ids);
+      })
+      .catch(() => {
+        // Badge degrades to "Checking…" forever rather than throwing —
+        // the table itself is more important than the badge.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <div className="mx-auto flex max-w-[1280px] gap-8 px-10 py-10">
       <RepositorySidebar
         filters={filters}
-        onFiltersChange={handleFiltersChange}
+        onFiltersChange={setFilters}
         onClearAll={handleClearAll}
       />
       <RepositoryResults
         datasets={result.items}
+        modelInputIds={modelInputIds}
         totalCount={result.totalCount}
         sortBy={filters.sortBy}
-        onSortChange={(sortBy) => handleFiltersChange({ sortBy })}
+        onSortChange={(sortBy) => setFilters({ sortBy })}
         page={filters.page}
         totalPages={result.totalPages}
-        onPageChange={(page) => handleFiltersChange({ page })}
+        onPageChange={(page) => setFilters({ page })}
         isLoading={isPending}
       />
     </div>

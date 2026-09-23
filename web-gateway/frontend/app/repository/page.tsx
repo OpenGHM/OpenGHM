@@ -3,7 +3,7 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { RepositoryTabs } from "@/components/repository/repository-tabs";
 import { fetchDatasets, fetchModelInputs } from "@/lib/repository/actions";
-import { TEMPORAL_RANGE_BOUNDS } from "@/lib/repository/data";
+import { parseDatasetFilters, parseModelInputFilters, toURLSearchParams } from "@/lib/repository/url-filters";
 import { RepositoryListResponse, ModelInputListResponse } from "@/lib/repository/types";
 
 export const metadata: Metadata = {
@@ -26,30 +26,29 @@ const EMPTY_MODEL_INPUT_RESULT: ModelInputListResponse = {
   page: 1,
 };
 
-export default async function RepositoryPage() {
-  // Server-side pre-fetch for initial render (SSR)
+export default async function RepositoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const rawParams = await searchParams;
+  const params = toURLSearchParams(rawParams);
+  const initialTab = params.get("tab") === "model-inputs" ? "model-inputs" : "snapshots";
+  const datasetFilters = parseDatasetFilters(params);
+  const modelInputFilters = parseModelInputFilters(params);
+
+  // Server-side pre-fetch for initial render (SSR), hydrated from the URL
+  // rather than fixed defaults — see open item 16 / url-filters.ts.
   let initialData: RepositoryListResponse = EMPTY_RESULT;
   try {
-    initialData = await fetchDatasets({
-      searchQuery: "",
-      temporalCoverageStart: TEMPORAL_RANGE_BOUNDS.min,
-      temporalCoverageEnd: TEMPORAL_RANGE_BOUNDS.max,
-      spatialResMin: null,
-      spatialResMax: null,
-      sortBy: "relevance",
-      page: 1,
-    });
+    initialData = await fetchDatasets(datasetFilters);
   } catch {
     // Backend unavailable — client will retry via useEffect
   }
 
   let initialModelInputs: ModelInputListResponse = EMPTY_MODEL_INPUT_RESULT;
   try {
-    initialModelInputs = await fetchModelInputs({
-      searchQuery: "",
-      sortBy: "relevance",
-      page: 1,
-    });
+    initialModelInputs = await fetchModelInputs(modelInputFilters);
   } catch {
     // Backend unavailable — client will retry via useEffect
   }
@@ -59,6 +58,9 @@ export default async function RepositoryPage() {
       <Header />
       <main className="min-h-screen bg-muted/30">
         <RepositoryTabs
+          initialTab={initialTab}
+          initialDatasetFilters={datasetFilters}
+          initialModelInputFilters={modelInputFilters}
           initialDatasets={initialData}
           initialModelInputs={initialModelInputs}
         />

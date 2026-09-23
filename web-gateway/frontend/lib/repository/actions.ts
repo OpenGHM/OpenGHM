@@ -76,16 +76,21 @@ export async function fetchDatasetById(id: string): Promise<Dataset | null> {
  * a model input has no single top-level resolution to filter on the way a
  * snapshot's `simulation.resolution` does (see `ModelInputResponse`'s
  * docstring in `app/models/repository.py`).
+ *
+ * `pageSize` defaults to the list's own page size (5); `fetchModelInputIds`
+ * below is the one caller that raises it, for a one-shot existence check
+ * rather than a browsable page.
  */
 export async function fetchModelInputs(
-  filters: ModelInputFilterState
+  filters: ModelInputFilterState,
+  pageSize: number = 5
 ): Promise<ModelInputListResponse> {
   const client = await getApiClient();
 
   const params: Record<string, string | number> = {
     sort: filters.sortBy,
     page: filters.page,
-    page_size: 5,
+    page_size: pageSize,
   };
 
   if (filters.searchQuery.trim()) {
@@ -98,6 +103,22 @@ export async function fetchModelInputs(
   );
 
   return response.data;
+}
+
+/**
+ * Every published model input's id, for the dataset table's "model input
+ * status" badge — a snapshot's `uses.modelInput.id` always names one, but
+ * only checking membership here tells "present" from "inherited-missing"
+ * (the same distinction `wizard-review-step.tsx` draws for a simulation's
+ * effective model input). `page_size: 100` is a one-shot upper bound, not a
+ * pagination contract — the catalogue is small; this fetches it whole.
+ */
+export async function fetchModelInputIds(): Promise<Set<string>> {
+  const { items } = await fetchModelInputs(
+    { searchQuery: "", sortBy: "relevance", page: 1 },
+    100
+  );
+  return new Set(items.map((m) => m.id));
 }
 
 /**

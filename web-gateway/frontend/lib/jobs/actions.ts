@@ -12,7 +12,6 @@ import type {
   SimulationDeriveRequest,
   SimulationUpdateRequest,
 } from "@/lib/jobs/types";
-import type { RepositoryListResponse } from "@/lib/repository/types";
 
 /**
  * Submit a new simulation job.
@@ -148,24 +147,5 @@ export async function fetchJobStats(userId?: string): Promise<JobStatsResponse> 
   const client = await getApiClient();
   const params = userId ? { user_id: userId } : undefined;
   const res = await client.get<JobStatsResponse>("/api/v1/jobs/stats", { params });
-  return res.data;
-}
-
-/**
- * Fetch snapshot-type datasets for the New Simulation selection page.
- */
-export async function fetchSnapshots(
-  searchQuery: string = "",
-  page: number = 1
-): Promise<RepositoryListResponse> {
-  const client = await getApiClient();
-  const params: Record<string, string | number> = {
-    type: "snapshot",
-    page,
-    page_size: 9,
-    sort: "relevance",
-  };
-  if (searchQuery.trim()) params.q = searchQuery.trim();
-  const res = await client.get<RepositoryListResponse>("/api/v1/repository/datasets", { params });
   return res.data;
 }

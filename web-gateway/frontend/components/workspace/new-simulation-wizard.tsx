@@ -1,68 +1,74 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WizardProgress } from "@/components/workspace/wizard-progress";
-import { WizardSnapshotStep } from "@/components/workspace/wizard-snapshot-step";
 import { WizardModelInputStep } from "@/components/workspace/wizard-model-input-step";
 import { WizardParametersStep } from "@/components/workspace/wizard-parameters-step";
 import { WizardReviewStep } from "@/components/workspace/wizard-review-step";
-import type { RepositoryListResponse, Dataset } from "@/lib/repository/types";
+import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import {
-  WIZARD_STEPS,
   type WizardStep,
   type ModelInputChoice,
   defaultParametersFor,
   defaultSlurmConfigFor,
 } from "@/lib/workspace/wizard-types";
 
+// This component only ever owns steps 2–4 — "snapshot" (step 1) is the
+// picker route, not a state this component's `step` can be in. Indexing
+// against the full `WIZARD_STEPS` (which still has 4 entries, for
+// `WizardProgress`'s "step N of 4" display) would let `goBack` land on
+// "snapshot" with nothing to render for it — exactly the bug this local
+// order avoids: "model-input" has nothing before it in this list.
+const OWNED_STEPS: WizardStep[] = ["model-input", "parameters", "review"];
+
 /**
- * The whole `/workspace/new` flow, as one route: nothing here is real until
- * the Review step's Submit button — everything before it is local state
- * over the real catalogue (`fetchSnapshots`, `fetchModelInputs`), staged so
- * the user can move back and forth without creating a draft on every click.
+ * Steps 2–4 of the new-simulation flow: nothing here is real until the
+ * Review step's Submit button — everything before it is local state over
+ * the real catalogue (`fetchModelInputs`), staged so the user can move
+ * back and forth without creating a draft on every click.
+ *
+ * Step 1 (choosing the base snapshot) is no longer part of this component —
+ * it is the picker route (`/workspace/new/pick`), which is the repository's
+ * own search rather than a second one. `snapshot` arrives already chosen,
+ * from `/workspace/new/configure`'s server-side fetch.
  */
 export function NewSimulationWizard({
-  initialSnapshots,
+  snapshot,
 }: {
-  initialSnapshots: RepositoryListResponse;
+  snapshot: Dataset;
 }) {
-  const [step, setStep] = useState<WizardStep>("snapshot");
-  const [snapshot, setSnapshot] = useState<Dataset | null>(null);
+  const router = useRouter();
+  const [step, setStep] = useState<WizardStep>("model-input");
   const [modelInputChoice, setModelInputChoice] = useState<ModelInputChoice>({ mode: "inherit" });
-  const [parameters, setParameters] = useState<JobParameters | null>(null);
-  const [slurmConfig, setSlurmConfig] = useState<SlurmConfig | null>(null);
+  const [parameters, setParameters] = useState<JobParameters>(() => defaultParametersFor(snapshot));
+  const [slurmConfig, setSlurmConfig] = useState<SlurmConfig>(() => defaultSlurmConfigFor(snapshot));
 
-  const stepIndex = WIZARD_STEPS.indexOf(step);
-
-  const handleSelectSnapshot = (ds: Dataset) => {
-    setSnapshot(ds);
-    // Re-derive defaults whenever the base snapshot changes — a different
-    // snapshot means a different real temporal range, variable list and
-    // recommended compute, and any earlier model-input override no longer
-    // applies to it.
-    setParameters(defaultParametersFor(ds));
-    setSlurmConfig(defaultSlurmConfigFor(ds));
-    setModelInputChoice({ mode: "inherit" });
-  };
+  const stepIndex = OWNED_STEPS.indexOf(step);
 
   const canGoNext =
-    (step === "snapshot" && snapshot !== null) ||
     step === "model-input" ||
     (step === "parameters" &&
-      parameters !== null &&
       parameters.temporal_range_start <= parameters.temporal_range_end &&
       parameters.variables.length > 0);
 
   const goNext = () => {
-    const next = WIZARD_STEPS[stepIndex + 1];
+    const next = OWNED_STEPS[stepIndex + 1];
     if (next) setStep(next);
   };
   const goBack = () => {
-    const prev = WIZARD_STEPS[stepIndex - 1];
-    if (prev) setStep(prev);
+    const prev = OWNED_STEPS[stepIndex - 1];
+    if (prev) {
+      setStep(prev);
+    } else {
+      // Nothing before "model-input" in this component — leaving it means
+      // leaving the wizard for the picker, where the base snapshot itself
+      // is chosen.
+      router.push("/workspace/new/pick");
+    }
   };
 
   return (
@@ -70,15 +76,7 @@ export function NewSimulationWizard({
       <WizardProgress step={step} />
 
       <div className="bg-slate-50">
-        {step === "snapshot" && (
-          <WizardSnapshotStep
-            initialData={initialSnapshots}
-            selectedId={snapshot?.id ?? null}
-            onSelect={handleSelectSnapshot}
-          />
-        )}
-
-        {step === "model-input" && snapshot && (
+        {step === "model-input" && (
           <WizardModelInputStep
             snapshot={snapshot}
             choice={modelInputChoice}
@@ -86,7 +84,7 @@ export function NewSimulationWizard({
           />
         )}
 
-        {step === "parameters" && snapshot && parameters && slurmConfig && (
+        {step === "parameters" && (
           <WizardParametersStep
             snapshot={snapshot}
             parameters={parameters}
@@ -96,7 +94,7 @@ export function NewSimulationWizard({
           />
         )}
 
-        {step === "review" && snapshot && parameters && slurmConfig && (
+        {step === "review" && (
           <WizardReviewStep
             snapshot={snapshot}
             modelInputChoice={modelInputChoice}
@@ -105,10 +103,12 @@ export function NewSimulationWizard({
           />
         )}
 
-        {/* Back / Next — the Review step has its own Submit button instead. */}
+        {/* Back / Next — the Review step has its own Submit button instead.
+            Back is never disabled: from the first step here it leaves for
+            the picker instead of stopping. */}
         {step !== "review" && (
           <div className="mx-auto flex max-w-[1024px] items-center justify-between px-10 pb-10">
-            <Button variant="ghost" onClick={goBack} disabled={stepIndex === 0}>
+            <Button variant="ghost" onClick={goBack}>
               <ArrowLeft className="mr-1.5 size-4" />
               Back
             </Button>

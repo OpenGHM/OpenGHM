@@ -17,6 +17,7 @@
  * is, by definition, not yet connected.
  */
 import type { Job, JobLogsResponse, JobStatus } from "@/lib/jobs/types";
+import type { Dataset } from "@/lib/repository/types";
 
 /** A file a finished run would have written. No route returns these yet. */
 export interface FakeOutputFile {
@@ -180,4 +181,67 @@ export function fakeOutputFiles(): FakeOutputFile[] {
 
 export function fakeProgress(): FakeProgress {
   return { elapsed: "4:18", requested: "15:00", fraction: 4.3 / 15, stage: "Run: 2001-04" };
+}
+
+/**
+ * A `Dataset` (published snapshot) for component tests — e.g.
+ * `dataset-table.test.tsx`, `repository-results.test.tsx`. This is the one
+ * place fake data lives in this frontend (spec.md, `2026-09-23-pick-a-snapshot`),
+ * so a test fixture belongs here too rather than as a second hand-built
+ * literal that drifts from the spec the next time `just codegen` runs.
+ * Every field is real spec shape (`OpenGHMSnapshotMetadata` via `Dataset`),
+ * not invented — same rule as the rest of this module.
+ */
+export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
+  return {
+    $schema: "https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json",
+    id: "fake-dataset-id",
+    slug: "fake-dataset",
+    about: {
+      name: "Fake Snapshot",
+      description: "A snapshot used only in tests.",
+      datePublished: "2026-01-01T00:00:00Z",
+      category: "hydrology",
+      creator: [{ name: "Test Author" }],
+      license: "GPL-3.0-only",
+      keywords: ["test"],
+      url: "https://openghm.org/repository/fake-dataset-id",
+    },
+    simulation: {
+      init: "test.init",
+      spatialCoverage: {
+        northlimit: 10,
+        southlimit: -10,
+        eastlimit: 10,
+        westlimit: -10,
+        units: "Decimal degrees",
+        projection: "EPSG:4326",
+      },
+      resolution: { value: 0.5, unit: "degree" },
+      temporalCoverage: { start: "2001-01-01", end: "2001-12-31" },
+      inputVariables: [{ role: "precipitation", dataset: "test_precip" }],
+      activeProcesses: [],
+      outputVariables: [{ name: "discharge", fullName: "Discharge", unit: "m3/s" }],
+      recommendedCompute: { cores: 16, walltime: "15:00" },
+    },
+    uses: {
+      container: { image: "wbm", version: "2.0.0", digest: "sha256:fake", oras: "", https: "" },
+      modelInput: { id: "fake-model-input-id", mountAs: "default" },
+    },
+    runtime: {
+      generatedAt: "2026-01-01T00:00:00Z",
+      execution: {
+        cluster: "anvil",
+        cores: 16,
+        elapsedWalltime: "12:00",
+        startedAt: "2026-01-01T00:00:00Z",
+        finishedAt: "2026-01-01T00:12:00Z",
+        slurmJobId: "12345",
+      },
+    },
+    spatialResolutionDegrees: 0.5,
+    licenseUrl: "https://spdx.org/licenses/GPL-3.0-only.html",
+    generatedAt: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
 }

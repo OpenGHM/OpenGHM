@@ -1,34 +1,154 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
-import { NewSimulationWizard } from "@/components/workspace/new-simulation-wizard";
-import { fetchSnapshots } from "@/lib/jobs/actions";
-import type { RepositoryListResponse } from "@/lib/repository/types";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { RecentSnapshots } from "@/components/workspace/recent-snapshots";
+import { fetchJobs } from "@/lib/jobs/actions";
+import { fetchDatasetById } from "@/lib/repository/actions";
+import type { Dataset } from "@/lib/repository/types";
+import type { Job } from "@/lib/jobs/types";
+import { Compass, Play } from "lucide-react";
 
-const EMPTY_RESULT: RepositoryListResponse = {
-  items: [],
-  totalCount: 0,
-  totalPages: 1,
-  page: 1,
-};
+const RECENTS_LIMIT = 5;
 
-export default async function NewSimulationPage() {
+function displayName(job: Job): string {
+  return job.about?.name || job.slug || job.sim_id || `Untitled (${job.id.slice(0, 8)})`;
+}
+
+/**
+ * The new-simulation entry screen: not an empty search box (spec.md's
+ * In scope). A user with past simulations sees the snapshots they've
+ * already used and their own recent simulations, both derived from `jobs`
+ * with no new backend field; a user with none sees a single way in — the
+ * picker (`/workspace/new/pick`), which is the repository's own search.
+ */
+export default async function NewSimulationEntryPage() {
   const session = await auth();
   if (!session) redirect("/auth/signin");
 
-  let initialSnapshots: RepositoryListResponse = EMPTY_RESULT;
+  let jobs: Job[] = [];
   try {
-    initialSnapshots = await fetchSnapshots("", 1);
+    const jobData = await fetchJobs(1);
+    jobs = jobData.items;
   } catch {
-    // Backend unavailable — the wizard's snapshot step will retry on interaction.
+    // Backend unavailable — falls through to the empty state.
   }
+
+  const recentSimulations = jobs.slice(0, RECENTS_LIMIT);
+
+  const distinctDatasetIds: string[] = [];
+  for (const job of jobs) {
+    if (!distinctDatasetIds.includes(job.dataset_id)) distinctDatasetIds.push(job.dataset_id);
+    if (distinctDatasetIds.length >= RECENTS_LIMIT) break;
+  }
+  const settled = await Promise.allSettled(distinctDatasetIds.map((id) => fetchDatasetById(id)));
+  const recentSnapshots: Dataset[] = settled
+    .map((r) => (r.status === "fulfilled" ? r.value : null))
+    .filter((d): d is Dataset => d !== null);
+
+  const hasHistory = jobs.length > 0;
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        <NewSimulationWizard initialSnapshots={initialSnapshots} />
+        <div className="bg-gradient-to-br from-[#0a192f] to-[#006994] px-10 py-12">
+          <div className="mx-auto max-w-[1024px]">
+            <p className="mb-1 text-sm font-medium text-white/60 uppercase tracking-wider">
+              Workspace
+            </p>
+            <h1 className="text-3xl font-bold text-white">New Simulation</h1>
+            <p className="mt-2 text-sm text-white/70">
+              Start from a snapshot you&apos;ve used before, or browse the full catalogue.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 px-10 py-10">
+          <div className="mx-auto max-w-[1024px] space-y-10">
+            {!hasHistory ? (
+              <Card className="border-dashed">
+                <CardContent className="py-20 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#006994]/10">
+                    <Compass className="size-7 text-[#006994]" />
+                  </div>
+                  <p className="mb-1 text-sm font-medium text-foreground">
+                    You haven&apos;t run anything yet
+                  </p>
+                  <p className="mb-6 text-sm text-muted-foreground">
+                    Browse the Data Repository&apos;s published snapshots to start your first
+                    simulation.
+                  </p>
+                  <Button asChild className="bg-[#006994] hover:bg-[#005a7a] font-semibold">
+                    <Link href="/workspace/new/pick">
+                      <Compass className="mr-1.5 size-4" />
+                      Browse Snapshots
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {recentSnapshots.length > 0 && (
+                  <section>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-foreground">
+                        Snapshots you&apos;ve used
+                      </h2>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href="/workspace/new/pick">
+                          <Compass className="mr-1.5 size-4" />
+                          Browse all
+                        </Link>
+                      </Button>
+                    </div>
+                    <RecentSnapshots snapshots={recentSnapshots} />
+                  </section>
+                )}
+
+                <section>
+                  <h2 className="mb-4 text-lg font-semibold text-foreground">
+                    Your recent simulations
+                  </h2>
+                  <Card className="py-0">
+                    <CardContent className="divide-y p-0">
+                      {recentSimulations.map((job) => (
+                        <Link
+                          key={job.id}
+                          href={`/workspace/${job.id}`}
+                          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {displayName(job)}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {job.dataset_title}
+                            </p>
+                          </div>
+                          <JobStatusBadge status={job.status} />
+                        </Link>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </section>
+              </>
+            )}
+
+            <section className="flex items-center justify-center gap-3 border-t pt-8">
+              <Button asChild size="lg" className="bg-[#006994] hover:bg-[#005a7a] font-semibold">
+                <Link href="/workspace/new/pick">
+                  <Play className="mr-1.5 size-4" />
+                  Browse all snapshots
+                </Link>
+              </Button>
+            </section>
+          </div>
+        </div>
       </main>
       <Footer />
     </div>

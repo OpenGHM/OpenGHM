@@ -1,7 +1,6 @@
 import { Dataset, SortOption } from "@/lib/repository/types";
-import { DatasetCard } from "./dataset-card";
+import { DatasetTable } from "./dataset-table";
 import { Pagination } from "./pagination";
-import { SearchX } from "lucide-react";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "relevance", label: "Relevance" },
@@ -10,26 +9,19 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "title-za", label: "Title Z-A" },
 ];
 
-function DatasetCardSkeleton() {
+function DatasetTableSkeleton() {
   return (
-    <div className="animate-pulse rounded-xl border bg-card p-5 shadow-sm">
-      <div className="mb-3 flex items-start gap-3">
-        <div className="h-5 w-24 rounded-full bg-muted" />
-        <div className="h-5 flex-1 rounded bg-muted" />
-      </div>
-      <div className="mb-2 h-4 w-3/4 rounded bg-muted" />
-      <div className="mb-4 h-4 w-1/2 rounded bg-muted" />
-      <div className="flex gap-4">
-        <div className="h-3 w-20 rounded bg-muted" />
-        <div className="h-3 w-20 rounded bg-muted" />
-        <div className="h-3 w-20 rounded bg-muted" />
-      </div>
+    <div className="animate-pulse space-y-2 rounded-xl border bg-card p-5 shadow-sm">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-10 rounded bg-muted" />
+      ))}
     </div>
   );
 }
 
 export function RepositoryResults({
   datasets,
+  modelInputIds,
   totalCount,
   sortBy,
   onSortChange,
@@ -39,6 +31,7 @@ export function RepositoryResults({
   isLoading = false,
 }: {
   datasets: Dataset[];
+  modelInputIds: Set<string> | null;
   totalCount: number;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
@@ -76,25 +69,9 @@ export function RepositoryResults({
       </div>
 
       {isLoading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <DatasetCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : datasets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <SearchX className="mb-4 size-12 text-muted-foreground/40" />
-          <h3 className="text-lg font-semibold text-foreground">No datasets found</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try adjusting your search or filters
-          </p>
-        </div>
+        <DatasetTableSkeleton />
       ) : (
-        <div className="space-y-4">
-          {datasets.map((d) => (
-            <DatasetCard key={d.id} dataset={d} />
-          ))}
-        </div>
+        <DatasetTable datasets={datasets} modelInputIds={modelInputIds} />
       )}
 
       <Pagination page={page} totalPages={totalPages} onPageChange={onPageChange} />
