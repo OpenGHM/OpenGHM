@@ -113,8 +113,10 @@ A **model input** is the data a simulation mounts — prepared inputs published 
 their own rather than copied into each snapshot
 ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)). The
 internal layout is dataset-specific and the snapshot spec does not constrain it;
-model input gets a spec of its own, which **does not exist yet**. What is fixed
-today is the manifest and the key.
+model input has a spec of its own, `schemas/model-input-spec/`
+([snapshot-spec.md](snapshot-spec.md), [metadata-format.md](metadata-format.md#model-inputs-metadatajson)).
+What is fixed by that spec is the manifest, the key, and `metadata.json`'s
+shape.
 
 ```bash
 cd <dataset>
@@ -145,6 +147,29 @@ sha256sum -c SHA256SUMS --quiet
 
 Immutability enforcement is [Upload and lock](#upload-and-lock)'s list, applied to the `model-inputs/` prefix on
 the same terms.
+
+This is no longer aspirational: `model-inputs/` holds two published model
+inputs this way (mission `2026-09-24-publish-the-model-inputs`, private), the
+two ids the three published snapshots already cite in `uses.modelInput.id`:
+
+- `model-inputs/52585562…/` — `wbm_ancillary_data_v2.0.0`, 1,542 keys, copied
+  from `snapshots/fc66a2cd…/data/wbm_ancillary_data_v2.0.0/`.
+- `model-inputs/ff0ba2e5…/` — `wbm_ancillary_data_v1.0.0`, 32,959 keys, copied
+  from `snapshots/245430de…/data/Wyoming_tracking/` (Global's
+  `data/Global_tracking/` is byte-identical; Wyoming's was used because it is
+  listed first).
+
+Each has a `metadata.json` and a `SHA256SUMS`, every key public-read, and both
+were re-hashed anonymously from `model-inputs/<id>/` after publishing. Unlike
+[Upload and lock](#upload-and-lock)'s snapshot copy, these copied
+**server-side**: the source trees under `snapshots/<snapshot-id>/data/<child>/`
+were uploaded by our own `EES260008` identity rather than Xiao Liu's, so
+`s3cmd`'s `CopyObject` works here (`ops/docs/reference/anvil-environment.md`,
+private). The publish script, `ops/anvil/publish_model_input.sh` (private),
+derives `SHA256SUMS` from the source snapshot's own manifest — keeping only
+the `./data/<child>/` lines and rewriting their prefix to `./` — rather than
+re-hashing local bytes the way the recipe above does; both produce the same
+manifest shape.
 
 ## Publish a code version
 

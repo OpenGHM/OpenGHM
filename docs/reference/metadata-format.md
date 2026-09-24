@@ -230,8 +230,8 @@ entry without them rather than guessing.
 
 Fields the record carries that this file deliberately does not: `Project`,
 `MetadataLink` and `citation` describe the *provenance* of a forcing dataset, and
-belong with model input once that has a spec of its own (ADR 0015) rather than
-being copied per snapshot.
+belong with the model input's own `datasets[]` entry
+([below](#where-datasets-comes-from)) rather than being copied per snapshot.
 
 The bias-correction inputs (`WM_mod_precip`, `WM_obs_precip`, `WM_mod_airT`,
 `WM_obs_airT`) are deliberately excluded. They are reference series used to
