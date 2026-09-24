@@ -127,14 +127,12 @@ is a MAJOR bump (2.0.0), not a MINOR one: removing a required path is exactly
 the case the version-rules table below calls breaking. Until the data actually
 moves, 1.0.0 describes the bundle as it is.
 
-`SHA256SUMS` is optional in 1.0.0 because it describes both the published and
-the staged shape, and only the published one is guaranteed to have a manifest:
-the three snapshots at `snapshots/<id>/` each have one now (mission
-`2026-09-23-publish-the-staged-snapshots`, private), but the project-space
-staging copies still do not — see
-[snapshot-layout.md](snapshot-layout.md#generate-sha256sums). Now that every
-published snapshot has one, requiring it is unblocked; making it required is
-still a MAJOR bump (2.0.0), not this version's.
+`SHA256SUMS` is optional, and stays optional: it is an integrity check a
+consumer may run, not part of a snapshot's identity
+([ADR 0014](../decisions/0014-identity-is-a-minted-id.md)). The three
+snapshots published at `snapshots/<id>/` each ship one (mission
+`2026-09-23-publish-the-staged-snapshots`, private) — see
+[snapshot-layout.md](snapshot-layout.md#generate-sha256sums).
 
 ## Version rules
 
