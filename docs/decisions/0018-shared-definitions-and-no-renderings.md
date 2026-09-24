@@ -5,6 +5,7 @@
 | **Status** | accepted |
 | **Date** | 2026-09-18 |
 | **Affects** | [ADR 0006](0006-spec-is-two-files.md), [ADR 0007](0007-schemas-on-s3-behind-a-proxy.md), [ADR 0015](0015-model-input-is-a-published-artifact.md), `schemas/`, `reference/snapshot-spec.md` |
+| **Amended by** | [0020](0020-a-live-schema-viewer-is-not-a-generated-rendering.md) — narrows "no generated renderings" to the shape rejected here; a live-fetching viewer is a different shape, accepted there |
 
 ## Context
 

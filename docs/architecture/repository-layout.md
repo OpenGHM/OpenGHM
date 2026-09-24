@@ -4,7 +4,7 @@
 `deploy/services/` and `.github/` are empty placeholders and say which mission
 fills them.
 
-Seven top-level directories, each answering "what is this?" in one word.
+Eight top-level directories, each answering "what is this?" in one word.
 `.claude/` is agent configuration and is not one of them.
 
 ```
@@ -19,6 +19,7 @@ OpenGHM/
 │   ├── wbm-v1-lite-s3/  wbm-v2-lite-s3/     the direct-S3 builds
 │   └── verification/    cross-image comparison runs — not an image
 ├── schemas/         the snapshot spec — one source, generated outward
+├── schema-docs/     the spec viewer — reads schemas/ live, in the browser
 ├── deploy/          everything that reaches a laptop
 │   ├── services/    third-party config — arrives with mission 0004
 │   └── local/       compose stack, mongo init, .env.example
@@ -68,6 +69,16 @@ is not published to zot. See
 between the gateway and the toolkit. Under either one, the other would be
 reaching into a foreign directory for its own types.
 
+**`schema-docs/` is neither `deploy/services/` nor `schemas/`.** It is code we
+author and maintain — plain HTML/CSS/JS, no build step — so it is not
+third-party config, which is what `deploy/services/` is for. And it fetches
+`schemas/`'s already-published JSON at read time rather than storing anything
+about it, so it is not part of the spec tree either: `schemas/`'s own layout
+is a contract ([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)),
+and nothing that isn't a schema belongs inside it. Neither existing directory
+fit, so it gets its own; [ADR 0020](../decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md)
+has the design reasoning.
+
 **`deploy/services/` is for things we operate but do not build.** zot and the
 schema-host nginx have no source in this repository — a Helm values file and an
 `nginx.conf`. Placing them next to `web-gateway/` would read as though they
@@ -95,10 +106,15 @@ schemas/snapshot-spec/metadata/<ver>.json
    └─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
 ```
 
-A fourth artifact, generated HTML documentation, is deliberately not on this
-list: [ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)
-decided against it. Each schema's own `description` fields are the
-documentation.
+`schema-docs/` is deliberately not on this list. The three artifacts above
+each produce a file that gets committed or published at build time;
+`schema-docs/` produces none. It is a live viewer — plain HTML/CSS/JS,
+checked in once — that fetches `schemas/`'s already-published JSON in the
+browser, at read time, and renders it there, with no per-version output ever
+generated or stored. [ADR 0020](../decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md)
+has the reasoning. Each schema's own `description` fields are still the
+underlying documentation; `schema-docs/` is a second way to read them, not a
+replacement for them.
 
 This is the whole reason the repository is unified: a spec bump is one commit,
 and CI can assert that regenerating produces no diff. Split across
