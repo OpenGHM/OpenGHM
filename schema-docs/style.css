@@ -1,199 +1,15 @@
 /* OpenGHM schema-docs — layered on top of Pico.css v2.1.1's design tokens
    (--pico-*). Pico supplies base typography, color, spacing and dark-mode
-   (prefers-color-scheme, auto-detected whenever no data-theme is set —
-   see the :root:not([data-theme]) blocks below, which follow the same gate
-   Pico's own dark palette uses). This file only adds what Pico has no
-   opinion on: the sidebar/content layout, the schema-field tree, and the
-   version/required/deprecated indicators app.js assigns by class name. */
+   (prefers-color-scheme, auto-detected whenever no data-theme is set).
 
-:root {
-  --max-width: 78ch;
+   index.html is now a small, hand-written index page — no field tree, no
+   sidebar nav, no fetch — so this file only adds the few things specific to
+   it: the current/deprecated tag, the required/optional two-column layout
+   list, and the "raw JSON" links. The field-by-field rendering itself is
+   json-schema-for-humans' own output (schema-docs/generated/.../metadata.html)
+   and ships its own CSS — this file is never loaded there. */
 
-  /* "required" has no Pico equivalent token, so it gets its own pair,
-     defined once here and swapped for dark mode below like Pico's own. */
-  --required: #9a3412;
-  --required-bg: #fff4ed;
-
-  /* "deprecated" reuses Pico's own del-color (already theme-aware) so it
-     stays visually consistent with any future use of <del> in this app. */
-  --deprecated: var(--pico-del-color);
-  --deprecated-bg: color-mix(in srgb, var(--pico-del-color) 12%, transparent);
-}
-
-@media only screen and (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --required: #fb923c;
-    --required-bg: color-mix(in srgb, #fb923c 16%, transparent);
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-code,
-.field-key,
-.version-btn,
-.path-list li {
-  font-family: var(--pico-font-family-monospace);
-}
-
-/* --- header / top nav --------------------------------------------------- */
-
-.site-header {
-  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
-  background: var(--pico-card-sectioning-background-color);
-  margin-bottom: 0;
-}
-
-.site-header nav {
-  padding-top: 1.1rem;
-  padding-bottom: 0.5rem;
-}
-
-.brand {
-  margin: 0;
-  font-size: 1.35rem;
-  --pico-color: var(--pico-h1-color, var(--pico-color));
-}
-
-.base-indicator {
-  color: var(--pico-muted-color);
-  font-size: 0.85rem;
-}
-
-.site-sub {
-  margin: 0;
-  padding-bottom: 1.1rem;
-  color: var(--pico-muted-color);
-  max-width: var(--max-width);
-}
-
-/* --- two-column layout --------------------------------------------------- */
-
-.layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 0;
-  min-height: calc(100vh - 9rem);
-}
-
-.spec-nav-aside {
-  flex: 0 0 270px;
-  border-right: var(--pico-border-width) solid var(--pico-muted-border-color);
-  background: var(--pico-card-sectioning-background-color);
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  max-height: 100vh;
-  overflow-y: auto;
-}
-
-/* #spec-nav is a semantic <nav>, but it renders a vertical tree of spec
-   blocks rather than Pico's horizontal navbar groups, so the flex layout
-   Pico gives every <nav>/<nav ul> is turned back into a plain block flow
-   here. Colors, spacing and font still come from Pico's tokens below. */
-.spec-nav {
-  display: block;
-  padding: 1.25rem 1rem;
-}
-
-.spec-nav ul {
-  display: block;
-}
-
-.spec-nav li {
-  display: block;
-  padding: 0;
-  margin: 0 0 0.35rem 0;
-}
-
-.spec-nav li :where(a, [role="link"]) {
-  margin: 0;
-  padding: 0;
-}
-
-.nav-loading {
-  color: var(--pico-muted-color);
-}
-
-.spec-block {
-  margin-bottom: 1.75rem;
-}
-
-.spec-block:last-child {
-  margin-bottom: 0;
-}
-
-.spec-name {
-  font-size: 0.95rem;
-  margin: 0 0 0.5rem 0;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--pico-muted-color);
-}
-
-.version-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.version-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.3rem;
-}
-
-/* Pico's own <button> base rule locally redefines --pico-background-color /
-   --pico-border-color / --pico-color to its primary-CTA palette on the
-   element itself; since var() substitution happens per element (not frozen
-   at the :root declaration), just writing e.g. `background:
-   var(--pico-background-color)` here would still resolve to that shadowed
-   primary value. So, exactly like Pico's own .secondary/.outline classes do,
-   the fix is to re-declare those same three custom properties locally
-   rather than fight them with plain background/color/border-color. */
-.version-btn {
-  --pico-background-color: transparent;
-  --pico-border-color: var(--pico-muted-border-color);
-  --pico-color: var(--pico-contrast);
-  font-size: 0.85rem;
-  padding: 0.3rem 0.65rem;
-  cursor: pointer;
-  line-height: 1.2;
-}
-
-.version-btn:hover {
-  --pico-background-color: transparent;
-  --pico-border-color: var(--pico-primary);
-  --pico-color: var(--pico-primary);
-}
-
-.version-btn.current {
-  --pico-border-color: var(--pico-primary);
-  font-weight: 600;
-}
-
-.version-btn.deprecated {
-  --pico-color: var(--pico-muted-color);
-  text-decoration: line-through;
-}
-
-.version-btn.selected {
-  --pico-background-color: var(--pico-primary);
-  --pico-border-color: var(--pico-primary);
-  --pico-color: var(--pico-primary-inverse);
-}
-
-/* --- pills: tags and badges ---------------------------------------------- */
-
-.tag,
-.badge {
+.tag {
   display: inline-block;
   font-size: 0.68rem;
   font-weight: 600;
@@ -202,154 +18,16 @@ code,
   border-radius: 5rem;
   padding: 0.15rem 0.55rem;
   line-height: 1.4;
-}
-
-.badge {
-  margin-left: 0.5rem;
   vertical-align: middle;
 }
 
-.tag-current,
-.badge-required {
+.tag-current {
   background: color-mix(in srgb, var(--pico-primary) 14%, transparent);
   color: var(--pico-primary);
 }
 
-/* required fields borrow the amber accent instead of the primary blue, so
-   they stay visually distinct from "current version" pills next to them. */
-.badge-required {
-  background: var(--required-bg);
-  color: var(--required);
-}
-
-.tag-deprecated,
-.badge-deprecated {
-  background: var(--deprecated-bg);
-  color: var(--deprecated);
-}
-
-/* --- main content area ---------------------------------------------------- */
-
-.content {
-  flex: 1 1 auto;
-  padding: 1.75rem 2.25rem 4rem;
-  max-width: calc(var(--max-width) + 4rem);
-}
-
-.placeholder,
-.loading {
-  color: var(--pico-muted-color);
-}
-
-.error {
-  color: var(--deprecated);
-  background: var(--deprecated-bg);
-  border: var(--pico-border-width) solid var(--deprecated);
-  border-radius: var(--pico-border-radius);
-  padding: 0.85rem 1.1rem;
-  max-width: var(--max-width);
-}
-
-.content-heading {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  border-bottom: 2px solid var(--pico-muted-border-color);
-  padding-bottom: 0.6rem;
-  margin-bottom: 1.25rem;
-}
-
-.content-heading h2 {
-  margin: 0;
-}
-
-.section-label {
-  margin-top: 3rem;
-  padding-top: 1.1rem;
-  border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--pico-muted-color);
-}
-
-/* --- schema fields ---------------------------------------------------- */
-
-.field {
-  border-left: 3px solid var(--pico-muted-border-color);
-  padding: 0.6rem 0 0.6rem 1rem;
-  margin: 0.85rem 0;
-  max-width: var(--max-width);
-}
-
-.field.required {
-  border-left-color: var(--required);
-}
-
-.field.root {
-  border-left: none;
-  padding-left: 0;
-  max-width: none;
-}
-
-.field-heading {
-  margin: 0 0 0.25rem 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.field.level-2 > .field-heading {
-  font-size: 1.15rem;
-}
-
-.field.level-3 > .field-heading {
-  font-size: 1.02rem;
-}
-
-.field.level-4 > .field-heading,
-.field.level-5 > .field-heading {
-  font-size: 0.92rem;
-}
-
-.field-key {
-  font-weight: 600;
-}
-
-.field-title {
-  margin: 0.15rem 0;
-  font-style: italic;
-  color: var(--pico-muted-color);
-}
-
-.field-desc {
-  margin: 0.3rem 0 0.5rem 0;
-  max-width: var(--max-width);
-}
-
-.field-meta {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.15rem 0.75rem;
-  margin: 0.4rem 0;
-  font-size: 0.88rem;
-}
-
-.field-meta dt {
-  color: var(--pico-muted-color);
-}
-
-.field-meta dd {
-  margin: 0;
-  word-break: break-word;
-}
-
 .raw-link {
-  display: inline-block;
-  font-size: 0.8rem;
-  margin: 0.3rem 0 0.1rem 0;
+  font-size: 0.85rem;
   color: var(--pico-muted-color);
   text-decoration: none;
 }
@@ -362,75 +40,47 @@ code,
   color: var(--pico-primary);
 }
 
-.nested-props,
-.nested-items,
-.nested-combiner {
-  margin-top: 0.5rem;
-  padding-left: 0.75rem;
-  border-left: 1px dashed var(--pico-muted-border-color);
+.layout-columns {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
 }
 
-.combiner-label {
+.path-heading {
+  font-size: 0.78rem;
   font-weight: 600;
-  color: var(--pico-muted-color);
-  margin: 0.35rem 0 0.15rem 0;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.72rem;
-}
-
-/* --- layout (directory contract) rendering ----------------------------- */
-
-.layout-section {
-  max-width: var(--max-width);
-  margin-top: 1.25rem;
+  letter-spacing: 0.05em;
+  color: var(--pico-muted-color);
+  margin-bottom: 0.35rem;
 }
 
 .path-list {
-  margin: 0.4rem 0 1.1rem 0;
+  margin: 0 0 0.5rem 0;
   padding-left: 1.3rem;
 }
 
 .path-list li {
   font-size: 0.92rem;
   margin-bottom: 0.2rem;
+  font-family: var(--pico-font-family-monospace);
 }
 
 .required-paths li::marker {
-  color: var(--required);
+  color: #9a3412;
+}
+
+@media only screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .required-paths li::marker {
+    color: #fb923c;
+  }
+}
+
+:root[data-theme="dark"] .required-paths li::marker {
+  color: #fb923c;
 }
 
 .optional-paths li::marker {
   color: var(--pico-muted-color);
-}
-
-/* --- footer -------------------------------------------------------------- */
-
-.site-footer {
-  border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
-  color: var(--pico-muted-color);
-}
-
-.site-footer small {
-  display: block;
-  padding: 1rem 0;
-}
-
-@media (max-width: 720px) {
-  .layout {
-    flex-direction: column;
-  }
-
-  .spec-nav-aside {
-    position: static;
-    flex-basis: auto;
-    border-right: none;
-    border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
-    max-height: none;
-    width: 100%;
-  }
-
-  .content {
-    padding: 1.4rem 1.25rem 3rem;
-  }
 }

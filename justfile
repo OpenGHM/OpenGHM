@@ -226,6 +226,49 @@ codegen:
 
     echo "✅  Done. 'git diff --exit-code' is clean when nothing needed regenerating."
 
+# ─── Schema docs ────────────────────────────────────────────────────────────
+
+# Regenerate schema-docs/generated/<spec>/<ver>/metadata.html for every
+# version schemas/<spec>/index.json lists, using json-schema-for-humans
+# (ADR 0021). A relative $ref into schemas/common/ resolves with no extra
+# flag. layout/<ver>.json is not JSON Schema and is never run through this
+# tool — schema-docs/index.html renders it by hand instead. Idempotent: run
+# it twice, get byte-identical files (footer_show_time is off for exactly
+# this reason — the tool's own footer embeds a timestamp otherwise). CI runs
+# this and fails on a diff, once CI exists (Next item 1).
+schema-docs-gen:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 -m pip install --quiet -r schema-docs/requirements-dev.txt
+
+    marker='<!-- GENERATED -- do not edit by hand. Run '"'"'just schema-docs-gen'"'"' to regenerate. -->'
+
+    for spec in snapshot-spec model-input-spec; do
+        versions=$(python3 -c "import json; print(' '.join(json.load(open('schemas/$spec/index.json'))['versions']))")
+        for ver in $versions; do
+            source="schemas/$spec/metadata/$ver.json"
+            outdir="schema-docs/generated/$spec/$ver"
+            mkdir -p "$outdir"
+
+            echo "📄  Schema doc (json-schema-for-humans) — $source ..."
+            python3 -m json_schema_for_humans.cli \
+                --config footer_show_time=false \
+                --expand-buttons \
+                "$source" \
+                "$outdir/metadata.html"
+
+            # The tool's output is a complete HTML file starting at
+            # <!DOCTYPE html>, so the marker goes one line ahead of it — a
+            # comment before <!DOCTYPE html> parses identically to one
+            # inside <head> (verified: document.compatMode stays
+            # "CSS1Compat", not quirks).
+            printf '%s\n' "$marker" | cat - "$outdir/metadata.html" > "$outdir/metadata.html.tmp"
+            mv "$outdir/metadata.html.tmp" "$outdir/metadata.html"
+        done
+    done
+
+    echo "✅  Done. 'git diff --exit-code' is clean when nothing needed regenerating."
+
 # ─── Docker Build ───────────────────────────────────────────────────────────
 
 # Build the frontend Docker image

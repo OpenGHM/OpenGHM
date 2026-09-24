@@ -18,7 +18,7 @@ openghm/
   containers/<image>/<version>/…     # plain-S3 SIF mirror
   registry/…                         # zot's own blob store, content-addressed, opaque
   schemas/…                          # common/, snapshot-spec/, model-input-spec/ — proxied by nginx
-  schema-docs/…                      # the browsable viewer (ADR 0020) — proxied by the same nginx, at /docs/
+  schema-docs/…                      # the browsable spec docs (ADR 0021) — proxied by the same nginx, at /docs/
 ```
 
 | Prefix | Keyed by | Namespace | Mutable objects | Written by |
@@ -29,7 +29,7 @@ openghm/
 | `containers/` | name + version | curated | `containers/manifest.json` only | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
 | `registry/` | content address | curated | zot's own bookkeeping | zot |
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
-| `schema-docs/` | not versioned — single artifact, no version axis | curated | all three files — redeployed on each change, not versioned as an artifact ([ADR 0020](../decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md)) | manual `s3cmd put`, same as `schemas/` before automation — no dedicated walkthrough exists yet |
+| `schema-docs/` | not versioned — single artifact, no version axis | curated | every file — redeployed on each change, not versioned as an artifact ([ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)) | **built** by `just schema-docs-gen` (`schema-docs/generated/`, committed) then **published** by a manual `s3cmd put`, same as `schemas/` before automation — no dedicated publish walkthrough exists yet |
 
 One rule decides the key, and it is the **namespace**, not the artifact:
 

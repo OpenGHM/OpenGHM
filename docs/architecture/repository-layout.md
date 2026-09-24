@@ -19,7 +19,7 @@ OpenGHM/
 │   ├── wbm-v1-lite-s3/  wbm-v2-lite-s3/     the direct-S3 builds
 │   └── verification/    cross-image comparison runs — not an image
 ├── schemas/         the snapshot spec — one source, generated outward
-├── schema-docs/     the spec viewer — reads schemas/ live, in the browser
+├── schema-docs/     the spec docs — generated from schemas/, checked in
 ├── deploy/          everything that reaches a laptop
 │   ├── services/    third-party config — arrives with mission 0004
 │   └── local/       compose stack, mongo init, .env.example
@@ -70,14 +70,14 @@ between the gateway and the toolkit. Under either one, the other would be
 reaching into a foreign directory for its own types.
 
 **`schema-docs/` is neither `deploy/services/` nor `schemas/`.** It is code we
-author and maintain — plain HTML/CSS/JS, no build step — so it is not
-third-party config, which is what `deploy/services/` is for. And it fetches
-`schemas/`'s already-published JSON at read time rather than storing anything
-about it, so it is not part of the spec tree either: `schemas/`'s own layout
-is a contract ([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)),
-and nothing that isn't a schema belongs inside it. Neither existing directory
-fit, so it gets its own; [ADR 0020](../decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md)
-has the design reasoning.
+author and maintain — a hand-written `index.html` plus, since
+[ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md),
+a `schema-docs/generated/` subtree built by `just schema-docs-gen` — so it is not
+third-party config, which is what `deploy/services/` is for. It is not part
+of the spec tree either: `schemas/`'s own layout is a contract
+([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)), and
+nothing that isn't a schema belongs inside it, generated or not. Neither
+existing directory fit, so it gets its own.
 
 **`deploy/services/` is for things we operate but do not build.** zot and the
 schema-host nginx have no source in this repository — a Helm values file and an
@@ -94,27 +94,33 @@ registry is the signal that those are remote
 
 ## Generated files
 
-Three artifacts are produced from `schemas/snapshot-spec/metadata/<ver>.json`
-and are never hand-edited. **None of them exists yet** — the exact generated
-filenames are the codegen mission's own decision
-(`ops/missions/2026-09-18-gateway-on-the-spec/`, private); this is the shape:
+Four artifacts are produced from `schemas/*-spec/metadata/<ver>.json` and are
+never hand-edited. The first three now exist (`ops/missions/2026-09-18-gateway-on-the-spec/`,
+private, built them); this is the shape:
 
 ```
 schemas/snapshot-spec/metadata/<ver>.json
    ├─ datamodel-codegen ──▶ web-gateway/backend/app/models/…
    ├─ json2ts ────────────▶ web-gateway/frontend/lib/repository/…
-   └─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
+   ├─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
+   └─ json-schema-for-humans ─▶ schema-docs/generated/snapshot-spec/<ver>/metadata.html
 ```
 
-`schema-docs/` is deliberately not on this list. The three artifacts above
-each produce a file that gets committed or published at build time;
-`schema-docs/` produces none. It is a live viewer — plain HTML/CSS/JS,
-checked in once — that fetches `schemas/`'s already-published JSON in the
-browser, at read time, and renders it there, with no per-version output ever
-generated or stored. [ADR 0020](../decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md)
-has the reasoning. Each schema's own `description` fields are still the
-underlying documentation; `schema-docs/` is a second way to read them, not a
-replacement for them.
+The fourth, `schema-docs/generated/`, **is built**: `just schema-docs-gen`
+runs [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans)
+over every version each spec's `index.json` lists and commits the result,
+the same convention `web-gateway/backend/app/models/generated/` will use once
+it exists — a `GENERATED -- do not edit by hand` marker on every output file,
+idempotent, meant to be checked by CI once CI exists.
+[ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)
+has the reasoning, including what was verified empirically about the tool's
+`$ref` resolution and filename collisions. `schema-docs/index.html` itself is
+hand-written, not generated: it lists both specs' versions and
+`layout/<ver>.json`'s required/optional paths by hand (`layout/<ver>.json` is
+a fixed, non-JSON-Schema shape json-schema-for-humans is not pointed at) and
+links out to each version's generated metadata doc. Each schema's own
+`description` fields are still the underlying documentation;
+`schema-docs/` is a second way to read them, not a replacement for them.
 
 This is the whole reason the repository is unified: a spec bump is one commit,
 and CI can assert that regenerating produces no diff. Split across

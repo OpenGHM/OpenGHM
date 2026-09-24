@@ -5,7 +5,7 @@
 | **Status** | accepted |
 | **Date** | 2026-09-18 |
 | **Affects** | [ADR 0006](0006-spec-is-two-files.md), [ADR 0007](0007-schemas-on-s3-behind-a-proxy.md), [ADR 0015](0015-model-input-is-a-published-artifact.md), `schemas/`, `reference/snapshot-spec.md` |
-| **Amended by** | [0020](0020-a-live-schema-viewer-is-not-a-generated-rendering.md) — narrows "no generated renderings" to the shape rejected here; a live-fetching viewer is a different shape, accepted there |
+| **Amended by** | [0021](0021-generate-schema-docs-with-json-schema-for-humans.md) — narrows "no generated renderings" to the shape rejected here; generating per-version HTML docs with a maintained third-party tool, checked into this repository rather than the published spec tree, is a different shape, accepted there. [0020](0020-a-live-schema-viewer-is-not-a-generated-rendering.md) amended this first, with a live-fetching viewer; 0021 supersedes 0020 and is the current word on this. |
 
 ## Context
 

@@ -2,7 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | accepted |
+| **Status** | superseded |
+| **Superseded by** | [0021](0021-generate-schema-docs-with-json-schema-for-humans.md) — the live-fetching viewer this ADR accepted did not satisfy after two rounds of hand-styling; 0021 replaces `app.js`'s client-side fetch/`$ref`/render with generated static HTML instead. The reasoning below is kept for the record, not edited (ADRs are append-only in this repository) — it no longer describes what `schema-docs/` does. |
 | **Date** | 2026-09-24 |
 | **Affects** | [ADR 0018](0018-shared-definitions-and-no-renderings.md), `docs/architecture/repository-layout.md`, `docs/reference/s3-layout.md` |
 

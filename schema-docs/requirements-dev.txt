@@ -1,0 +1,16 @@
+# Dev-only tool. Not installed in any deployed container — schema-docs/ has
+# no runtime of its own, generated or otherwise.
+
+# `just schema-docs-gen` installs this on the host before regenerating
+# schema-docs/generated/.
+
+# Generates schema-docs/generated/<spec>/<ver>/metadata.html from
+# schemas/<spec>/metadata/<ver>.json. Verified against 1.5.1 (ADR 0021):
+# a relative $ref into schemas/common/ resolves with no extra flag — unlike
+# datamodel-code-generator's --allow-remote-refs in the codegen recipe, this
+# is a local file path, not a network fetch. footer_show_time is turned off
+# at the call site (--config footer_show_time=false) because the tool's own
+# footer embeds a timestamp otherwise, which would make the output
+# non-idempotent. See the `schema-docs-gen` recipe in the repository-root
+# justfile.
+json-schema-for-humans==1.5.1
