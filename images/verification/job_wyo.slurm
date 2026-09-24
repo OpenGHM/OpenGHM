@@ -10,7 +10,7 @@ set -u
 V=/anvil/scratch/x-openghm/verify3; SNAP=wyo
 CMPSIF=/home/x-openghm/apps/wbm/v1-lite-s3/wbm_v1_lite_s3.sif
 echo "node $(hostname)  $(date)"
-curl -s -o /dev/null -w "S3 HTTP %{http_code}\n" "https://s3.anvil.rcac.purdue.edu/openghm/snapshots/wbm_storage_v2.0.0/data/wbm_ancillary_data_v2.0.0/climate/airTemp/2000/MERRA2.T2M.2000-01-01.nc" || echo "S3 UNREACHABLE"
+curl -s -o /dev/null -w "S3 HTTP %{http_code}\n" "https://s3.anvil.rcac.purdue.edu/openghm/snapshots/fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89/data/wbm_ancillary_data_v2.0.0/climate/airTemp/2000/MERRA2.T2M.2000-01-01.nc" || echo "S3 UNREACHABLE"
 for cfg in stock lloc s3; do
   echo "===== WYO $cfg $(date +%T) ====="
   /usr/bin/time -v bash $V/run_wyo.sh $cfg > $V/log_wyo_$cfg.log 2> $V/log_wyo_$cfg.time || echo "WYO $cfg rc=$?"
