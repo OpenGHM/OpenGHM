@@ -1,0 +1,361 @@
+:root {
+  --bg: #ffffff;
+  --bg-alt: #f6f7f8;
+  --border: #d9dce1;
+  --text: #1c2127;
+  --text-muted: #5b6472;
+  --accent: #1a5fb4;
+  --required: #9a3412;
+  --required-bg: #fff4ed;
+  --deprecated: #8a1c1c;
+  --deprecated-bg: #fdeaea;
+  --code-bg: #eef0f3;
+  --max-width: 78ch;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-size: 16px;
+}
+
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-alt);
+}
+
+.site-header h1 {
+  margin: 0 0 0.35rem 0;
+  font-size: 1.4rem;
+}
+
+.site-sub {
+  margin: 0 0 0.35rem 0;
+  color: var(--text-muted);
+  max-width: var(--max-width);
+}
+
+.base-indicator {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-height: calc(100vh - 160px);
+}
+
+.spec-nav {
+  flex: 0 0 260px;
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 1rem;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.nav-loading {
+  color: var(--text-muted);
+}
+
+.spec-block {
+  margin-bottom: 1.75rem;
+}
+
+.spec-name {
+  font-size: 1rem;
+  margin: 0 0 0.4rem 0;
+}
+
+.version-list {
+  list-style: none;
+  margin: 0.4rem 0 0 0;
+  padding: 0;
+}
+
+.version-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.version-btn {
+  font: inherit;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.version-btn:hover {
+  border-color: var(--accent);
+}
+
+.version-btn.current {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.version-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.version-btn.deprecated {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+}
+
+.tag-current {
+  background: #e8f0fc;
+  color: var(--accent);
+}
+
+.tag-deprecated,
+.badge-deprecated {
+  background: var(--deprecated-bg);
+  color: var(--deprecated);
+}
+
+.badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.badge-required {
+  background: var(--required-bg);
+  color: var(--required);
+}
+
+.content {
+  flex: 1 1 auto;
+  padding: 1.5rem 2rem 4rem;
+  max-width: calc(var(--max-width) + 4rem);
+}
+
+.placeholder,
+.loading {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--deprecated);
+  background: var(--deprecated-bg);
+  border: 1px solid var(--deprecated);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  max-width: var(--max-width);
+}
+
+.content-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.content-heading h2 {
+  margin: 0;
+}
+
+.section-label {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* --- schema fields ---------------------------------------------------- */
+
+.field {
+  border-left: 3px solid var(--border);
+  padding: 0.5rem 0 0.5rem 0.9rem;
+  margin: 0.75rem 0;
+  max-width: var(--max-width);
+}
+
+.field.required {
+  border-left-color: var(--required);
+}
+
+.field.root {
+  border-left: none;
+  padding-left: 0;
+  max-width: none;
+}
+
+.field-heading {
+  margin: 0 0 0.2rem 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.field.level-2 > .field-heading {
+  font-size: 1.1rem;
+}
+
+.field.level-3 > .field-heading {
+  font-size: 1rem;
+}
+
+.field.level-4 > .field-heading,
+.field.level-5 > .field-heading {
+  font-size: 0.92rem;
+}
+
+.field-key {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-weight: 600;
+}
+
+.field-title {
+  margin: 0.15rem 0;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.field-desc {
+  margin: 0.25rem 0 0.4rem 0;
+  max-width: var(--max-width);
+}
+
+.field-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.1rem 0.6rem;
+  margin: 0.3rem 0;
+  font-size: 0.88rem;
+}
+
+.field-meta dt {
+  color: var(--text-muted);
+}
+
+.field-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.raw-link {
+  display: inline-block;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0.1rem 0;
+}
+
+.nested-props,
+.nested-items,
+.nested-combiner {
+  margin-top: 0.4rem;
+  padding-left: 0.6rem;
+  border-left: 1px dashed var(--border);
+}
+
+.combiner-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0.3rem 0 0.1rem 0;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+/* --- layout (directory contract) rendering ----------------------------- */
+
+.layout-section {
+  max-width: var(--max-width);
+  margin-top: 1rem;
+}
+
+.path-list {
+  margin: 0.3rem 0 1rem 0;
+  padding-left: 1.2rem;
+}
+
+.path-list li {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92rem;
+  margin-bottom: 0.15rem;
+}
+
+.required-paths li::marker {
+  color: var(--required);
+}
+
+.optional-paths li::marker {
+  color: var(--text-muted);
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 1rem 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .spec-nav {
+    position: static;
+    flex-basis: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+    width: 100%;
+  }
+
+  .content {
+    padding: 1.25rem 1.25rem 3rem;
+  }
+}
