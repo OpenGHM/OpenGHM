@@ -1,6 +1,6 @@
 /* OpenGHM schema-docs index — a small card grid, styled on top of Pico.css.
    Pico's own .grid + <article> already give the card layout and spacing;
-   this file only adds the version tag. */
+   this file only adds the version tag and the raw-JSON link. */
 
 .tag {
   display: inline-block;
@@ -16,5 +16,21 @@
 
 .tag-current {
   background: color-mix(in srgb, var(--pico-primary) 14%, transparent);
+  color: var(--pico-primary);
+}
+
+.raw-link {
+  display: inline-block;
+  margin-left: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+.raw-link::before {
+  content: "\2197 ";
+}
+
+.raw-link:hover {
   color: var(--pico-primary);
 }
