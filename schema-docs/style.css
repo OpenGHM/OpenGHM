@@ -1,3 +1,20 @@
-/* OpenGHM schema-docs index — a plain link list, styled by Pico.css alone.
-   Nothing custom needed; kept as an empty hook so index.html's <link> stays
-   valid if something small is ever worth adding here. */
+/* OpenGHM schema-docs index — a small card grid, styled on top of Pico.css.
+   Pico's own .grid + <article> already give the card layout and spacing;
+   this file only adds the version tag. */
+
+.tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 5rem;
+  padding: 0.15rem 0.6rem;
+  vertical-align: middle;
+  float: right;
+}
+
+.tag-current {
+  background: color-mix(in srgb, var(--pico-primary) 14%, transparent);
+  color: var(--pico-primary);
+}
