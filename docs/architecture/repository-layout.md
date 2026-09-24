@@ -115,10 +115,11 @@ idempotent, meant to be checked by CI once CI exists.
 [ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)
 has the reasoning, including what was verified empirically about the tool's
 `$ref` resolution and filename collisions. `schema-docs/index.html` itself is
-hand-written, not generated: it lists both specs' versions and
-`layout/<ver>.json`'s required/optional paths by hand (`layout/<ver>.json` is
-a fixed, non-JSON-Schema shape json-schema-for-humans is not pointed at) and
-links out to each version's generated metadata doc. Each schema's own
+hand-written, not generated: one card per spec, transcribing its current
+version from `index.json` and its `title`/`$id` from the metadata schema by
+hand, linking to the generated doc and the raw JSON. `layout/<ver>.json` is
+not shown — it is a fixed, non-JSON-Schema shape json-schema-for-humans is
+not pointed at. Each schema's own
 `description` fields are still the underlying documentation;
 `schema-docs/` is a second way to read them, not a replacement for them.
 

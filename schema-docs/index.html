@@ -1,56 +1,81 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <!--
-  Forced to light: json-schema-for-humans' own generated pages
+  Light only: json-schema-for-humans' own generated pages
   (generated/**/metadata.html) are Bootstrap-based and light-only, so this
-  index is pinned to light too rather than switching to dark under Pico's
-  prefers-color-scheme default and looking inconsistent next to them.
+  index stays light too rather than looking inconsistent next to them.
 
-  Hand-written, not generated — it transcribes schemas/*-spec/index.json
-  directly and must be updated by hand in the same commit as that file
-  changes (AGENTS.md rule 4). generated/ is the one part of this directory
-  that regenerates on its own: run `just schema-docs-gen` after any
-  metadata.json change and commit the result. See ADR 0021.
+  Hand-written, not generated — it transcribes schemas/*-spec/index.json and
+  each metadata schema's title/$id directly, and must be updated by hand in
+  the same commit as those change (AGENTS.md rule 4). generated/ is the one
+  part of this directory that regenerates on its own: run
+  `just schema-docs-gen` after any metadata.json change and commit the
+  result. See ADR 0021.
 -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>OpenGHM schema docs</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="container">
-  <hgroup>
-    <h1>OpenGHM schema docs</h1>
-    <p>Field-by-field reference for the specs published at <code>schemas.openghm.org</code>.</p>
-  </hgroup>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">OpenGHM</p>
+    <h1>Schema docs</h1>
+    <p class="lede">Field-by-field reference for the JSON Schemas published at
+      <a href="https://schemas.openghm.org/">schemas.openghm.org</a>.</p>
+  </div>
+</header>
 
-  <div class="grid">
-    <article>
-      <header>
-        <strong>snapshot-spec</strong>
-        <span class="tag tag-current">1.0.0 &middot; current</span>
-      </header>
-      <p>A published WBM snapshot — <code>metadata.json</code>'s full field tree.</p>
-      <div class="button-row">
-        <a role="button" href="generated/snapshot-spec/1.0.0/metadata.html">View docs &rarr;</a>
-        <a role="button" class="secondary outline" href="../snapshot-spec/metadata/1.0.0.json">Raw JSON</a>
+<main class="wrap">
+  <div class="cards">
+    <article class="card">
+      <div class="card-top">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5 12 12l9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>
+        </span>
+        <span class="pill">v1.0.0 <span class="dot"></span> current</span>
+      </div>
+      <h2>snapshot-spec</h2>
+      <p class="desc">OpenGHM snapshot metadata — the <code>metadata.json</code> of one published WBM snapshot.</p>
+      <dl class="meta">
+        <dt>$id</dt>
+        <dd><code>schemas.openghm.org/snapshot-spec/metadata/1.0.0.json</code></dd>
+      </dl>
+      <div class="actions">
+        <a class="btn btn-primary" href="generated/snapshot-spec/1.0.0/metadata.html">View docs <span aria-hidden="true">&rarr;</span></a>
+        <a class="btn btn-ghost" href="../snapshot-spec/metadata/1.0.0.json">Raw JSON</a>
       </div>
     </article>
 
-    <article>
-      <header>
-        <strong>model-input-spec</strong>
-        <span class="tag tag-current">1.0.0 &middot; current</span>
-      </header>
-      <p>A published model input — <code>metadata.json</code>'s full field tree.</p>
-      <div class="button-row">
-        <a role="button" href="generated/model-input-spec/1.0.0/metadata.html">View docs &rarr;</a>
-        <a role="button" class="secondary outline" href="../model-input-spec/metadata/1.0.0.json">Raw JSON</a>
+    <article class="card">
+      <div class="card-top">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.5"/><path d="M4 5.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/><path d="M4 11.5v6c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-6"/></svg>
+        </span>
+        <span class="pill">v1.0.0 <span class="dot"></span> current</span>
+      </div>
+      <h2>model-input-spec</h2>
+      <p class="desc">OpenGHM model input metadata — the <code>metadata.json</code> of one published model input.</p>
+      <dl class="meta">
+        <dt>$id</dt>
+        <dd><code>schemas.openghm.org/model-input-spec/metadata/1.0.0.json</code></dd>
+      </dl>
+      <div class="actions">
+        <a class="btn btn-primary" href="generated/model-input-spec/1.0.0/metadata.html">View docs <span aria-hidden="true">&rarr;</span></a>
+        <a class="btn btn-ghost" href="../model-input-spec/metadata/1.0.0.json">Raw JSON</a>
       </div>
     </article>
   </div>
 </main>
+
+<footer class="wrap footer">
+  Docs generated with <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a>.
+</footer>
 </body>
 </html>
