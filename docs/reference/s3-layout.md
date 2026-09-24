@@ -31,6 +31,16 @@ openghm/
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
 | `schema-docs/` | not versioned — single artifact, no version axis | curated | every file — redeployed on each change, not versioned as an artifact ([ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)) | **built** by `just schema-docs-gen` (`schema-docs/generated/`, committed) then **published** by a manual `s3cmd put`, same as `schemas/` before automation — no dedicated publish walkthrough exists yet |
 
+**`schema-docs/`'s first publish put `.css` and `.js` on S3 as plain text.**
+`s3cmd put` without `-M`/`--guess-mime-type` on this endpoint does not guess by
+extension — a gap `schemas/`'s all-JSON tree never surfaced. Every `.html`
+file came back with the right content type, but `.css` and `.js` did not, and
+a browser silently refuses to apply a stylesheet served with the wrong
+content type (no error, the rule just never takes effect). Fixed by passing
+an explicit `--mime-type` per file on upload (text/css for `.css`,
+application/javascript for `.js`); the same care is needed for any future
+prefix that serves anything other than JSON.
+
 One rule decides the key, and it is the **namespace**, not the artifact:
 
 - **Open namespace → minted id.** Snapshots and model inputs are the prefixes
