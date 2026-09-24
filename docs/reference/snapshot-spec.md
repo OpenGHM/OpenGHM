@@ -23,7 +23,7 @@ schemas/
     metadata/1.0.0.json     # metadata.json's schema, $id = its published URL, about by $ref
     layout/1.0.0.json       # required/optional snapshot paths
     index.json              # { "versions": [...], "current": ..., "deprecated": [...] }
-    examples/*.json         # the three staged snapshots, in the spec's shape
+    examples/*.json         # the three published snapshots' documents, creator anonymised
   model-input-spec/
     metadata/1.0.0.json     # a published model input's metadata.json schema
     layout/1.0.0.json       # required/optional model-input paths
@@ -38,11 +38,15 @@ removed the one `snapshot-spec/` had, which sat empty since
 generator. The examples are flat rather than per-version because they are
 exhibits of what real snapshots carry, not fixtures owned by one spec version.
 
-The examples describe the three snapshots staged on Anvil, but they are **not
-copies of the `metadata.json` files sitting in those folders**. The staged
-files predate the spec and still carry the pre-spec shape; the examples are
-what those snapshots look like once described by 1.0.0, and replacing the
-staged files with them is outstanding work, not something already done.
+The examples are the three snapshots' published `metadata.json` documents
+(`snapshots/<id>/metadata.json`, mission
+`2026-09-23-publish-the-staged-snapshots`, private), with `about.creator`
+anonymised — real names stay out of this public repository, but the
+published objects in S3 carry the real ones. They are **not copies of the
+`metadata.json` files sitting in the project-space staging folders**: those
+files predate the spec and still carry the pre-spec shape, and replacing them
+is out of scope (staging is left as it is; the published copy is the document
+of record).
 
 These files live at the top of the **`OpenGHM` repository**, which holds the
 application, the toolkit and the spec together
@@ -123,9 +127,14 @@ is a MAJOR bump (2.0.0), not a MINOR one: removing a required path is exactly
 the case the version-rules table below calls breaking. Until the data actually
 moves, 1.0.0 describes the bundle as it is.
 
-`SHA256SUMS` is optional because **no staged snapshot has one yet** — see
-[snapshot-layout.md](snapshot-layout.md#generate-sha256sums). Requiring it is
-Next item 5's MAJOR bump, not this version's.
+`SHA256SUMS` is optional in 1.0.0 because it describes both the published and
+the staged shape, and only the published one is guaranteed to have a manifest:
+the three snapshots at `snapshots/<id>/` each have one now (mission
+`2026-09-23-publish-the-staged-snapshots`, private), but the project-space
+staging copies still do not — see
+[snapshot-layout.md](snapshot-layout.md#generate-sha256sums). Now that every
+published snapshot has one, requiring it is unblocked; making it required is
+still a MAJOR bump (2.0.0), not this version's.
 
 ## Version rules
 

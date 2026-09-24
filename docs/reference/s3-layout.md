@@ -76,6 +76,18 @@ Finding a snapshot by name is the catalog's job, not the bucket's: the
 `slug` → id mapping lives in `metadata.json` and in the OpenGHM application's
 own index. Listing `snapshots/` gives ids, which is the point.
 
+This is no longer aspirational: `snapshots/<id>/` holds three published
+snapshots this way (v2.0.0, Wyoming and Global; mission
+`2026-09-23-publish-the-staged-snapshots`, private), each with a
+`metadata.json` and a `SHA256SUMS`, every key public-read. `snapshots/` also
+still holds the original slug-keyed trees the id-keyed copies were made
+from (`snapshots/wbm_storage_v2.0.0/`, `snapshots/wbm_storage_v1.0.0_Wyoming/`,
+`snapshots/wbm_storage_v1.0.0_Global/`) — those predate this layout, have no
+`metadata.json` or `SHA256SUMS` of their own, and stay for now because
+`images/verification/job_*.slurm` and the `*-lite-s3` patch docs still read
+them by slug ([open-items.md](open-items.md)). Retiring them is a follow-up,
+not done here.
+
 Enforce immutability with the strongest option available:
 
 1. **Object Lock** (governance or compliance mode) on the `snapshots/` and

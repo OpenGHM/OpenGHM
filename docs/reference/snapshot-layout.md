@@ -25,11 +25,12 @@ run will materialise it at `data/<mountAs>/`. Until model input has a spec of
 its own, they stay bundled — and duplicated, both across snapshots and, for
 `data_init/`, within one.
 
-**No staged snapshot has a `SHA256SUMS`.** Checked across all three under the
-staging root (`ops/docs/reference/anvil-environment.md`, private) — the
-recipe below is how one gets made, and nobody has run it. Creating them is
-the *snapshot identity files* item on the Next list in
-`ops/missions/README.md` (private). Two other
+**The three snapshots published at `snapshots/<id>/` each have a
+`SHA256SUMS`** (mission `2026-09-23-publish-the-staged-snapshots`, private),
+built by the recipe below from the published copy. The
+project-space staging copies (`ops/docs/reference/anvil-environment.md`,
+private) still do not have one — nothing there runs this recipe until a
+snapshot is published. Two other
 things the tree above does not mention are really there: `meta_data/` and
 `WBM_run_state/`, in the two v1.0.0 snapshots but not in v2.0.0.
 
