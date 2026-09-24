@@ -25,12 +25,19 @@ names, versions, field-by-field descriptions with `$ref` (including
 
 **This ADR narrows "no generated renderings" to the shape ADR 0018 actually
 rejected: baked, per-version, stored in the published spec tree.** It adds a
-*different* shape as accepted: a single, source-controlled, dependency-free
-static viewer (`schema-docs/` — plain HTML/CSS/JS, no build step) that fetches
-the already-published JSON at read time, in the browser, and renders it. It
-resolves `$ref` (including into `schemas/common/`) client-side, by fetching
-the referenced file too. Nothing version-specific is ever stored — no HTML
-file exists for any given spec version until a browser asks for it.
+*different* shape as accepted: a single, source-controlled static viewer
+(`schema-docs/` — plain HTML/CSS/JS, no build step, no JS library) that
+fetches the already-published JSON at read time, in the browser, and renders
+it. It resolves `$ref` (including into `schemas/common/`) client-side, by
+fetching the referenced file too. Nothing version-specific is ever stored — no
+HTML file exists for any given spec version until a browser asks for it.
+
+Presentation is the one exception to "no dependency": `index.html` loads
+[Pico.css](https://picocss.com/) from a CDN, pinned to its exact version
+`2.1.1` (never a floating `2` or `latest` tag) rather than hand-tuning plain
+CSS, because a person asked for the page to look like a modern docs site and
+that is a styling decision, not a data or logic one — it changes nothing about
+how the viewer fetches or renders schema content.
 
 It is served from the same `schemas.openghm.org` host, certificate and nginx
 pod [ADR 0007](0007-schemas-on-s3-behind-a-proxy.md) already runs, at a new
@@ -74,3 +81,9 @@ The viewer has no build step and no test of its own beyond manual
 verification against the live public JSON. That is acceptable because it
 stores no facts of its own to get wrong — every fact it shows is fetched
 fresh from the schema it is displaying.
+
+The Pico.css CDN link is a live external dependency for styling only: if
+`cdn.jsdelivr.net` is unreachable, the page still fetches and renders every
+schema field correctly, unstyled — content never depends on the stylesheet
+loading. Pinning the exact version means the page's look never changes
+underneath this repository without a commit here to bump it.

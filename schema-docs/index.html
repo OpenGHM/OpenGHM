@@ -4,19 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenGHM schema docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="site-header">
-  <h1>OpenGHM schema docs</h1>
-  <p class="site-sub">A human-readable view of the published <code>schemas.openghm.org</code> specs, fetched live &mdash; not a generated copy. See <a href="../docs/decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md">ADR 0020</a>.</p>
-  <p class="base-indicator">Reading from <code id="base-url">&hellip;</code></p>
+  <nav class="container-fluid">
+    <ul>
+      <li><h1 class="brand">OpenGHM schema docs</h1></li>
+    </ul>
+    <ul>
+      <li class="base-indicator">Reading from <code id="base-url">&hellip;</code></li>
+    </ul>
+  </nav>
+  <p class="site-sub container-fluid">A human-readable view of the published <code>schemas.openghm.org</code> specs, fetched live &mdash; not a generated copy. See <a href="../docs/decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md">ADR 0020</a>.</p>
 </header>
 
 <div class="layout">
-  <nav id="spec-nav" class="spec-nav" aria-label="Specs and versions">
-    <p class="nav-loading">Loading spec index&hellip;</p>
-  </nav>
+  <aside class="spec-nav-aside">
+    <nav id="spec-nav" class="spec-nav" aria-label="Specs and versions">
+      <p class="nav-loading">Loading spec index&hellip;</p>
+    </nav>
+  </aside>
 
   <main id="content" class="content">
     <p class="placeholder">Select a spec version from the left to view its metadata and layout schemas.</p>
@@ -24,7 +33,7 @@
 </div>
 
 <footer class="site-footer">
-  <p>Static viewer, no build step &mdash; <code>schema-docs/index.html</code>, <code>app.js</code>, <code>style.css</code>. Append <code>?base=https://example.org</code> to point it at a different schema host.</p>
+  <small class="container-fluid">Static viewer, no build step &mdash; <code>schema-docs/index.html</code>, <code>app.js</code>, <code>style.css</code>. Append <code>?base=https://example.org</code> to point it at a different schema host.</small>
 </footer>
 
 <script src="app.js"></script>
