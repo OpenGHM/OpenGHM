@@ -214,3 +214,58 @@ never an edit to an existing one.
 Because the key is a name rather than a hash, two versions holding byte-identical
 code are stored twice. At this size that is not worth solving; what matters is
 that `TREEHASH` makes the duplication detectable.
+
+## Publish a container image
+
+Two distribution paths for the same bytes ([ADR 0003](../decisions/0003-zot-as-sif-registry.md)):
+zot for `oras://` pulls (anonymous read, htpasswd publisher push), plain S3
+under `containers/<name>/<version>/` for a credential-free HTTPS read. Both
+are written by `ops/anvil/publish_container.sh` (private `ops/` repo), run
+on Anvil where the built SIF and `oras`/`s3cmd` live:
+
+```bash
+just publish-container wbm-v1-lite 1.1.0 \
+  /anvil/scratch/x-openghm/apps/wbm/v1-lite/wbm_v1_lite.sif
+```
+
+The script never builds the SIF (rule 3 — store artifacts, do not rebuild
+them); it only publishes one already built by `images/<name>/deploy_to_anvil.sh`
+or an `apptainer build` from a `.def`. It:
+
+1. Pushes to zot from a **relative-named symlink**, never the SIF's absolute
+   path — an absolute source path embeds itself as the artifact's filename
+   annotation, and a later anonymous `oras pull` then refuses with `"path
+   traversal disallowed"` (oras's own client-side safety guard against a
+   publisher writing outside the pull directory; found and fixed during
+   `2026-09-25-zot-deploy`, private).
+2. Pulls it back anonymously and compares `sha256sum` against the source —
+   never trusts `oras push`'s own success message.
+3. Mirrors it to `containers/<name>/<version>/<name>-<version>.sif` with
+   `s3cmd put --acl-public --mime-type=application/octet-stream`, then
+   re-fetches over plain HTTPS and compares `sha256sum` again.
+4. Updates `containers/manifest.json` — the mirror's only mutable object
+   ([Anvil S3 bucket](#anvil-s3-bucket)): adds the new version (`status:
+   "current"`, an `oras://registry.openghm.org/openghm/<name>@sha256:…`
+   reference pinned to the pushed **digest**, per rule 2 — pin by identity,
+   not by name), marks this image's previous `"current"` version
+   `"deprecated"` with a reason (never deletes it — rule 1), and moves
+   `aliases.latest`. Refuses outright if the version string already exists,
+   rather than silently overwriting a published entry.
+
+**A version string is never reused for different bytes.** A respin needs a
+new version — bump semver, or for a metadata-only respin of the same
+code, the `-rN` suffix `metadata-format.md`'s own `containers/manifest.json`
+example uses (`2.0.0-r3`).
+
+**No cluster step is needed.** zot is a content-addressed store; adding a
+version changes no config, so nothing here restarts or redeploys it.
+Whatever snapshot's `metadata.json` should cite the new version is a
+separate, later step — an already-published snapshot's `metadata.json` is
+never edited to point at it (rule 1).
+
+**The three images published so far (`wbm-v1-lite`, `wbm-v2-lite`,
+`wbm-tools-lite`, 2026-09-25) predate this script and its digest-pinned `oras`
+convention**: their `containers/manifest.json` entries carry a tag reference
+(`registry.openghm.org/openghm/<name>:<version>`, no `oras://` scheme, no
+digest) instead. That is left as-is rather than rewritten in place — every
+version published from here on gets the digest-pinned form.

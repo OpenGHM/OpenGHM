@@ -550,6 +550,7 @@ manifest, not duplicated objects — S3 has no symlinks.
           "size": 371195904,
           "sha256": "…",
           "status": "current",
+          "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:…",
           "verifiedAgainst": "prod-2.0.0"
         },
         "2.0.0-r2": { "…": "…", "status": "deprecated",
@@ -559,3 +560,11 @@ manifest, not duplicated objects — S3 has no symlinks.
   }
 }
 ```
+
+`key`/`size`/`sha256`/`status`/`oras` are written by the publish step itself
+([s3-layout.md](s3-layout.md#publish-a-container-image),
+`ops/anvil/publish_container.sh`, private) — `oras` pins the pushed
+**digest**, per rule 2, never a tag. `verifiedAgainst` and `reason` are added
+by hand afterward: `verifiedAgainst` once the image's own bit-identity test
+(`images/<name>/test/`) has run against it, `reason` when a later version
+marks this one `"deprecated"`.

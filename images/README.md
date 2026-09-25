@@ -62,6 +62,17 @@ cd ../wbm-v1-lite-s3                      # stage 2: apptainer build from the .d
 The built SIF is self-contained — the base is squashed in — but keep the base
 directory: it is the only recipe for rebuilding it.
 
+## Publishing a built SIF
+
+`deploy_to_anvil.sh` (or an `apptainer build` for the `-s3` recipes) only gets
+the SIF onto Anvil at the "Deployed SIF" path above — it is not yet reachable
+by anything outside this cluster. Publishing it to zot and the S3 mirror is a
+separate step, `just publish-container <image> <version> <sif>`
+(`ops/anvil/publish_container.sh`, private `ops/` repo):
+[s3-layout.md](../docs/reference/s3-layout.md#publish-a-container-image) has
+the full procedure. A version is never republished under the same string —
+a rebuild, even byte-identical, gets a new version (rule 1).
+
 ## Verifying bit-identity against production
 
 Per-image, in each image's own `test/`:
