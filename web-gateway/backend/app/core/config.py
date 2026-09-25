@@ -41,8 +41,7 @@ class Settings(BaseSettings):
     # credentials, and datasets/outputs are served as plain public HTTPS links.
     # These are just used to build those link strings.
     S3_PUBLIC_BASE_URL: str = "https://s3.anvil.rcac.purdue.edu"
-    S3_BUCKET_DATA: str = "openghm-data"
-    S3_BUCKET_OUTPUTS: str = "openghm-outputs"
+    S3_BUCKET: str = "openghm"
 
     # JWT
     JWT_ALGORITHM: str = "HS256"

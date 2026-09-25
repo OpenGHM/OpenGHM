@@ -98,8 +98,7 @@ export interface RuntimeSettingsSummary {
   anvil_host: string;
   anvil_partition: string;
   anvil_execution_profile: string;
-  s3_bucket_data: string;
-  s3_bucket_outputs: string;
+  s3_bucket: string;
   cors_origins: string[];
 }
 

@@ -209,11 +209,11 @@ that; the browser downloads from Anvil S3 directly, bypassing the API. The
 config file states this in a comment, and there is no S3 client in
 `requirements.txt` to contradict it.
 
-`S3_BUCKET_DATA` and `S3_BUCKET_OUTPUTS` are set to `openghm-data` and
-`openghm-outputs` in both environments. Neither exists — both return 404 from
-the endpoint, where `openghm` returns 200. The real bucket is `openghm` with
-prefixes ([`../reference/s3-layout.md`](../reference/s3-layout.md)). Nothing
-has broken yet only because no route builds a link from either value.
+The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
+has, with every artifact under a prefix
+([`../reference/s3-layout.md`](../reference/s3-layout.md)). There is
+deliberately no output-bucket setting: where job outputs land is undecided
+(Next item 7, private; [open item 10](../reference/open-items.md)).
 
 ### Jobs — SSH, and no queue
 

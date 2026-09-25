@@ -44,8 +44,7 @@ class RuntimeSettingsSummary(BaseModel):
     anvil_host: str
     anvil_partition: str
     anvil_execution_profile: str
-    s3_bucket_data: str
-    s3_bucket_outputs: str
+    s3_bucket: str
     cors_origins: list[str]
 
 

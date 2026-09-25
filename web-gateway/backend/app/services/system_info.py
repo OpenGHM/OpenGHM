@@ -73,8 +73,7 @@ def _settings_summary() -> RuntimeSettingsSummary:
         anvil_host=settings.ANVIL_SSH_HOST,
         anvil_partition=settings.ANVIL_PARTITION,
         anvil_execution_profile=settings.ANVIL_EXECUTION_PROFILE,
-        s3_bucket_data=settings.S3_BUCKET_DATA,
-        s3_bucket_outputs=settings.S3_BUCKET_OUTPUTS,
+        s3_bucket=settings.S3_BUCKET,
         cors_origins=settings.CORS_ORIGINS,
     )
 
