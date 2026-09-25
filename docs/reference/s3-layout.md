@@ -263,9 +263,16 @@ Whatever snapshot's `metadata.json` should cite the new version is a
 separate, later step — an already-published snapshot's `metadata.json` is
 never edited to point at it (rule 1).
 
-**The three images published so far (`wbm-v1-lite`, `wbm-v2-lite`,
-`wbm-tools-lite`, 2026-09-25) predate this script and its digest-pinned `oras`
-convention**: their `containers/manifest.json` entries carry a tag reference
+**The three images published on 2026-09-25 predate this script.** They went
+out with a tag reference in their `oras` field
 (`registry.openghm.org/openghm/<name>:<version>`, no `oras://` scheme, no
-digest) instead. That is left as-is rather than rewritten in place — every
-version published from here on gets the digest-pinned form.
+digest) instead of the digest-pinned form above. Fixed the same day, once the
+script existed to compare against: `manifest.json`'s `oras` field is metadata
+about the pointer, not the artifact — the `key`/`size`/`sha256` an existing
+version pins never changed, so correcting it is not an edit of a published
+artifact (rule 1), it is exactly the kind of update `manifest.json` being
+**the only mutable object under `containers/`** exists for. All three now
+read `oras://registry.openghm.org/openghm/<name>@sha256:…`, each digest
+resolved anonymously against the live registry and verified against the
+manifest.json actually served afterward, not just `s3cmd`'s own success
+message.
