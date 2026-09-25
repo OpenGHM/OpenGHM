@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | proposed |
+| **Status** | accepted |
 | **Date** | 2026-09-25 |
 | **Affects** | [ADR 0014](0014-identity-is-a-minted-id.md), [ADR 0015](0015-model-input-is-a-published-artifact.md), `docs/reference/s3-layout.md`, `ops/anvil/publish_snapshot.sh` (private) |
 
