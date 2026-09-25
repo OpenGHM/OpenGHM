@@ -32,12 +32,20 @@ had, including `RIMS.conf` 0755 and an executable script
 **A file's POSIX mode is part of what a published tree records, and it is
 recorded on the file's own object**, as `mode:<decimal st_mode>` inside
 `x-amz-meta-s3cmd-attrs`. That is the field and encoding `s3cmd` already
-writes and reads, so `s3cmd get` restores it and any HTTPS client can read
-it from a `HEAD`.
+writes, and any HTTPS client can read it from a `HEAD`. Of `s3cmd`'s own
+download commands, only `s3cmd sync` applies it. `s3cmd get` never does,
+even with `--preserve` (verified 2026-09-25 with s3cmd 2.4.0: `sync` → 0755,
+`get --preserve` → 0644; the chmod exists only on its sync path). A
+consumer either uses `sync` or applies the header itself.
 
 For the five trees published without it, the mode is restored from the
 legacy copy's record, once, by a metadata-only server-side copy of each
-object onto itself. The bytes, the key and `SHA256SUMS` are untouched.
+object onto itself. The bytes, the key and `SHA256SUMS` are untouched. This
+was shown on scratch objects (a small one and a 1.2 GiB multipart one): the
+bytes are identical and public-read, `Content-Type` and even the ETag are
+unchanged. The copy has to be signed with SigV4. The shared `~/.s3cfg`'s
+`signature_v2 = True` gets `403 SignatureDoesNotMatch` on it for any
+object size.
 
 **This is a narrow exception to rule 1, and it is stated as one.** Rule 1
 protects what a published artifact *is*: its bytes, which `SHA256SUMS`
@@ -75,9 +83,10 @@ a migration, or another publish script. A server-side `CopyObject` does by
 default. A download-then-upload does not unless told to, which is exactly
 how this was lost.
 
-The metadata-only copy changes each object's `Last-Modified`, and the `ETag`
-of any object first uploaded multipart. Nothing pins either one. Pins cite
-ids and `SHA256SUMS` hashes.
+The metadata-only copy changes each object's `Last-Modified`. On this
+endpoint it leaves the `ETag` alone, including for multipart objects, which
+the scratch test showed. Nothing pins either one anyway: pins cite ids and
+`SHA256SUMS` hashes.
 
 Once the five trees carry their modes and a full scan has shown it, the
 legacy slug copies hold nothing that does not exist elsewhere, and their
