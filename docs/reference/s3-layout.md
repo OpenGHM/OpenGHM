@@ -31,6 +31,16 @@ openghm/
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
 | `schema-docs/` | not versioned — single artifact, no version axis | curated | every file — redeployed on each change, not versioned as an artifact ([ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)) | **built** by `just schema-docs-gen` (`schema-docs/generated/`, committed) then **published** by a manual `s3cmd put`, same as `schemas/` before automation — no dedicated publish walkthrough exists yet |
 
+**`containers/` and `registry/` hold real content as of `2026-09-25-zot-deploy`
+(private):** three images (`wbm-v1-lite`, `wbm-v2-lite`, `wbm-tools-lite`,
+the non-`-s3` variants), pushed to zot and mirrored to
+`containers/<name>/<version>/`, `containers/manifest.json` listing all three.
+Pushing the first one 413'd — ingress-nginx's own default request-body cap is
+1m, nowhere near a ~300 MiB SIF — fixed with
+`nginx.ingress.kubernetes.io/proxy-body-size: "0"` on zot's Ingress. Anyone
+adding a workload that receives large uploads through this cluster's ingress
+needs the same annotation; nothing defaults it higher.
+
 **`schema-docs/`'s first publish put `.css` and `.js` on S3 as plain text.**
 `s3cmd put` without `-M`/`--guess-mime-type` on this endpoint does not guess by
 extension — a gap `schemas/`'s all-JSON tree never surfaced. Every `.html`

@@ -79,12 +79,18 @@ of the spec tree either: `schemas/`'s own layout is a contract
 nothing that isn't a schema belongs inside it, generated or not. Neither
 existing directory fit, so it gets its own.
 
-**`deploy/services/` is for things we operate but do not build.** zot and the
-schema-host nginx have no source in this repository — a Helm values file and an
-`nginx.conf`. Placing them next to `web-gateway/` would read as though they
-were products of ours. Nothing lives there yet: mission 0000 creates `deploy/`
-but has no third-party config to put in it, and the directory arrives with
-mission 0004, which deploys zot.
+**`deploy/services/` is for things we operate but do not build — and stays
+empty.** zot and the schema-host nginx have no source in this repository, so
+placing them next to `web-gateway/` would read as though they were products of
+ours. The plan when this was written was a Helm values file and an
+`nginx.conf` here; what actually shipped for both
+(`2026-09-19-serve-the-spec`, `2026-09-25-zot-deploy`, private) is plain k8s
+manifests in the private `ops/` repository's `ops/k8s/prod/` — `schemas.yml`
+and `zot.yml` — the same place every other cluster manifest already lives, so
+a second, public-repo deployment tree for just these two never had anything
+to hold. `deploy/services/` remains the placeholder for a *build artifact*
+this repository is supposed to produce and doesn't own the deployment of
+(a Helm chart, say) — nothing here has needed that shape yet.
 
 **`deploy/local/` is defined as much by what it lacks.** It brings up MongoDB,
 a Redis nothing reads ([gateway.md](gateway.md#6-what-is-absent-and-not-by-oversight)),

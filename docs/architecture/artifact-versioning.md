@@ -3,10 +3,10 @@
 How a WBM simulation is identified, stored, and reproduced.
 
 **Status: target.** This is the shape we are building toward — the page the
-mission list is derived from. Almost none of it runs yet: the spec is
-unpublished, the registry is undeployed, and no snapshot carries a
-`metadata.json`. Where something *does* already exist, the text says so. Read
-it as a description of the destination, never as a description of the system.
+mission list is derived from. Most of it does not run yet: no snapshot
+carries a `metadata.json`, and only three images are published (below). Where
+something *does* already exist, the text says so. Read it as a description of
+the destination, never as a description of the system.
 
 The gateway that runs today is a different document:
 [gateway.md](gateway.md).
@@ -129,6 +129,14 @@ rescheduled pod loses nothing and there is no volume to back up:
 
 Everything else already exists: the namespace and its ingress, the bucket, and
 the Anvil install root.
+
+**zot is no longer target — it is deployed and live**
+(`2026-09-25-zot-deploy`, private): one pod, anonymous read, htpasswd
+publisher auth, backed by Anvil S3 under `registry/`. Three images are
+published so far — `wbm-v1-lite`, `wbm-v2-lite`, `wbm-tools-lite`, all
+`openghm/<name>:<tag>` — mirroring the S3 layout above, `containers/` is no
+longer empty either. Neither the `-s3` image variants nor a CI-driven publish
+path exist yet; both are still target.
 
 The two edges into the HPC tier are **different operations**, not two ways of
 doing the same thing:
