@@ -1,0 +1,46 @@
+{
+  "image": "wbm-tools-lite",
+  "version": "2026-05-31",
+  "base": {
+    "os": "Debian GNU/Linux 12 (bookworm)",
+    "versionId": "12",
+    "digest": null
+  },
+  "aptPins": "2026-05-31.dpkg.txt",
+  "cpanScope": "inc",
+  "cpanPins": {
+    "CGI": "4.55",
+    "FFI::Platypus": "2.05",
+    "Geo::GDAL::FFI": "0.16",
+    "PDL": "2.081",
+    "PDL::NetCDF": "4.24",
+    "PkgConfig": "0.26026",
+    "Sort::Versions": "1.62",
+    "File::Which": "1.27",
+    "Alien::gdal": "1.44",
+    "Text::Balanced": "2.06",
+    "Time::DaysInMonth": "99.1117",
+    "Time::JulianDay": "2011.0505",
+    "Time::Timezone": "2015.0925"
+  },
+  "cpanUnversioned": [],
+  "supportsCode": null,
+  "sif": {
+    "filename": "wbm-tools-lite-2026-05-31.sif",
+    "size": 309235712,
+    "sha256": "409eb15bcb9f3c637853f340c202f384fc97dc2e65c2ebc58632b292adc723a8",
+    "oras": "oras://registry.openghm.org/openghm/wbm-tools-lite@sha256:419b002d7323e89c9a0392161ef67a33d90aab84e35341f915a8ce777e24eb5f"
+  },
+  "verification": {
+    "script": "images/wbm-tools-lite/test/test_lite.slurm",
+    "against": null,
+    "result": "all three tests rc=0; networkTools preclip 120x96; spatial_aggregation 51 polygons x 10 layers; temporal_aggregation 3 yearly files",
+    "date": "2026-09-25",
+    "slurmJobId": "20903429"
+  },
+  "unrecoverable": {
+    "base.digest": "The SIF was built with `apptainer build docker-archive://wbm-lite.tar` from a Docker-saved tar that deploy_to_anvil.sh deletes after the build, and no base-image registry digest survives anywhere in the artifact — the deffile only names the local tar (`bootstrap: docker-archive` / `from: wbm-lite.tar`), and unlike v1/v2 there is no base-related label at all (`apptainer inspect --labels` shows nothing under `org.opencontainers.image.*`).",
+    "supportsCode": "wbm-tools-lite embeds its own copy of the three utility scripts (images/wbm-tools-lite/wbm/, at /wbm/utilities in the SIF) and binds no model code; it carries no `wbm_version` label, so there is no WBM version range for it to declare support for.",
+    "verification.against": "test_lite.slurm is a functional test with no reference output to compare against: it runs the three utilities on the v1.0.0 Global staging snapshot's wbm_output/ (used as input) and prints each output's shape next to the expected one."
+  }
+}

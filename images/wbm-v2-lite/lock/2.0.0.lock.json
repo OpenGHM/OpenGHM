@@ -1,0 +1,53 @@
+{
+  "image": "wbm-v2-lite",
+  "version": "2.0.0",
+  "base": {
+    "os": "Ubuntu 20.04.6 LTS",
+    "versionId": "20.04",
+    "digest": null
+  },
+  "aptPins": "2.0.0.dpkg.txt",
+  "cpanScope": "inc",
+  "cpanPins": {
+    "CGI": "4.46",
+    "File::Tee": "0.07",
+    "FFI::Platypus": "2.01",
+    "Geo::GDAL::FFI": "0.09",
+    "Inline": "0.86",
+    "PDL": "2.063",
+    "PkgConfig": "0.26026",
+    "Time::DaysInMonth": "99.1117",
+    "Time::JulianDay": "2011.0505",
+    "Time::Timezone": "2015.0925"
+  },
+  "cpanUnversioned": [
+    "Inline::denter"
+  ],
+  "supportsCode": {
+    "wbmVersion": "2.0.0",
+    "perl": "5.30.0",
+    "inlineAbi": "perl-5.30"
+  },
+  "sif": {
+    "filename": "wbm-v2-lite-2.0.0.sif",
+    "size": 335466496,
+    "sha256": "4ef9e35b3c15f08721a165cccb15266ab812f5fa51e0266d36061e9a77f222ea",
+    "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:a9fc0281ed4010fcb89c788edcd53639cfc4fe76e5bc6b245d8c407d7cc76f43"
+  },
+  "verification": {
+    "script": "images/wbm-v2-lite/test/reproduce_v2.slurm",
+    "scriptCommit": "07c0bd3",
+    "against": "wbm_opensource_v2.0.0_with_paws.sif",
+    "result": "spool identical 3656/3656; all 16 netCDF outputs data-identical per images/verification/nc_datacmp.pl (the script's own ncdump step reports false differences on attribute order)",
+    "date": "2026-09-25",
+    "slurmJobId": "20909196",
+    "dataCompare": {
+      "script": "images/verification/nc_datacmp.pl",
+      "commit": "741bc60",
+      "slurmJobId": "20910382"
+    }
+  },
+  "unrecoverable": {
+    "base.digest": "The SIF was built with `apptainer build docker-archive://wbm-v2-full.tar` from a Docker-saved tar that deploy_to_anvil.sh deletes after the build, and no base-image registry digest survives anywhere in the artifact — the deffile only names the local tar (`bootstrap: docker-archive` / `from: wbm-v2-full.tar`), and the only base-related label is `org.opencontainers.image.ref.name: ubuntu` / `org.opencontainers.image.version: 20.04`, a tag rather than a digest."
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "image": "wbm-v1-lite",
+  "version": "1.0.0",
+  "base": {
+    "os": "Ubuntu 20.04.6 LTS",
+    "versionId": "20.04",
+    "digest": null
+  },
+  "aptPins": "1.0.0.dpkg.txt",
+  "cpanScope": "inc",
+  "cpanPins": {
+    "CGI": "4.46",
+    "File::Tee": "0.07",
+    "Geo::GDAL": "3.0004",
+    "Inline": "0.86",
+    "PDL": "2.063",
+    "PDL::NetCDF": "4.25",
+    "Time::DaysInMonth": "99.1117",
+    "Time::JulianDay": "2011.0505",
+    "Time::Timezone": "2015.0925"
+  },
+  "cpanUnversioned": [
+    "Geo::GDAL::Const",
+    "Geo::OSR",
+    "Inline::denter"
+  ],
+  "supportsCode": {
+    "wbmVersion": "1.0.0",
+    "perl": "5.30.0",
+    "inlineAbi": "perl-5.30"
+  },
+  "sif": {
+    "filename": "wbm-v1-lite-1.0.0.sif",
+    "size": 328179712,
+    "sha256": "404a5d6f3b7209441b2680b45f2f117b32ba300ab138ce2a76debe44d706294d",
+    "oras": "oras://registry.openghm.org/openghm/wbm-v1-lite@sha256:9ed50f847705272cafb2ce4bc7d3538dff12ce36fb4b8fe45617bc84a95be15f"
+  },
+  "verification": {
+    "script": "images/wbm-v1-lite/test/control_v1.slurm",
+    "against": "wbm_opensource_v1.0.0.sif",
+    "result": "self-test (lite vs lite) and container (prod vs lite) spool identical 2725/2725; all 54 netCDF outputs data-identical per images/verification/nc_datacmp.pl (every variable, fill -9999 masked)",
+    "date": "2026-09-25",
+    "slurmJobId": "20903427",
+    "dataCompare": {
+      "script": "images/verification/nc_datacmp.pl",
+      "commit": "741bc60",
+      "slurmJobId": "20910418"
+    }
+  },
+  "unrecoverable": {
+    "base.digest": "The SIF was built with `apptainer build docker-archive://wbm-v1-full.tar` from a Docker-saved tar that deploy_to_anvil.sh deletes after the build, and no base-image registry digest survives anywhere in the artifact — the deffile only names the local tar (`bootstrap: docker-archive` / `from: wbm-v1-full.tar`), and the only base-related label is `org.opencontainers.image.ref.name: ubuntu` / `org.opencontainers.image.version: 20.04`, a tag rather than a digest."
+  }
+}
