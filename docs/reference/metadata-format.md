@@ -501,37 +501,101 @@ series — rather than measured over a real period.
 
 ## Container lock record
 
-One per image revision, committed alongside the recipe — for the v2 image
-that is `container/v2/lock/2.0.0-r3.lock.json`. **No lock record exists yet**;
-this is the shape mission 0005 will write.
+One per published image version, committed beside the recipe at
+`images/<name>/lock/<version>.lock.json`, with the image's full apt list in
+`<version>.dpkg.txt` next to it. Three exist, one each for `wbm-v1-lite`
+1.0.0, `wbm-v2-lite` 2.0.0 and `wbm-tools-lite` 2026-05-31
+(`2026-09-25-image-lock-records`, private). This is the v2 one, with its
+one long reason shortened:
 
 ```json
 {
   "image": "wbm-v2-lite",
-  "version": "2.0.0-r3",
-  "base": "ubuntu:20.04@sha256:…",
-  "aptPins": "2.0.0-r3.dpkg.txt",
-  "cpanPins": { "PDL": "2.063", "FFI::Platypus": "2.01", "Geo::GDAL::FFI": "0.09+double6" },
-  "supportsCode": { "wbmVersion": "2.0.0", "perl": "5.30", "inlineAbi": "perl-5.30" },
+  "version": "2.0.0",
+  "base": {
+    "os": "Ubuntu 20.04.6 LTS",
+    "versionId": "20.04",
+    "digest": null
+  },
+  "aptPins": "2.0.0.dpkg.txt",
+  "cpanScope": "inc",
+  "cpanPins": {
+    "CGI": "4.46",
+    "File::Tee": "0.07",
+    "FFI::Platypus": "2.01",
+    "Geo::GDAL::FFI": "0.09",
+    "Inline": "0.86",
+    "PDL": "2.063",
+    "PkgConfig": "0.26026",
+    "Time::DaysInMonth": "99.1117",
+    "Time::JulianDay": "2011.0505",
+    "Time::Timezone": "2015.0925"
+  },
+  "cpanUnversioned": [
+    "Inline::denter"
+  ],
+  "supportsCode": {
+    "wbmVersion": "2.0.0",
+    "perl": "5.30.0",
+    "inlineAbi": "perl-5.30"
+  },
   "sif": {
-    "filename": "wbm-v2-lite-2.0.0-r3.sif",
-    "size": 371195904,
-    "sha256": "…",
-    "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:…"
+    "filename": "wbm-v2-lite-2.0.0.sif",
+    "size": 335466496,
+    "sha256": "4ef9e35b3c15f08721a165cccb15266ab812f5fa51e0266d36061e9a77f222ea",
+    "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:a9fc0281ed4010fcb89c788edcd53639cfc4fe76e5bc6b245d8c407d7cc76f43"
   },
   "verification": {
-    "script": "container/v2/test/reproduce_v2.slurm",
-    "against": "wbm_opensource_v2.0.0.sif",
-    "result": "spool sha256 identical; all daily vars maxabs=0",
-    "date": "2026-08-05",
-    "slurmJobId": "…"
+    "script": "images/wbm-v2-lite/test/reproduce_v2.slurm",
+    "scriptCommit": "07c0bd3",
+    "against": "wbm_opensource_v2.0.0_with_paws.sif",
+    "result": "spool identical 3656/3656; all 16 netCDF outputs data-identical per images/verification/nc_datacmp.pl (the script's own ncdump step reports false differences on attribute order)",
+    "date": "2026-09-25",
+    "slurmJobId": "20909196",
+    "dataCompare": {
+      "script": "images/verification/nc_datacmp.pl",
+      "commit": "741bc60",
+      "slurmJobId": "20910382"
+    }
+  },
+  "unrecoverable": {
+    "base.digest": "…why, in one sentence…"
   }
 }
 ```
 
-`supportsCode` is the reverse declaration — which model code this container can
-run. `openghm sim` refuses a snapshot whose `modelCode.wbmVersion` falls
-outside it, rather than failing at runtime on an `_Inline` ABI mismatch.
+**Every value is read from the published SIF, never from the recipe.** The
+Dockerfile says what a build asked for; the artifact says what it got. So:
+
+- `base` is the SIF's own `/etc/os-release`.
+- `aptPins` names a verbatim `dpkg-query -W` of it.
+- `cpanPins` are the versions each module prints from inside it.
+- `sif` matches `containers/manifest.json` and a fresh hash of the mirror
+  copy.
+
+`verification` is a real SLURM run against those bytes, cited by job id,
+with the script by repository path (and `scriptCommit` when the script
+changed to make that run possible).
+
+**A value that cannot be recovered is `null`, never a plausible guess.**
+Every `null` has an entry in `unrecoverable`, keyed by field path (`base.digest`,
+`supportsCode`, `verification.against`), giving the reason. `base.digest` is
+`null` for all three published images. They were built with `apptainer
+build docker-archive://<local tar>` from a tar deleted after the build, and
+no base registry digest survives in the SIF. Today's digest for the same tag
+would be a different image.
+
+- `cpanScope` says which modules count. `"inc"` means every non-core module
+  in `%INC` once the image's own entry point is compiled (`wbm.pl` with the
+  snapshot's code bound read-only; tools-lite's three embedded utilities).
+  Submodules sharing their distribution's version are folded into it.
+- `cpanUnversioned` lists modules that load but declare no `$VERSION`,
+  rather than giving them an invented one.
+- `supportsCode` is the reverse declaration: which WBM code this container
+  can run, from the SIF's `wbm_version` label and its Perl version.
+  tools-lite's is `null`, because it embeds its own utilities and binds no
+  model code. Nothing reads `supportsCode` yet. `openghm sim` checking it
+  before a run is Next item 8's (private).
 
 ## `containers/manifest.json`
 

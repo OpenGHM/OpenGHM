@@ -135,8 +135,13 @@ the Anvil install root.
 publisher auth, backed by Anvil S3 under `registry/`. Three images are
 published so far — `wbm-v1-lite`, `wbm-v2-lite`, `wbm-tools-lite`, all
 `openghm/<name>:<tag>` — mirroring the S3 layout above, `containers/` is no
-longer empty either. Neither the `-s3` image variants nor a CI-driven publish
-path exist yet; both are still target.
+longer empty either. Each of the three has a committed lock record,
+`images/<name>/lock/<version>.lock.json`, read from the published SIF
+itself and backed by a fresh prod-comparison run
+([metadata-format.md](../reference/metadata-format.md#container-lock-record)).
+That is axis 4's "digest + lock record" made real for them. Neither the
+`-s3` image variants nor a CI-driven publish path exist yet; both are still
+target, and neither has a lock record.
 
 The two edges into the HPC tier are **different operations**, not two ways of
 doing the same thing:
