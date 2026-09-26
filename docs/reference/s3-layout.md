@@ -69,6 +69,30 @@ Integrity does not depend on the key in either case. Every prefix ships a
 the id says *which* artifact, the manifest says whether the bytes arrived
 intact.
 
+**A file's mode lives on its own object** ([ADR 0022](../decisions/0022-file-modes-are-object-metadata.md)).
+Every object under `snapshots/<id>/` and `model-inputs/<id>/` carries its
+source file's POSIX mode as `mode:<decimal st_mode>` inside
+`x-amz-meta-s3cmd-attrs`. It matters because runs execute
+`/wbm/model/wbm.pl` directly. The five published trees lost it at publish
+and had it restored on 2026-09-26 (`2026-09-25-preserve-file-modes`,
+private), from the legacy slug copies' own records, with every object's
+bytes left untouched.
+
+Reading it back:
+
+- **`s3cmd sync` applies it** on download. `s3cmd get` never does, even
+  with `--preserve`.
+- **An HTTPS client** reads it from a `HEAD`.
+
+Anything that copies these prefixes has to carry `x-amz-meta-*`:
+
+- A server-side `CopyObject` does by default.
+- A download-then-upload does not. `publish_snapshot.sh` streams
+  `curl … | s3cmd put -`, which is exactly how it was lost.
+- A metadata change on an object over 5 GiB, such as Global's 45–52 GB
+  daily outputs, has to be a multipart copy. That changes the object's
+  ETag, so the object's bytes have to be re-proven against a hash.
+
 `containers/` and `registry/` hold the same images through two different
 mechanisms — `containers/` for credential-free HTTPS reads, `registry/` for
 `oras://` pulls.
