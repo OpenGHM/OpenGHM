@@ -42,8 +42,14 @@ For the five trees published without it, the mode is restored from the
 legacy copy's record, once, by a metadata-only server-side copy of each
 object onto itself. The bytes, the key and `SHA256SUMS` are untouched. This
 was shown on scratch objects (a small one and a 1.2 GiB multipart one): the
-bytes are identical and public-read, `Content-Type` and even the ETag are
-unchanged. The copy has to be signed with SigV4. The shared `~/.s3cfg`'s
+bytes are identical and public-read, and `Content-Type` and even the ETag
+are unchanged. **Over 5 GiB it is different.** S3 cannot `CopyObject`
+anything that large in one request, so the self-copy becomes a multipart
+copy. That re-assembles the object and gives it a new ETag
+(`…-218` → `…-43` on a 45 GB object). Global's daily outputs are 45–52 GB
+each. For those objects, byte identity is proven by re-hashing the object
+against the tree's own `SHA256SUMS`, never inferred from the ETag. The copy
+has to be signed with SigV4. The shared `~/.s3cfg`'s
 `signature_v2 = True` gets `403 SignatureDoesNotMatch` on it for any
 object size.
 
@@ -83,10 +89,10 @@ a migration, or another publish script. A server-side `CopyObject` does by
 default. A download-then-upload does not unless told to, which is exactly
 how this was lost.
 
-The metadata-only copy changes each object's `Last-Modified`. On this
-endpoint it leaves the `ETag` alone, including for multipart objects, which
-the scratch test showed. Nothing pins either one anyway: pins cite ids and
-`SHA256SUMS` hashes.
+The metadata-only copy changes each object's `Last-Modified`. Under
+5 GiB it leaves the `ETag` alone on this endpoint; over it, the ETag
+changes. Nothing pins either one: pins cite ids and `SHA256SUMS` hashes,
+and `SHA256SUMS` is what proves an over-5 GiB copy intact.
 
 Once the five trees carry their modes and a full scan has shown it, the
 legacy slug copies hold nothing that does not exist elsewhere, and their
