@@ -87,9 +87,17 @@ Per-image, in each image's own `test/`:
 
 Verdict uses **PDL::NetCDF maxabs** with fill `-9999` masked, plus **spool
 sha256** — not `ncdump -p`, which reports cosmetic attribute-order and
-version-string false differences.
+version-string false differences. `reproduce_v2.slurm`'s own netCDF step still uses
+`ncdump -p` and reports every file as differing for exactly that reason (its
+spool step is sound). `control_v1.slurm`'s `datacmp` counts a variable
+missing from either side as bit-identical, and it checks only one daily
+file. The strict comparison is `verification/nc_datacmp.pl <a.nc> <b.nc>`.
+For every non-`crs` variable in both files it reports maxabs and
+fill-mask mismatches, prints `UNREADABLE`/`SHAPE` rather than skipping,
+and lists variables present on one side only. Run it inside a lite SIF, e.g.
+`singularity exec -e <sif> perl nc_datacmp.pl a.nc b.nc`.
 
-Across images, in `verification/`: ten scripts that run a basin through two or
+Across images, in `verification/`: `nc_datacmp.pl` above, and ten scripts that run a basin through two or
 three SIFs and compare the results — stock against lite, lite against
 direct-S3, for both Global and Wyoming. They address the SIFs by their
 **deployed** Anvil path, so they run on Anvil against what is installed there,
