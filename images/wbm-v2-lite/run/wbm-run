@@ -1,12 +1,12 @@
 #!/bin/sh
 # Launcher for the lightweight WBM full-model container.
 #
-# Model code (model + utilities + RIMS + the Inline caches) is embedded in the
-# image. Only data + I/O are bound, split into a read root and a write root so
-# a shared read-only snapshot is never written to:
+# The image holds only the environment (NO embedded code). The snapshot's
+# model/ and utilities/, plus data + I/O, are bound in, split into a read root
+# and a write root so a shared read-only snapshot is never written to:
 #
-#   -r ROOT    read root   (snapshot): ROOT/data/<subdir>, data_init,
-#                          wbm_init, gdal_test_files
+#   -r ROOT    read root   (snapshot): ROOT/model, utilities, data/<subdir>,
+#                          data_init, wbm_init, gdal_test_files
 #   -s SUBDIR  data subdir under ROOT/data  -> /wbm/data
 #   -w WORK    write root  (per-run): WORK/{spool,wbm_output,WBM_run_state}
 #                          (created if missing)
@@ -15,8 +15,12 @@
 #   wbm-run -r $SNAP -s wbm_ancillary_data_v2.0.0 -w $WORK -- \
 #       /wbm/model/wbm.pl -v /wbm/wbm_init/wbm_test.init
 #
-# NOTE: the init file's Output_dir / spool_dir must resolve under the mounted
-# /wbm/wbm_output and /wbm/spool (use absolute /wbm/... paths in the init).
+# The container starts in / (--pwd /), so an init's relative paths resolve
+# from there: the v2 snapshot's own wbm_test.init writes to the relative
+# 'wbm/wbm_output/...', which lands in the mounted /wbm/wbm_output, the same
+# way reproduce_v2.slurm runs it. Absolute /wbm/... paths are unaffected.
+# Output_dir / spool_dir must end up under the mounted /wbm/wbm_output and
+# /wbm/spool either way.
 set -eu
 
 SIF=${SIF:-/home/x-openghm/apps/wbm/v2-lite/wbm_v2_lite.sif}
@@ -35,7 +39,9 @@ done
 
 mkdir -p "$WORK/spool" "$WORK/wbm_output" "$WORK/WBM_run_state"
 
-exec singularity exec -c -e \
+exec singularity exec -c -e --pwd / \
+  -B "$ROOT/model:/wbm/model:ro" \
+  -B "$ROOT/utilities:/wbm/utilities:ro" \
   -B "$ROOT/data/$SUB:/wbm/data" \
   -B "$ROOT/data_init:/wbm/data_init" \
   -B "$ROOT/wbm_init:/wbm/wbm_init" \

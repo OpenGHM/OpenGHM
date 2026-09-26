@@ -39,12 +39,10 @@ run() {  # $1=label  $2=sif  $3...=extra binds
   echo "    [$label] exit=${PIPESTATUS[0]}  output files: $(find "$d/wbm_output" "$d/spool" -type f 2>/dev/null | wc -l)"
 }
 
-# PROD SIF expects model/utilities BOUND (its embedded copy may differ from the
-# snapshot). Bind the v2 snapshot code so prod runs the SAME code as lite (whose
-# embedded model is byte-identical to this snapshot).
+# Neither image embeds code (NO embedded code, by design) — bind the v2
+# snapshot's model/utilities into BOTH runs so they run the SAME code.
 run prod "$PROD" -B "$SNAP/model:/wbm/model" -B "$SNAP/utilities:/wbm/utilities"
-# LITE embeds the (identical) snapshot code -> no model/utilities bind.
-run lite "$LITE"
+run lite "$LITE" -B "$SNAP/model:/wbm/model" -B "$SNAP/utilities:/wbm/utilities"
 
 echo; echo "================= COMPARE ================="
 echo "--- output file-list diff (prod vs lite) ---"
