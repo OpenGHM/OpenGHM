@@ -9,9 +9,16 @@ Non-negotiable. A change that breaks one needs an ADR that changes this list
 first. They override everything else in this repository, including the rest of
 this file.
 
-1. **Published means immutable.** A published artifact is never edited in
-   place. A fix is a new version under a new key — snapshots, `raw_data`,
-   container images, code versions and schema versions alike.
+1. **Published means immutable — once the project is in operation.** A
+   published artifact is never edited in place. A fix is a new version under
+   a new key — snapshots, `raw_data`, container images, code versions and
+   schema versions alike. **Until then, it is development:** nothing has
+   been released for anyone to depend on, so a wrong artifact is corrected
+   where it is — replaced, rewritten or deleted — rather than re-published
+   beside itself. "In operation" starts when the first complete release is
+   deployed and used, and that date is written here when it happens. Until
+   it is, this rule describes the discipline the project is building
+   toward, and every other rule still applies.
 2. **Pin by identity, not by name.** Tags, slugs and `latest` are conveniences
    for humans. Anything recorded in `metadata.json` or used to reproduce a run
    cites a digest, a hash or an immutable serial.
