@@ -5,6 +5,10 @@
  * SLURM --time syntax, not an ISO 8601 duration: minutes, minutes:seconds, hours:minutes:seconds, days-hours[:minutes[:seconds]]. Hours are not capped at 24 (observed: 111:30:00).
  */
 export type SlurmTime = string;
+/**
+ * Recorded when a past run's own record (SLURM accounting, logs) could not be recovered at rewrite time. Allowed only in runtime.execution's observation fields (cores, elapsedWalltime, startedAt, finishedAt, slurmJobId), never in cluster or anywhere else.
+ */
+export type Unknown = "unknown";
 
 /**
  * metadata.json for one WBM snapshot. Fields are grouped by where their contents come from: about (a person, at publish), simulation (derived from the selected .init), uses (the publisher, at publish), runtime (the system). See docs/reference/metadata-format.md.
@@ -220,10 +224,10 @@ export interface Runtime {
      * Every compute-node fact in this project assumes one cluster today. A second cluster is an additive MINOR bump.
      */
     cluster: "anvil";
-    cores: number;
-    elapsedWalltime: SlurmTime;
-    startedAt: string;
-    finishedAt: string;
-    slurmJobId: string;
+    cores: number | Unknown;
+    elapsedWalltime: SlurmTime | Unknown;
+    startedAt: string | Unknown;
+    finishedAt: string | Unknown;
+    slurmJobId: string | Unknown;
   };
 }

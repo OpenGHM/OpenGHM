@@ -23,6 +23,10 @@ dependencies = [
   # jsonschema>=4.18 for the `referencing`-based Registry, needed to resolve a
   # schema's relative $ref into schemas/common/ from the bundled tree offline.
   "jsonschema>=4.18",
+  # jsonschema checks "format": "date-time" and "uri" only when these are
+  # importable, and passes anything silently when they are not.
+  "rfc3339-validator>=0.1.4",
+  "rfc3986-validator>=0.1.1",
 ]
 
 [project.optional-dependencies]

@@ -222,3 +222,57 @@ def test_model_input_folder_validates(tmp_path):
     folder = _make_model_input_folder(tmp_path)
     result = spec.validate_folder(folder, spec="model-input-spec")
     assert result.ok, (result.document.errors, result.layout.missing_required if result.layout else None)
+
+
+# ---- "unknown" — runtime.execution's observation fields only -----------------
+
+
+@pytest.mark.parametrize(
+    "field", ["cores", "elapsedWalltime", "startedAt", "finishedAt", "slurmJobId"]
+)
+def test_unknown_validates_in_each_execution_observation_field(field):
+    doc = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    doc["runtime"]["execution"][field] = "unknown"
+    result = spec.validate_document(doc, spec="snapshot-spec")
+    assert result.ok, result.errors
+
+
+def test_unknown_rejected_in_execution_cluster():
+    bad = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    bad["runtime"]["execution"]["cluster"] = "unknown"
+    result = spec.validate_document(bad, spec="snapshot-spec")
+    assert not result.ok
+    assert any("cluster" in e for e in result.errors)
+
+
+def test_unknown_rejected_in_simulation_temporal_coverage_start():
+    bad = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    bad["simulation"]["temporalCoverage"]["start"] = "unknown"
+    result = spec.validate_document(bad, spec="snapshot-spec")
+    assert not result.ok
+    assert any("start" in e for e in result.errors)
+
+
+def test_unknown_rejected_in_uses_container_digest():
+    bad = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    bad["uses"]["container"]["digest"] = "unknown"
+    result = spec.validate_document(bad, spec="snapshot-spec")
+    assert not result.ok
+    assert any("digest" in e for e in result.errors)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [("runtime", "generatedAt"), ("about", "datePublished"), ("uses", "container", "https")],
+)
+def test_unknown_rejected_in_formatted_fields(path):
+    # "date-time" and "uri" are only checked when rfc3339-validator and
+    # rfc3986-validator are installed; this fails if they are not.
+    bad = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    node = bad
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = "unknown"
+    result = spec.validate_document(bad, spec="snapshot-spec")
+    assert not result.ok
+    assert any(path[-1] in e for e in result.errors)

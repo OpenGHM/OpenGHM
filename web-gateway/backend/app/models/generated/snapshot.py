@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import Enum
+from typing import Literal
 
 from pydantic import (
     AnyUrl,
@@ -229,6 +230,13 @@ class SlurmTime(RootModel[constr(pattern=r'^([0-9]+-)?[0-9]{1,3}(:[0-9]{2}){0,2}
     )
 
 
+class Unknown(RootModel[Literal['unknown']]):
+    root: Literal['unknown'] = Field(
+        ...,
+        description="Recorded when a past run's own record (SLURM accounting, logs) could not be recovered at rewrite time. Allowed only in runtime.execution's observation fields (cores, elapsedWalltime, startedAt, finishedAt, slurmJobId), never in cluster or anywhere else.",
+    )
+
+
 class RecommendedCompute(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -270,11 +278,11 @@ class Execution(BaseModel):
         ...,
         description='Every compute-node fact in this project assumes one cluster today. A second cluster is an additive MINOR bump.',
     )
-    cores: conint(ge=1)
-    elapsedWalltime: SlurmTime
-    startedAt: AwareDatetime
-    finishedAt: AwareDatetime
-    slurmJobId: constr(pattern=r'^[0-9]+$')
+    cores: conint(ge=1) | Unknown
+    elapsedWalltime: SlurmTime | Unknown
+    startedAt: AwareDatetime | Unknown
+    finishedAt: AwareDatetime | Unknown
+    slurmJobId: constr(pattern=r'^[0-9]+$') | Unknown
 
 
 class Runtime(BaseModel):

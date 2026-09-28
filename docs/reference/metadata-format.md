@@ -306,6 +306,21 @@ logic `test`, `demo` — is documented here for the catalog's filter UI to seed
 itself from, but the field stays unvalidated against it: a new value never
 needs a spec bump.
 
+#### `runtime.execution`
+
+Records the run that produced this snapshot's `wbm_output/` — not a rebuild,
+the actual job. For the two v1.0.0 snapshots (Wyoming, Global), that run used
+the original prod container image, which the pinned `wbm-v1-lite` image
+`uses.container` points at reproduces bit-identically — the verification
+recorded in `images/wbm-v1-lite/lock/1.0.0.lock.json`.
+
+Its `cores`, `elapsedWalltime`, `startedAt`, `finishedAt` and `slurmJobId`
+each accept the literal `"unknown"` in place of their normal value, for a run
+whose own record — SLURM accounting, logs — could not be recovered at rewrite
+time. No other field accepts it, `cluster` included: `"unknown"` is not itself
+a compute-node fact, only a stand-in for one that observation lost. None of
+the five published documents uses it today; every field was recoverable.
+
 #### `runtime.execution.cluster`
 
 Enum, currently `["anvil"]`. Every compute-node fact in this project — the
@@ -327,7 +342,12 @@ validate against this grammar directly rather than borrowing a duration
 ### Notes
 
 Both `oras` and `https` are recorded: the plain-HTTPS mirror is the only path
-that works without registry credentials.
+that works without registry credentials. `uses.container.digest` is the
+sha256 of the SIF bytes that `https` serves — not the OCI manifest digest,
+which is already carried inside the `oras` URL (`@sha256:…`). The two are
+different hashes of different things (a single-file image vs. an OCI
+manifest) and cross-check each other rather than repeating the same value
+twice.
 
 `about`'s field names are schema.org/Dataset property names on purpose, so a
 JSON-LD island can be generated for Google Dataset Search at render time. That
@@ -497,7 +517,14 @@ fake**, when the source has nothing real to report: several crop-coefficient
 records declare `Units` as the empty string (the quantity is genuinely
 dimensionless), and most non-climate records use the `0000`-year placeholder
 because they are climatological — a repeating annual cycle, not a dated
-series — rather than measured over a real period.
+series — rather than measured over a real period. The `0000`-year placeholder
+still means omitted, whichever day follows it.
+
+A `-00` day (WBM's monthly marker — `Start_Date`/`End_Date` such as
+`1980-01-00`, meaning "this month" with no specific day) is a real period,
+not a placeholder, and is recorded as the first day of that month for
+`start` and the last day of that month for `end`: `1980-01-00` becomes
+`1980-01-01` in `start` and `1980-01-31` in `end`.
 
 ## Container lock record
 
