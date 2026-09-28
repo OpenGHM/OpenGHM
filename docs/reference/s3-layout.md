@@ -8,7 +8,7 @@ The GPFS project space (`ops/docs/reference/anvil-environment.md`, private) is s
 where compute jobs read from. Anvil S3 is the published, immutable
 destination — everything in this document pins against it.
 
-One bucket, `openghm`, seven prefixes:
+One bucket, `openghm`, eight prefixes (`wbm-code/` is designed but holds nothing yet):
 
 ```
 openghm/
@@ -19,6 +19,7 @@ openghm/
   registry/…                         # zot's own blob store, content-addressed, opaque
   schemas/…                          # common/, snapshot-spec/, model-input-spec/ — proxied by nginx
   schema-docs/…                      # the browsable spec docs (ADR 0021) — proxied by the same nginx, at /docs/
+  old/…                              # objects kept but outside the curated layout — not served, not cited
 ```
 
 | Prefix | Keyed by | Namespace | Mutable objects | Written by |
@@ -29,6 +30,7 @@ openghm/
 | `containers/` | name + version | curated | `containers/manifest.json` only | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
 | `registry/` | content address | curated | zot's own bookkeeping | zot |
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
+| `old/` | the path the object had before it moved | none — a holding area | nothing is added; objects are only moved in | by hand, when a curated prefix drops something worth keeping |
 | `schema-docs/` | not versioned — single artifact, no version axis | curated | every file — redeployed on each change, not versioned as an artifact ([ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)) | **built** by `just schema-docs-gen` (`schema-docs/generated/`, committed) then **published** by a manual `s3cmd put`, same as `schemas/` before automation — no dedicated publish walkthrough exists yet |
 
 **`containers/` and `registry/` hold real content as of `2026-09-25-zot-deploy`
@@ -40,6 +42,14 @@ Pushing the first one 413'd — ingress-nginx's own default request-body cap is
 `nginx.ingress.kubernetes.io/proxy-body-size: "0"` on zot's Ingress. Anyone
 adding a workload that receives large uploads through this cluster's ingress
 needs the same annotation; nothing defaults it higher.
+
+**`old/` holds the two original prod images.** `old/containers/wbm_opensource_v1.0.0.sif`
+(sha256 `c02d82d8…`) and `…_v2.0.0.sif` (`923b4829…`) are the same bytes as
+Anvil's `apps/wbm/{1.0.0,2.0.0}/bin/` copies. They moved there on 2026-09-29
+from the top of `containers/`, where they sat outside the curated
+`<image>/<version>/` layout and out of `manifest.json`. The published lite
+images were verified against them (`images/*/lock/`). Nothing serves or pins
+them.
 
 **`schema-docs/`'s first publish put `.css` and `.js` on S3 as plain text.**
 `s3cmd put` without `-M`/`--guess-mime-type` on this endpoint does not guess by
@@ -125,14 +135,14 @@ own index. Listing `snapshots/` gives ids, which is the point.
 This is no longer aspirational: `snapshots/<id>/` holds three published
 snapshots this way (v2.0.0, Wyoming and Global; mission
 `2026-09-23-publish-the-staged-snapshots`, private), each with a
-`metadata.json` and a `SHA256SUMS`, every key public-read. `snapshots/` also
-still holds the original slug-keyed trees the id-keyed copies were made
-from (`snapshots/wbm_storage_v2.0.0/`, `snapshots/wbm_storage_v1.0.0_Wyoming/`,
-`snapshots/wbm_storage_v1.0.0_Global/`) — those predate this layout, have no
-`metadata.json` or `SHA256SUMS` of their own, and stay for now because
-`images/verification/job_*.slurm` and the `*-lite-s3` patch docs still read
-them by slug ([open-items.md](open-items.md)). Retiring them is a follow-up,
-not done here.
+`metadata.json` and a `SHA256SUMS`, every key public-read. The
+slug-keyed trees they were copied from (`snapshots/wbm_storage_v2.0.0/`,
+`…_v1.0.0_Wyoming/`, `…_v1.0.0_Global/`, uploaded by Xiao Liu) were
+deleted on 2026-09-29. By then the id-keyed trees held their bytes, and,
+since `2026-09-25-preserve-file-modes`, their file modes as well. Listing
+`snapshots/` now gives only the three ids. The legacy
+`wbmAncillaryData/` prefix, a partial and unversioned copy of the v2
+ancillary tree that nothing read, went the same day.
 
 Enforce immutability with the strongest option available:
 
