@@ -39,7 +39,7 @@ maps to ids for browsing.
   "about": {
     "name": "WBM v1.0.0 Wyoming_tracking simulation …: [Wyoming] [2000-2009]",
     "description": "A WBM regional simulation over the Wyoming basin for 2022 model documentation paper.",
-    "datePublished": "2026-02-24",
+    "datePublished": "2026-09-23",
     "category": "publication",
     "creator": [
       { "name": "Jordan Rivera", "email": "jordan.rivera@example.edu" },
@@ -62,7 +62,7 @@ maps to ids for browsing.
   "simulation": {
     "init": "Wyoming_tracking.init",
     "spatialCoverage": {
-      "northlimit": 52.9167, "southlimit": 28.9166, "eastlimit": -77.8333, "westlimit": -123.75,
+      "northlimit": 52.9167, "southlimit": 28.9167, "eastlimit": -77.8333, "westlimit": -123.75,
       "units": "Decimal degrees", "projection": "EPSG:4326"
     },
     "resolution": { "value": 5, "unit": "arc-minute" },
@@ -86,27 +86,27 @@ maps to ids for browsing.
 
   "uses": {
     "container": {
-      "image": "wbm-v2-lite",
-      "version": "2.0.0-r3",
-      "digest": "sha256:9f2c…",
-      "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:9f2c…",
-      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v2-lite/2.0.0-r3/wbm-v2-lite-2.0.0-r3.sif"
+      "image": "wbm-v1-lite",
+      "version": "1.0.0",
+      "digest": "sha256:404a…",
+      "oras": "oras://registry.openghm.org/openghm/wbm-v1-lite@sha256:9ed5…",
+      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v1-lite/1.0.0/wbm-v1-lite-1.0.0.sif"
     },
     "modelInput": {
-      "id": "7d4e9a1c8b2f5e0a3d6c9b1e4f7a0c3d6b9e2f5a8c1d4e7f0a3b6c9d2e5f8a1b",
+      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d",
       "mountAs": "Wyoming_tracking"
     }
   },
 
   "runtime": {
-    "generatedAt": "2026-02-24T16:45:00Z",
+    "generatedAt": "2026-09-28T18:49:37Z",
     "execution": {
       "cluster": "anvil",
       "cores": 64,
-      "elapsedWalltime": "3:52:14",
-      "startedAt": "2026-05-01T10:00:00Z",
-      "finishedAt": "2026-05-01T13:52:14Z",
-      "slurmJobId": "12345678"
+      "elapsedWalltime": "4:01:06",
+      "startedAt": "2026-05-04T20:52:35Z",
+      "finishedAt": "2026-05-05T00:53:41Z",
+      "slurmJobId": "16935452"
     }
   }
 }

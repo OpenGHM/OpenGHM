@@ -51,6 +51,13 @@ from the top of `containers/`, where they sat outside the curated
 images were verified against them (`images/*/lock/`). Nothing serves or pins
 them.
 
+**`old/snapshots/<id>/` holds a snapshot's replaced output.**
+`old/snapshots/fc66a2cd…/wbm_output/wbm_short_standard/` (65 objects) was the
+v2.0.0 snapshot's `wbm_output/` until 2026-09-29: runs of another init,
+`wbm_SHORT*.init`, from 2019 and 2021 on a host named `merrimack`. It was
+moved by server-side copy, checked by size and ETag, and replaced by the
+output of the run the snapshot's `metadata.json` describes.
+
 **`schema-docs/`'s first publish put `.css` and `.js` on S3 as plain text.**
 `s3cmd put` without `-M`/`--guess-mime-type` on this endpoint does not guess by
 extension — a gap `schemas/`'s all-JSON tree never surfaced. Every `.html`

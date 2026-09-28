@@ -39,6 +39,10 @@
       "westlimit": -180.0,
       "units": "Decimal degrees",
       "projection": "EPSG:4326"
+    },
+    "temporalCoverage": {
+      "start": "1980-01-01",
+      "end": "2019-12-31"
     }
   },
   "networks": [
@@ -46,7 +50,7 @@
       "file": "network/Wyoming_05min_flwdir.asc",
       "spatialCoverage": {
         "northlimit": 52.9167,
-        "southlimit": 28.9166,
+        "southlimit": 28.9167,
         "eastlimit": -77.8333,
         "westlimit": -123.75,
         "units": "Decimal degrees",
@@ -222,6 +226,10 @@
       "name": "Glacier Discharge, model (v.2; 6min) ERA-Interim hindcast, monthly",
       "unit": "m3/sec",
       "timeSeries": "monthly",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2012-12-31"
+      },
       "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
     },
     {
@@ -230,6 +238,10 @@
       "name": "Glacier Volume, model (v.2; 6min) ERA-Interim hindcast, yearly",
       "unit": "m3",
       "timeSeries": "yearly",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2012-12-31"
+      },
       "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
     },
     {

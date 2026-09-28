@@ -4,9 +4,9 @@
   "slug": "wbm_storage_v2.0.0",
 
   "about": {
-    "name": "WBM v2.0.0 simulation as tutorial: [Global] [2001]",
+    "name": "WBM v2.0.0 simulation as tutorial: [CONUS] [2000-2001]",
     "description": "A simple WBM simulation that was used in 2023 user community WBM workshop",
-    "datePublished": "2026-02-24",
+    "datePublished": "2026-09-23",
     "category": "tutorial",
     "creator": [
       { "name": "Jordan Rivera", "email": "jordan.rivera@example.edu" },
@@ -30,11 +30,11 @@
   "simulation": {
     "init": "wbm_test.init",
     "spatialCoverage": {
-      "northlimit": 57.1667, "southlimit": 21.75, "eastlimit": -60.5834, "westlimit": -127.8334,
+      "northlimit": 57.1667, "southlimit": 21.75, "eastlimit": -60.5833, "westlimit": -127.8333,
       "units": "Decimal degrees", "projection": "EPSG:4326"
     },
     "resolution": { "value": 5, "unit": "arc-minute" },
-    "temporalCoverage": { "start": "2001-01-01", "end": "2001-12-31" },
+    "temporalCoverage": { "start": "2000-01-01", "end": "2001-12-31" },
     "inputVariables": [
       { "role": "precipitation",  "dataset": "merra2_prectotcorr_d",
         "fullName": "MERRA2 Total Surface Precipitation, bias corrected, Daily", "unit": "mm/day" },
@@ -54,11 +54,11 @@
 
   "uses": {
     "container": {
-      "image": "wbm_opensource",
+      "image": "wbm-v2-lite",
       "version": "2.0.0",
-      "digest": "sha256:164e468a2ef8067aa981b4911eebdc884398437463569a83c0f37aa8a800d36c",
-      "oras": "oras://registry.openghm.org/openghm/wbm_opensource@sha256:164e468a2ef8067aa981b4911eebdc884398437463569a83c0f37aa8a800d36c",
-      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm_opensource/2.0.0/wbm_opensource-2.0.0.sif"
+      "digest": "sha256:4ef9e35b3c15f08721a165cccb15266ab812f5fa51e0266d36061e9a77f222ea",
+      "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:a9fc0281ed4010fcb89c788edcd53639cfc4fe76e5bc6b245d8c407d7cc76f43",
+      "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif"
     },
     "modelInput": {
       "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
@@ -67,14 +67,14 @@
   },
 
   "runtime": {
-    "generatedAt": "2026-02-24T16:45:00Z",
+    "generatedAt": "2026-09-28T18:49:37Z",
     "execution": {
       "cluster": "anvil",
-      "cores": 16,
-      "elapsedWalltime": "12:47",
-      "startedAt": "2026-05-01T10:00:00Z",
-      "finishedAt": "2026-05-01T10:12:47Z",
-      "slurmJobId": "12345680"
+      "cores": 4,
+      "elapsedWalltime": "13:53",
+      "startedAt": "2026-09-26T00:37:28Z",
+      "finishedAt": "2026-09-26T00:51:21Z",
+      "slurmJobId": "20909227"
     }
   }
 }

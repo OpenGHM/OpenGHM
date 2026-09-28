@@ -30,12 +30,14 @@ its own, they stay bundled — and duplicated, both across snapshots and, for
 built by the recipe below from the published copy. The
 project-space staging copies (`ops/docs/reference/anvil-environment.md`,
 private) still do not have one — nothing there runs this recipe until a
-snapshot is published. Two other
-things the tree above does not mention are really there: `meta_data/` and
-`WBM_run_state/`, in the two v1.0.0 snapshots but not in v2.0.0.
-
-`spool/` is likewise absent from the v2.0.0 snapshot, which is what optional
-means here — the tree is the full shape, not the guaranteed one.
+snapshot is published. The tree above leaves out two optional directories:
+`WBM_run_state/`, which all three published snapshots have, and `meta_data/`,
+which only the two v1.0.0 staging copies have and none of the published ones
+does. That is what optional means here: the tree is the full shape, not the
+guaranteed one. All three published snapshots also have `spool/`. v2.0.0's
+`spool/`, `WBM_run_state/` and `wbm_output/` come from job 20909227
+(2026-09-25), which ran its own `wbm_test.init` through the published
+`wbm-v2-lite` 2.0.0.
 
 `schemas/snapshot-spec/layout/<version>.json` ([metadata-format.md](metadata-format.md)) is the machine-readable
 form of this tree, and the one that decides required from optional.
