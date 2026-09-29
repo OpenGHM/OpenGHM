@@ -30,9 +30,36 @@ pure-Python package. `openghm init` then sets you up (downloads the image(s) aft
 asking, and configures SLURM if you need it):
 
 ```sh
-pip install openghm          # once published to PyPI (or: pip install . from a checkout)
+pip install openghm          # once published to PyPI (or: pip install packages/openghm from a checkout)
 openghm init                 # interactive: pick runtime, download image, configure
 ```
+
+**Installing from a checkout needs pip 21.3 or newer.** The package reaches the
+spec schemas through a relative symlink (`src/openghm/schemas` -> the repository's
+top-level `schemas/`), and pip older than 21.3 copies the source tree to a temporary
+directory before building, where the symlink dangles: the build stops with
+`openghm: ... does not resolve to the spec schemas`. No build setting can fix that
+from inside the copy. Anvil's `module load python/3.9.5` venv has pip 21.1, so there
+(from the repository root):
+
+```sh
+module load python/3.9.5 && python -m venv venv
+venv/bin/python -m pip install --upgrade pip              # 21.1 -> current, into the venv
+env -u PYTHONPATH venv/bin/python -m pip install packages/openghm
+```
+
+The `env -u PYTHONPATH` is needed on Anvil: the module puts its own pip 21.1.2 on
+`PYTHONPATH`, which shadows the venv's upgraded pip, so a plain `venv/bin/python -m
+pip` still runs 21.1 and fails the same way. (`openghm` itself runs fine with the
+module loaded.) The alternative that keeps the old pip is one flag, accepted only by
+pip 21.1 to 21.x:
+
+```sh
+venv/bin/python -m pip install --use-feature=in-tree-build packages/openghm
+```
+
+A wheel or sdist built once (`python -m build`) carries the schemas as real files
+and installs under any pip.
 
 `init` announces each image's size (about 300–330 MB each) and asks before
 downloading. Non-interactive setup for CI/provisioning:
@@ -262,6 +289,7 @@ ssh openghm
 source ~/etc/bashrc && module load python/3.9.5
 python -m venv /home/x-openghm/apps/openghm/venv
 /home/x-openghm/apps/openghm/venv/bin/pip install <wheel>   # later: openghm (PyPI)
+# from a checkout instead of a wheel: see Install (needs pip >= 21.3 or --use-feature=in-tree-build)
 ```
 
 A wrapper on `PATH` keeps callers from needing `module load`:

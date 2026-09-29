@@ -56,6 +56,16 @@ def test_unknown_spec_raises():
         spec.current_version("bogus-spec")
 
 
+def test_missing_schemas_says_the_install_is_broken(monkeypatch, tmp_path):
+    # An install whose schemas/ is absent (the symlink dangling under pip < 21.3)
+    # must fail loudly and name the fix, not with a bare FileNotFoundError.
+    monkeypatch.setattr(spec, "schemas_root", lambda: tmp_path / "schemas")
+    with pytest.raises(OpenghmError, match=r"broken.*upgrade pip.*in-tree-build"):
+        spec.current_version("snapshot-spec")
+    with pytest.raises(OpenghmError, match="broken"):
+        spec.validate_document(SNAPSHOT_EXAMPLE, spec="snapshot-spec")
+
+
 def test_unknown_version_raises():
     with pytest.raises(OpenghmError, match="unknown snapshot-spec version"):
         spec.validate_document(SNAPSHOT_EXAMPLE, spec="snapshot-spec", version="9.9.9")

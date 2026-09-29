@@ -31,8 +31,9 @@ container from notebooks, batch scripts, a web backend, or a future GUI.
 
 ```sh
 pip install openghm          # once published to PyPI
-# or, from a checkout:
-pip install .
+# or, from a checkout (needs pip >= 21.3, or --use-feature=in-tree-build on
+# Anvil's python/3.9.5 pip 21.1 — see the package README's Install):
+pip install packages/openghm
 ```
 
 Python ≥ 3.9. Pure-Python dependencies only (`click`, `rich`, `questionary`,

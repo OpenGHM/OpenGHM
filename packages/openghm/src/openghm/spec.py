@@ -45,7 +45,15 @@ def _spec_dir(spec: str) -> Path:
         raise OpenghmError(f"unknown spec {spec!r} (expected one of {', '.join(SPECS)})")
     d = schemas_root() / spec
     if not d.is_dir():
-        raise OpenghmError(f"spec {spec!r} not found under {schemas_root()} — a broken install")
+        raise OpenghmError(
+            f"spec {spec!r} not found under {schemas_root()}: the schemas are missing from this "
+            "install, so it is broken. The wheel's schemas/ is a symlink into the repository, "
+            "and pip older than 21.3 builds from a copy where it dangles. Fix: "
+            "`python -m pip install --upgrade pip`, then reinstall from the checkout "
+            "(`pip install packages/openghm`); or keep the old pip and pass "
+            "`--use-feature=in-tree-build`. (On Anvil see the package README's Install: "
+            "the module's PYTHONPATH pip shadows an upgraded venv pip.)"
+        )
     return d
 
 
