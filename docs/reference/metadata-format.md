@@ -621,8 +621,10 @@ would be a different image.
 - `supportsCode` is the reverse declaration: which WBM code this container
   can run, from the SIF's `wbm_version` label and its Perl version.
   tools-lite's is `null`, because it embeds its own utilities and binds no
-  model code. Nothing reads `supportsCode` yet. `openghm sim` checking it
-  before a run is Next item 8's (private).
+  model code. Nothing reads `supportsCode`. A published snapshot runs with
+  the container its own `uses.container` pins, and its code is in its own
+  `model/`, so the two already ran together. The check matters only when
+  `openghm sim --sif` replaces the pinned image.
 
 ## `containers/manifest.json`
 
