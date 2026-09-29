@@ -155,8 +155,8 @@ document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
 and `slurmJobId`, none of which a draft can honestly carry, and a
 finished simulation is not itself in `datasets` until someone publishes it —
 a step that does not exist yet ([open items
-9](../reference/open-items.md) and [10](../reference/open-items.md), **Next**
-list *job output reaches S3*).
+9](../reference/open-items.md) and [10](../reference/open-items.md); **Next**
+list *publish a simulation as a snapshot*).
 
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
@@ -212,8 +212,10 @@ config file states this in a comment, and there is no S3 client in
 The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
 has, with every artifact under a prefix
 ([`../reference/s3-layout.md`](../reference/s3-layout.md)). There is
-deliberately no output-bucket setting: where job outputs land is undecided
-(Next item 7, private; [open item 10](../reference/open-items.md)).
+deliberately no output-bucket setting. A run's output stays on Anvil
+scratch and reaches S3 only when it is published as a snapshot
+([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)), so there is
+no job-output link to return.
 
 ### Jobs — SSH, and no queue
 
@@ -251,9 +253,10 @@ snapshot and executes `wbm.pl` against an init file
 Nothing in the job model names a snapshot or an init —
 [open item 9](../reference/open-items.md).
 
-Nothing uploads output. The job script writes to Anvil, and the step that
-copies results to S3 is not written; it is on the
-Next list in `ops/missions/README.md` (private).
+Nothing uploads output, by decision
+([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
+writes to Anvil scratch, and the output stays there. Publishing a simulation
+as a snapshot is the step that uploads it, and that step is not written yet.
 
 ## 6. What is absent, and not by oversight
 

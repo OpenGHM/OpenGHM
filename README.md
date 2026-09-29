@@ -80,7 +80,7 @@ This starts:
 - **Backend (FastAPI)** → `http://localhost:8100` (hot reload)
 - **Frontend (Next.js)** → `http://localhost:3100` (hot reload)
 
-Datasets, containers, and job outputs live on Anvil S3 and are served as plain public HTTPS links (see `S3_PUBLIC_BASE_URL` in `web-gateway/backend/.env.example`) — the backend never calls the S3 API. Slurm job scripts upload their own outputs directly from Anvil compute nodes using their own credentials, not the backend's.
+Snapshots, model inputs and containers live on Anvil S3 and are served as plain public HTTPS links (see `S3_PUBLIC_BASE_URL` in `web-gateway/backend/.env.example`). The backend never calls the S3 API. A simulation's output stays on Anvil scratch until it is published as a snapshot ([ADR 0023](docs/decisions/0023-simulation-output-stays-on-scratch.md)).
 
 Press `Ctrl-C` to stop the frontend. Run `just down` to stop Docker services.
 
