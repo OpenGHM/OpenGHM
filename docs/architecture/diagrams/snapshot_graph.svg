@@ -6,11 +6,10 @@
     above three sibling boxes: the published wbm_output, the bundled code and configuration, and
     a dashed spool cache. metadata.json makes two dashed pin edges — one up to the spec
     repository, one right to a group of external stores holding the image registry and the model
-    input store. The bundled content flows down into a WBM run on a solid edge; the spool flows
-    down on a dashed conditional edge; the external stores feed the run from the right. Input
+    input store. The bundled content flows down into a WBM run on a solid edge; the spool is bound
+    into the run in place, on a dashed conditional edge; the external stores feed the run from the right. Input
     data is not bundled: it is a published model input the run pulls by id. The run writes down
-    into a writable per-simulation scratch directory containing wbm_output, WBM_run_state and a
-    spool. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
+    into a writable per-simulation scratch directory containing wbm_output and WBM_run_state. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
   </desc>
 
   <!-- SVG <style> is not scoped, so every class is g- prefixed: this markup is
@@ -107,7 +106,7 @@
 
   <rect x="591" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2" stroke-dasharray="5 4"/>
   <text class="g-m g-ink g-bd" x="674" y="698" text-anchor="middle" font-size="12">spool/</text>
-  <text class="g-b g-mut"      x="674" y="718" text-anchor="middle" font-size="11">seeded or built cold</text>
+  <text class="g-b g-mut"      x="674" y="718" text-anchor="middle" font-size="11">only with --spool fresh</text>
 
   <text class="g-b g-mut" x="233" y="758" font-size="11.5">+ per-sim wbm_init/ copy &#183; simulation.json provenance &#183; slurm logs</text>
   <text class="g-b g-mut" x="233" y="774" font-size="11.5">Nothing here is ever written back into the snapshot.</text>
@@ -131,10 +130,10 @@
   <text class="g-m g-ink" x="505" y="400" font-size="12.5">mounted</text>
   <text class="g-m g-ink" x="505" y="416" font-size="12.5">read-only</text>
 
-  <!-- ── spool -> run (conditional; must be copied, snapshot is :ro) ─────── -->
+  <!-- ── spool -> run (conditional: bound read-write in place, if present) ── -->
   <line x1="674" y1="354" x2="674" y2="464" stroke="#8A9997" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#g-af)"/>
-  <text class="g-m g-fnt" x="686" y="400" font-size="12.5">copied out</text>
-  <text class="g-m g-fnt" x="686" y="416" font-size="12.5">only if valid</text>
+  <text class="g-m g-fnt" x="686" y="400" font-size="12.5">bound in place</text>
+  <text class="g-m g-fnt" x="686" y="416" font-size="12.5">read-write</text>
 
   <!-- ── run -> scratch (lands in the gap between children: it writes all) ─ -->
   <line x1="584" y1="554" x2="584" y2="646" stroke="#131C1B" stroke-width="2.6" marker-end="url(#g-ai)"/>

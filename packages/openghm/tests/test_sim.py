@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from openghm import Config, spec
+from openghm import Config, assets, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.sim import (
@@ -43,7 +43,11 @@ _METADATA = {
         "init": "wbm_test.init",
         "recommendedCompute": {"cores": 16, "walltime": "15:00"},
     },
-    "uses": {"container": {"version": "2.0.0"}},
+    "id": "1" * 64,
+    "uses": {"container": {
+        "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
+        "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
+    }},
 }
 
 
@@ -58,6 +62,13 @@ def _make_snapshot(root: Path, *, metadata=_METADATA, init_name="wbm_test.init",
         (snap / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
     if write_init:
         (snap / "wbm_init" / init_name).write_text(_INIT_TEMPLATE, encoding="utf-8")
+    # the image the document pins, in the cache `_config` points at
+    container = ((metadata or {}).get("uses") or {}).get("container")
+    if container and all(container.get(k) for k in ("image", "version", "https")):
+        pin = assets.spec_from_container({**container, "digest": "sha256:" + "0" * 64})
+        sif = Path(_config(root).image_path(pin.image, pin.version, pin.filename))
+        sif.parent.mkdir(parents=True, exist_ok=True)
+        sif.write_bytes(b"")
     return snap
 
 
@@ -81,16 +92,19 @@ def test_submit_split_mounts_and_sif(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
-    assert _ctx.image == str(tmp_path / "sif" / "wbm" / "2.0.0" / "wbm_opensource_v2.0.0.sif")
+    assert _ctx.image == str(tmp_path / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif")
     # reads come from the snapshot, bound read-only
     assert _find(built, "/wbm/data").readonly is True
     assert _find(built, "/wbm/data").host == str(snap / "data" / "wbm_ancillary_data_v2.0.0")
     assert _find(built, "/wbm/model").readonly is True
     # writes go to per-sim scratch, writable
-    for cpath in ("/wbm/spool", "/wbm/wbm_output", "/wbm/WBM_run_state"):
+    for cpath in ("/wbm/wbm_output", "/wbm/WBM_run_state"):
         m = _find(built, cpath)
         assert m.readonly is False
         assert m.host.startswith(str(tmp_path / "out" / "sim1"))
+    # the spool is the snapshot's own, in place, writable
+    assert _find(built, "/wbm/spool").host == str(snap / "spool")
+    assert _find(built, "/wbm/spool").readonly is False
     # per-sim wbm_init overrides the snapshot's
     assert _find(built, "/wbm/wbm_init").host == str(tmp_path / "out" / "sim1" / "wbm_init")
     assert built.inner_cmd == ["/wbm/model/wbm.pl", "/wbm/wbm_init/wbm_test.init"]
@@ -101,7 +115,7 @@ def test_submit_staging_lists(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
     base = str(tmp_path / "out" / "sim1")
-    assert set(built.staged_dirs) == {f"{base}/spool", f"{base}/wbm_output", f"{base}/WBM_run_state"}
+    assert set(built.staged_dirs) == {str(snap / "spool"), f"{base}/wbm_output", f"{base}/WBM_run_state"}
     assert len(built.staged_copies) == 1
     assert built.staged_copies[0].src == str(snap / "wbm_init")
     assert built.staged_copies[0].dst == f"{base}/wbm_init"
@@ -147,7 +161,7 @@ def test_sbatch_script_has_slurm_directives(tmp_path):
     assert "#SBATCH --time=2:00:00" in sb
     assert "#SBATCH --account=abc123456" in sb
     assert "singularity exec -B " in sb
-    assert "wbm_opensource_v2.0.0.sif /wbm/model/wbm.pl /wbm/wbm_init/wbm_test.init" in sb
+    assert "wbm-v2-lite-2.0.0.sif /wbm/model/wbm.pl /wbm/wbm_init/wbm_test.init" in sb
 
 
 def test_sidecar_records_provenance(tmp_path):
@@ -172,6 +186,70 @@ def test_cwd_default(tmp_path, monkeypatch):
     assert _find(built, "/wbm/data").host == str(snap / "data" / "wbm_ancillary_data_v2.0.0")
 
 
+# ── --spool snapshot | fresh ─────────────────────────────────────────────────
+
+
+def test_spool_snapshot_uses_existing_spool_in_place(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    (snap / "spool").mkdir()
+    (snap / "spool" / "cache.bin").write_bytes(b"x")
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    stage_files(built)
+    assert _find(built, "/wbm/spool").host == str(snap / "spool")
+    assert (snap / "spool" / "cache.bin").read_bytes() == b"x"   # untouched, not copied
+    assert not (tmp_path / "out" / "sim1" / "spool").exists()
+    sidecar = json.loads(_gen(built, "simulation.json").content)
+    assert sidecar["spool_mode"] == "snapshot" and sidecar["spool_dir"] == str(snap / "spool")
+
+
+def test_spool_fresh_is_per_simulation(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    (snap / "spool").mkdir()
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
+    per_sim = str(tmp_path / "out" / "sim1" / "spool")
+    assert _find(built, "/wbm/spool").host == per_sim
+    assert _find(built, "/wbm/spool").readonly is False
+    assert per_sim in built.staged_dirs and str(snap / "spool") not in built.staged_dirs
+    sidecar = json.loads(_gen(built, "simulation.json").content)
+    assert sidecar["spool_mode"] == "fresh" and sidecar["spool_dir"] == per_sim
+    # the init still points WBM at the container path
+    assert "/wbm/spool/" in _gen(built, "wbm_init/wbm_test.init").content
+
+
+def test_spool_fresh_works_on_a_read_only_snapshot(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    snap.chmod(0o555)
+    try:
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"),
+                     _config(tmp_path))
+    finally:
+        snap.chmod(0o755)
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores permissions")
+@pytest.mark.parametrize("existing_spool", [False, True])
+def test_spool_snapshot_not_writable_suggests_fresh(tmp_path, existing_spool):
+    snap = _make_snapshot(tmp_path)
+    target = snap
+    if existing_spool:
+        target = snap / "spool"
+        target.mkdir()
+    target.chmod(0o555)
+    try:
+        with pytest.raises(OpenghmError, match="--spool fresh"):
+            build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    finally:
+        target.chmod(0o755)
+
+
+def test_spool_bad_mode(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    with pytest.raises(OpenghmError, match="--spool must be one of"):
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="bogus"),
+                     _config(tmp_path))
+
+
 # ── real host staging (no sbatch spawn) ────────────────────────────────────────
 
 
@@ -183,8 +261,9 @@ def test_stage_files_creates_dirs_copies_and_init(tmp_path):
 
     stage_files(built)
     base = tmp_path / "out" / "sim1"
-    for d in ("spool", "wbm_output", "WBM_run_state"):
+    for d in ("wbm_output", "WBM_run_state"):
         assert (base / d).is_dir()
+    assert (snap / "spool").is_dir() and not (base / "spool").exists()   # created in the snapshot
     assert (base / "wbm_init" / "shared.pm").is_file()          # copied
     init = (base / "wbm_init" / "wbm_test.init").read_text()
     assert "Output_dir => '/wbm/wbm_output/sim1'" in init       # generated wins over copy
@@ -252,6 +331,30 @@ def test_missing_container_version(tmp_path):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
 
+def test_missing_image_names_the_commands(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    os.remove(_config(tmp_path).image_path("wbm-v2-lite", "2.0.0", "wbm-v2-lite-2.0.0.sif"))
+    with pytest.raises(OpenghmError) as e:
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    msg = str(e.value)
+    assert f"openghm snapshot fetch {_METADATA['id']}" in msg
+    assert "openghm sif pull wbm-v2-lite:2.0.0" in msg
+    # a dry run prints the plan without the image, and --sif replaces the lookup
+    build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path),
+                 check_image=False)
+    ctx, _ = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"),
+                          _config(tmp_path), sif="/x/my.sif")
+    assert ctx.image == "/x/my.sif"
+
+
+def test_container_pin_incomplete(tmp_path):
+    meta = json.loads(json.dumps(_METADATA))
+    del meta["uses"]["container"]["https"]
+    snap = _make_snapshot(tmp_path, metadata=meta)
+    with pytest.raises(OpenghmError, match="uses.container.https"):
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+
+
 def test_missing_recommended_compute(tmp_path):
     meta = json.loads(json.dumps(_METADATA))
     del meta["simulation"]["recommendedCompute"]
@@ -312,7 +415,10 @@ def test_spec_examples_submit(tmp_path, name):
     compute = meta["simulation"]["recommendedCompute"]
     sbatch = _gen(built, ".sbatch").content
     assert str(compute["cores"]) in sbatch and compute["walltime"] in sbatch
-    assert _ctx.image.endswith(f"wbm_opensource_v{meta['uses']['container']['version']}.sif")
+    pin = meta["uses"]["container"]
+    assert _ctx.image == str(
+        tmp_path / "sif" / pin["image"] / pin["version"] / pin["https"].rsplit("/", 1)[-1]
+    )
     assert _gen(built, meta["simulation"]["init"])
 
 

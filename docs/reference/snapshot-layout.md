@@ -78,6 +78,11 @@ bytes arrive intact", and a consumer runs it or does not
 ([ADR 0014](../decisions/0014-identity-is-a-minted-id.md)). Nothing derived from
 it is carried in `metadata.json`.
 
+`openghm snapshot fetch <id>` is one such consumer: it checks every file it
+downloads against `SHA256SUMS` (a spool file, which has no line, by size and
+MD5), and does not download `wbm_output/` or `WBM_run_state/`
+([packages/openghm/README.md](../../packages/openghm/README.md#fetching-a-snapshot-openghm-snapshot-fetch)).
+
 ## Mint the id
 
 The id is assigned once, at publish, and never reused or reassigned: 256 bits of

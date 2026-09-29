@@ -1,0 +1,47 @@
+{
+  "manifestVersion": 1,
+  "images": {
+    "wbm-v1-lite": {
+      "aliases": {
+        "latest": "1.0.0"
+      },
+      "versions": {
+        "1.0.0": {
+          "key": "containers/wbm-v1-lite/1.0.0/wbm-v1-lite-1.0.0.sif",
+          "size": 328179712,
+          "sha256": "404a5d6f3b7209441b2680b45f2f117b32ba300ab138ce2a76debe44d706294d",
+          "status": "current",
+          "oras": "oras://registry.openghm.org/openghm/wbm-v1-lite@sha256:9ed50f847705272cafb2ce4bc7d3538dff12ce36fb4b8fe45617bc84a95be15f"
+        }
+      }
+    },
+    "wbm-v2-lite": {
+      "aliases": {
+        "latest": "2.0.0"
+      },
+      "versions": {
+        "2.0.0": {
+          "key": "containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
+          "size": 335466496,
+          "sha256": "4ef9e35b3c15f08721a165cccb15266ab812f5fa51e0266d36061e9a77f222ea",
+          "status": "current",
+          "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:a9fc0281ed4010fcb89c788edcd53639cfc4fe76e5bc6b245d8c407d7cc76f43"
+        }
+      }
+    },
+    "wbm-tools-lite": {
+      "aliases": {
+        "latest": "2026-05-31"
+      },
+      "versions": {
+        "2026-05-31": {
+          "key": "containers/wbm-tools-lite/2026-05-31/wbm-tools-lite-2026-05-31.sif",
+          "size": 309235712,
+          "sha256": "409eb15bcb9f3c637853f340c202f384fc97dc2e65c2ebc58632b292adc723a8",
+          "status": "current",
+          "oras": "oras://registry.openghm.org/openghm/wbm-tools-lite@sha256:419b002d7323e89c9a0392161ef67a33d90aab84e35341f915a8ce777e24eb5f"
+        }
+      }
+    }
+  }
+}

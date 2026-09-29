@@ -32,8 +32,16 @@ _METADATA = {
         "init": "wbm_test.init",
         "recommendedCompute": {"cores": 16, "walltime": "15:00"},
     },
-    "uses": {"container": {"version": "2.0.0"}},
+    "uses": {"container": {
+        "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
+        "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
+    }},
 }
+
+
+def tmp_sif(root: Path) -> Path:
+    """Where ``_config`` looks for the image the snapshot pins."""
+    return root / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif"
 
 
 def _make_snapshot(root: Path) -> Path:
@@ -43,6 +51,9 @@ def _make_snapshot(root: Path) -> Path:
         (snap / d).mkdir(parents=True, exist_ok=True)
     (snap / "metadata.json").write_text(json.dumps(_METADATA), encoding="utf-8")
     (snap / "wbm_init" / "wbm_test.init").write_text(_INIT_TEMPLATE, encoding="utf-8")
+    sif = tmp_sif(root)
+    sif.parent.mkdir(parents=True, exist_ok=True)
+    sif.write_bytes(b"")
     return snap
 
 
@@ -130,3 +141,14 @@ def test_resolve_job_id_local_mode_is_clear_error(tmp_path):
         json.dumps({"simulation_id": "loc", "mode": "local", "exit_code": 0}), encoding="utf-8")
     with pytest.raises(OpenghmError, match="run locally"):
         resolve_job_id(str(base), "loc")
+
+
+def test_run_spool_modes(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    _c, snapshot_run = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert _find(snapshot_run, "/wbm/spool").host == str(snap / "spool")
+    assert json.loads(_gen(snapshot_run, "simulation.json").content)["spool_mode"] == "snapshot"
+    _c, fresh_run = build_run(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
+    assert _find(fresh_run, "/wbm/spool").host == str(tmp_path / "out" / "sim1" / "spool")
+    assert json.loads(_gen(fresh_run, "simulation.json").content)["spool_mode"] == "fresh"

@@ -41,8 +41,10 @@ class Config:
 
     #: Container runtime used to run the tools-lite image.
     runtime: str = "singularity"
-    #: SIF path for singularity/apptainer (the tools-lite image).
-    sif: str = "~/.openghm/sif/lite/wbm_tools_lite.sif"
+    #: SIF path for singularity/apptainer (the tools-lite image). This is where
+    #: ``openghm sif pull wbm-tools-lite`` puts the manifest's latest today; a
+    #: test keeps it equal to that path.
+    sif: str = "~/.openghm/sif/wbm-tools-lite/2026-05-31/wbm-tools-lite-2026-05-31.sif"
     #: Cache root for downloaded images (``openghm sif pull`` / ``openghm init``).
     sif_dir: str = "~/.openghm/sif"
     #: Image ref for the docker runtime (local builds).
@@ -86,19 +88,14 @@ class Config:
                 return legacy
         return cache
 
-    def resolve_wbm_sif(self, version: str) -> str:
-        """Absolute path to the version-specific WBM model SIF (for ``sim``).
+    def image_path(self, image: str, version: str, filename: str) -> str:
+        """Where the image ``<image>:<version>`` is cached: ``<sif_dir>/<image>/<version>/<filename>``.
 
-        Derived from ``sif_dir`` (``<sif_dir>/wbm/<ver>/wbm_opensource_v<ver>.sif``),
-        with the same legacy Anvil fallback as :meth:`resolve_sif`.
+        Used for every image — the tools image, and the model image a snapshot
+        pins (``sim`` looks for it here; ``openghm sif pull`` and
+        ``openghm snapshot fetch`` put it here).
         """
-        base = os.path.expanduser(self.sif_dir)
-        cache = os.path.join(base, "wbm", version, f"wbm_opensource_v{version}.sif")
-        if not os.path.exists(cache) and _ANVIL_APPS_WBM:
-            legacy = f"{_ANVIL_APPS_WBM}/{version}/bin/wbm_opensource_v{version}.sif"
-            if os.path.exists(legacy):
-                return legacy
-        return cache
+        return os.path.join(os.path.expanduser(self.sif_dir), image, version, filename)
 
     def resolve_output_base(self) -> str:
         """Per-sim work/output root, with ``~`` expanded."""

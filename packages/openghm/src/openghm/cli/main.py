@@ -102,7 +102,11 @@ def output_options(f):
         click.option("--runtime", type=click.Choice(["singularity", "apptainer", "docker"]),
                      default=None, help="container runtime"),
         click.option("--sif", default=None, metavar="PATH",
-                     help="WBM SIF path override (default: derived from the snapshot version)"),
+                     help="WBM SIF path override (default: the image the snapshot pins, from sif_dir)"),
+        click.option("--spool", type=click.Choice(["snapshot", "fresh"]), default="snapshot",
+                     show_default=True,
+                     help="snapshot: use <snapshot>/spool in place (created if absent); "
+                          "fresh: an empty per-simulation spool"),
         click.option("--dry-run", "dry_run", is_flag=True,
                      help="print the generated init/sbatch script without submitting"),
         click.option("-v", "--verbose", is_flag=True,
@@ -326,7 +330,7 @@ def sim_submit_cmd(**p) -> None:
     opts = SubmitOptions(
         snapshot_dir=p["path"], simulation_id=p["sim_id"],
         cores=p["cores"], walltime=p["walltime"], account=p["account"],
-        partition=p["partition"], output_base=p["output_base"],
+        partition=p["partition"], output_base=p["output_base"], spool=p["spool"],
         run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
         spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
         user_info=p["user_info"], verbose=p["verbose"],
@@ -334,7 +338,8 @@ def sim_submit_cmd(**p) -> None:
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         cfg = load_config(path=p["config_path"]).config
-        ctx, built = build_submit(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now)
+        ctx, built = build_submit(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
+                                  check_image=not p["dry_run"])
         # Capture sbatch stdout on a real submit so we can record the SLURM job ID.
         result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"] or not p["dry_run"])
     except OpenghmError as e:
@@ -372,14 +377,15 @@ def sim_run_cmd(**p) -> None:
     """
     opts = SubmitOptions(
         snapshot_dir=p["path"], simulation_id=p["sim_id"], output_base=p["output_base"],
-        run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
+        spool=p["spool"], run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
         spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
         user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         cfg = load_config(path=p["config_path"]).config
-        ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now)
+        ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
+                              check_image=not p["dry_run"])
         result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"])
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
@@ -556,10 +562,71 @@ def _validate_cmd(spec: str):
 
 @cli.group("snapshot")
 def snapshot_group() -> None:
-    """validate a snapshot folder against the published snapshot spec."""
+    """fetch a published snapshot, and validate a snapshot folder against the snapshot spec."""
 
 
 snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
+
+
+@snapshot_group.command("fetch")
+@click.argument("snapshot_id", metavar="<id>")
+@click.option("--dest", default=None, metavar="DIR", help="where to put the tree (default: ./<id>)")
+@click.option("--spool", type=click.Choice(["auto", "skip"]), default="auto", show_default=True,
+              help="auto: download spool/ if the snapshot has one; skip: never")
+@click.option("--no-image", "no_image", is_flag=True,
+              help="do not download the container image the snapshot pins")
+@click.option("--jobs", type=click.IntRange(min=1), default=8, show_default=True,
+              help="parallel downloads")
+@click.option("--config", "config_path", default=None, metavar="PATH",
+              help="config file (default: ~/.openghm/config.toml)")
+def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_image: bool,
+                       jobs: int, config_path: Optional[str]) -> None:
+    """download snapshots/<id>/ from the public bucket, ready for `sim`
+
+    Everything except wbm_output/ (output is carried, not consumed) and
+    WBM_run_state/; spool/ only if the snapshot has one and --spool is auto.
+    Each file is checked against SHA256SUMS (spool files by size and MD5) and
+    gets its mode from the object's metadata. The pinned container image goes
+    into sif_dir, checked against its digest. Re-running resumes: files already
+    valid are skipped.
+    """
+    from rich.console import Console
+
+    from ..fetch import FetchOptions, fetch_snapshot, format_failures, summary_line
+
+    err = Console(stderr=True)
+    tty = sys.stderr.isatty()
+
+    def progress(done: int, total: int) -> None:
+        if tty:
+            click.echo(f"\r  {done}/{total} files", nl=False, err=True)
+        elif done % 1000 == 0:
+            click.echo(f"  {done}/{total} files", err=True)
+
+    try:
+        cfg = load_config(path=config_path).config
+        result = fetch_snapshot(
+            FetchOptions(snapshot_id=snapshot_id, dest=dest, spool=spool, image=not no_image, jobs=jobs),
+            cfg, console=err if tty else None, on_progress=progress,
+        )
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    if tty:
+        click.echo("", err=True)
+    click.echo(f"snapshot: {result.dest}")
+    if result.spool == "fetched":
+        click.echo(f"spool: {result.spool_files} files")
+    else:
+        click.echo(f"spool: {'not fetched (--spool skip)' if result.spool == 'skipped' else 'none in this snapshot'}")
+    if result.image_path:
+        click.echo(f"image: {result.image_path}")
+    click.echo(summary_line(result))
+    if result.failed:
+        click.echo("failed:", err=True)
+        for line in format_failures(result):
+            click.echo(line, err=True)
+        raise SystemExit(1)
 
 
 @cli.group("model-input")
@@ -605,16 +672,21 @@ def sif_list_cmd(config_path: str) -> None:
         spec = manifest[key]
         dest = cache_path(cfg, spec)
         mark = "✓" if os.path.exists(dest) else " "
-        click.echo(f" [{mark}] {key:<8} {spec.filename:<28} {spec.human_size():>10}")
+        aliases = f"  ({', '.join(spec.aliases)})" if spec.aliases else ""
+        click.echo(f" [{mark}] {key:<26} {spec.human_size():>10}{aliases}")
 
 
 @sif_group.command("pull")
-@click.argument("name", metavar="<lite|VERSION>")
+@click.argument("name", metavar="<IMAGE[:VERSION]>")
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="config file (default: ~/.openghm/config.toml)")
 @click.option("--force", is_flag=True, help="re-download even if already present")
 def sif_pull_cmd(name: str, config_path: str, force: bool) -> None:
-    """download a container image into the local cache (sif_dir)"""
+    """download a container image into the local cache (sif_dir)
+
+    NAME is <image>:<version> (see `openghm sif list`), or <image> for its latest.
+    The older names `lite`, `1.0.0` and `2.0.0` still work.
+    """
     from rich.console import Console
 
     from ..assets import cache_path, download, resolve_spec
@@ -627,7 +699,7 @@ def sif_pull_cmd(name: str, config_path: str, force: bool) -> None:
         if os.path.exists(dest) and not force:
             click.echo(f"already present: {dest} (use --force to re-download)")
             return
-        console.print(f"downloading {spec.filename} (~{spec.human_size()})…")
+        console.print(f"downloading {spec.key} (~{spec.human_size()})…")
         download(spec, dest, console=console)
         click.echo(f"saved {dest}")
     except OpenghmError as e:

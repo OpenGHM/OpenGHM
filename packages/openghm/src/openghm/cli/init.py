@@ -103,7 +103,7 @@ def _run_non_interactive(*, preset: Optional[str], config_path: Optional[str]) -
     path = _write_config(config, config_path)
     sys.stdout.write(
         f"wrote {path} (preset: {preset}).\n"
-        "No images were downloaded — run `openghm sif pull <lite|VERSION>` when ready.\n"
+        "No images were downloaded — run `openghm sif pull <IMAGE[:VERSION]>` (or `openghm snapshot fetch <id>`) when ready.\n"
     )
 
 
@@ -176,43 +176,50 @@ def _run_interactive(*, config_path: Optional[str]) -> None:
                   "(A container image is required to run anything.)")
     manifest = assets.load_manifest()
 
-    def offer_download(key: str, *, default_yes: bool) -> None:
+    def offer_download(selector: str, *, default_yes: bool) -> Optional[assets.ImageSpec]:
         try:
-            spec = assets.resolve_spec(key, manifest)
+            spec = assets.resolve_spec(selector, manifest)
         except Exception as e:  # unknown key in manifest
             console.print(f"[red]{e}[/red]")
-            return
+            return None
+        key = spec.key
         config_stub = apply_answers(answers)
         if assets.is_present(config_stub, spec):
-            console.print(f"[green]✓[/green] {spec.filename} already present — skipping.")
-            return
-        hint(f"{spec.filename} — about {spec.human_size()}.")
-        if not ask(questionary.confirm(f"Download {spec.filename} now?", default=default_yes)):
+            console.print(f"[green]✓[/green] {key} already present — skipping.")
+            return spec
+        hint(f"{key} — about {spec.human_size()}.")
+        if not ask(questionary.confirm(f"Download {key} now?", default=default_yes)):
             console.print(f"[dim]Skipped. Get it later with:[/dim] openghm sif pull {key}")
-            return
+            return spec
         try:
             dest = assets.download(spec, assets.cache_path(config_stub, spec), console=console)
             console.print(f"[green]✓[/green] saved {dest}")
         except Exception as e:
             console.print(f"[red]download failed:[/red] {e}")
             console.print(f"[dim]You can retry later with:[/dim] openghm sif pull {key}")
+        return spec
 
-    # lite image (needed for processing tools; small)
-    offer_download("lite", default_yes=True)
+    # tools image (needed for processing tools; small). `sif` names the file
+    # `sif pull` puts it at, so the config finds it whatever the manifest's latest is.
+    tools = offer_download(assets.TOOLS_IMAGE, default_yes=True)
+    if tools is not None:
+        answers["sif"] = assets.cache_path(apply_answers(answers), tools)
 
-    # WBM model image (only if running sims; large → default No)
+    # WBM model image (only if running sims). `sim` runs the image a snapshot pins,
+    # and `openghm snapshot fetch` downloads that one, so this is optional.
     if want_sim:
-        wbm_keys = [k for k, s in manifest.items() if s.kind == "wbm"]
-        if wbm_keys:
-            hint("\nWhich WBM version do you need? (large download — pick the one you run)")
-            version = ask(questionary.select(
-                "WBM version?",
+        model_keys = [k for k, sp in manifest.items() if sp.image != assets.TOOLS_IMAGE]
+        if model_keys:
+            hint("\nWhich WBM image do you need? (`openghm snapshot fetch <id>` also downloads "
+                 "the one a snapshot pins)")
+            choice = ask(questionary.select(
+                "WBM image?",
                 choices=[
                     questionary.Choice(f"{k}  ({manifest[k].human_size()})", k)
-                    for k in sorted(wbm_keys)
+                    for k in sorted(model_keys)
                 ],
             ))
-            offer_download(version, default_yes=False)
+            offer_download(choice, default_yes=False)
 
     # 5 & 6. SLURM vs local output
     if want_sim:
