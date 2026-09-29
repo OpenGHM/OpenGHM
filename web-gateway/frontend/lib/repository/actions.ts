@@ -8,6 +8,8 @@ import {
   ModelInput,
   ModelInputFilterState,
   ModelInputListResponse,
+  ModelInputLinks,
+  SnapshotLinks,
 } from "@/lib/repository/types";
 
 /**
@@ -136,6 +138,46 @@ export async function fetchModelInputById(
     return response.data;
   } catch (error: unknown) {
     // 404 → return null so the page can call notFound()
+    const axiosError = error as { response?: { status?: number } };
+    if (axiosError?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Download links for a published snapshot (`GET .../datasets/{id}/links`).
+ * Used by the detail page `/repository/[id]`.
+ */
+export async function fetchDatasetLinks(id: string): Promise<SnapshotLinks | null> {
+  try {
+    const client = await getApiClient();
+    const response = await client.get<SnapshotLinks>(
+      `/api/v1/repository/datasets/${encodeURIComponent(id)}/links`
+    );
+    return response.data;
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { status?: number } };
+    if (axiosError?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Download links for a published model input
+ * (`GET .../model-inputs/{id}/links`). Used by `/repository/model-inputs/[id]`.
+ */
+export async function fetchModelInputLinks(id: string): Promise<ModelInputLinks | null> {
+  try {
+    const client = await getApiClient();
+    const response = await client.get<ModelInputLinks>(
+      `/api/v1/repository/model-inputs/${encodeURIComponent(id)}/links`
+    );
+    return response.data;
+  } catch (error: unknown) {
     const axiosError = error as { response?: { status?: number } };
     if (axiosError?.response?.status === 404) {
       return null;

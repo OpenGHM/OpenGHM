@@ -209,6 +209,18 @@ that; the browser downloads from Anvil S3 directly, bypassing the API. The
 config file states this in a comment, and there is no S3 client in
 `requirements.txt` to contradict it.
 
+Two read routes return those strings for a published artifact:
+`GET /api/v1/repository/datasets/{id}/links` and
+`GET /api/v1/repository/model-inputs/{id}/links`. They are open like the other
+`GET` routes, and an unknown id is `404`. A tree is thousands of files, so a
+response is the prefix (`snapshots/<id>/`, `model-inputs/<id>/`) plus its
+`metadata.json` and `SHA256SUMS`. A snapshot's also carries the fetch command
+(`openghm snapshot fetch <id>`), the container's `uses.container.https` and the
+`model-inputs/<uses.modelInput.id>/` prefix. The strings are built from the
+stored document and the two settings on each request, so nothing is stored and
+nothing checks that the objects exist. The detail pages render them in a
+Download card.
+
 The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
 has, with every artifact under a prefix
 ([`../reference/s3-layout.md`](../reference/s3-layout.md)). There is

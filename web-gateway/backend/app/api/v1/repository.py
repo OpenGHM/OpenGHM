@@ -6,16 +6,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
 
 from app.core.authz import require_permission
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import Permission
 from app.models.generated.model_input import OpenGHMModelInputMetadata
 from app.models.generated.snapshot import OpenGHMSnapshotMetadata
 from app.models.repository import (
     DatasetResponse,
+    ModelInputLinks,
     ModelInputListResponse,
     ModelInputResponse,
     RepositoryListResponse,
+    SnapshotLinks,
     build_envelope,
+    model_input_links,
+    snapshot_links,
 )
 
 router = APIRouter(prefix="/repository", tags=["repository"])
@@ -114,6 +119,20 @@ async def get_dataset(dataset_id: str) -> DatasetResponse:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     return DatasetResponse.from_metadata_json(doc)
+
+
+@router.get("/datasets/{dataset_id}/links")
+async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
+    """Download links for a published snapshot: plain strings, no S3 call
+    (gateway.md §5). A separate route rather than a field on
+    ``DatasetResponse`` because they depend on the deployment's S3 settings,
+    not only on the document, and the list route would otherwise carry them
+    on every item. Open, like ``get_dataset``."""
+    db = get_db()
+    doc = await db["datasets"].find_one({"_id": dataset_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    return snapshot_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
 
 
 @router.post("/datasets", status_code=201)
@@ -222,6 +241,17 @@ async def get_model_input(model_input_id: str) -> ModelInputResponse:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
     return ModelInputResponse.from_metadata_json(doc)
+
+
+@router.get("/model-inputs/{model_input_id}/links")
+async def get_model_input_links(model_input_id: str) -> ModelInputLinks:
+    """The model-input sibling of ``get_dataset_links``. Open, like
+    ``get_model_input``."""
+    db = get_db()
+    doc = await db["model_inputs"].find_one({"_id": model_input_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return model_input_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
 
 
 @router.post(

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { fetchModelInputById } from "@/lib/repository/actions";
+import { fetchModelInputById, fetchModelInputLinks } from "@/lib/repository/actions";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { ModelInputDatasetsTable } from "@/components/repository/model-input-datasets-table";
+import { DownloadCard } from "@/components/repository/download-card";
 
 export default async function ModelInputDetailPage({
   params,
@@ -29,7 +30,7 @@ export default async function ModelInputDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const modelInput = await fetchModelInputById(id);
+  const [modelInput, links] = await Promise.all([fetchModelInputById(id), fetchModelInputLinks(id)]);
   if (!modelInput) notFound();
 
   const { about, coverage, datasets, networks } = modelInput;
@@ -239,6 +240,17 @@ export default async function ModelInputDetailPage({
                     </ul>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Download — links from the backend, bytes from Anvil S3 */}
+              {links && (
+                <DownloadCard
+                  items={[
+                    { label: "Model input tree", url: links.treeUrl, isFile: false },
+                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
+                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
+                  ]}
+                />
               )}
             </div>
 

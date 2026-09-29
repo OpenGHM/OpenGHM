@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { fetchDatasetById } from "@/lib/repository/actions";
+import { fetchDatasetById, fetchDatasetLinks } from "@/lib/repository/actions";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -31,6 +31,7 @@ import { CitationCard } from "@/components/repository/citation-card";
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
+import { DownloadCard } from "@/components/repository/download-card";
 
 export default async function DatasetDetailPage({
   params,
@@ -38,7 +39,7 @@ export default async function DatasetDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const dataset = await fetchDatasetById(id);
+  const [dataset, links] = await Promise.all([fetchDatasetById(id), fetchDatasetLinks(id)]);
   if (!dataset) notFound();
 
   const { about, simulation, uses, runtime } = dataset;
@@ -246,6 +247,20 @@ export default async function DatasetDetailPage({
 
               {/* Citation */}
               <CitationCard dataset={dataset} />
+
+              {/* Download — links from the backend, bytes from Anvil S3 */}
+              {links && (
+                <DownloadCard
+                  command={links.fetchCommand}
+                  items={[
+                    { label: "Snapshot tree", url: links.treeUrl, isFile: false },
+                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
+                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
+                    { label: "Container image", url: links.containerUrl, isFile: true },
+                    { label: "Model input tree", url: links.modelInputTreeUrl, isFile: false },
+                  ]}
+                />
+              )}
 
               {/* Container & Execution — uses/runtime, not shown by the legacy UI at all */}
               <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">

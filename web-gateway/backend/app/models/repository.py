@@ -171,3 +171,80 @@ class ModelInputListResponse(BaseModel):
     totalCount: int
     totalPages: int
     page: int
+
+
+# ---- download links ------------------------------------------------------
+#
+# Links, not bytes (gateway.md §5): plain strings built from the public base
+# URL and the bucket, with no S3 client, no HEAD and no presigning. The key
+# layout is `docs/reference/s3-layout.md`; a snapshot or model input is a
+# tree of many files, so a "download link" is its prefix plus the two
+# top-level files that identify and verify it. Not part of the snapshot spec
+# — these are the gateway's own response shapes, hand-written.
+
+
+def s3_url(base_url: str, bucket: str, key: str) -> str:
+    """``{base_url}/{bucket}/{key}``, tolerating a trailing slash on the base."""
+    return f"{base_url.rstrip('/')}/{bucket}/{key}"
+
+
+class SnapshotLinks(BaseModel):
+    """Where to fetch a published snapshot, computed from its ``metadata.json``
+    and the S3 settings, never stored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    #: ``snapshots/<id>/`` — the whole tree.
+    treeUrl: str
+    metadataUrl: str
+    sha256sumsUrl: str
+    #: ``openghm snapshot fetch <id>`` (packages/openghm/README.md).
+    fetchCommand: str
+    #: ``uses.container.https``, verbatim.
+    containerUrl: str
+    #: ``uses.modelInput.id`` and its ``model-inputs/<id>/`` prefix.
+    modelInputId: str
+    modelInputTreeUrl: str
+
+
+class ModelInputLinks(BaseModel):
+    """The same, for a published model input (``model-inputs/<id>/``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    treeUrl: str
+    metadataUrl: str
+    sha256sumsUrl: str
+
+
+def snapshot_links(document: dict[str, Any], *, base_url: str, bucket: str) -> SnapshotLinks:
+    """Pure: ``document`` is a snapshot's ``metadata.json`` (an envelope's
+    ``document``); read as the stored dict so ``uses.container.https`` comes
+    out exactly as published."""
+    snapshot_id = document["id"]
+    model_input_id = document["uses"]["modelInput"]["id"]
+    tree = s3_url(base_url, bucket, f"snapshots/{snapshot_id}/")
+    return SnapshotLinks(
+        id=snapshot_id,
+        treeUrl=tree,
+        metadataUrl=f"{tree}metadata.json",
+        sha256sumsUrl=f"{tree}SHA256SUMS",
+        fetchCommand=f"openghm snapshot fetch {snapshot_id}",
+        containerUrl=document["uses"]["container"]["https"],
+        modelInputId=model_input_id,
+        modelInputTreeUrl=s3_url(base_url, bucket, f"model-inputs/{model_input_id}/"),
+    )
+
+
+def model_input_links(document: dict[str, Any], *, base_url: str, bucket: str) -> ModelInputLinks:
+    """Pure: ``document`` is a model input's ``metadata.json``."""
+    model_input_id = document["id"]
+    tree = s3_url(base_url, bucket, f"model-inputs/{model_input_id}/")
+    return ModelInputLinks(
+        id=model_input_id,
+        treeUrl=tree,
+        metadataUrl=f"{tree}metadata.json",
+        sha256sumsUrl=f"{tree}SHA256SUMS",
+    )

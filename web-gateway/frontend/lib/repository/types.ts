@@ -71,3 +71,33 @@ export interface ModelInputListResponse {
   totalPages: number;
   page: number;
 }
+
+// ─── Download links ───────────────────────────────────────────────────────────
+
+/**
+ * `GET /repository/datasets/{id}/links` — plain public HTTPS strings the
+ * backend builds from `S3_PUBLIC_BASE_URL` and the bucket (no S3 call); see
+ * `app/models/repository.py`'s `SnapshotLinks`. Hand-written: not part of
+ * the snapshot spec.
+ */
+export interface SnapshotLinks {
+  id: string;
+  /** `snapshots/<id>/` — the whole tree, many files. */
+  treeUrl: string;
+  metadataUrl: string;
+  sha256sumsUrl: string;
+  /** `openghm snapshot fetch <id>` */
+  fetchCommand: string;
+  /** `uses.container.https` */
+  containerUrl: string;
+  modelInputId: string;
+  modelInputTreeUrl: string;
+}
+
+/** `GET /repository/model-inputs/{id}/links` — `ModelInputLinks` in the backend. */
+export interface ModelInputLinks {
+  id: string;
+  treeUrl: string;
+  metadataUrl: string;
+  sha256sumsUrl: string;
+}
