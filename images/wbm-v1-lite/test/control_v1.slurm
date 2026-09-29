@@ -15,14 +15,27 @@
 #   (2) CONTAINER  : fresh PROD-1.0.0 vs fresh LITE, identical bound code ->
 #                    any diff is purely the rebuilt library stack.
 #
-# Comparison = spool sha256 byte-identity + PDL maxabs/RMS/frac(|rel|>1e-3) on
-# daily output, fill (-9999) masked. PASS = spool identical + all-var maxabs=0.
+# Comparison = spool sha256 byte-identity + every .nc under wbm_output through
+# images/verification/nc_datacmp.pl (PDL, run in the lite SIF; fill -9999
+# masked; attribute order is not compared). A file missing on either side, a
+# variable present on one side only, or any differing/unreadable variable
+# fails that file. PASS = both comparisons have spool identical + every .nc
+# identical; the script exits non-zero on FAIL. A real difference in (2) is
+# reported as it is, not tuned away.
+#
+# Submit from the root of the checkout, so that the comparator resolves:
+#   cd <OpenGHM checkout> && sbatch images/wbm-v1-lite/test/control_v1.slurm
+# (sbatch runs a copy of this script, so its own location is not usable; the
+# comparator defaults to $SLURM_SUBMIT_DIR/images/verification/nc_datacmp.pl.
+# Override: DATACMP=/path/to/nc_datacmp.pl sbatch ...)
 # -----------------------------------------------------------------------------
 set -uo pipefail
 LITE=${LITE:-/home/x-openghm/apps/wbm/v1-lite/wbm_v1_lite.sif}
 PROD=/home/x-openghm/apps/wbm/1.0.0/bin/wbm_opensource_v1.0.0.sif
 SNAP=/anvil/projects/x-ees260008/data/dataRepo/snapshots/wbm_storage_v1.0.0_Wyoming
 SUB=Wyoming_tracking; INIT=Wyoming_tracking
+DATACMP=${DATACMP:-${SLURM_SUBMIT_DIR:-$PWD}/images/verification/nc_datacmp.pl}
+[ -f "$DATACMP" ] || { echo "ERROR: comparator not found: $DATACMP (set DATACMP=)"; exit 2; }
 W=$SCRATCH/wbm_v1_ctrl
 rm -rf "$W"; mkdir -p "$W/wbm_init"
 
@@ -57,49 +70,50 @@ run lite_A "$LITE"
 run lite_B "$LITE"
 run prod   "$PROD"
 
-spoolcmp() {  # $1=label dirA dirB
+RESULT=PASS
+
+spoolcmp() {  # $1=label dirA dirB ; sets SP_DIFF
   local lab=$1 A=$2 B=$3 id=0 df=0
   while IFS= read -r f; do
     local x y; x=$(sha256sum "$A/$f" 2>/dev/null|cut -d' ' -f1); y=$(sha256sum "$B/$f" 2>/dev/null|cut -d' ' -f1)
     [ -n "$x" ] && [ "$x" = "$y" ] && id=$((id+1)) || df=$((df+1))
   done < <(cd "$A" && find . -type f|sort)
   echo "  [$lab] spool identical=$id differ=$df"
+  SP_DIFF=$df
 }
 
-datacmp() {  # $1=label fileA fileB
-  echo "  [$1] daily data (fill -9999 masked):"
-  singularity exec -e "$LITE" perl -MPDL -MPDL::NetCDF -e '
-    my ($A,$B)=@ARGV;
-    my $na=PDL::NetCDF->new($A); my $nb=PDL::NetCDF->new($B);
-    my ($nv,$bit,@rows)=(0,0);
-    for my $v (@{$na->getvariablenames}) {
-      next if $v=~/^(lat|lon|time|crs|latitude|longitude|.*_bnds)$/;
-      my ($mx,$rms,$frac,$pk)=(0,0,0,0);
-      { my $a=eval{$na->get($v)}; my $b=eval{$nb->get($v)};
-        last unless defined $a && defined $b && $a->nelem==$b->nelem;
-        my $m=($a!=-9999)&($b!=-9999); my $n=$m->sum->sclr; last if $n==0;
-        my $d=($a-$b)->abs->where($m); $mx=$d->max->sclr;
-        $rms=sqrt(($d**2)->sum->sclr/$n);
-        $pk=$a->where($m)->abs->max->sclr;
-        $frac=($d > 1e-3*($pk>0?$pk:1))->sum->sclr / $n;
-      }
-      $nv++; $bit++ if $mx==0;
-      push @rows,[$v,$mx,$rms,$frac,$pk];
-    }
-    @rows=sort{$b->[1]<=>$a->[1]}@rows;
-    printf "    vars=%d  bit-identical=%d  differing=%d\n",$nv,$bit,$nv-$bit;
-    printf "    %-20s %11s %11s %11s %11s\n","top-by-maxabs","maxabs","rms","frac>1e-3","peak";
-    for my $i (0..14){ last if $i>$#rows; my $r=$rows[$i]; last if $r->[1]==0;
-      printf "    %-20s %11.3e %11.3e %11.3e %11.3e\n",@$r; }
-  ' "$2" "$3" 2>/dev/null
+nc_compare() {  # $1=label dirA dirB : nc_datacmp.pl on every .nc under <dir>/wbm_output ; sets NC_N NC_ID NC_FAIL
+  local lab=$1 A=$2/wbm_output B=$3/wbm_output f out rc n=0 id=0 fl=0
+  local ok_re='vars=[1-9][0-9]* bit-identical=[0-9]+ differing=0 bad=0 only_prod=\[\] only_lite=\[\]'
+  echo "  [$lab] every .nc (nc_datacmp.pl, fill -9999 masked; only_prod = only in the first tree, only_lite = only in the second):"
+  while IFS= read -r f; do
+    f=${f#./}; n=$((n+1))
+    if [ ! -f "$A/$f" ] || [ ! -f "$B/$f" ]; then
+      echo "  MISSING $f  (first: $([ -f "$A/$f" ] && echo present || echo ABSENT)  second: $([ -f "$B/$f" ] && echo present || echo ABSENT))"
+      fl=$((fl+1)); continue
+    fi
+    out=$(singularity exec -e "$LITE" perl "$DATACMP" "$A/$f" "$B/$f" </dev/null 2>&1); rc=$?
+    echo "$out"
+    if [ $rc -eq 0 ] && [[ $out =~ $ok_re ]]; then id=$((id+1)); else fl=$((fl+1)); echo "  FAIL $f (exit=$rc)"; fi
+  done < <({ (cd "$A" && find . -name '*.nc'); (cd "$B" && find . -name '*.nc'); } | sort -u)
+  NC_N=$n; NC_ID=$id; NC_FAIL=$fl
 }
 
-Y=daily/wbm_2000.nc
+compare() {  # $1=label dirA dirB : spool + netCDF for one pair; folds into RESULT
+  local lab=$1 A=$2 B=$3 sec=PASS
+  spoolcmp "$lab" "$A/spool" "$B/spool"
+  nc_compare "$lab" "$A" "$B"
+  echo "  [$lab] netCDF summary: files compared=$NC_N  identical=$NC_ID  failed=$NC_FAIL"
+  { [ "$SP_DIFF" -eq 0 ] && [ "$NC_FAIL" -eq 0 ] && [ "$NC_N" -gt 0 ]; } || sec=FAIL
+  echo "  [$lab] RESULT: $sec"
+  [ "$sec" = PASS ] || RESULT=FAIL
+}
+
 echo; echo "================= (1) SELF-TEST  lite_A vs lite_B ================="
-spoolcmp self "$W/lite_A/spool" "$W/lite_B/spool"
-datacmp self "$W/lite_A/wbm_output/$SUB/$Y" "$W/lite_B/wbm_output/$SUB/$Y"
+compare self "$W/lite_A" "$W/lite_B"
 
 echo; echo "================= (2) CONTAINER  prod vs lite_A ================="
-spoolcmp cont "$W/prod/spool" "$W/lite_A/spool"
-datacmp cont "$W/prod/wbm_output/$SUB/$Y" "$W/lite_A/wbm_output/$SUB/$Y"
+compare cont "$W/prod" "$W/lite_A"
 echo; echo "=== DONE ==="
+echo "RESULT: $RESULT"
+[ "$RESULT" = PASS ]

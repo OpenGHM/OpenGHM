@@ -8,7 +8,20 @@
 # -----------------------------------------------------------------------------
 # "Reproduce production" golden test for the lightweight v2 container.
 # Runs the SAME init (wbm_test.init) through the PRODUCTION v2 SIF and the
-# new LITE v2 SIF, then diffs the outputs. Both PDL 2.063 -> expect a match.
+# new LITE v2 SIF, then compares the outputs. Both PDL 2.063 -> expect a match.
+#
+# Comparison = file list of the two trees + spool sha256 byte-identity + every
+# .nc under wbm_output through images/verification/nc_datacmp.pl (PDL, run in
+# the lite SIF; fill -9999 masked; attribute order is not compared). A file
+# missing on either side, a variable present on one side only, or any
+# differing/unreadable variable fails that file. PASS = file lists identical +
+# spool identical + every .nc identical; the script exits non-zero on FAIL.
+#
+# Submit from the root of the checkout, so that the comparator resolves:
+#   cd <OpenGHM checkout> && sbatch images/wbm-v2-lite/test/reproduce_v2.slurm
+# (sbatch runs a copy of this script, so its own location is not usable; the
+# comparator defaults to $SLURM_SUBMIT_DIR/images/verification/nc_datacmp.pl.
+# Override: DATACMP=/path/to/nc_datacmp.pl sbatch ...)
 # -----------------------------------------------------------------------------
 set -uo pipefail
 
@@ -17,6 +30,8 @@ PROD=/anvil/projects/x-ees260008/data/containers/wbm_opensource_v2.0.0_with_paws
 SNAP=/anvil/projects/x-ees260008/data/dataRepo/snapshots/wbm_storage_v2.0.0
 SUB=wbm_ancillary_data_v2.0.0
 INIT=wbm_test
+DATACMP=${DATACMP:-${SLURM_SUBMIT_DIR:-$PWD}/images/verification/nc_datacmp.pl}
+[ -f "$DATACMP" ] || { echo "ERROR: comparator not found: $DATACMP (set DATACMP=)"; exit 2; }
 W=$SCRATCH/wbm_v2_reproduce
 rm -rf "$W"; mkdir -p "$W"
 
@@ -44,26 +59,37 @@ run() {  # $1=label  $2=sif  $3...=extra binds
 run prod "$PROD" -B "$SNAP/model:/wbm/model" -B "$SNAP/utilities:/wbm/utilities"
 run lite "$LITE" -B "$SNAP/model:/wbm/model" -B "$SNAP/utilities:/wbm/utilities"
 
+RESULT=PASS
+
+nc_compare() {  # $1=label  $2=dirA  $3=dirB : nc_datacmp.pl on every .nc under <dir>/wbm_output
+  local lab=$1 A=$2/wbm_output B=$3/wbm_output f out rc n=0 id=0 fl=0
+  local ok_re='vars=[1-9][0-9]* bit-identical=[0-9]+ differing=0 bad=0 only_prod=\[\] only_lite=\[\]'
+  echo "  [$lab] every .nc (nc_datacmp.pl, fill -9999 masked; only_prod = only in the first tree, only_lite = only in the second):"
+  while IFS= read -r f; do
+    f=${f#./}; n=$((n+1))
+    if [ ! -f "$A/$f" ] || [ ! -f "$B/$f" ]; then
+      echo "  MISSING $f  (first: $([ -f "$A/$f" ] && echo present || echo ABSENT)  second: $([ -f "$B/$f" ] && echo present || echo ABSENT))"
+      fl=$((fl+1)); continue
+    fi
+    out=$(singularity exec -e "$LITE" perl "$DATACMP" "$A/$f" "$B/$f" </dev/null 2>&1); rc=$?
+    echo "$out"
+    if [ $rc -eq 0 ] && [[ $out =~ $ok_re ]]; then id=$((id+1)); else fl=$((fl+1)); echo "  FAIL $f (exit=$rc)"; fi
+  done < <({ (cd "$A" && find . -name '*.nc'); (cd "$B" && find . -name '*.nc'); } | sort -u)
+  NC_N=$n; NC_ID=$id; NC_FAIL=$fl
+}
+
 echo; echo "================= COMPARE ================="
 echo "--- output file-list diff (prod vs lite) ---"
-diff <(cd "$W/prod" && find . -type f | sort) <(cd "$W/lite" && find . -type f | sort) \
-  && echo "FILE LIST: identical" || echo "FILE LIST: DIFFERS (above)"
+if diff <(cd "$W/prod" && find . -type f | sort) <(cd "$W/lite" && find . -type f | sort); then
+  echo "FILE LIST: identical"
+else
+  echo "FILE LIST: DIFFERS (above)"; RESULT=FAIL
+fi
 
-echo; echo "--- netCDF data compare (ncdump -p 6, volatile attrs stripped) ---"
-strip='/:history|:_NCProperties|:NCO|:created|:Conventions|date/d'
-ncdiff_ok=0; ncdiff_bad=0
-while IFS= read -r f; do
-  pf="$W/prod/wbm_output/$f"; lf="$W/lite/wbm_output/$f"
-  [ -f "$pf" ] || { echo "  MISSING in prod: $f"; ncdiff_bad=$((ncdiff_bad+1)); continue; }
-  if diff -q \
-      <(singularity exec -e "$LITE" ncdump -p 6 "$pf" 2>/dev/null | sed -E "$strip") \
-      <(singularity exec -e "$LITE" ncdump -p 6 "$lf" 2>/dev/null | sed -E "$strip") >/dev/null; then
-    ncdiff_ok=$((ncdiff_ok+1))
-  else
-    ncdiff_bad=$((ncdiff_bad+1)); echo "  DIFFERS: $f"
-  fi
-done < <(cd "$W/lite/wbm_output" && find . -name '*.nc' | sort)
-echo "netCDF match: $ncdiff_ok  differ/missing: $ncdiff_bad"
+echo; echo "--- netCDF data compare (nc_datacmp.pl over every .nc in wbm_output) ---"
+nc_compare v2 "$W/prod" "$W/lite"
+echo "netCDF summary: files compared=$NC_N  identical=$NC_ID  failed=$NC_FAIL"
+{ [ "$NC_FAIL" -eq 0 ] && [ "$NC_N" -gt 0 ]; } || RESULT=FAIL
 
 echo; echo "--- spool FlexRaw byte-identity (sha256) ---"
 sid=0; sdiff=0
@@ -73,4 +99,8 @@ while IFS= read -r f; do
   if [ -n "$a" ] && [ "$a" = "$b" ]; then sid=$((sid+1)); else sdiff=$((sdiff+1)); fi
 done < <(cd "$W/lite/spool" && find . -type f | sort)
 echo "spool identical: $sid  differ: $sdiff"
+[ "$sdiff" -eq 0 ] || RESULT=FAIL
+
 echo; echo "=== DONE ==="
+echo "RESULT: $RESULT"
+[ "$RESULT" = PASS ]
