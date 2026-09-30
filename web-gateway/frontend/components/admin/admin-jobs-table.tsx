@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
 
 // JobResponse doesn't carry the owner's email (only user_id) — see the
@@ -45,7 +46,7 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
             </TableCell>
             <TableCell className="max-w-48 truncate text-sm">{job.dataset_title}</TableCell>
             <TableCell>
-              <JobStatusBadge status={job.status} />
+              <JobStatusBadge status={displayStatus(job)} />
             </TableCell>
             <TableCell className="text-xs text-slate-500">{job.slurm_job_id ?? "—"}</TableCell>
             <TableCell className="text-xs text-slate-500">

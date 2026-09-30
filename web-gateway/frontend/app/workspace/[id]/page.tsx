@@ -11,12 +11,13 @@ import { JobLogsPanel } from "@/components/workspace/job-logs-panel";
 import { SimulationEditor } from "@/components/workspace/simulation-editor";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
 import { SubmitSimulationButton } from "@/components/workspace/submit-simulation-button";
+import { DeleteSimulationButton } from "@/components/workspace/delete-simulation-button";
 import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
 import { describeSlurmTime, submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
-import { fakeSimulation, fakeLogs, fakeOutputFiles, fakeProgress } from "@/lib/workspace/fixtures";
-import { resolvePreviewStatus } from "@/lib/workspace/preview";
+import { previewSimulation, fakeLogs, fakeProgress } from "@/lib/workspace/fixtures";
+import { resolvePreview } from "@/lib/workspace/preview";
 import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
 import { QueuedNoticeCard } from "@/components/workspace/queued-notice-card";
 import { RunningProgressCard } from "@/components/workspace/running-progress-card";
@@ -46,11 +47,17 @@ export default async function JobDetailPage({
   await requireSession(here);
 
   const previewRaw = Array.isArray(query.preview) ? query.preview[0] : query.preview;
-  const previewStatus = resolvePreviewStatus(previewRaw);
+  const preview = resolvePreview(previewRaw);
+
+  // The signed-in user, fetched at most once: a draft needs it for who may
+  // submit, a cancelled job for "you cancelled this".
+  let mePromise: ReturnType<typeof fetchMe> | null = null;
+  const me = () => (mePromise ??= fetchMe());
 
   let job;
-  if (previewStatus) {
-    job = fakeSimulation(previewStatus, { id });
+  if (preview) {
+    const viewerEmail = preview.key.startsWith("cancel") ? ((await me())?.email ?? null) : null;
+    job = previewSimulation(preview.key, { overrides: { id }, viewerEmail });
   } else {
     const result = await fetchJob(id);
     if (!result.ok) {
@@ -62,7 +69,7 @@ export default async function JobDetailPage({
   }
 
   const isDraft = job.status === "DRAFT";
-  const isPreview = previewStatus !== null;
+  const isPreview = preview !== null;
 
   // Only needed while editable — gives the parameter editor the snapshot's
   // own output variables to choose from, in addition to whatever the
@@ -75,18 +82,19 @@ export default async function JobDetailPage({
   const blockedReason = isPreview
     ? "This is a design preview; nothing can be submitted from it."
     : isDraft
-      ? submitBlockedReason(await fetchMe())
+      ? submitBlockedReason(await me())
       : null;
+  const viewerEmail = job.status === "CANCELLED" ? ((await me())?.email ?? null) : null;
 
   const previewLogs = isPreview ? fakeLogs(job.status, job.id) : undefined;
-  const previewParam = previewStatus ? `?preview=${previewStatus}` : "";
+  const previewParam = preview ? `?preview=${preview.key}` : "";
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
 
       {process.env.NODE_ENV !== "production" && (
-        <DevPreviewSwitcher jobId={id} active={previewStatus} />
+        <DevPreviewSwitcher jobId={id} active={preview?.key ?? null} />
       )}
 
       {/* Breadcrumb */}
@@ -166,6 +174,15 @@ export default async function JobDetailPage({
                     </Link>
                   </CardContent>
                 </Card>
+
+                <DeleteSimulationButton
+                  jobId={job.id}
+                  isDraft
+                  workDir={null}
+                  remoteJobDir={null}
+                  files={null}
+                  preview={isPreview}
+                />
               </div>
             </div>
           ) : (
@@ -307,6 +324,16 @@ export default async function JobDetailPage({
                     started_at: job.started_at,
                     completed_at: job.completed_at,
                     status_reason: job.status_reason,
+                    work_dir: job.work_dir,
+                    slurm_state: job.slurm_state,
+                    slurm_exit_code: job.slurm_exit_code,
+                    slurm_start: job.slurm_start,
+                    slurm_end: job.slurm_end,
+                    failure: job.failure,
+                    cancel_requested_at: job.cancel_requested_at,
+                    cancel_requested_by_email: job.cancel_requested_by_email,
+                    files: job.files,
+                    output: job.output,
                   }}
                   preview={isPreview}
                 />
@@ -324,24 +351,18 @@ export default async function JobDetailPage({
 
                 {job.status === "COMPLETED" && (
                   <CompletedResultsCard
-                    jobId={job.id}
-                    files={fakeOutputFiles()}
+                    job={job}
                     publishHref={`/workspace/${job.id}/publish${previewParam}`}
+                    preview={isPreview}
                   />
                 )}
 
                 {job.status === "FAILED" && (
-                  <FailedNextStepsCard
-                    statusReason={job.status_reason}
-                    datasetId={job.dataset_id}
-                  />
+                  <FailedNextStepsCard job={job} preview={isPreview} />
                 )}
 
                 {job.status === "CANCELLED" && (
-                  <CancelledNoticeCard
-                    statusReason={job.status_reason}
-                    datasetId={job.dataset_id}
-                  />
+                  <CancelledNoticeCard job={job} viewerEmail={viewerEmail} preview={isPreview} />
                 )}
 
                 {/* Dataset link */}

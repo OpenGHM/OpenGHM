@@ -179,7 +179,11 @@ export async function pollJobStatus(
 }
 
 /**
- * Cancel a running/pending job.
+ * Cancel a job that has not ended (ADR 0026). With a SLURM id the status does
+ * not change yet: `cancel_requested_at` is set and the job is *Cancelling*
+ * until SLURM confirms. Without one it comes back CANCELLED at once. Failures
+ * carry the backend's `code`: `cancel_failed` (502), or a 409 when the job can
+ * no longer be cancelled.
  */
 export async function cancelJob(
   jobId: string
@@ -189,6 +193,20 @@ export async function cancelJob(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`
     );
     return res.data;
+  });
+}
+
+/**
+ * Delete a simulation: a draft, or one that has ended. Removes the job's two
+ * directories on Anvil and then the record (ADR 0026). On any failure the
+ * simulation still exists, and `code` says why: `job_active` (409, cancel it
+ * first), `refused_path` (409), `anvil_unreachable` (503) or `cleanup_failed`
+ * (502). `not_found` means it is already gone.
+ */
+export async function deleteSimulation(jobId: string): Promise<ActionResult<null>> {
+  return run(async (client) => {
+    await client.delete(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+    return null;
   });
 }
 

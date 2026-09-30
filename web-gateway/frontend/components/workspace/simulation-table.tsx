@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
 
 function displayName(job: Job): string {
@@ -37,7 +38,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
               </Link>
             </TableCell>
             <TableCell>
-              <JobStatusBadge status={job.status} />
+              <JobStatusBadge status={displayStatus(job)} />
             </TableCell>
             <TableCell className="max-w-64 truncate text-sm text-muted-foreground">
               <Link

@@ -167,7 +167,13 @@ def test_staff_cancelling_another_users_job_is_allowed_and_recorded(client, db):
     db.jobs.docs["job-1"] = make_job("job-1", OWNER, "RUNNING")
     response = client.post("/api/v1/jobs/job-1/cancel", headers=CALLERS["staff"]["headers"])
     assert response.status_code == 200
-    assert db.jobs.docs["job-1"]["status"] == "CANCELLED"
+    # A cancel is a request until SLURM confirms it (ADR 0026): the job keeps
+    # running here, and who asked is on it.
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "RUNNING"
+    assert stored["cancel_requested_by"] == "staff"
+    assert stored["cancel_requested_by_email"] == "staff@example.org"
+    assert response.json()["cancel_requested_by_email"] == "staff@example.org"
 
 
 # ---- the submit gate's refusals are distinguishable --------------------

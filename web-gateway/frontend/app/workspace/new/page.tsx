@@ -5,6 +5,7 @@ import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { displayStatus } from "@/lib/jobs/display-status";
 import { RecentSnapshots } from "@/components/workspace/recent-snapshots";
 import { fetchJobs } from "@/lib/jobs/actions";
 import { fetchDatasetById } from "@/lib/repository/actions";
@@ -129,7 +130,7 @@ export default async function NewSimulationEntryPage() {
                               {job.dataset_title}
                             </p>
                           </div>
-                          <JobStatusBadge status={job.status} />
+                          <JobStatusBadge status={displayStatus(job)} />
                         </Link>
                       ))}
                     </CardContent>

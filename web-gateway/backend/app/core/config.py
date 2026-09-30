@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # may have at once — every job spends the one shared SLURM allocation
     # (ADR 0024). admin and staff are exempt. See app.core.authz.require_submitter.
     JOB_MAX_ACTIVE_PER_USER: int = 2
+    # How long a job must stay absent from squeue and sacct before the gateway
+    # gives up on it (ADR 0026, rule 4). One lookup that finds nothing proves
+    # nothing: slurmly answers "absent" when both commands fail, too.
+    JOB_LOST_AFTER_SECONDS: int = 600
+    # How often a finished job's work directory is checked for Anvil's purge.
+    JOB_FILES_CHECK_INTERVAL_SECONDS: int = 86400
 
 
 settings = Settings()

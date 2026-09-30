@@ -16,7 +16,14 @@
  * Delete this module when the routes behind it are real. Anything importing it
  * is, by definition, not yet connected.
  */
-import type { Job, JobLogsResponse, JobStatus } from "@/lib/jobs/types";
+import type {
+  FailureCause,
+  Job,
+  JobFailure,
+  JobLogsResponse,
+  JobStatus,
+  OutputManifest,
+} from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 
 /** A file a finished run would have written. No route returns these yet. */
@@ -107,8 +114,220 @@ export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}):
     work_dir: null,
     remote_job_dir: null,
     last_submit_error: null,
+    slurm_state: null,
+    slurm_exit_code: null,
+    slurm_start: null,
+    slurm_end: null,
+    failure: null,
+    cancel_requested_at: null,
+    cancel_requested_by_email: null,
+    files: null,
+    output: null,
     ...overrides,
   };
+}
+
+// Placeholder paths: clearly not a real user's scratch.
+const FAKE_WORK_DIR = "/scratch/example/openghm/out/sim-20260921-preview";
+const FAKE_JOB_DIR = "/scratch/example/openghm/jobs/slurmly-0123456789ab";
+
+const WBM_LOG_TAIL = [
+  "Reading init: data_init/climate/merra2_prectotcorr_d.init",
+  "Warping precipitation to the model grid",
+  "Failed to warp /scratch/example/openghm/model_input/precip_2001.nc: out of memory",
+].join("\n");
+
+const STDERR_TAIL = [
+  "openghm: cannot reach the snapshot store: connection timed out",
+  "openghm: 3 of 412 files failed",
+].join("\n");
+
+/** What each cause would leave on a job. Invented: the shape is `JobFailure`
+ *  plus the SLURM fields that go with it, the words are not the real ones. */
+const FAILURE_FIXTURES: Record<
+  Exclude<FailureCause, "cancelled_by_user" | "cancelled_by_system">,
+  { slurm_state: string; slurm_exit_code: string | null; failure: Omit<JobFailure, "cause"> }
+> = {
+  fetch_failed: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "1:0",
+    failure: {
+      phase: "fetch",
+      message: "3 files could not be downloaded: inputs/precip_2001.nc, inputs/precip_2002.nc, inputs/tair_2001.nc",
+      excerpt: STDERR_TAIL,
+    },
+  },
+  run_refused: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "2:0",
+    failure: {
+      phase: "run",
+      message: "openghm: the snapshot's init names a variable that is not in its output list",
+      excerpt: "openghm: the snapshot's init names a variable that is not in its output list\nopenghm: nothing was staged",
+    },
+  },
+  wbm_error: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "1:0",
+    failure: {
+      phase: "run",
+      message: "WBM exited with status 1",
+      excerpt: [
+        "Use of uninitialized value in numeric lt (<) at /wbm/model/wbm.pl line 2841.",
+        "ERROR: cannot open data_init/climate/merra2_prectotcorr_d.init: No such file or directory",
+        "  at /wbm/model/RIMS.pm line 1184.",
+      ].join("\n"),
+    },
+  },
+  wbm_silent_failure: {
+    slurm_state: "COMPLETED",
+    slurm_exit_code: "0:0",
+    failure: {
+      phase: "check",
+      message: "WBM exited 0 but its log has no \"All Done!\" line",
+      excerpt: WBM_LOG_TAIL,
+    },
+  },
+  timeout: {
+    slurm_state: "TIMEOUT",
+    slurm_exit_code: "0:0",
+    failure: {
+      phase: "run",
+      message: "The job hit its walltime of 00:15:00 while WBM was still running",
+      excerpt: "  2001-08 .. done\n  2001-09 .. done\n  2001-10 ..",
+    },
+  },
+  out_of_memory: {
+    slurm_state: "OUT_OF_MEMORY",
+    slurm_exit_code: "0:125",
+    failure: {
+      phase: "run",
+      message: "SLURM stopped the job for using more memory than it was given",
+      excerpt: null,
+    },
+  },
+  node_failure: {
+    slurm_state: "NODE_FAIL",
+    slurm_exit_code: "0:0",
+    failure: {
+      phase: null,
+      message: "The node the job ran on failed",
+      excerpt: null,
+    },
+  },
+  lost: {
+    slurm_state: "UNKNOWN",
+    slurm_exit_code: null,
+    failure: {
+      phase: null,
+      message: "SLURM has had no record of this job for 10 minutes and it left no result",
+      excerpt: null,
+    },
+  },
+  outcome_missing: {
+    slurm_state: "COMPLETED",
+    slurm_exit_code: "0:0",
+    failure: {
+      phase: null,
+      message: "SLURM says the job completed, but it wrote no result record",
+      excerpt: "slurmstepd: error: could not write to the job directory",
+    },
+  },
+};
+
+/** A small, plausible manifest: three variables at three time steps. */
+function fakeOutput(): OutputManifest {
+  const files: OutputManifest["files"] = [];
+  for (const v of ["discharge", "runoff", "streamAge"]) {
+    files.push({ path: `yearly/${v}_2001.nc`, bytes: 15_360_000 });
+    files.push({ path: `monthly/${v}_2001.nc`, bytes: 184_320_000 });
+    for (let d = 1; d <= 3; d++) {
+      files.push({ path: `daily/${v}_2001_${String(d).padStart(3, "0")}.nc`, bytes: 61_440_000 });
+    }
+  }
+  files.push({ path: "init.ini", bytes: 4_096 });
+  return {
+    nc_count: files.length - 1,
+    file_count: files.length,
+    total_bytes: files.reduce((n, f) => n + f.bytes, 0),
+    files,
+    truncated: false,
+  };
+}
+
+/**
+ * The fixture behind a `?preview=<key>` (lib/workspace/preview.ts): a job with
+ * the fields that state would really have — a failed one its verdict, a
+ * finished one its directories on Anvil. `viewerEmail` is who is looking, so
+ * "cancelled by you" can be shown as such.
+ */
+export function previewSimulation(
+  key: string,
+  { overrides = {}, viewerEmail = null }: { overrides?: Partial<Job>; viewerEmail?: string | null } = {}
+): Job {
+  const [kind, variant] = key.split(":");
+  const onAnvil = { work_dir: FAKE_WORK_DIR, remote_job_dir: FAKE_JOB_DIR, files: "present" as const };
+  const you = viewerEmail ?? "you@example.test";
+
+  const build = (): Job => {
+    if (kind === "cancelling") {
+      return fakeSimulation("RUNNING", {
+        work_dir: FAKE_WORK_DIR,
+        remote_job_dir: FAKE_JOB_DIR,
+        cancel_requested_at: iso(2 * 60_000),
+        cancel_requested_by_email: you,
+      });
+    }
+
+    if (kind === "completed") {
+      const base = fakeSimulation("COMPLETED", {
+        ...onAnvil,
+        slurm_state: "COMPLETED",
+        slurm_exit_code: "0:0",
+        output: fakeOutput(),
+      });
+      if (variant === "purged") return { ...base, files: "purged" };
+      if (variant === "legacy") {
+        return { ...base, work_dir: null, remote_job_dir: null, files: null, output: null };
+      }
+      return base;
+    }
+
+    if (kind === "failed") {
+      const cause = (variant ?? "wbm_error") as keyof typeof FAILURE_FIXTURES;
+      const f = FAILURE_FIXTURES[cause] ?? FAILURE_FIXTURES.wbm_error;
+      return fakeSimulation("FAILED", {
+        ...onAnvil,
+        slurm_state: f.slurm_state,
+        slurm_exit_code: f.slurm_exit_code,
+        failure: { cause, ...f.failure },
+        status_reason: f.failure.message,
+      });
+    }
+
+    if (kind === "cancelled") {
+      const bySystem = variant === "system";
+      return fakeSimulation("CANCELLED", {
+        ...onAnvil,
+        slurm_state: bySystem ? "CANCELLED by 8013088" : "CANCELLED by 2100",
+        slurm_exit_code: "0:0",
+        failure: {
+          cause: bySystem ? "cancelled_by_system" : "cancelled_by_user",
+          phase: "run",
+          message: bySystem
+            ? "SLURM cancelled the job and the gateway had no cancel request for it"
+            : "Cancelled at the owner's request",
+          excerpt: null,
+        },
+        cancel_requested_at: bySystem ? null : iso(90 * 60_000),
+        cancel_requested_by_email: bySystem ? null : variant === "other" ? "colleague@example.test" : you,
+      });
+    }
+
+    return fakeSimulation(kind.toUpperCase() as JobStatus);
+  };
+
+  return { ...build(), ...overrides };
 }
 
 /** stdout as a WBM run under SLURM would leave it. */

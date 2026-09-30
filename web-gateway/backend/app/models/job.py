@@ -42,6 +42,26 @@ TERMINAL_STATUSES: set[str] = {"COMPLETED", "FAILED", "CANCELLED"}
 ACTIVE_STATUSES: list[str] = ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"]
 CANCELLABLE_STATUSES: set[str] = {"PENDING", "SUBMITTED", "RUNNING", "COMPLETING"}
 
+#: Why a job ended the way it did (ADR 0026). Named in one place only,
+#: `app.services.job_verdict.classify`. Mirrored by `FailureCause` in the
+#: frontend's lib/jobs/types.ts (rule 4).
+FailureCause = Literal[
+    "fetch_failed",
+    "run_refused",
+    "wbm_error",
+    "wbm_silent_failure",
+    "timeout",
+    "out_of_memory",
+    "node_failure",
+    "cancelled_by_user",
+    "cancelled_by_system",
+    "lost",
+    "outcome_missing",
+]
+
+#: `purged`: Anvil's 30-day scratch purge removed the work directory (ADR 0026).
+FilesState = Literal["present", "purged"]
+
 #: The three states `app.api.v1.jobs._resolve_model_input` (T1) can produce
 #: for "which model input does this simulation use" — distinguished at the
 #: source rather than reconstructed in the UI (mission 2026-09-21, plan.md):
@@ -139,6 +159,17 @@ class SubmitError(BaseModel):
     at: datetime
 
 
+class JobFailure(BaseModel):
+    """The verdict on a job that did not complete, or was cancelled: the cause,
+    the phase it happened in, a sentence its owner can act on, and the log
+    excerpt that shows why. Stored on the job and returned as it is."""
+
+    cause: FailureCause
+    phase: str | None = None
+    message: str
+    excerpt: str | None = None
+
+
 # --- MongoDB document ---
 
 
@@ -204,6 +235,30 @@ class JobDB(BaseModel):
     # S3 outputs
     output_s3_key: str | None = None
 
+    # How the job ended (ADR 0026), written once, the first time the sweep sees
+    # SLURM's terminal state. All optional: a job stored before this has none.
+    # SLURM's own words and times, kept because sacct forgets a job after 14
+    # days; `outcome` is the job's own record (`job_script`), as read.
+    slurm_state: str | None = None
+    slurm_exit_code: str | None = None
+    slurm_start: datetime | None = None
+    slurm_end: datetime | None = None
+    failure: JobFailure | None = None
+    outcome: dict | None = None
+    # A cancel is two steps: the request is recorded, then SLURM confirms it.
+    cancel_requested_at: datetime | None = None
+    cancel_requested_by: str | None = None  # user id
+    cancel_requested_by_email: str | None = None
+    # When the sweep first found SLURM had no record of the job; cleared when
+    # it is found again. A miss alone is never a verdict.
+    missing_since: datetime | None = None
+    # The work directory's fate, and when it was last looked for.
+    files: FilesState | None = None
+    files_checked_at: datetime | None = None
+    # On a draft: a `sim_id` whose submit may have reached SLURM without the
+    # gateway learning of it, and whose `scancel --name` has not yet worked.
+    orphan_sim_ids: list[str] = Field(default_factory=list)
+
     # Timestamps
     created_at: datetime
     submitted_at: datetime | None = None
@@ -259,7 +314,68 @@ class SimulationUpdateRequest(BaseModel):
     model_input_id: str | None = None
 
 
-class JobResponse(BaseModel):
+class OutputFile(BaseModel):
+    path: str  # relative to the job's work directory
+    bytes: int
+
+
+class JobOutputSummary(BaseModel):
+    """What a job wrote under its work directory, from its own outcome record.
+    `files` can be cut short (`truncated`); `file_count` is the real total."""
+
+    nc_count: int
+    total_bytes: int
+    file_count: int
+    files: list[OutputFile] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class JobVerdictFields(BaseModel):
+    """What ADR 0026 adds to a job, on both `JobResponse` and
+    `JobStatusResponse` (the polling hook reads /status). Null until it
+    applies. The raw outcome record is never exposed, only `output`."""
+
+    slurm_state: str | None = None
+    slurm_exit_code: str | None = None
+    slurm_start: datetime | None = None
+    slurm_end: datetime | None = None
+    failure: JobFailure | None = None
+    cancel_requested_at: datetime | None = None
+    cancel_requested_by_email: str | None = None
+    files: FilesState | None = None
+    output: JobOutputSummary | None = None
+
+
+def verdict_fields(doc: dict) -> dict:
+    """The `JobVerdictFields` of a job document, for a response to be built
+    with. `output` is read from the stored outcome record."""
+    output = None
+    recorded = (doc.get("outcome") or {}).get("output")
+    if isinstance(recorded, dict):
+        try:
+            output = JobOutputSummary(
+                nc_count=recorded["nc_count"],
+                total_bytes=recorded["total_bytes"],
+                file_count=recorded.get("file_count", len(recorded.get("files") or [])),
+                files=recorded.get("files") or [],
+                truncated=bool(recorded.get("truncated", False)),
+            )
+        except (KeyError, TypeError, ValueError):
+            output = None  # a record this gateway cannot read is shown as none
+    return {
+        "slurm_state": doc.get("slurm_state"),
+        "slurm_exit_code": doc.get("slurm_exit_code"),
+        "slurm_start": doc.get("slurm_start"),
+        "slurm_end": doc.get("slurm_end"),
+        "failure": doc.get("failure"),
+        "cancel_requested_at": doc.get("cancel_requested_at"),
+        "cancel_requested_by_email": doc.get("cancel_requested_by_email"),
+        "files": doc.get("files"),
+        "output": output,
+    }
+
+
+class JobResponse(JobVerdictFields):
     """Single job detail returned to the frontend."""
 
     model_config = {"protected_namespaces": ()}
@@ -312,7 +428,7 @@ class JobListResponse(BaseModel):
     total_pages: int
 
 
-class JobStatusResponse(BaseModel):
+class JobStatusResponse(JobVerdictFields):
     """Lightweight status for polling."""
 
     job_id: str
@@ -323,6 +439,7 @@ class JobStatusResponse(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     status_reason: str | None = None
+    work_dir: str | None = None
 
 
 class JobStatsResponse(BaseModel):

@@ -7,8 +7,8 @@ import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { PublishForm } from "@/components/workspace/publish-form";
 import { fetchJob } from "@/lib/jobs/actions";
-import { fakeSimulation } from "@/lib/workspace/fixtures";
-import { resolvePreviewStatus } from "@/lib/workspace/preview";
+import { previewSimulation } from "@/lib/workspace/fixtures";
+import { resolvePreview } from "@/lib/workspace/preview";
 import { ArrowLeft } from "lucide-react";
 
 export default async function PublishJobPage({
@@ -24,11 +24,11 @@ export default async function PublishJobPage({
   await requireSession(here);
 
   const previewRaw = Array.isArray(query.preview) ? query.preview[0] : query.preview;
-  const previewStatus = resolvePreviewStatus(previewRaw);
+  const preview = resolvePreview(previewRaw);
 
   let job;
-  if (previewStatus) {
-    job = fakeSimulation(previewStatus, { id });
+  if (preview) {
+    job = previewSimulation(preview.key, { overrides: { id } });
   } else {
     const result = await fetchJob(id);
     if (!result.ok) {
@@ -47,7 +47,7 @@ export default async function PublishJobPage({
       <Header />
       <div className="border-b bg-muted/50">
         <div className="mx-auto max-w-[840px] px-10 py-3 text-sm text-muted-foreground">
-          <Link href={`/workspace/${id}${previewStatus ? `?preview=${previewStatus}` : ""}`} className="transition-colors hover:text-foreground">
+          <Link href={`/workspace/${id}${preview ? `?preview=${preview.key}` : ""}`} className="transition-colors hover:text-foreground">
             {job.sim_id || job.id.slice(0, 8)}
           </Link>
           <span className="mx-2">/</span>
@@ -59,7 +59,7 @@ export default async function PublishJobPage({
         <div className="mx-auto max-w-[840px] px-10 py-10">
           <div className="mb-6">
             <Button variant="ghost" size="sm" asChild>
-              <Link href={`/workspace/${id}${previewStatus ? `?preview=${previewStatus}` : ""}`}>
+              <Link href={`/workspace/${id}${preview ? `?preview=${preview.key}` : ""}`}>
                 <ArrowLeft className="mr-1.5 size-4" />
                 Back to Simulation
               </Link>

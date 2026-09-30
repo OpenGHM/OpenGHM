@@ -14,7 +14,16 @@ import { deriveSimulation } from "@/lib/jobs/actions";
  * catalogue the gateway doesn't have yet). Creates a DRAFT inheriting the
  * snapshot's own configuration and opens it straight in the editor.
  */
-export function DeriveSimulationButton({ datasetId }: { datasetId: string }) {
+export function DeriveSimulationButton({
+  datasetId,
+  label = "New simulation from this snapshot",
+  fullWidth = false,
+}: {
+  datasetId: string;
+  label?: string;
+  /** Fill the card it sits in (the detail page's cards). */
+  fullWidth?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -48,23 +57,23 @@ export function DeriveSimulationButton({ datasetId }: { datasetId: string }) {
   };
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
+    <div className={`flex flex-col gap-1.5 ${fullWidth ? "items-stretch" : "items-end"}`}>
       <Button
         size="lg"
         variant="outline"
         onClick={handleClick}
         disabled={pending}
-        className="gap-2 border-[#006994] px-6 text-base font-semibold text-[#006994] hover:bg-[#006994]/5"
+        className="min-h-10 gap-2 border-primary px-6 text-base font-semibold text-primary hover:bg-primary/5"
       >
         {pending ? (
-          <Loader2 className="size-5 animate-spin" />
+          <Loader2 className="size-5 motion-safe:animate-spin" />
         ) : (
           <FlaskConical className="size-5" />
         )}
-        New simulation from this snapshot
+        {label}
       </Button>
       {sessionExpired && <SessionExpiredBanner className="w-full max-w-md" />}
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-xs text-status-failed">{error}</p>}
     </div>
   );
 }

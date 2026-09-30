@@ -38,6 +38,14 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
+  --color-status-draft: var(--status-draft);
+  --color-status-pending: var(--status-pending);
+  --color-status-submitted: var(--status-submitted);
+  --color-status-running: var(--status-running);
+  --color-status-cancelling: var(--status-cancelling);
+  --color-status-completed: var(--status-completed);
+  --color-status-failed: var(--status-failed);
+  --color-status-cancelled: var(--status-cancelled);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -73,6 +81,17 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Job status hues. Each is dark enough to read as text on a 10% tint of
+     itself (AA); components take tints with the opacity modifier, e.g.
+     bg-status-failed/10, border-status-failed/25. */
+  --status-draft: #6d28d9;
+  --status-pending: #475569;
+  --status-submitted: #1d4ed8;
+  --status-running: #b45309;
+  --status-cancelling: #c2410c;
+  --status-completed: #047857;
+  --status-failed: #b91c1c;
+  --status-cancelled: #475569;
   --sidebar: #f8fafc;
   --sidebar-foreground: #0f172a;
   --sidebar-primary: #e6f6fb;

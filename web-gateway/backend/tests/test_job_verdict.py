@@ -1,0 +1,345 @@
+"""How a job's verdict is reached (ADR 0026, mission
+2026-09-30-every-job-ends-with-a-verdict): one test per row of the mission's
+verdict contract, fed SLURM's raw states the way slurmly reports them
+(`JobInfo.raw_state`), the outcome record a job body writes
+(`job_script.OUTCOME_PY`) and the stderr a job leaves behind. Pure: no Mongo,
+no SSH.
+
+The submit-time rows (`submit_unreachable`, `submit_rejected`) are HTTP answers
+of the submit route, and are tested with it (tests/test_job_submit.py).
+"""
+
+from __future__ import annotations
+
+import copy
+
+import pytest
+
+from app.services.job_script import BODY_MARKER
+from app.services.job_verdict import classify
+
+from route_helpers import SUCCESS_OUTCOME as SUCCESS
+
+
+# What slurmly's preamble leaves on stderr before the body's marker.
+PREAMBLE = "Currently Loaded Modules:\n  1) modtree/cpu   2) git/2.31\n"
+
+
+def stderr(*lines: str) -> str:
+    return PREAMBLE + BODY_MARKER + "\n" + "\n".join(lines) + "\n"
+
+
+def record(**changes) -> dict:
+    """SUCCESS with `changes` merged in one level deep (`steps={...}` replaces
+    `steps`), so a case reads as what differs."""
+    rec = copy.deepcopy(SUCCESS)
+    rec.update(copy.deepcopy(changes))
+    rec["ok"] = False
+    return rec
+
+
+def verdict(state="COMPLETED", *, outcome=SUCCESS, err="", cancel=False, missing=False):
+    return classify(
+        slurm_state=state,
+        cancel_requested=cancel,
+        outcome=outcome,
+        stderr_tail=err,
+        missing=missing,
+    )
+
+
+# ---- success ----------------------------------------------------------------
+
+
+def test_completed_and_a_successful_record_is_completed():
+    v = verdict()
+    assert v.status == "COMPLETED"
+    assert v.failure is None
+
+
+# ---- rule 3: SLURM says the script exited, the record decides ---------------
+
+
+@pytest.mark.parametrize("state", ["COMPLETED", "FAILED", "SPECIAL_EXIT"])
+def test_fetch_failed_names_the_files_that_did_not_download(state):
+    err = stderr(
+        "openghm 0.4.0 commit abc1234",
+        "fetching 12 files",
+        "failed:",
+        "  data/runoff_2000.nc: HTTP 500",
+        "  data/runoff_2001.nc: connection reset",
+    )
+    rec = record(phase="fetch", steps={"fetch": {"exit_code": 1}}, staged=False)
+    v = verdict(state, outcome=rec, err=err)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "fetch_failed"
+    assert v.failure.phase == "fetch"
+    assert "could not be downloaded" in v.failure.message
+    assert v.failure.excerpt.splitlines()[0] == "failed:"
+    assert "runoff_2001.nc: connection reset" in v.failure.excerpt
+    assert "fetching 12 files" not in v.failure.excerpt
+
+
+def test_fetch_exit_2_is_a_fetch_failure_with_the_toolkits_message():
+    err = stderr("openghm: snapshot id 'x' is not valid")
+    rec = record(phase="fetch", steps={"fetch": {"exit_code": 2}}, staged=False)
+    v = verdict("FAILED", outcome=rec, err=err)
+    assert v.failure.cause == "fetch_failed"
+    assert v.failure.excerpt == "openghm: snapshot id 'x' is not valid"
+
+
+def test_run_refused_before_staging_carries_the_toolkits_reason():
+    err = stderr("openghm: the snapshot has no wbm section.")
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=False, wbm={"log": None, "all_done": False, "markers": [], "tail": []},
+                 output={"nc_count": 0, "total_bytes": 0, "file_count": 0, "files": [], "truncated": False})
+    v = verdict("FAILED", outcome=rec, err=err)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "run_refused"
+    assert v.failure.phase == "run"
+    assert "the snapshot has no wbm section" in v.failure.message
+    assert v.failure.excerpt == "openghm: the snapshot has no wbm section."
+
+
+def test_the_same_exit_code_after_staging_is_a_wbm_error():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=True,
+                 wbm={"log": "wbm_output/x/wbm_test.log", "all_done": False, "markers": [],
+                      "tail": ["reading forcing", "died at RIMS/WBM.pm line 771."]})
+    v = verdict("FAILED", outcome=rec, err=stderr("container exited 2"))
+    assert v.failure.cause == "wbm_error"
+    assert v.failure.phase == "run"
+    assert "exit code 2" in v.failure.message
+    assert v.failure.excerpt == "reading forcing\ndied at RIMS/WBM.pm line 771."
+
+
+def test_a_wbm_error_without_a_log_falls_back_to_stderr():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 125}},
+                 staged=True, wbm={"log": None, "all_done": False, "markers": [], "tail": []})
+    v = verdict("FAILED", outcome=rec, err=stderr("apptainer: image not found"))
+    assert v.failure.cause == "wbm_error"
+    assert v.failure.excerpt == "apptainer: image not found"
+
+
+def test_wbm_exiting_0_over_a_failure_marker_is_a_silent_failure():
+    rec = record(wbm={"log": "x.log", "all_done": False, "markers": ["Failed to warp"],
+                      "tail": ["Failed to warp runoff: out of memory"]})
+    v = verdict("COMPLETED", outcome=rec)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "wbm_silent_failure"
+    assert v.failure.phase == "check"
+    assert "Failed to warp" in v.failure.message
+    assert v.failure.excerpt == "Failed to warp runoff: out of memory"
+
+
+def test_nothing_to_do_is_a_silent_failure_too():
+    rec = record(wbm={"log": "x.log", "all_done": False, "markers": ["Nothing to do"], "tail": ["Nothing to do"]})
+    v = verdict(outcome=rec)
+    assert v.failure.cause == "wbm_silent_failure"
+    assert "Nothing to do" in v.failure.message
+
+
+def test_wbm_exiting_0_without_all_done_is_a_silent_failure():
+    rec = record(wbm={"log": "x.log", "all_done": False, "markers": [], "tail": ["step 40 of 366"]})
+    v = verdict(outcome=rec)
+    assert v.failure.cause == "wbm_silent_failure"
+    assert "All Done!" in v.failure.message
+
+
+def test_a_run_that_wrote_no_nc_files_is_a_silent_failure():
+    rec = record(output={"nc_count": 0, "total_bytes": 0, "file_count": 0, "files": [], "truncated": False})
+    v = verdict(outcome=rec)
+    assert v.failure.cause == "wbm_silent_failure"
+    assert ".nc" in v.failure.message
+
+
+def test_a_marker_outranks_a_missing_all_done_in_the_message():
+    rec = record(wbm={"log": "x.log", "all_done": False, "markers": ["Failed to warp"], "tail": []})
+    assert "Failed to warp" in verdict(outcome=rec).failure.message
+
+
+def test_completed_without_a_record_is_outcome_missing():
+    v = verdict("COMPLETED", outcome=None, err=stderr("something odd"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "outcome_missing"
+    assert "without reporting" in v.failure.message
+    assert v.failure.excerpt == "something odd"
+
+
+def test_slurm_failed_without_a_record_is_outcome_missing():
+    v = verdict("FAILED", outcome=None)
+    assert v.failure.cause == "outcome_missing"
+
+
+def test_a_step_without_an_exit_code_is_outcome_missing():
+    rec = record(phase="run", signal="TERM",
+                 steps={"fetch": {"exit_code": 0}, "run": {"exit_code": None}}, staged=False)
+    v = verdict("FAILED", outcome=rec)
+    assert v.failure.cause == "outcome_missing"
+    assert "stopped part-way" in v.failure.message
+
+
+def test_a_script_that_never_reached_the_run_is_outcome_missing():
+    rec = record(phase="fetch", steps={}, staged=False)
+    v = verdict("FAILED", outcome=rec)
+    assert v.failure.cause == "outcome_missing"
+    assert "before it ran" in v.failure.message
+
+
+def test_a_signal_over_otherwise_good_steps_is_outcome_missing():
+    v = verdict("FAILED", outcome=record(signal="HUP"))
+    assert v.failure.cause == "outcome_missing"
+
+
+def test_slurm_failed_over_a_successful_record_is_outcome_missing():
+    v = verdict("FAILED", outcome=SUCCESS)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "outcome_missing"
+    assert "FAILED" in v.failure.message and "succeeded" in v.failure.message
+
+
+def test_a_failing_record_wins_over_a_completed_state():
+    rec = record(steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 1}}, staged=True)
+    assert verdict("COMPLETED", outcome=rec).failure.cause == "wbm_error"
+
+
+# ---- rule 2: SLURM killed the job -------------------------------------------
+
+
+def test_timeout_is_timeout_and_suggests_a_longer_walltime():
+    v = verdict("TIMEOUT", outcome=None, err=stderr("slurmstepd: error: *** JOB 1 ON a000 CANCELLED AT 2026-09-30T14:15:00 DUE TO TIME LIMIT ***"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "timeout"
+    assert "walltime" in v.failure.message and "longer" in v.failure.message
+    assert "DUE TO TIME LIMIT" in v.failure.excerpt
+
+
+def test_out_of_memory_is_out_of_memory():
+    v = verdict("OUT_OF_MEMORY", outcome=None)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "out_of_memory"
+    assert "memory" in v.failure.message
+
+
+@pytest.mark.parametrize("state", ["NODE_FAIL", "BOOT_FAIL", "PREEMPTED", "DEADLINE", "REVOKED"])
+def test_a_node_class_failure_is_node_failure_and_not_the_users(state):
+    v = verdict(state, outcome=None)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "node_failure"
+    assert state in v.failure.message
+    assert "not a problem with your input" in v.failure.message
+
+
+def test_slurms_kill_wins_over_whatever_the_record_says():
+    # The record of a job that was killed is absent or cut short; if one
+    # survived saying it failed some other way, SLURM's word still stands.
+    rec = record(steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 137}}, staged=True)
+    assert verdict("TIMEOUT", outcome=rec).failure.cause == "timeout"
+    assert verdict("OUT_OF_MEMORY", outcome=SUCCESS).failure.cause == "out_of_memory"
+
+
+def test_a_kill_keeps_the_phase_the_record_reached():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": None}})
+    assert verdict("TIMEOUT", outcome=rec).failure.phase == "run"
+    assert verdict("TIMEOUT", outcome=None).failure.phase is None
+
+
+# ---- rule 1: cancelled ------------------------------------------------------
+
+
+def test_cancelled_after_a_request_is_cancelled_by_user():
+    v = verdict("CANCELLED", cancel=True, outcome=None)
+    assert v.status == "CANCELLED"
+    assert v.failure.cause == "cancelled_by_user"
+    assert "You cancelled" in v.failure.message
+
+
+def test_the_verbose_sacct_form_is_read_as_cancelled():
+    v = verdict("CANCELLED by 8013088", cancel=True, outcome=None)
+    assert v.status == "CANCELLED" and v.failure.cause == "cancelled_by_user"
+    v = verdict("CANCELLED by 0", cancel=False, outcome=None)
+    assert v.status == "CANCELLED" and v.failure.cause == "cancelled_by_system"
+
+
+def test_cancelled_without_a_request_is_cancelled_by_system():
+    v = verdict("CANCELLED", cancel=False, outcome=None)
+    assert v.status == "CANCELLED"
+    assert v.failure.cause == "cancelled_by_system"
+    assert "administrator" in v.failure.message
+
+
+def test_cancelled_outranks_a_record_that_says_it_failed():
+    rec = record(steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 143}}, staged=True, signal="TERM")
+    assert verdict("CANCELLED", cancel=True, outcome=rec).failure.cause == "cancelled_by_user"
+
+
+def test_a_cancel_that_came_too_late_leaves_the_real_verdict():
+    assert verdict("COMPLETED", cancel=True).status == "COMPLETED"
+    assert verdict("TIMEOUT", cancel=True, outcome=None).failure.cause == "timeout"
+    rec = record(steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 1}}, staged=True)
+    assert verdict("FAILED", cancel=True, outcome=rec).failure.cause == "wbm_error"
+
+
+# ---- rule 4: SLURM has no record of the job ---------------------------------
+
+
+def test_missing_without_a_record_is_lost():
+    v = verdict(None, outcome=None, missing=True, err=stderr("started"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "lost"
+    assert "no record" in v.failure.message
+    assert v.failure.excerpt == "started"
+
+
+def test_missing_with_a_successful_record_is_judged_by_it():
+    v = verdict(None, outcome=SUCCESS, missing=True)
+    assert v.status == "COMPLETED" and v.failure is None
+
+
+def test_missing_with_a_failing_record_is_judged_by_it():
+    rec = record(phase="fetch", steps={"fetch": {"exit_code": 1}}, staged=False)
+    v = verdict(None, outcome=rec, missing=True, err=stderr("failed:", "  a.nc: 500"))
+    assert v.failure.cause == "fetch_failed"
+
+
+def test_missing_ignores_whatever_slurm_state_was_last_seen():
+    v = verdict("RUNNING", outcome=None, missing=True)
+    assert v.failure.cause == "lost"
+
+
+# ---- excerpts and states ----------------------------------------------------
+
+
+def test_the_excerpt_starts_after_the_bodys_marker():
+    v = verdict("TIMEOUT", outcome=None, err=stderr("first", "second"))
+    assert v.failure.excerpt == "first\nsecond"
+    assert "Currently Loaded" not in v.failure.excerpt
+
+
+def test_without_the_marker_the_whole_tail_is_the_excerpt():
+    # The body never started (a module error, say): all of it is news.
+    v = verdict("FAILED", outcome=None, err="Lmod has detected the following error: no such module\n")
+    assert v.failure.excerpt == "Lmod has detected the following error: no such module"
+
+
+def test_the_excerpt_is_the_last_60_lines_and_8_kb():
+    many = stderr(*[f"line {i}" for i in range(200)])
+    lines = verdict("FAILED", outcome=None, err=many).failure.excerpt.splitlines()
+    assert len(lines) == 60 and lines[-1] == "line 199"
+    wide = stderr(*[("y" * 400) for _ in range(50)])
+    assert len(verdict("FAILED", outcome=None, err=wide).failure.excerpt.encode()) <= 8 * 1024
+
+
+def test_an_empty_stderr_leaves_no_excerpt():
+    assert verdict("TIMEOUT", outcome=None, err="").failure.excerpt is None
+    assert verdict("TIMEOUT", outcome=None, err=PREAMBLE + BODY_MARKER + "\n").failure.excerpt is None
+
+
+@pytest.mark.parametrize("state", ["RUNNING", "PENDING", "", None, "WHATEVER"])
+def test_a_job_that_is_not_over_has_no_verdict(state):
+    with pytest.raises(ValueError):
+        verdict(state, outcome=None)
+
+
+def test_a_garbled_record_is_no_record():
+    assert verdict("COMPLETED", outcome=["not", "a", "dict"]).failure.cause == "outcome_missing"

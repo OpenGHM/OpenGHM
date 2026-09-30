@@ -9,13 +9,14 @@ The route and the real auth dependencies run against the in-memory Mongo
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from pathlib import Path
 
 import pytest
 from slurmly import JobSpec
-from slurmly.exceptions import InvalidJobSpec, SbatchError, SSHTransportError
+from slurmly.exceptions import InvalidJobSpec, SbatchError, SbatchParseError, SSHTransportError
 from slurmly.scripts.renderer import render_script
 
 from app.api.v1 import jobs as jobs_router
@@ -23,7 +24,13 @@ from app.core.config import settings
 from app.models.job import JobDB
 from app.services import job_script, slurm
 
+from conftest import REMOTE_BASE
 from route_helpers import make_job, make_user, token_for
+
+# conftest fakes these for the route tests; the leftovers tests below want the
+# real ones, and this module is imported before any fixture runs.
+REAL_SCANCEL_BY_NAME = slurm.scancel_by_name
+REAL_REMOVE_FAILED_SUBMIT_DIRS = slurm.remove_failed_submit_dirs
 
 OWNER = "owner"
 HEADERS = token_for(OWNER)
@@ -96,6 +103,7 @@ def test_a_submit_is_accepted_and_the_job_records_everything(client, db, draft, 
     ((job, _, script),) = sent
     assert isinstance(job, JobDB) and job.sim_id == body["sim_id"]
     assert f'--id {body["sim_id"]} --spool fresh' in script  # defaults: no overrides
+    assert f'OG_WORK_DIR={body["work_dir"]}' in script
     assert "snapshot fetch" in script and " ds-1 " in script
 
     (event,) = [e for e in db.audit_events.docs.values() if e["action"] == "job_submitted"]
@@ -367,6 +375,147 @@ def test_no_toolkit_install_is_503_and_runs_nothing(client, db, draft, sent, mon
     assert "sim_id" not in db.jobs.docs["job-1"]
 
 
+# ---- a submit that may have reached SLURM, and one that certainly did not ----
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        SSHTransportError("connection reset"),
+        SbatchParseError("Submitted batch job soon"),
+        TimeoutError("no answer"),
+        ConnectionResetError("reset"),
+    ],
+)
+def test_a_lost_answer_cancels_the_attempt_by_name(client, db, draft, monkeypatch, exc):
+    _fail_with(monkeypatch, exc)
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "anvil_unreachable"
+    ((call, sim_id),) = db.cleanup_calls
+    assert call == "scancel_by_name" and sim_id.startswith("sim-")
+    _assert_back_to_draft(db, "anvil_unreachable")
+    assert not db.jobs.docs["job-1"].get("orphan_sim_ids")
+
+
+def test_when_that_scancel_fails_too_the_name_is_kept_on_the_draft(
+    client, db, draft, monkeypatch
+):
+    _fail_with(monkeypatch, SSHTransportError("connection reset"))
+
+    async def scancel_by_name(sim_id):
+        db.cleanup_calls.append(("scancel_by_name", sim_id))
+        return False
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 503
+    ((_, sim_id),) = db.cleanup_calls
+    stored = db.jobs.docs["job-1"]
+    assert stored["orphan_sim_ids"] == [sim_id]
+    _assert_back_to_draft(db, "anvil_unreachable")  # and still a draft, without sim_id
+
+
+def test_a_scancel_that_raises_is_the_same_as_one_that_failed(client, db, draft, monkeypatch):
+    _fail_with(monkeypatch, SSHTransportError("down"))
+
+    async def scancel_by_name(sim_id):
+        raise SSHTransportError("still down")
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 503
+    assert len(db.jobs.docs["job-1"]["orphan_sim_ids"]) == 1
+
+
+def test_a_resubmit_after_an_orphan_keeps_the_old_name_to_cancel(client, db, draft, monkeypatch):
+    real = slurm.submit_job
+    _fail_with(monkeypatch, SSHTransportError("down"))
+
+    async def scancel_by_name(sim_id):
+        return False
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    client.post(SUBMIT, headers=HEADERS)
+    (orphan,) = db.jobs.docs["job-1"]["orphan_sim_ids"]
+    monkeypatch.setattr(slurm, "submit_job", real)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    assert db.jobs.docs["job-1"]["orphan_sim_ids"] == [orphan]
+    assert db.jobs.docs["job-1"]["sim_id"] != orphan
+
+
+def test_a_refusal_removes_slurmlys_leftover_directory_and_cancels_nothing(
+    client, db, draft, monkeypatch
+):
+    _fail_with(monkeypatch, SbatchError(command="sbatch run.sh", exit_status=1, stderr="Invalid account"))
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 502
+    ((call, sim_id),) = db.cleanup_calls
+    assert call == "remove_failed_submit_dirs" and sim_id.startswith("sim-")
+    assert not db.jobs.docs["job-1"].get("orphan_sim_ids")
+
+
+def test_a_failed_cleanup_never_changes_the_answer(client, db, draft, monkeypatch):
+    _fail_with(monkeypatch, SbatchError(command="sbatch run.sh", exit_status=1, stderr="no"))
+
+    async def no_anvil():
+        raise SSHTransportError("down")
+
+    # The real function swallows its own failures. (Never the real client: a
+    # developer's .env may hold real credentials.)
+    monkeypatch.setattr(slurm, "get_slurm_client", no_anvil)
+    monkeypatch.setattr(slurm, "remove_failed_submit_dirs", REAL_REMOVE_FAILED_SUBMIT_DIRS)
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "sbatch_rejected"
+
+
+@pytest.mark.parametrize(
+    "exc", [slurm.AnvilNotConfigured("no key"), InvalidJobSpec("bad time")]
+)
+def test_a_submit_that_never_left_the_gateway_needs_no_cleanup_by_name(
+    client, db, draft, monkeypatch, exc
+):
+    _fail_with(monkeypatch, exc)
+    client.post(SUBMIT, headers=HEADERS)
+    assert not [c for c in db.cleanup_calls if c[0] == "scancel_by_name"]
+
+
+def test_scancel_by_name_is_this_users_and_this_attempts(db, anvil, monkeypatch):
+    assert asyncio.run(REAL_SCANCEL_BY_NAME("sim-20260930-0a1b2c")) is True
+    assert anvil.commands == ["scancel --name=sim-20260930-0a1b2c --user=x-openghm"]
+    assert anvil.transport.runs[0].retry_safe is True
+    anvil.results.append((lambda c: True, (1, "", "scancel: error")))
+    assert asyncio.run(REAL_SCANCEL_BY_NAME("sim-20260930-0a1b2c")) is False
+
+
+def test_the_leftover_directory_is_found_by_the_name_in_its_metadata_and_removed(db, anvil):
+    sim = "sim-20260930-0a1b2c"
+    found = f"{REMOTE_BASE}/jobs/slurmly-1a2b3c4d/metadata.json\n"
+    anvil.results.append((lambda c: c.startswith("grep"), (0, found, "")))
+    asyncio.run(REAL_REMOVE_FAILED_SUBMIT_DIRS(sim))
+    grep, rm = anvil.commands
+    assert grep == (
+        f"grep -l -F '\"name\": \"{sim}\"' {REMOTE_BASE}/jobs/slurmly-*/metadata.json"
+    )
+    assert rm == f"rm -rf -- {REMOTE_BASE}/jobs/slurmly-1a2b3c4d"
+
+
+def test_nothing_is_removed_when_no_directory_names_the_attempt(db, anvil):
+    anvil.results.append((lambda c: c.startswith("grep"), (1, "", "")))
+    asyncio.run(REAL_REMOVE_FAILED_SUBMIT_DIRS("sim-20260930-0a1b2c"))
+    assert len(anvil.commands) == 1
+
+
+def test_a_hit_outside_the_jobs_root_is_not_removed(db, anvil):
+    anvil.results.append((lambda c: c.startswith("grep"), (0, "/anvil/scratch/x-openghm/cache/metadata.json\n", "")))
+    asyncio.run(REAL_REMOVE_FAILED_SUBMIT_DIRS("sim-20260930-0a1b2c"))
+    assert len(anvil.commands) == 1  # slurmly's own check refuses; the grep was all
+
+
+def test_a_cleanup_that_cannot_reach_anvil_is_silent(db, anvil):
+    anvil.results.append((lambda c: True, SSHTransportError("down")))
+    asyncio.run(REAL_REMOVE_FAILED_SUBMIT_DIRS("sim-20260930-0a1b2c"))  # does not raise
+
+
 # ---- PATCH slurm_config ------------------------------------------------------
 
 
@@ -463,6 +612,7 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
         openghm_home=settings.ANVIL_OPENGHM_HOME,
         cache_dir=settings.ANVIL_CACHE_DIR,
         fetch_lock=settings.ANVIL_FETCH_LOCK,
+        work_dir=f"{settings.ANVIL_OUTPUT_BASE}/{job.sim_id}",
     )
     script = render_script(
         spec=slurm.build_job_spec(job, snapshot, body),
@@ -477,7 +627,9 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
     assert "#SBATCH --time=22:30" in directives
     assert "#SBATCH --account=ees260008" in directives
     assert not [d for d in directives if "--nodes" in d or "--ntasks" in d]
-    assert script.rstrip().endswith("--id sim-20260930-0a1b2c --spool fresh")
+    assert "--id sim-20260930-0a1b2c --spool fresh" in script
+    # slurmly's preamble comes first; the body's own marker separates them.
+    assert script.index("module list") < script.index(job_script.BODY_MARKER)
 
 
 def test_a_walltime_the_draft_chose_is_sent_as_given(v2_spec_inputs):
@@ -499,7 +651,7 @@ def test_the_snapshots_walltime_gets_headroom_and_its_cores_do_not(v2_spec_input
 def test_the_job_body_locks_the_fetch_on_home(client, db, draft, sent):
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     script = sent[0][2]
-    assert f"flock {settings.ANVIL_FETCH_LOCK} " in script
+    assert f"step fetch flock {settings.ANVIL_FETCH_LOCK} " in script
     assert settings.ANVIL_FETCH_LOCK.startswith("/home/")
 
 

@@ -37,6 +37,7 @@ from app.models.job import (
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
+    verdict_fields,
 )
 from app.models.user import TokenPayload
 from app.services import job_script, slurm
@@ -147,6 +148,23 @@ def _doc_to_response(
         work_dir=doc.get("work_dir"),
         remote_job_dir=doc.get("remote_job_dir"),
         last_submit_error=doc.get("last_submit_error"),
+        **verdict_fields(doc),
+    )
+
+
+def _status_response(doc: dict) -> JobStatusResponse:
+    """What the polling endpoint and the cancel route answer with."""
+    return JobStatusResponse(
+        job_id=doc["_id"],
+        sim_id=doc.get("sim_id"),
+        status=doc["status"],
+        slurm_job_id=doc.get("slurm_job_id"),
+        submitted_at=doc.get("submitted_at"),
+        started_at=doc.get("started_at"),
+        completed_at=doc.get("completed_at"),
+        status_reason=doc.get("status_reason"),
+        work_dir=doc.get("work_dir"),
+        **verdict_fields(doc),
     )
 
 
@@ -467,6 +485,7 @@ async def submit_simulation(
     now = datetime.now(timezone.utc)
     sim_id = _generate_sim_id(now)
     home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
+    work_dir = posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
     try:
         overrides = job_script.run_overrides(job.parameters, snapshot)
         body = job_script.render_job_body(
@@ -475,6 +494,7 @@ async def submit_simulation(
             openghm_home=home,
             cache_dir=settings.ANVIL_CACHE_DIR,
             fetch_lock=settings.ANVIL_FETCH_LOCK,
+            work_dir=work_dir,
             run_start=overrides.run_start,
             run_end=overrides.run_end,
             output_vars=overrides.output_vars,
@@ -494,7 +514,7 @@ async def submit_simulation(
                 "sim_id": sim_id,
                 "slurm_job_name": sim_id,
                 "toolkit": toolkit,
-                "work_dir": posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id),
+                "work_dir": work_dir,
                 "status_reason": None,
                 "updated_at": now,
             },
@@ -512,6 +532,7 @@ async def submit_simulation(
     try:
         submitted = await slurm.submit_job(job, snapshot, body)
     except Exception as exc:
+        maybe_sent = False
         if isinstance(exc, slurm.AnvilNotConfigured):
             http_status, code, message = (
                 status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -524,6 +545,10 @@ async def submit_simulation(
                 "sbatch_rejected",
                 _sbatch_refusal_message(exc),
             )
+            if isinstance(exc, SbatchError):
+                # slurmly made its job directory before sbatch said no, and
+                # keeps no record of it: nothing else will ever remove it.
+                await slurm.remove_failed_submit_dirs(sim_id)
         elif isinstance(exc, job_script.SubmitInputError):
             http_status, code, message = (
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -538,11 +563,16 @@ async def submit_simulation(
                 "anvil_unreachable",
                 _ANVIL_UNREACHABLE,
             )
+            maybe_sent = True
         else:
             await _return_to_draft(job_id, "internal_error", "The submit failed unexpectedly.")
             raise
         logger.error("Job %s submit failed (%s): %s", job_id, code, exc)
-        await _return_to_draft(job_id, code, message)
+        # The user is told nothing was submitted, so a job that was must go.
+        # If scancel cannot run either, the sim_id stays on the draft and the
+        # sweep retries it (ADR 0026).
+        orphan = sim_id if maybe_sent and not await _scancel_attempt(sim_id) else None
+        await _return_to_draft(job_id, code, message, orphan_sim_id=orphan)
         raise _error(http_status, code, message)
 
     done = datetime.now(timezone.utc)
@@ -570,6 +600,23 @@ async def submit_simulation(
             await slurm.cancel_job(submitted.slurm_job_id)
         except Exception as exc:
             logger.error("scancel of orphaned %s failed: %s", submitted.slurm_job_id, exc)
+            # Keep the name so the sweep retries it by name.
+            await db.jobs.update_one({"_id": job_id}, {"$addToSet": {"orphan_sim_ids": sim_id}})
+        # Keep where its files are, so a delete can remove them.
+        await db.jobs.update_one(
+            {"_id": job_id, "status": "CANCELLED"},
+            {
+                "$set": {
+                    "slurm_job_id": submitted.slurm_job_id,
+                    "internal_job_id": submitted.internal_job_id,
+                    "remote_job_dir": submitted.remote_job_dir,
+                    "remote_script_path": submitted.remote_script_path,
+                    "stdout_path": submitted.stdout_path,
+                    "stderr_path": submitted.stderr_path,
+                    "slurmly_submitted_at": submitted.submitted_at,
+                }
+            },
+        )
 
     await log_event(
         "job_submitted",
@@ -590,28 +637,45 @@ async def submit_simulation(
     return _doc_to_response(updated, effective=effective)
 
 
-async def _return_to_draft(job_id: str, code: str, message: str) -> None:
+async def _scancel_attempt(sim_id: str) -> bool:
+    """`scancel --name=<sim_id>` for a submit whose answer was lost. Whether
+    it ran; a failure is logged and never changes the answer to the user."""
+    try:
+        return await slurm.scancel_by_name(sim_id)
+    except Exception as exc:
+        logger.error("scancel --name=%s failed: %s", sim_id, exc)
+        return False
+
+
+async def _return_to_draft(
+    job_id: str, code: str, message: str, *, orphan_sim_id: str | None = None
+) -> None:
     """Undo the claim of a submit that never reached SLURM: back to DRAFT, the
     submit-time fields removed (a draft carries no `sim_id`, see
-    `_new_draft_document`), and the reason kept for the UI."""
+    `_new_draft_document`), and the reason kept for the UI. `orphan_sim_id` is
+    a `sim_id` whose job may exist after all, kept for the sweep to cancel."""
     now = datetime.now(timezone.utc)
-    await get_db().jobs.update_one(
-        {"_id": job_id, "status": "SUBMITTED"},
-        {
-            "$set": {
-                "status": "DRAFT",
-                "slurm_job_name": "",
-                "last_submit_error": {"code": code, "message": message, "at": now},
-                "updated_at": now,
-            },
-            "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
+    update: dict = {
+        "$set": {
+            "status": "DRAFT",
+            "slurm_job_name": "",
+            "last_submit_error": {"code": code, "message": message, "at": now},
+            "updated_at": now,
         },
-    )
+        "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
+    }
+    if orphan_sim_id:
+        update["$addToSet"] = {"orphan_sim_ids": orphan_sim_id}
+    await get_db().jobs.update_one({"_id": job_id, "status": "SUBMITTED"}, update)
 
 
 # ---------------------------------------------------------------------------
-# DELETE /jobs/{job_id}  —  Delete while draft
+# DELETE /jobs/{job_id}  —  Delete a draft or a finished simulation
 # ---------------------------------------------------------------------------
+#
+# A draft has nothing on Anvil. A finished simulation leaves two directories
+# there (ADR 0026), and its owner's delete removes both before the document:
+# a document that outlived its files could no longer say where they were.
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -621,12 +685,56 @@ async def delete_simulation(
 ):
     db = get_db()
     doc = await _get_job_for(job_id, user, None)
-    if not _is_editable(doc):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot delete a simulation in state {doc['status']}",
+    removed: list[str] = []
+    if doc["status"] in TERMINAL_STATUSES:
+        removed = await _remove_files_of(doc)
+    elif not _is_editable(doc):
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "job_active",
+            "Cancel the simulation before deleting it.",
         )
-    await db.jobs.delete_one({"_id": job_id})
+    await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
+    await log_event(
+        "job_deleted",
+        actor_id=user.sub,
+        actor_email=user.email,
+        target_id=job_id,
+        category=AuditCategory.JOB,
+        detail={"sim_id": doc.get("sim_id"), "status": doc["status"], "removed": removed},
+    )
+
+
+async def _remove_files_of(doc: dict) -> list[str]:
+    """Remove a finished job's directories on Anvil, or say why they were not.
+    Whatever goes wrong, the document stays."""
+    if doc.get("files") == "purged" or not (doc.get("remote_job_dir") or doc.get("work_dir")):
+        return []  # nothing recorded, or Anvil already removed it
+    try:
+        return await slurm.remove_job_files(doc)
+    except slurm.RefusedPath as exc:
+        logger.error("Job %s: refused to remove %s", doc["_id"], exc)
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "refused_path",
+            "This simulation's files are not where the gateway expects them, so it "
+            "removed nothing. Ask an administrator.",
+        )
+    except slurm.CleanupFailed as exc:
+        logger.error("Job %s: could not remove its files: %s", doc["_id"], exc)
+        raise _error(
+            status.HTTP_502_BAD_GATEWAY,
+            "cleanup_failed",
+            "Anvil could not remove this simulation's files, so it was not deleted. "
+            "Try again.",
+        )
+    except (slurm.AnvilNotConfigured, SlurmlyError, OSError, asyncio.TimeoutError) as exc:
+        logger.error("Job %s: Anvil unreachable while deleting: %s", doc["_id"], exc)
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "anvil_unreachable",
+            "Anvil could not be reached, so nothing was deleted. Try again in a few minutes.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -732,16 +840,7 @@ async def get_job_status(
             logger.warning("Status poll failed for %s: %s", job_id, exc)
             # Return stale data
 
-    return JobStatusResponse(
-        job_id=doc["_id"],
-        sim_id=doc.get("sim_id"),
-        status=doc["status"],
-        slurm_job_id=doc.get("slurm_job_id"),
-        submitted_at=doc.get("submitted_at"),
-        started_at=doc.get("started_at"),
-        completed_at=doc.get("completed_at"),
-        status_reason=doc.get("status_reason"),
-    )
+    return _status_response(doc)
 
 
 # ---------------------------------------------------------------------------
@@ -754,7 +853,14 @@ async def cancel_job(
     job_id: str,
     user: TokenPayload = Depends(require_permission(Permission.JOB_CANCEL_OWN)),
 ):
+    """Cancel takes two steps (ADR 0026). A job SLURM has an id for records
+    the request and runs `scancel`; its status changes only when the sweep
+    sees SLURM report CANCELLED, so SLURM's own end is what is stored. A job
+    still inside its submit has no id to cancel: it is CANCELLED at once, and
+    the submit route cancels what SLURM answers."""
+    db = get_db()
     doc = await _get_job_for(job_id, user, Permission.JOB_CANCEL_ANY)
+    now = datetime.now(timezone.utc)
 
     if doc["status"] not in CANCELLABLE_STATUSES:
         raise HTTPException(
@@ -762,27 +868,61 @@ async def cancel_job(
             detail=f"Cannot cancel job in state {doc['status']}",
         )
 
-    slurm_job_id = doc.get("slurm_job_id")
-    if slurm_job_id:
+    immediate = False
+    if not doc.get("slurm_job_id"):
+        # `slurm_job_id: None` is in the filter: the submit may record its id
+        # between the read above and this write, and then there is a job to
+        # scancel after all.
+        immediate = (
+            await db.jobs.update_one(
+                {"_id": job_id, "status": doc["status"], "slurm_job_id": None},
+                {
+                    "$set": {
+                        "status": "CANCELLED",
+                        "status_reason": _CANCELLED_BY_USER,
+                        "failure": {
+                            "cause": "cancelled_by_user",
+                            "phase": None,
+                            "message": _CANCELLED_BY_USER,
+                            "excerpt": None,
+                        },
+                        **_cancel_request(user, now),
+                        "completed_at": now,
+                        "updated_at": now,
+                    }
+                },
+            )
+        ).matched_count == 1
+        if not immediate:
+            doc = await db.jobs.find_one({"_id": job_id})
+            if doc is None or doc["status"] not in CANCELLABLE_STATUSES or not doc.get("slurm_job_id"):
+                raise _job_changed()
+
+    if not immediate:
+        # Keep the first request's time and requester if one is pending; a
+        # second click only asks scancel again (safe to repeat).
+        fresh = doc.get("cancel_requested_at") is None
+        if fresh:
+            recorded = await db.jobs.update_one(
+                {"_id": job_id, "status": doc["status"]},
+                {"$set": {**_cancel_request(user, now), "updated_at": now}},
+            )
+            if recorded.matched_count == 0:
+                raise _job_changed()
         try:
-            await slurm.cancel_job(slurm_job_id)
+            await slurm.cancel_job(doc["slurm_job_id"])
         except Exception as exc:
             logger.error("scancel failed for %s: %s", job_id, exc)
-            raise HTTPException(status_code=502, detail=str(exc))
-
-    now = datetime.now(timezone.utc)
-    db = get_db()
-    await db.jobs.update_one(
-        {"_id": job_id},
-        {
-            "$set": {
-                "status": "CANCELLED",
-                "status_reason": "Cancelled by user",
-                "completed_at": now,
-                "updated_at": now,
-            }
-        },
-    )
+            if fresh:
+                await db.jobs.update_one(
+                    {"_id": job_id},
+                    {"$unset": {key: "" for key in _CANCEL_REQUEST_FIELDS}},
+                )
+            raise _error(
+                status.HTTP_502_BAD_GATEWAY,
+                "cancel_failed",
+                "Anvil could not be asked to cancel the job, so it is still running. Try again.",
+            )
 
     await log_event(
         "job_cancelled",
@@ -796,18 +936,31 @@ async def cancel_job(
             # (JOB_CANCEL_ANY) from a user cancelling their own.
             "owner_id": doc["user_id"],
             "on_behalf_of_other": doc["user_id"] != user.sub,
+            # Requested: SLURM has yet to confirm. Immediate: it never had it.
+            "requested": not immediate,
         },
     )
 
-    updated = await db.jobs.find_one({"_id": job_id})
-    return JobStatusResponse(
-        job_id=updated["_id"],
-        status=updated["status"],
-        slurm_job_id=updated.get("slurm_job_id"),
-        submitted_at=updated.get("submitted_at"),
-        started_at=updated.get("started_at"),
-        completed_at=updated.get("completed_at"),
-        status_reason=updated.get("status_reason"),
+    return _status_response(await db.jobs.find_one({"_id": job_id}))
+
+
+_CANCELLED_BY_USER = "You cancelled this simulation."
+_CANCEL_REQUEST_FIELDS = ("cancel_requested_at", "cancel_requested_by", "cancel_requested_by_email")
+
+
+def _cancel_request(user: TokenPayload, now: datetime) -> dict:
+    return {
+        "cancel_requested_at": now,
+        "cancel_requested_by": user.sub,
+        "cancel_requested_by_email": user.email,
+    }
+
+
+def _job_changed() -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "job_changed",
+        "This simulation changed while it was being cancelled. Reload it and try again.",
     )
 
 

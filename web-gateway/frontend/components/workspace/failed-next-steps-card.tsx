@@ -1,38 +1,88 @@
-import { AlertOctagon } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CloudOff } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { DeleteSimulationButton } from "@/components/workspace/delete-simulation-button";
 import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
+import { ExcerptBlock } from "@/components/workspace/excerpt-block";
+import { RunMetadata } from "@/components/workspace/run-metadata";
+import { HUE, TONE_HUE } from "@/lib/jobs/status-hue";
+import type { Job } from "@/lib/jobs/types";
+import {
+  FAILURE_COPY,
+  NEXT_STEP_COPY,
+  UNRECORDED_FAILURE_COPY,
+  offersNewDraft,
+  type FailureTone,
+} from "@/lib/workspace/failure-copy";
+
+const TONE_ICON = {
+  danger: AlertOctagon,
+  warning: AlertTriangle,
+  neutral: CloudOff,
+} satisfies Record<FailureTone, unknown>;
 
 /**
- * FAILED — the error, and what happens next. A failed simulation can't be
- * edited in place (PATCH /jobs/{id} is refused past DRAFT), so "edit and
- * resubmit" is honestly a *new* draft from the same snapshot rather than a
- * reopened editor on this one.
+ * FAILED — what happened, the message and log excerpt that show why, and what
+ * to do next. The wording per cause is `FAILURE_COPY`; the backend's own
+ * message and the excerpt are shown as they came. A failed simulation can't be
+ * edited in place (PATCH /jobs/{id} is refused past DRAFT), so the next step is
+ * a *new* draft from the same snapshot.
  */
 export function FailedNextStepsCard({
-  statusReason,
-  datasetId,
+  job,
+  preview = false,
 }: {
-  statusReason: string | null;
-  datasetId: string;
+  job: Job;
+  preview?: boolean;
 }) {
+  const failure = job.failure;
+  const copy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
+  const hue = HUE[TONE_HUE[copy.tone]];
+  const Icon = TONE_ICON[copy.tone];
+  // Without a verdict, the reason the job stored is all there is to show.
+  const message = failure?.message ?? job.status_reason;
+
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-red-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+      <CardHeader
+        className={`border-b bg-gradient-to-r ${hue.gradient} to-transparent !py-4 !gap-0 grid-rows-1 items-center`}
+      >
         <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-red-500/10">
-            <AlertOctagon className="size-4 text-red-600" />
+          <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${hue.tile}`}>
+            <Icon className={`size-4 ${hue.icon}`} aria-hidden="true" />
           </div>
-          What now
+          <span className="min-w-0 break-words">{copy.title}</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-5 pb-6">
-        <p className="text-sm text-muted-foreground">
-          {statusReason ?? "The run failed."} A failed simulation can&apos;t be
-          edited in place — parameters are only editable while a simulation is
-          a draft. Starting over creates a new draft from the same snapshot;
-          the full stderr below is worth reading first.
-        </p>
-        <DeriveSimulationButton datasetId={datasetId} />
+        <p className="text-sm text-muted-foreground">{copy.body}</p>
+
+        {message && (
+          <p className={`min-w-0 break-words rounded-lg border p-3 text-sm text-foreground ${hue.box}`}>
+            {message}
+          </p>
+        )}
+
+        <RunMetadata job={job} phase={failure?.phase} />
+
+        {failure?.excerpt && <ExcerptBlock excerpt={failure.excerpt} />}
+
+        {offersNewDraft(copy.nextStep) && (
+          <p className="text-sm text-muted-foreground">{NEXT_STEP_COPY[copy.nextStep]}</p>
+        )}
+
+        <div className="flex flex-col gap-2">
+          {offersNewDraft(copy.nextStep) && (
+            <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
+          )}
+          <DeleteSimulationButton
+            jobId={job.id}
+            isDraft={false}
+            workDir={job.work_dir}
+            remoteJobDir={job.remote_job_dir}
+            files={job.files}
+            preview={preview}
+          />
+        </div>
       </CardContent>
     </Card>
   );

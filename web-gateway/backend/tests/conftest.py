@@ -9,7 +9,11 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from slurmly import SubmittedJob
+import shlex
+from dataclasses import dataclass, field
+
+from slurmly import SlurmSSHClient, SubmittedJob, get_preset
+from slurmly.testing import FakeTransport
 from route_helpers import FakeDB
 
 from app.api.v1 import jobs as jobs_router
@@ -23,7 +27,7 @@ from app.services import slurm
 def db(monkeypatch) -> FakeDB:
     fake = FakeDB()
     get_fake = lambda: fake  # noqa: E731
-    for module in (jobs_router, users_router, audit, authz):
+    for module in (jobs_router, users_router, audit, authz, slurm):
         monkeypatch.setattr(module, "get_db", get_fake)
     fake.datasets.docs["ds-1"] = {
         "_id": "ds-1",
@@ -64,10 +68,24 @@ def db(monkeypatch) -> FakeDB:
     async def get_job_logs(job_id: str) -> tuple[str, str, bool]:
         return "out", "err", False
 
+    # What a submit that may have reached SLURM does to clean up after itself,
+    # recorded rather than run. A test that cares reads or replaces them.
+    async def scancel_by_name(sim_id: str) -> bool:
+        cleanup_calls.append(("scancel_by_name", sim_id))
+        return True
+
+    async def remove_failed_submit_dirs(sim_id: str) -> None:
+        cleanup_calls.append(("remove_failed_submit_dirs", sim_id))
+
+    cleanup_calls: list[tuple[str, str]] = []
+    fake.cleanup_calls = cleanup_calls
+
     monkeypatch.setattr(slurm, "submit_job", submit_job)
     monkeypatch.setattr(slurm, "update_job_status", update_job_status)
     monkeypatch.setattr(slurm, "cancel_job", cancel_job)
     monkeypatch.setattr(slurm, "get_job_logs", get_job_logs)
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    monkeypatch.setattr(slurm, "remove_failed_submit_dirs", remove_failed_submit_dirs)
 
     monkeypatch.setattr(settings, "JOB_MAX_ACTIVE_PER_USER", 2)
     monkeypatch.setattr(settings, "ANVIL_OPENGHM_HOME", "/home/x-openghm/apps/openghm/abc1234")
@@ -85,3 +103,82 @@ def client(db) -> TestClient:
     app.include_router(users_router.router, prefix="/api/v1")
     # Not entered as a context manager: that would run the lifespan.
     return TestClient(app)
+
+
+# ---- a real slurmly client over a fake transport ------------------------------
+
+REMOTE_BASE = "/anvil/scratch/x-openghm/openghm"
+
+
+@dataclass
+class Anvil:
+    """slurmly's real client, its SSH transport replaced by an in-memory one.
+    `commands` is every remote command run, in order. `files` is what `cat`
+    and `tail` find, by path; `results` overrides the answer to a command
+    (first predicate that matches). `found` is what the batched lookup
+    returns (`JobInfo` by SLURM id) and `lookups` the ids it was asked for."""
+
+    client: SlurmSSHClient
+    transport: FakeTransport
+    files: dict[str, str] = field(default_factory=dict)
+    results: list = field(default_factory=list)
+    found: dict = field(default_factory=dict)
+    lookups: list[list[str]] = field(default_factory=list)
+    lookup_error: Exception | None = None
+
+    @property
+    def commands(self) -> list[str]:
+        return [call.command for call in self.transport.runs]
+
+    def answer(self, command: str):
+        for matches, result in self.results:
+            if matches(command):
+                if isinstance(result, Exception):
+                    raise result
+                return result
+        words = shlex.split(command) if command.startswith(("[ -f", "test -f")) else []
+        if words[:2] in (["[", "-f"], ["test", "-f"]):
+            path = words[2]
+            if path not in self.files:
+                return (1, "", "")
+            text = self.files[path]
+            if "tail" in words:
+                lines = text.splitlines()[-int(words[words.index("-n") + 1]):]
+                text = "\n".join(lines) + "\n"
+            return (0, text, "")
+        return (0, "", "")
+
+
+@pytest.fixture
+def anvil(monkeypatch, db) -> Anvil:
+    preset = get_preset("purdue_anvil")
+    settings_patch = {
+        "ANVIL_SSH_USERNAME": "x-openghm",
+        "ANVIL_REMOTE_BASE_DIR": REMOTE_BASE,
+        "ANVIL_OUTPUT_BASE": "/anvil/scratch/x-openghm/simulations",
+    }
+    for key, value in settings_patch.items():
+        monkeypatch.setattr(settings, key, value)
+
+    transport = FakeTransport()
+    client = SlurmSSHClient(
+        transport=transport,
+        remote_base_dir=REMOTE_BASE,
+        cluster_profile=preset.cluster_profile,
+        execution_profiles=preset.execution_profiles,
+    )
+    fake = Anvil(client=client, transport=transport)
+    transport.handler = fake.answer
+
+    async def get_jobs(ids, **_kw):
+        fake.lookups.append(list(ids))
+        if fake.lookup_error is not None:
+            raise fake.lookup_error
+        return {i: fake.found[i] for i in ids if i in fake.found}
+
+    async def get_client():
+        return client
+
+    monkeypatch.setattr(client, "get_jobs", get_jobs)
+    monkeypatch.setattr(slurm, "get_slurm_client", get_client)
+    return fake

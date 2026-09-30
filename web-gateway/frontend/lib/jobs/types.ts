@@ -18,6 +18,71 @@ export function isTerminalStatus(s: JobStatus): boolean {
   return TERMINAL.has(s);
 }
 
+// ─── Verdict (ADR 0026) ──────────────────────────────────────────────────────
+
+/** Why a job ended the way it did. The backend's `classify`
+ *  (app/services/job_verdict.py) is the only place a cause is named; the words
+ *  a user reads for each live in lib/workspace/failure-copy.ts. */
+export type FailureCause =
+  | "fetch_failed"
+  | "run_refused"
+  | "wbm_error"
+  | "wbm_silent_failure"
+  | "timeout"
+  | "out_of_memory"
+  | "node_failure"
+  | "cancelled_by_user"
+  | "cancelled_by_system"
+  | "lost"
+  | "outcome_missing";
+
+/** Set on FAILED and CANCELLED. `excerpt` is the WBM log tail for the WBM
+ *  causes and the stderr tail for the others. */
+export interface JobFailure {
+  cause: FailureCause;
+  phase: string | null;
+  message: string;
+  excerpt: string | null;
+}
+
+/** `purged`: Anvil's 30-day scratch purge removed the run's work directory. */
+export type FilesState = "present" | "purged";
+
+export interface OutputFile {
+  /** Relative to `work_dir`. */
+  path: string;
+  bytes: number;
+}
+
+/** What a COMPLETED job wrote, from the job's own outcome record. */
+export interface OutputManifest {
+  nc_count: number;
+  total_bytes: number;
+  file_count: number;
+  files: OutputFile[];
+  /** `files` was cut short; `file_count` is still the real total. */
+  truncated: boolean;
+}
+
+/** What the verdict adds to a job. On both `Job` (GET /jobs/{id}) and
+ *  `JobStatusResponse` (GET /jobs/{id}/status); every field is null until it
+ *  applies. `work_dir` and `completed_at` are on both too, declared there. */
+export interface JobVerdictFields {
+  /** SLURM's own words, e.g. `COMPLETED`, `TIMEOUT`, `CANCELLED by 8013088`. */
+  slurm_state: string | null;
+  /** e.g. `0:0`, `1:0`. */
+  slurm_exit_code: string | null;
+  slurm_start: string | null;
+  slurm_end: string | null;
+  failure: JobFailure | null;
+  /** Set when a cancel was asked for. The status stays non-terminal until
+   *  SLURM confirms it. */
+  cancel_requested_at: string | null;
+  cancel_requested_by_email: string | null;
+  files: FilesState | null;
+  output: OutputManifest | null;
+}
+
 // ─── Value objects ───────────────────────────────────────────────────────────
 
 export interface SpatialDomain {
@@ -80,7 +145,7 @@ export interface JobStatsResponse {
   failed: number;
 }
 
-export interface Job {
+export interface Job extends JobVerdictFields {
   id: string;
   sim_id: string;
   user_id: string;
@@ -146,7 +211,7 @@ export interface SimulationUpdateRequest {
   model_input_id?: string | null;
 }
 
-export interface JobStatusResponse {
+export interface JobStatusResponse extends JobVerdictFields {
   job_id: string;
   sim_id: string | null;
   status: JobStatus;
@@ -155,6 +220,7 @@ export interface JobStatusResponse {
   started_at: string | null;
   completed_at: string | null;
   status_reason: string | null;
+  work_dir: string | null;
 }
 
 export interface JobLogsResponse {

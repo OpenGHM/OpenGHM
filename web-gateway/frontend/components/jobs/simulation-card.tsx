@@ -2,18 +2,9 @@ import Link from "next/link";
 import { Clock, Cpu, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-import type { Job, JobStatus } from "@/lib/jobs/types";
-
-const BORDER_COLOR: Record<JobStatus, string> = {
-  DRAFT: "border-l-violet-300",
-  PENDING: "border-l-slate-300",
-  SUBMITTED: "border-l-blue-400",
-  RUNNING: "border-l-amber-400",
-  COMPLETING: "border-l-amber-400",
-  COMPLETED: "border-l-emerald-400",
-  FAILED: "border-l-red-400",
-  CANCELLED: "border-l-slate-300",
-};
+import { displayStatus } from "@/lib/jobs/display-status";
+import { HUE } from "@/lib/jobs/status-hue";
+import type { Job } from "@/lib/jobs/types";
 
 function formatDuration(startedAt: string, completedAt: string): string {
   const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
@@ -27,7 +18,8 @@ function formatDuration(startedAt: string, completedAt: string): string {
 }
 
 export function SimulationCard({ job }: { job: Job }) {
-  const borderColor = BORDER_COLOR[job.status] ?? "border-l-slate-300";
+  const shown = displayStatus(job);
+  const borderColor = HUE[shown].border;
   const displayId = job.sim_id || job.id.slice(0, 12);
 
   return (
@@ -45,7 +37,7 @@ export function SimulationCard({ job }: { job: Job }) {
                 {displayId}
               </code>
             </div>
-            <JobStatusBadge status={job.status} />
+            <JobStatusBadge status={shown} />
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

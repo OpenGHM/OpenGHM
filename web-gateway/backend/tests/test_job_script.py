@@ -26,6 +26,7 @@ CACHE = "/anvil/scratch/x-openghm/cache"
 LOCK = "/home/x-openghm/apps/openghm/locks/fetch.lock"
 SNAPSHOT_ID = "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89"
 SIM_ID = "sim-20260930-0a1b2c"
+WORK_DIR = f"/anvil/scratch/x-openghm/simulations/{SIM_ID}"
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +41,7 @@ def _body(**overrides) -> str:
         openghm_home=HOME,
         cache_dir=CACHE,
         fetch_lock=LOCK,
+        work_dir=WORK_DIR,
     )
     return render_job_body(**{**kwargs, **overrides})
 
@@ -56,14 +58,68 @@ def test_default_v2_draft_renders_the_golden_body_with_no_overrides(v2):
     assert overrides == job_script.RunOverrides(None, None, None)
     body = _body(**overrides.__dict__)
     assert body == f"""\
+echo "== openghm gateway job body ==" >&2
 set -euo pipefail
 OPENGHM={HOME}/bin/openghm
 CONFIG={HOME}/gateway.toml
 CACHE={CACHE}
+PY={HOME}/venv/bin/python
+export OG_SNAPSHOT_ID={SNAPSHOT_ID} OG_SIM_ID={SIM_ID} OG_COMMIT=abc1234
+export OG_WORK_DIR={WORK_DIR}
+OG_STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+OG_PHASE=fetch OG_SIGNAL= STEP_RC=0
+export OG_STARTED OG_PHASE OG_SIGNAL OG_RC_fetch OG_RC_run
+step() {{
+  OG_PHASE=$1; shift
+  eval "OG_RC_$OG_PHASE="
+  local rc=0
+  "$@" || rc=$?
+  eval "OG_RC_$OG_PHASE=$rc"
+  [ "$rc" -eq 0 ] || STEP_RC=$rc
+  return "$rc"
+}}
+finish() {{
+  local status=$?
+  set +e
+  trap - EXIT
+  "$PY" - <<'PYEOF'
+{job_script.OUTCOME_PY}PYEOF
+  local verdict=$?
+  if [ "$verdict" -ne 0 ] && [ "$verdict" -ne 10 ]; then
+    echo "openghm: outcome.json was not written" >&2
+  fi
+  [ "$status" -ne 0 ] && exit "$status"
+  [ "$STEP_RC" -ne 0 ] && exit "$STEP_RC"
+  case $verdict in
+    0) exit 0 ;;
+    10) exit 3 ;;
+    *) exit 4 ;;
+  esac
+}}
+trap finish EXIT
+trap 'OG_SIGNAL=TERM; exit 143' TERM
+trap 'OG_SIGNAL=INT; exit 130' INT
+trap 'OG_SIGNAL=HUP; exit 129' HUP
 echo "openghm $("$OPENGHM" --version) commit abc1234"
 mkdir -p "$CACHE/snapshots"
-flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}" --spool skip
-"$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool fresh"""
+step fetch flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}" --spool skip
+step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool fresh
+OG_PHASE=check"""
+
+
+def test_the_outcome_writer_is_python_3_9_stdlib_only():
+    """It runs in the toolkit venv on Anvil (3.9): no `X | Y`, no `match`, and
+    nothing outside the standard library."""
+    import ast
+
+    tree = ast.parse(job_script.OUTCOME_PY, feature_version=(3, 9))
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in (node.names if isinstance(node, ast.Import) else [ast.alias(node.module)])
+    }
+    assert imported <= {"json", "os", "re", "socket", "sys", "tempfile", "collections", "datetime"}
 
 
 def test_a_changed_period_and_variables_add_exactly_those_flags(v2):
@@ -77,9 +133,9 @@ def test_a_changed_period_and_variables_add_exactly_those_flags(v2):
     assert overrides == job_script.RunOverrides(
         "2000-06-01", "2001-06-30", "runoff discharge"
     )
-    run_line = _body(**overrides.__dict__).splitlines()[-1]
+    run_line = _body(**overrides.__dict__).splitlines()[-2]
     assert run_line == (
-        f'"$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" '
+        f'step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" '
         f"--id {SIM_ID} --run-start 2000-06-01 --run-end 2001-06-30 "
         "--output-vars 'runoff discharge' --spool fresh"
     )
@@ -163,10 +219,10 @@ def test_the_fetch_lock_is_outside_the_cache_and_quoted():
     not lock across nodes), and a path with a space or `$` stays one word."""
     body = _body()
     assert '"$CACHE/fetch.lock"' not in body
-    assert f"flock {LOCK} " in body
+    assert f"step fetch flock {LOCK} " in body
     hostile = _body(fetch_lock="/home/x/my locks/$HOME/fetch.lock")
-    (line,) = [l for l in hostile.splitlines() if l.startswith("flock ")]
-    assert shlex.split(line)[1] == "/home/x/my locks/$HOME/fetch.lock"
+    (line,) = [l for l in hostile.splitlines() if l.startswith("step fetch flock ")]
+    assert shlex.split(line)[3] == "/home/x/my locks/$HOME/fetch.lock"
 
 
 @pytest.mark.parametrize(
