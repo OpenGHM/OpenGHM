@@ -96,12 +96,10 @@ relative, resolved from the local tree
 ([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)), because
 an unpublished schema has no absolute URL to point at yet.
 
-**Nothing is served at this hostname today.** `$id` names the URL a version
-will resolve to once published, not a claim that it does now — serving is its
-own mission ([ADR 0007](../decisions/0007-schemas-on-s3-behind-a-proxy.md)),
-deliberately after the spec stops changing, because [rule
-1](../../AGENTS.md#the-rules) makes serving irreversible: a published version
-is never edited in place.
+`$id` is also where each version is served
+([ADR 0007](../decisions/0007-schemas-on-s3-behind-a-proxy.md)). Until the
+project is in operation, a version is corrected in place, served copy
+included ([rule 1](../../AGENTS.md#the-rules)).
 
 ## `layout/<version>.json`
 
@@ -119,13 +117,11 @@ not an aspirational shape:
 }
 ```
 
-`data/` and `data_init/` are required in 1.0.0 because a snapshot bundles its
-input data today. [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)
-moves that data out to a linked, separately published model input — at which
-point a snapshot no longer contains it, so both entries leave `required`. That
-is a MAJOR bump (2.0.0), not a MINOR one: removing a required path is exactly
-the case the version-rules table below calls breaking. Until the data actually
-moves, 1.0.0 describes the bundle as it is.
+`data/` and `data_init/` are required because a snapshot bundles its input
+data today. [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)
+moves that data out to a linked, separately published model input. When it
+moves, both entries leave `required` in 1.0.0 itself: the project is in
+development, so the spec is edited in place, not bumped.
 
 `SHA256SUMS` is optional, and stays optional: it is an integrity check a
 consumer may run, not part of a snapshot's identity
@@ -141,3 +137,8 @@ snapshots published at `snapshots/<id>/` each ship one (mission
 | MAJOR | remove/rename/retype a required field, remove a required path | breaks |
 | MINOR | add an optional field or optional path | safe |
 | PATCH | description or constraint wording only | none |
+
+The table applies once the project is in operation
+([rule 1](../../AGENTS.md#the-rules)). Until then, every change, a breaking one
+included, is made in place: the spec stays 1.0.0, and the examples, the
+published snapshots and the served schema are changed with it.
