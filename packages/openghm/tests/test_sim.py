@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,7 +18,7 @@ from openghm import Config, assets, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.sim import (
-    SubmitOptions, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
+    SubmitOptions, _set_perl_key, build_persim_init, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
     list_simulations, find_simulation, resolve_job_id, read_sidecar,
     build_sacct_argv, parse_sacct, sacct_primary, build_scancel_argv,
     slurm_log_path, tail_lines,
@@ -147,6 +149,105 @@ def test_persim_init_normalizes_paths_and_overrides(tmp_path):
     assert "Loops => 2" in init
     # \bStart\b must not have clobbered Run_Start
     assert "Start => '2000-01-01'" in init
+
+
+# the v2 wbm_test.init's MT_Code_Name block: Run_End but no Run_Start, tab-indented
+_V2_INIT = (
+    "{\n"
+    "MT_Code_Name\t=>  {\n"
+    "          File_Size\t=> 'year',\n"
+    "          MT_ID\t\t=> 'WMB_test_runoff',\n"
+    "          Output_dir\t=> '/wbm/wbm_output/sim-20260930-53366e',\n"
+    "          Run_End\t=> '2001-12-31'\n"
+    "        },\n"
+    "}\n"
+)
+
+
+def _build(template, **kw):
+    return build_persim_init(template, "sim1", SubmitOptions(snapshot_dir="x", simulation_id="sim1", **kw))
+
+
+def test_run_start_inserted_before_run_end_when_init_has_none():
+    out = _build(_V2_INIT, run_start="2000-03-01")
+    assert (
+        "          Output_dir\t=> '/wbm/wbm_output/sim1',\n"
+        "          Run_Start => '2000-03-01',\n"
+        "          Run_End\t=> '2001-12-31'\n"
+    ) in out
+    assert out.count("Run_Start") == 1 and out.count("Run_End") == 1
+    # the inserted key is found by the same pattern: a second replace works
+    again = _set_perl_key(out, "Run_Start", "1999-01-01", quote=True, required=True, label="x")
+    assert "Run_Start => '1999-01-01'," in again and "2000-03-01" not in again
+
+
+def test_run_start_replaced_in_place_when_present():
+    out = _build(_V2_INIT.replace("          Run_End", "          Run_Start => '2000-01-01',\n          Run_End"),
+                 run_start="2000-03-01")
+    assert out.count("Run_Start") == 1
+    assert "Run_Start => '2000-03-01'," in out
+
+
+def test_run_start_with_both_keys_replaces_and_leaves_run_end():
+    out = _build(_INIT_TEMPLATE, run_start="2000-03-01")
+    assert "Run_Start  => '2000-03-01'," in out
+    assert "Run_End    => '2000-12-31'," in out
+    assert out.count("Run_Start") == 1
+
+
+def test_run_start_without_either_key_still_raises():
+    with pytest.raises(OpenghmError, match="--run-start: key 'Run_Start' not found"):
+        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_start="2000-03-01")
+
+
+def test_run_end_without_either_key_still_raises():
+    with pytest.raises(OpenghmError, match="--run-end: key 'Run_End' not found"):
+        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_end="2001-12-31")
+
+
+def test_run_end_inserted_after_run_start_when_init_has_none():
+    # Run_Start is the last entry, so it has no comma of its own to begin with
+    tpl = "{\n  MT_Code_Name => {\n\tOutput_dir => 'x',\n\tRun_Start => '2000-01-01'\n  },\n}\n"
+    out = _build(tpl, run_end="2001-12-31")
+    assert "\tRun_Start => '2000-01-01',\n\tRun_End => '2001-12-31',\n  }," in out
+    # and when Run_Start already has its comma, none is doubled
+    out = _build(tpl.replace("'2000-01-01'\n", "'2000-01-01',\n\tOther => 1\n"), run_end="2001-12-31")
+    assert "'2000-01-01',\n\tRun_End => '2001-12-31',\n\tOther => 1\n" in out
+
+
+def test_insert_keeps_tab_indentation():
+    tpl = "{\n\tMT_Code_Name => {\n\t\tOutput_dir => 'x',\n\t\tRun_End => '2001-12-31'\n\t},\n}\n"
+    out = _build(tpl, run_start="2000-03-01")
+    assert "\t\tRun_Start => '2000-03-01',\n\t\tRun_End => '2001-12-31'\n" in out
+
+
+def test_insert_into_one_line_hash_stays_on_the_line():
+    tpl = "{ MT_Code_Name => { Output_dir => 'x', Run_End => '2001-12-31' } }\n"
+    out = _build(tpl, run_start="2000-03-01")
+    assert "Run_Start => '2000-03-01', Run_End => '2001-12-31' }" in out
+
+
+def test_start_key_lookup_does_not_match_run_start_for_insert():
+    # \bStart\b must not see Run_Start, so a Spinup-less init with only Run_Start still raises
+    tpl = "{ MT_Code_Name => { Output_dir => 'x', Run_Start => '2000-01-01' } }\n"
+    with pytest.raises(OpenghmError, match="--spinup-start"):
+        _build(tpl, spinup_start="1999-01-01")
+
+
+@pytest.mark.skipif(shutil.which("perl") is None, reason="perl not installed")
+@pytest.mark.parametrize("kw,key,expected", [
+    ({"run_start": "2000-03-01"}, "Run_Start", "2000-03-01"),
+    ({"run_end": "2002-06-30"}, "Run_End", "2002-06-30"),
+])
+def test_inserted_init_is_valid_perl(kw, key, expected):
+    tpl = _V2_INIT if "run_start" in kw else _V2_INIT.replace("Run_End\t=> '2001-12-31'", "Run_Start => '2000-01-01'")
+    out = _build(tpl, **kw)
+    res = subprocess.run(
+        ["perl", "-e", f"my $h = do {{ local $/; eval <STDIN> }}; die $@ if $@; print $h->{{MT_Code_Name}}{{{key}}}"],
+        input=out, capture_output=True, text=True,
+    )
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == expected
 
 
 def test_persim_init_without_spool_dir(tmp_path):

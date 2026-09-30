@@ -208,18 +208,75 @@ def _model_input(config, meta: dict, snap: str, *, check: bool) -> Tuple[str, st
 # ── per-sim init generation ────────────────────────────────────────────────────
 
 
-def _set_perl_key(content: str, key: str, value, *, quote: bool, required: bool, label: str) -> str:
+def _set_perl_key(
+    content: str, key: str, value, *, quote: bool, required: bool, label: str,
+    insert_before: Optional[str] = None, insert_after: Optional[str] = None,
+) -> str:
     """Replace the first ``key => <value>`` in a Perl-hash init with ``value``.
 
     ``\\bkey\\b`` avoids matching ``Run_Start`` when replacing ``Start`` (the ``_``
     before ``Start`` is a word char, so there is no word boundary there).
+
+    When ``key`` is absent and ``insert_before`` / ``insert_after`` names a sibling
+    key that is present, the entry is inserted next to that sibling instead of
+    raising — see :func:`_insert_perl_key`. Only when neither ``key`` nor the
+    sibling is found does ``required`` decide between raising and a no-op.
     """
     repl = f"'{value}'" if quote else str(value)
     pattern = re.compile(rf"(\b{re.escape(key)}\b\s*=>\s*)(?:'[^']*'|\"[^\"]*\"|[^,}}\n]+)")
     new, n = pattern.subn(lambda m: m.group(1) + repl, content, count=1)
-    if n == 0 and required:
-        raise OpenghmError(f"{label}: key {key!r} not found in the init template")
+    if n == 0:
+        sibling = insert_before or insert_after
+        if sibling is not None:
+            inserted = _insert_perl_key(
+                content, f"{key} => {repl},", sibling, before=insert_before is not None,
+            )
+            if inserted is not None:
+                return inserted
+        if required:
+            raise OpenghmError(f"{label}: key {key!r} not found in the init template")
     return new
+
+
+def _insert_perl_key(content: str, entry: str, sibling: str, *, before: bool) -> Optional[str]:
+    """Insert ``entry`` (``Key => 'v',``) before or after the ``sibling`` key's entry.
+
+    The v2 ``wbm_test.init`` carries ``Run_End`` in its ``MT_Code_Name`` block but
+    no ``Run_Start``, although the block accepts both (``wbm_SHORT.init`` has
+    them side by side), so ``--run-start`` must add the key rather than refuse.
+    Returns ``None`` when the sibling is absent.
+
+    The new entry takes the sibling line's indentation, tabs or spaces as found.
+    It always ends in a comma, which Perl allows after the last entry, so the
+    hash stays valid whether or not the sibling was the last one. Inserting after
+    a sibling that has no comma of its own (it was the last entry) adds that
+    comma first. A sibling that shares its line with other tokens (a one-line
+    hash) gets the entry inline instead of on a new line.
+    """
+    m = re.search(rf"\b{re.escape(sibling)}\b\s*=>\s*(?:'[^']*'|\"[^\"]*\"|[^,}}\n]+)", content)
+    if m is None:
+        return None
+    line_start = content.rfind("\n", 0, m.start()) + 1
+    lead = content[line_start:m.start()]
+    own_line = lead.strip() == ""
+    if before:
+        if own_line:
+            return content[:line_start] + f"{lead}{entry}\n" + content[line_start:]
+        return content[:m.start()] + f"{entry} " + content[m.start():]
+    # after: make sure the sibling's own entry ends in a comma, then follow it
+    eol = content.find("\n", m.end())
+    eol = len(content) if eol == -1 else eol
+    tail = content[m.end():eol]
+    comma = re.match(r"\s*,", tail)
+    if comma:
+        pos, rest = m.end() + comma.end(), tail[comma.end():]
+    else:
+        content = content[:m.end()] + "," + content[m.end():]
+        pos, rest = m.end() + 1, tail
+        eol += 1
+    if own_line and (rest.strip() == "" or rest.lstrip().startswith("#")):
+        return content[:eol] + f"\n{lead}{entry}" + content[eol:]
+    return content[:pos] + f" {entry}" + content[pos:]
 
 
 def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) -> str:
@@ -237,11 +294,19 @@ def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) ->
         out, "spool_dir", "/wbm/spool/",
         quote=True, required=False, label="normalizing spool_dir",
     )
-    # optional override allow-list — each raises if its key is absent
+    # optional override allow-list — each raises if its key is absent, except
+    # Run_Start / Run_End: the v2 wbm_test.init has Run_End but no Run_Start, so a
+    # missing one is inserted beside the other and only a block with neither raises
     if opts.run_start is not None:
-        out = _set_perl_key(out, "Run_Start", opts.run_start, quote=True, required=True, label="--run-start")
+        out = _set_perl_key(
+            out, "Run_Start", opts.run_start, quote=True, required=True, label="--run-start",
+            insert_before="Run_End",
+        )
     if opts.run_end is not None:
-        out = _set_perl_key(out, "Run_End", opts.run_end, quote=True, required=True, label="--run-end")
+        out = _set_perl_key(
+            out, "Run_End", opts.run_end, quote=True, required=True, label="--run-end",
+            insert_after="Run_Start",
+        )
     if opts.output_vars is not None:
         out = _set_perl_key(out, "Output_vars", opts.output_vars, quote=True, required=True, label="--output-vars")
     if opts.spinup_start is not None:
