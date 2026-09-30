@@ -220,14 +220,14 @@ export function SimulationEditor({
     <div className="space-y-8">
       {sessionExpired && <SessionExpiredBanner />}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-status-failed">
           {error}
         </div>
       )}
 
       {/* About */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+        <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
           <CardTitle className="text-lg font-semibold text-foreground">About</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
@@ -324,7 +324,7 @@ export function SimulationEditor({
 
       {/* Parameters */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+        <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
           <CardTitle className="text-lg font-semibold text-foreground">Simulation Parameters</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5 pt-5 pb-6">
@@ -407,7 +407,7 @@ export function SimulationEditor({
           </div>
 
           {hasCustomParams && (
-            <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
               <p>
                 This draft has custom parameters. {UNSUPPORTED_REASON.customParams} Remove them to submit.
               </p>
@@ -438,7 +438,7 @@ export function SimulationEditor({
       {/* Compute — what SLURM is asked for. Account and partition are the
           gateway's, so only cores and walltime are here. */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+        <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
           <CardTitle className="text-lg font-semibold text-foreground">Compute</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
@@ -454,7 +454,7 @@ export function SimulationEditor({
         <Button
           onClick={handleSave}
           disabled={saving || computeInvalid}
-          className="min-h-10 bg-[#006994] hover:bg-[#005a7a] sm:min-h-9"
+          className="min-h-10 sm:min-h-9"
         >
           {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
           Save

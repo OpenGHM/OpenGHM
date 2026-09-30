@@ -19,13 +19,13 @@ export function RecentSnapshots({ snapshots }: { snapshots: Dataset[] }) {
         const { value, unit } = dataset.simulation.resolution;
         return (
           <Link key={dataset.id} href={`/workspace/new/configure?snapshotId=${dataset.id}`} className="block h-full">
-            <Card className="h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-[#006994]/40">
+            <Card className="h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md hover:border-primary/40">
               <CardContent className="flex h-full flex-col p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <h3 className="text-sm font-semibold leading-snug text-foreground">
                     {dataset.about.name}
                   </h3>
-                  <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
                     {dataset.about.category}
                   </span>
                 </div>

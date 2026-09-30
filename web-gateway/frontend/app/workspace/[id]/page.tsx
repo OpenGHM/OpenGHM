@@ -115,7 +115,7 @@ export default async function JobDetailPage({
       </div>
 
       {/* Hero */}
-      <div className="bg-gradient-to-r from-[#0a192f] to-[#006994] py-8">
+      <div className="bg-gradient-to-r from-hero to-primary py-8">
         <div className="mx-auto max-w-[1280px] px-10">
           <h1 className="text-xl font-bold text-white md:text-2xl">
             {job.dataset_title}
@@ -147,7 +147,7 @@ export default async function JobDetailPage({
               <div className="space-y-6">
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardContent className="flex items-start gap-3 py-4 text-sm">
-                    <PencilLine className="mt-0.5 size-4 shrink-0 text-violet-600" />
+                    <PencilLine className="mt-0.5 size-4 shrink-0 text-status-draft" />
                     <div>
                       <p className="font-medium text-foreground">Draft</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
@@ -168,7 +168,7 @@ export default async function JobDetailPage({
                   <CardContent className="py-4">
                     <Link
                       href={`/repository/${job.dataset_id}`}
-                      className="flex items-center gap-2 text-sm font-medium text-[#006994] transition-colors hover:text-[#00b4d8]"
+                      className="flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-accent"
                     >
                       <Database className="size-4" />
                       View Dataset
@@ -219,17 +219,17 @@ export default async function JobDetailPage({
 
                 {/* Simulation Parameters */}
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-                  <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+                  <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                      <div className="flex size-8 items-center justify-center rounded-lg bg-[#006994]/10">
-                        <Settings2 className="size-4 text-[#006994]" />
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                        <Settings2 className="size-4 text-primary" />
                       </div>
                       Simulation Parameters
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-5 pb-6">
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="rounded-lg bg-slate-50 p-3">
+                      <div className="rounded-lg bg-muted p-3">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="size-3" />
                           Temporal Range
@@ -240,7 +240,7 @@ export default async function JobDetailPage({
                         </p>
                       </div>
                       {job.parameters.spatial_domain && (
-                        <div className="rounded-lg bg-slate-50 p-3">
+                        <div className="rounded-lg bg-muted p-3">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Globe className="size-3" />
                             Spatial Domain
@@ -266,7 +266,7 @@ export default async function JobDetailPage({
                           {job.parameters.variables.map((v) => (
                             <span
                               key={v}
-                              className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
+                              className="rounded-full border border-success/25 bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success"
                             >
                               {v}
                             </span>
@@ -279,10 +279,10 @@ export default async function JobDetailPage({
 
                 {/* Slurm Config */}
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-                  <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+                  <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                      <div className="flex size-8 items-center justify-center rounded-lg bg-violet-500/10">
-                        <Database className="size-4 text-violet-600" />
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-compute/10">
+                        <Database className="size-4 text-compute" />
                       </div>
                       HPC Configuration
                     </CardTitle>
@@ -313,7 +313,7 @@ export default async function JobDetailPage({
                       ].map((item) => (
                         <div
                           key={item.label}
-                          className="min-w-0 rounded-lg bg-slate-50 p-3"
+                          className="min-w-0 rounded-lg bg-muted p-3"
                         >
                           <dt className="text-xs text-muted-foreground">
                             {item.label}
@@ -368,7 +368,7 @@ export default async function JobDetailPage({
                   <CardContent className="py-4">
                     <Link
                       href={`/repository/${job.dataset_id}`}
-                      className="flex items-center gap-2 text-sm font-medium text-[#006994] transition-colors hover:text-[#00b4d8]"
+                      className="flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-accent"
                     >
                       <Database className="size-4" />
                       View Dataset

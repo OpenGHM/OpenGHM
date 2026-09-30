@@ -42,15 +42,15 @@ function ModelInputMiniCard({
     >
       <Card
         className={`h-full gap-0 py-0 transition-all ${
-          selected ? "border-[#006994] ring-2 ring-[#006994]/30" : ""
-        } ${disabled ? "" : "hover:-translate-y-0.5 hover:border-[#006994]/40 hover:shadow-md"}`}
+          selected ? "border-primary ring-2 ring-primary/30" : ""
+        } ${disabled ? "" : "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"}`}
       >
         <CardContent className="p-4">
           <div className="mb-1.5 flex items-start justify-between gap-2">
             <h4 className="text-sm font-semibold leading-snug text-foreground">
               {modelInput.about.name}
             </h4>
-            <span className="shrink-0 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
               {modelInput.about.category}
             </span>
           </div>
@@ -70,7 +70,7 @@ function ModelInputMiniCard({
             {modelInput.about.description}
           </p>
           {selected && (
-            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-[#006994]">
+            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
               Selected
             </p>
@@ -160,9 +160,9 @@ export function WizardModelInputStep({
           </p>
 
           {choice.mode === "chosen" ? (
-            <div className="flex items-start justify-between gap-3 rounded-lg border border-[#006994]/30 bg-[#006994]/5 p-3">
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
               <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#006994]" />
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
                 <div>
                   <p className="text-sm font-semibold text-foreground">
                     Chosen: {choice.modelInput.about.name}
@@ -188,8 +188,8 @@ export function WizardModelInputStep({
               Resolving against the model-inputs catalogue…
             </div>
           ) : inherited ? (
-            <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/5 p-3">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   Inherited: {inherited.about.name}
@@ -198,7 +198,7 @@ export function WizardModelInputStep({
                   Model input{" "}
                   <Link
                     href={`/repository/model-inputs/${inheritedId}`}
-                    className="font-mono text-[#006994] hover:underline"
+                    className="font-mono text-primary hover:underline"
                   >
                     {inheritedId.slice(0, 12)}…
                   </Link>{" "}
@@ -207,8 +207,8 @@ export function WizardModelInputStep({
               </div>
             </div>
           ) : (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   Inherited — but not in the catalogue

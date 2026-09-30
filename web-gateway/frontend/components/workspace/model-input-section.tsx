@@ -47,7 +47,7 @@ function ModelInputMiniCard({
     <button type="button" onClick={onSelect} className="block h-full w-full text-left">
       <Card
         className={`h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-          selected ? "border-[#006994] ring-2 ring-[#006994]/30" : "hover:border-[#006994]/40"
+          selected ? "border-primary ring-2 ring-primary/30" : "hover:border-primary/40"
         }`}
       >
         <CardContent className="p-4">
@@ -55,7 +55,7 @@ function ModelInputMiniCard({
             <h4 className="text-sm font-semibold leading-snug text-foreground">
               {modelInput.about.name}
             </h4>
-            <span className="shrink-0 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-medium text-teal-700">
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
               {modelInput.about.category}
             </span>
           </div>
@@ -75,7 +75,7 @@ function ModelInputMiniCard({
             {modelInput.about.description}
           </p>
           {selected && (
-            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-[#006994]">
+            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-primary">
               <CheckCircle2 className="size-3.5" />
               Selected
             </p>
@@ -159,14 +159,14 @@ export function ModelInputSection({
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+      <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
         <CardTitle className="text-lg font-semibold text-foreground">Model Input</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-5 pb-6">
         {choice.mode === "chosen" ? (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-[#006994]/30 bg-[#006994]/5 p-3">
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
             <div className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#006994]" />
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   Chosen: {choice.modelInput ? choice.modelInput.about.name : "resolving…"}
@@ -194,16 +194,16 @@ export function ModelInputSection({
             Resolving against the model-inputs catalogue…
           </div>
         ) : inherited ? (
-          <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/5 p-3">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
             <div>
               <p className="text-sm font-semibold text-foreground">Inherited: {inherited.about.name}</p>
               <p className="text-xs text-muted-foreground">From the base snapshot — found in the catalogue.</p>
             </div>
           </div>
         ) : (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <div>
               <p className="text-sm font-semibold text-foreground">
                 {inheritedId ? "Inherited — but not in the catalogue" : "Base snapshot unavailable"}

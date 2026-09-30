@@ -37,7 +37,7 @@ export function WizardParametersStep({
     <div className="mx-auto max-w-[1024px] space-y-6 px-10 py-8">
       {/* Temporal range + variables */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+        <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
           <CardTitle className="text-lg font-semibold text-foreground">
             Temporal Range &amp; Output Variables
           </CardTitle>
@@ -131,7 +131,7 @@ export function WizardParametersStep({
 
       {/* Compute */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+        <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
           <CardTitle className="text-lg font-semibold text-foreground">Compute</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">

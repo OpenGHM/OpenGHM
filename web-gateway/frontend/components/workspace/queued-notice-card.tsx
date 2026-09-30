@@ -45,7 +45,7 @@ export function QueuedNoticeCard({ status }: { status: JobStatus }) {
         {(submittedAt || live?.estimated_start) && (
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-1">
             {submittedAt && (
-              <div className="min-w-0 rounded-lg bg-slate-50 p-3">
+              <div className="min-w-0 rounded-lg bg-muted p-3">
                 <dt className="text-xs text-muted-foreground">Waiting since</dt>
                 <dd className="mt-0.5 font-medium text-foreground">
                   <TimeStamp value={submittedAt} format="relative" />
@@ -53,7 +53,7 @@ export function QueuedNoticeCard({ status }: { status: JobStatus }) {
               </div>
             )}
             {live?.estimated_start && (
-              <div className="min-w-0 rounded-lg bg-slate-50 p-3">
+              <div className="min-w-0 rounded-lg bg-muted p-3">
                 <dt className="text-xs text-muted-foreground">SLURM&apos;s estimate</dt>
                 <dd className="mt-0.5 font-medium text-foreground">
                   <TimeStamp value={live.estimated_start} format="relative" />

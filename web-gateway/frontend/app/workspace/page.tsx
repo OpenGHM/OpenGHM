@@ -51,7 +51,7 @@ export default async function WorkspacePage({
       <Header />
       <main className="flex-1">
         {/* Hero */}
-        <div className="bg-gradient-to-br from-[#0a192f] to-[#006994] px-10 py-12">
+        <div className="bg-gradient-to-br from-hero to-primary px-10 py-12">
           <div className="mx-auto max-w-[1024px]">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
@@ -66,7 +66,7 @@ export default async function WorkspacePage({
               </div>
               <Button
                 asChild
-                className="shrink-0 bg-white text-[#006994] hover:bg-white/90 font-semibold"
+                className="shrink-0 bg-white text-primary hover:bg-white/90 font-semibold"
               >
                 <Link href="/workspace/new">
                   <Plus className="mr-1.5 size-4" />
@@ -96,7 +96,7 @@ export default async function WorkspacePage({
                     <span
                       className={`inline-block rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
                         isActive
-                          ? "bg-[#006994] text-white shadow-sm"
+                          ? "bg-primary text-white shadow-sm"
                           : "bg-white text-muted-foreground border hover:bg-slate-50"
                       }`}
                     >
@@ -110,15 +110,15 @@ export default async function WorkspacePage({
             {/* Job list */}
             {!jobData ? (
               <Card>
-                <CardContent className="py-10 text-center text-sm text-red-600">
+                <CardContent className="py-10 text-center text-sm text-destructive">
                   Failed to load simulations. Make sure the backend is running.
                 </CardContent>
               </Card>
             ) : jobData.items.length === 0 ? (
               <Card className="border-dashed">
                 <CardContent className="py-20 text-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#006994]/10">
-                    <Play className="size-7 text-[#006994]" />
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                    <Play className="size-7 text-primary" />
                   </div>
                   <p className="mb-1 text-sm font-medium text-foreground">
                     {statusFilter ? "No simulations found" : "No simulations yet"}
@@ -128,7 +128,7 @@ export default async function WorkspacePage({
                       ? "Try a different filter or create a new simulation."
                       : "Select a model snapshot to run your first simulation."}
                   </p>
-                  <Button asChild size="sm" className="bg-[#006994] hover:bg-[#005a7a]">
+                  <Button asChild size="sm">
                     <Link href="/workspace/new">
                       <Plus className="mr-1.5 size-4" />
                       New Simulation

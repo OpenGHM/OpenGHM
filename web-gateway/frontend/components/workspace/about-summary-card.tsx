@@ -10,10 +10,10 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+      <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
         <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-[#006994]/10">
-            <BookOpen className="size-4 text-[#006994]" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+            <BookOpen className="size-4 text-primary" />
           </div>
           About
         </CardTitle>
@@ -25,7 +25,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
         )}
         <div className="flex flex-wrap gap-4 text-sm">
           {about.category && (
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+            <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
               {about.category}
             </span>
           )}
@@ -36,7 +36,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
             {about.keywords.map((kw) => (
               <span
                 key={kw}
-                className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700"
+                className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
               >
                 {kw}
               </span>
@@ -51,7 +51,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
                 {c.email && (
                   <a
                     href={`mailto:${c.email}`}
-                    className="inline-flex items-center gap-1 text-xs text-[#006994] hover:text-[#00b4d8]"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:text-accent"
                   >
                     <Mail className="size-3" />
                     {c.email}

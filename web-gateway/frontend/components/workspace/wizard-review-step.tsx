@@ -52,8 +52,8 @@ import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
 function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; inheritedId: string }) {
   if (choice.mode === "chosen") {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-[#006994]/30 bg-[#006994]/5 p-3">
-        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#006994]" />
+      <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
         <div>
           <p className="text-sm font-semibold text-foreground">Chosen</p>
           <p className="text-xs text-muted-foreground">{choice.modelInput.about.name}</p>
@@ -63,7 +63,7 @@ function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; 
   }
   return (
     <div className="flex items-start gap-2 rounded-lg border p-3">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
       <div>
         <p className="text-sm font-semibold text-foreground">Inherited</p>
         <p className="text-xs text-muted-foreground">
@@ -180,7 +180,7 @@ export function WizardReviewStep({
       {error && (
         <div
           role="alert"
-          className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-status-failed"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <p>{error}</p>
@@ -194,7 +194,7 @@ export function WizardReviewStep({
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
                 <CardTitle className="text-base">{snapshot.about.name}</CardTitle>
-                <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                <span className="shrink-0 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
                   {snapshot.about.category}
                 </span>
               </div>
@@ -246,7 +246,7 @@ export function WizardReviewStep({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Layers className="size-4 text-emerald-600" />
+                <Layers className="size-4 text-success" />
                 Run Parameters
               </CardTitle>
             </CardHeader>
@@ -274,7 +274,7 @@ export function WizardReviewStep({
                   {parameters.variables.map((v) => (
                     <span
                       key={v}
-                      className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700"
+                      className="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
                     >
                       {v}
                     </span>
@@ -288,10 +288,10 @@ export function WizardReviewStep({
         {/* Right: compute + actions */}
         <div className="space-y-4">
           <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-            <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+            <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
               <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-violet-500/10">
-                  <Cpu className="size-4 text-violet-600" aria-hidden="true" />
+                <div className="flex size-8 items-center justify-center rounded-lg bg-compute/10">
+                  <Cpu className="size-4 text-compute" aria-hidden="true" />
                 </div>
                 Compute
               </CardTitle>

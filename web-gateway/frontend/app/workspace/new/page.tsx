@@ -56,7 +56,7 @@ export default async function NewSimulationEntryPage() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        <div className="bg-gradient-to-br from-[#0a192f] to-[#006994] px-10 py-12">
+        <div className="bg-gradient-to-br from-hero to-primary px-10 py-12">
           <div className="mx-auto max-w-[1024px]">
             <p className="mb-1 text-sm font-medium text-white/60 uppercase tracking-wider">
               Workspace
@@ -73,8 +73,8 @@ export default async function NewSimulationEntryPage() {
             {!hasHistory ? (
               <Card className="border-dashed">
                 <CardContent className="py-20 text-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#006994]/10">
-                    <Compass className="size-7 text-[#006994]" />
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                    <Compass className="size-7 text-primary" />
                   </div>
                   <p className="mb-1 text-sm font-medium text-foreground">
                     You haven&apos;t run anything yet
@@ -83,7 +83,7 @@ export default async function NewSimulationEntryPage() {
                     Browse the Data Repository&apos;s published snapshots to start your first
                     simulation.
                   </p>
-                  <Button asChild className="bg-[#006994] hover:bg-[#005a7a] font-semibold">
+                  <Button asChild className="font-semibold">
                     <Link href="/workspace/new/pick">
                       <Compass className="mr-1.5 size-4" />
                       Browse Snapshots
@@ -140,7 +140,7 @@ export default async function NewSimulationEntryPage() {
             )}
 
             <section className="flex items-center justify-center gap-3 border-t pt-8">
-              <Button asChild size="lg" className="bg-[#006994] hover:bg-[#005a7a] font-semibold">
+              <Button asChild size="lg" className="font-semibold">
                 <Link href="/workspace/new/pick">
                   <Play className="mr-1.5 size-4" />
                   Browse all snapshots

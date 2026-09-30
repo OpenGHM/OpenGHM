@@ -46,6 +46,11 @@
   --color-status-completed: var(--status-completed);
   --color-status-failed: var(--status-failed);
   --color-status-cancelled: var(--status-cancelled);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-compute: var(--compute);
+  --color-hero: var(--hero);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -87,11 +92,21 @@
   --status-draft: #6d28d9;
   --status-pending: #475569;
   --status-submitted: #1d4ed8;
-  --status-running: #b45309;
-  --status-cancelling: #c2410c;
+  --status-running: #92400e;
+  --status-cancelling: #9a3412;
   --status-completed: #047857;
   --status-failed: #b91c1c;
   --status-cancelled: #475569;
+  /* Semantic hues that are not a job status: a found thing, a caution, a
+     note, and the compute cards. Same values as the status tokens they
+     resemble, separate names because they mean something else; the same AA
+     rule applies (text in the hue on at most a 10% tint of itself). */
+  --success: #047857;
+  --warning: #92400e;
+  --info: #1d4ed8;
+  --compute: #6d28d9;
+  /* The navy the page heroes start from, ending in --primary. */
+  --hero: #0a192f;
   --sidebar: #f8fafc;
   --sidebar-foreground: #0f172a;
   --sidebar-primary: #e6f6fb;

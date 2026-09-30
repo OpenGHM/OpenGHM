@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import {
   Clock,
   Send,
@@ -14,26 +13,15 @@ import {
   Radio,
   WifiOff,
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { CancelJobDialog } from "@/components/workspace/cancel-job-dialog";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { TimeStamp } from "@/components/workspace/time-stamp";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { formatAge, formatLocalDateTime, formatUtcDateTime } from "@/lib/workspace/time";
 import { useNow } from "@/lib/workspace/use-now";
-import { cancelJob } from "@/lib/jobs/actions";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { isTerminalStatus } from "@/lib/jobs/types";
 
@@ -147,43 +135,6 @@ export function JobStatusPanel({ preview = false }: Props) {
   const [actionExpired, setActionExpired] = useState(false);
   const sessionExpired = pollExpired || actionExpired;
 
-  const confirmCancel = async () => {
-    if (cancelPending) return;
-    if (preview) {
-      setConfirmOpen(false);
-      toast.info("Preview data — there is no real job to cancel.");
-      return;
-    }
-    setCancelPending(true);
-    try {
-      const result = await cancelJob(jobId);
-      setConfirmOpen(false);
-      if (result.ok) {
-        setActionExpired(false);
-        apply(result.data);
-        toast.success(
-          isTerminalStatus(result.data.status)
-            ? "Simulation cancelled."
-            : "Cancel requested. SLURM will confirm shortly."
-        );
-      } else if (result.reason === "session_expired") {
-        setActionExpired(true);
-        toast.error("Your session has expired. Sign in to cancel this simulation.");
-      } else if (result.reason === "not_found") {
-        toast.error("This simulation no longer exists.");
-      } else {
-        toast.error(result.message || "Failed to cancel the simulation.");
-        // A 409 means it is no longer cancellable, often because it just ended.
-        if (result.status === 409) refresh();
-      }
-    } catch {
-      setConfirmOpen(false);
-      toast.error("Failed to cancel the simulation.");
-    } finally {
-      setCancelPending(false);
-    }
-  };
-
   const cancellable =
     !isTerminalStatus(status) && status !== "DRAFT" && status !== "COMPLETING";
   const showCancelling = cancelling || cancelPending;
@@ -273,62 +224,21 @@ export function JobStatusPanel({ preview = false }: Props) {
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           {cancellable && (
-            <AlertDialog
-              open={confirmOpen}
-              // Stay open while the request is in flight.
-              onOpenChange={(next) => {
-                if (!cancelPending) setConfirmOpen(next);
-              }}
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={showCancelling}
+              onClick={() => setConfirmOpen(true)}
+              className="min-h-10 sm:min-h-8"
             >
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={showCancelling}
-                  className="min-h-10 sm:min-h-8"
-                >
-                  {showCancelling ? (
-                    <Loader2 className="mr-1.5 size-4 motion-safe:animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Ban className="mr-1.5 size-4" aria-hidden="true" />
-                  )}
-                  {showCancelling ? "Cancelling…" : "Cancel Job"}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel this simulation?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    SLURM stops it; the work so far is kept until you delete it.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={cancelPending} className="min-h-10 sm:min-h-9">
-                    Keep running
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={cancelPending}
-                    className="min-h-10 bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/30 sm:min-h-9"
-                    onClick={(event) => {
-                      // Radix closes the dialog on Action; keep it open until
-                      // the cancel has answered.
-                      event.preventDefault();
-                      void confirmCancel();
-                    }}
-                  >
-                    {cancelPending ? (
-                      <>
-                        <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
-                        Cancelling…
-                      </>
-                    ) : (
-                      "Cancel simulation"
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              {showCancelling ? (
+                <Loader2 className="mr-1.5 size-4 motion-safe:animate-spin" aria-hidden="true" />
+              ) : (
+                <Ban className="mr-1.5 size-4" aria-hidden="true" />
+              )}
+              {showCancelling ? "Cancelling…" : "Cancel Job"}
+            </Button>
           )}
           {!preview && !isTerminalStatus(status) && lastError === null && (
             <Button variant="ghost" size="sm" onClick={refresh} className="min-h-10 sm:min-h-8">
@@ -337,6 +247,20 @@ export function JobStatusPanel({ preview = false }: Props) {
             </Button>
           )}
         </div>
+
+        <CancelJobDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          jobId={jobId}
+          preview={preview}
+          onCancelled={(data) => {
+            setActionExpired(false);
+            apply(data);
+          }}
+          onConflict={refresh}
+          onSessionExpired={() => setActionExpired(true)}
+          onPendingChange={setCancelPending}
+        />
       </CardContent>
     </Card>
   );

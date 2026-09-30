@@ -32,7 +32,7 @@ export function PublishForm({ job }: { job: Job }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+      <div className="flex items-start gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" />
         <div>
           <p className="font-medium">Not wired up</p>
@@ -73,7 +73,7 @@ export function PublishForm({ job }: { job: Job }) {
         </CardContent>
       </Card>
 
-      <Button type="submit" disabled={submitting} className="gap-1.5 bg-[#006994] hover:bg-[#00b4d8]">
+      <Button type="submit" disabled={submitting} className="gap-1.5 hover:bg-accent">
         <BadgeCheck className="size-4" />
         {submitting ? "Submitting..." : "Publish Snapshot"}
       </Button>

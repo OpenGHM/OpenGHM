@@ -28,14 +28,14 @@ export default function WorkspaceError({
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-10">
         <div
           role="alert"
-          className="space-y-3 rounded-lg border border-dashed border-red-200 bg-red-50 p-8 text-center"
+          className="space-y-3 rounded-lg border border-dashed border-destructive/25 bg-destructive/5 p-8 text-center"
         >
-          <p className="font-medium text-red-800">Something went wrong loading this page.</p>
-          <p className="text-sm text-red-600">
+          <p className="font-medium text-status-failed">Something went wrong loading this page.</p>
+          <p className="text-sm text-destructive">
             A simulation that is already running is not affected. Try again, or go
             back to your list.
           </p>
-          {error.digest && <p className="text-xs text-red-500">Reference: {error.digest}</p>}
+          {error.digest && <p className="text-xs text-status-failed">Reference: {error.digest}</p>}
           <div className="flex flex-col justify-center gap-2 pt-2 sm:flex-row">
             <Button variant="outline" className="min-h-10" onClick={reset}>
               Try again

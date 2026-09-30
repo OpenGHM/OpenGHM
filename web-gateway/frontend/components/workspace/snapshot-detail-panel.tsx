@@ -39,7 +39,7 @@ export function SnapshotDetailPanel({
             <h3 className="text-base font-semibold leading-snug text-foreground">
               {dataset.about.name}
             </h3>
-            <span className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            <span className="mt-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
               {dataset.about.category}
             </span>
           </div>

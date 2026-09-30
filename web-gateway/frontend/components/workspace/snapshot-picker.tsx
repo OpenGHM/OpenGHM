@@ -76,7 +76,7 @@ export function SnapshotPicker({
     <Button
       size="sm"
       onClick={() => onSelect(dataset)}
-      className="bg-[#006994] hover:bg-[#005a7a] font-semibold"
+      className="font-semibold"
     >
       <CheckCircle2 className="mr-1.5 size-4" />
       Select

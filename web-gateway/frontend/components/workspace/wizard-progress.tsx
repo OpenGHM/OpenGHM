@@ -26,7 +26,7 @@ export function WizardProgress({ step }: { step: WizardStep }) {
   const { title, subtitle } = STEP_TITLES[step];
 
   return (
-    <div className="bg-gradient-to-br from-[#0a192f] to-[#006994] px-10 py-12">
+    <div className="bg-gradient-to-br from-hero to-primary px-10 py-12">
       <div className="mx-auto max-w-[1024px]">
         {/* Breadcrumb */}
         <nav className="mb-4 flex items-center gap-1.5 text-xs text-white/60">
@@ -55,7 +55,7 @@ export function WizardProgress({ step }: { step: WizardStep }) {
                 <div
                   className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                     isCurrent
-                      ? "bg-white text-[#006994]"
+                      ? "bg-white text-primary"
                       : isDone
                         ? "bg-white/30 text-white"
                         : "bg-white/10 text-white/50"

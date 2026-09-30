@@ -32,7 +32,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
             <TableCell className="font-medium">
               <Link
                 href={`/workspace/${job.id}`}
-                className="text-foreground hover:text-[#006994] hover:underline"
+                className="text-foreground hover:text-primary hover:underline"
               >
                 {displayName(job)}
               </Link>
@@ -43,7 +43,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
             <TableCell className="max-w-64 truncate text-sm text-muted-foreground">
               <Link
                 href={`/repository/${job.dataset_id}`}
-                className="hover:text-[#006994] hover:underline"
+                className="hover:text-primary hover:underline"
               >
                 {job.dataset_title}
               </Link>

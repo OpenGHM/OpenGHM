@@ -32,19 +32,19 @@ export function SessionExpiredBanner({ className }: { className?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className={`flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
+      className={`flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
     >
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <div className="space-y-0.5">
           <p className="font-medium">Your session has expired.</p>
-          <p className="text-xs text-amber-700">
+          <p className="text-xs text-warning">
             Sign in again to keep going. Simulations that are already running
             keep running on Anvil while you are signed out.
           </p>
         </div>
       </div>
-      <Button asChild size="sm" variant="outline" className="min-h-10 shrink-0 border-amber-300 bg-white text-amber-900 hover:bg-amber-100 sm:min-h-8">
+      <Button asChild size="sm" variant="outline" className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8">
         <Link href={href}>Sign in</Link>
       </Button>
     </div>

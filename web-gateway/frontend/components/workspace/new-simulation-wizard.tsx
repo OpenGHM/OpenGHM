@@ -123,7 +123,7 @@ export function NewSimulationWizard({
             <Button
               onClick={goNext}
               disabled={!canGoNext}
-              className="min-h-10 bg-[#006994] font-semibold hover:bg-[#005a7a] sm:min-h-9"
+              className="min-h-10 font-semibold sm:min-h-9"
             >
               Next
               <ArrowRight className="ml-1.5 size-4" />
