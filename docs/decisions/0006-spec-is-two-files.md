@@ -43,5 +43,5 @@ where the bytes sit.
 
 Two files to bump per version, and a consumer must check both to call a
 snapshot valid. In exchange, the layout contract is machine-readable, so tools
-resolve `wbm_init/` and `data/` from the declared spec version rather than from
+resolve `wbm_init/` and `model/` from the declared spec version rather than from
 string literals.

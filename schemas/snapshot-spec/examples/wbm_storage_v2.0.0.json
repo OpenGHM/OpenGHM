@@ -61,8 +61,7 @@
       "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif"
     },
     "modelInput": {
-      "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
-      "mountAs": "wbm_ancillary_data_v2.0.0"
+      "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d"
     }
   },
 

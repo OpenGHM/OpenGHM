@@ -12,14 +12,14 @@ for notebooks, batch scripts, and a future GUI.
 > Scope: the three synchronous processing commands — `network`, `spatial`,
 > `temporal` — plus `sim`, WBM model runs either **locally** (`run`, foreground) or
 > on **SLURM** (`submit` / `status` / `list` / `logs` / `cancel`), setup
-> commands (`init`, `sif`), and `snapshot` (`fetch` a published snapshot,
-> `validate` a folder). Snapshots are **self-describing folders** (a root
+> commands (`init`, `sif`), `snapshot` (`fetch` a published snapshot,
+> `validate` a folder), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
 > `metadata.json`), and `sim` runs the folder you point it at.
 
 **Status:** `sim submit` has run a real WBM job to completion on Anvil (Python 3.9.5)
 and `sim status` reads live `sacct` records. The test suite covers the
 processing-tool goldens, the dry-run contract, `sim` build/run + management, image
-assets, `snapshot fetch` (against a local HTTP fixture), `init`, the library API
+assets, `snapshot fetch` and `model-input fetch` (against a local HTTP fixture), `init`, the library API
 and the wizard. `snapshot fetch` and `sim --spool` have not yet run on Anvil. **Full library/API reference:**
 [`docs/library.md`](docs/library.md).
 
@@ -81,7 +81,8 @@ and `wbm-v2-lite:2.0.0`. `sif` in the config (the tools image, for `network`,
 
 Requires Python ≥ 3.9. All dependencies are pure-Python (`click`, `rich`,
 `questionary`, and `tomli` on < 3.11), so installation needs no compiler — important
-for HPC. Images are cached under `sif_dir` (default `~/.openghm/sif`); an existing
+for HPC. Images are cached under `sif_dir` (default `~/.openghm/sif`) and model
+inputs under `model_input_dir` (default `~/.openghm/model-inputs`); an existing
 Anvil shared install keeps working without `init`.
 
 ## Use as a library
@@ -143,8 +144,10 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm temporal` | `temporal_aggregation.pl` | `--mt` required |
 | `openghm init` | — | one-time setup: download image(s), configure runtime/SLURM |
 | `openghm sif list` / `pull <image[:version]>` | — | list published images / download one into `sif_dir` |
-| `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/` and the image it pins, verified; `--dest`, `--spool auto\|skip`, `--no-image`, `--jobs` |
+| `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/`, the model input it links and the image it pins, verified; `--dest`, `--spool auto\|skip`, `--no-model-input`, `--no-image`, `--jobs` |
 | `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec |
+| `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
+| `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
 | `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool snapshot\|fresh`; writes `simulation.json` |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
@@ -192,17 +195,18 @@ openghm temporal --mt /work/test.MT.csv --no-datacube-check \
 ### Fetching a snapshot (`openghm snapshot fetch`)
 
 ```sh
-openghm snapshot fetch <id>                    # -> ./<id>, plus the pinned image in sif_dir
+openghm snapshot fetch <id>                    # -> ./<id>, plus the model input in model_input_dir and the pinned image in sif_dir
 openghm snapshot fetch <id> --spool skip       # without the (large) spool cache
-openghm snapshot fetch <id> --dest /scratch/me/snap --jobs 16 --no-image
+openghm snapshot fetch <id> --dest /scratch/me/snap --jobs 16 --no-image --no-model-input
 ```
 
 Reads `snapshots/<id>/` from the public bucket with anonymous HTTPS (no
 credentials). It downloads everything **except** `wbm_output/` (a snapshot carries
 its output, it does not consume it; ADR 0009 — the fetched tree gets an empty
-`wbm_output/`, which the layout requires) and `WBM_run_state/` (a new run
-starts its own). `spool/` is downloaded with `--spool auto` (the default) when the
-snapshot has one, and never with `--spool skip`.
+`wbm_output/`, which the layout requires), `WBM_run_state/` (a new run
+starts its own), and `data/` and `data_init/` (a snapshot holds no input data; it
+links a model input, ADR 0015). `spool/` is downloaded with `--spool auto` (the
+default) when the snapshot has one, and never with `--spool skip`.
 
 - Every file with a `SHA256SUMS` line is checked against it. A spool file has no
   line, so it is checked by size and, when its ETag is a plain MD5 (not
@@ -211,11 +215,28 @@ snapshot has one, and never with `--spool skip`.
 - Modes come from each object's `x-amz-meta-s3cmd-attrs` header (ADR 0022); an
   object without one is a failure rather than a guessed mode (setuid/setgid/sticky
   bits are never applied).
+- The model input is `uses.modelInput.id` from `metadata.json`, fetched into
+  `<model_input_dir>/<id>/` and checked like the snapshot. A model input that several
+  snapshots link (Wyoming and Global share one) is downloaded once: the second fetch
+  finds every file valid and skips it. `--no-model-input` leaves it out.
 - The image is `uses.container.https` from `metadata.json`, cached under `sif_dir`
   and checked against `uses.container.digest`.
 - It resumes: a file already at its path with the right size and hash is skipped
   (re-run it after an interruption; the last line is `downloaded N, skipped M,
   failed K`). Exit status is 1 if anything failed, with the paths listed.
+
+### Fetching a model input (`openghm model-input fetch`)
+
+```sh
+openghm model-input fetch <id>                 # -> <model_input_dir>/<id>, where `sim` looks
+openghm model-input fetch <id> --dest /scratch/me/input --jobs 16
+```
+
+Reads `model-inputs/<id>/` (all of it, `metadata.json` and `SHA256SUMS` included)
+with the same anonymous HTTPS, `SHA256SUMS` check, modes and resume as
+`snapshot fetch`, and prints `model input: <dir>` and the `downloaded N, skipped M,
+failed K` line. `snapshot fetch` does this for the model input a snapshot links; use
+`model-input fetch` to get one alone.
 
 ### Simulations (`openghm sim`)
 
@@ -225,7 +246,13 @@ and per-sim `wbm_output`/`WBM_run_state` + a `simulation.json` sidecar are writt
 under `output_base/<id>/`). The model image is the one the snapshot pins
 (`uses.container`), found at `<sif_dir>/<image>/<version>/<filename>`; if it is not
 there the command stops and names `openghm snapshot fetch <id>` and
-`openghm sif pull <image>:<version>`. `--sif PATH` overrides it.
+`openghm sif pull <image>:<version>`. `--sif PATH` overrides it. The input data is
+the model input the snapshot links (`uses.modelInput.id`), found at
+`<model_input_dir>/<id>`: its root is bound read-only at `/wbm/data` and its
+`data_init/` at `/wbm/data_init`. If it is not there the command stops and names
+`openghm snapshot fetch <id>` and `openghm model-input fetch <model-input-id>`; a
+`--dry-run` prints the plan without either. `simulation.json` records `model_input`
+and `model_input_path`.
 
 **Spool** (`--spool`): `snapshot` (the default) binds `<snapshot>/spool` read-write
 as `/wbm/spool` and creates it if absent, so a fetched spool is used in place

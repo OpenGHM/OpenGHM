@@ -39,8 +39,9 @@ are about 95 % of a published snapshot's bytes, which is why what to ship is a
 real decision rather than a detail.
 
 Input data is **not** in the folder. It is a separately published artifact that
-`metadata.json` links by id, materialised at `data/<mountAs>/` when the run is
-assembled ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)).
+`metadata.json` links by id, and the run binds it from a shared cache
+(`<model_input_dir>/<id>/`) at `/wbm/data` and `/wbm/data_init`
+([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)).
 Bundling it meant every snapshot stored its own copy of the same 49 GB.
 
 Exact tree and sizes: [`../reference/snapshot-layout.md`](../reference/snapshot-layout.md).
@@ -187,7 +188,7 @@ Every axis resolves from one object — the pin block in a snapshot's
   "uses": {
     "container": { "image": "wbm-v2-lite", "version": "2.0.0-r3",
                    "digest": "sha256:9f2c…", "oras": "…", "https": "…" },
-    "modelInput": { "id": "7d4e9a…", "mountAs": "wbm_ancillary_data_v2.0.0" }
+    "modelInput": { "id": "7d4e9a…" }
   }
 }
 ```

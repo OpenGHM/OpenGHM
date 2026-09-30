@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
@@ -55,9 +56,17 @@ def test_non_interactive_writes_config(tmp_path, capsys):
     data = tomllib.loads(path.read_text())
     assert data["runtime"] == "docker"
     assert data["output_base"] == "~/.openghm/runs"
+    assert data["model_input_dir"] == "~/.openghm/model-inputs"
     assert "No images were downloaded" in capsys.readouterr().out
 
 
 def test_non_interactive_requires_preset(tmp_path):
     with pytest.raises(SystemExit):
         initmod.run_init(non_interactive=True, preset=None, config_path=str(tmp_path / "c.toml"))
+
+
+def test_model_input_path_is_under_the_cache_dir():
+    assert Config().model_input_dir == "~/.openghm/model-inputs"
+    cfg = Config(model_input_dir="/cache/mi")
+    assert cfg.model_input_path("ab" * 32) == "/cache/mi/" + "ab" * 32
+    assert Config().model_input_path("x") == os.path.expanduser("~/.openghm/model-inputs/x")

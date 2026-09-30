@@ -37,16 +37,17 @@ Model input becomes a published artifact in its own right, with its own spec —
 metadata and layout, versioned like the snapshot spec. It is stored under
 `model-inputs/<id>/` and a snapshot **links** to one instead of containing it.
 
-`metadata.json` gains `uses.modelInput`, naming the input by id and the
-directory it is mounted as:
+`metadata.json` gains `uses.modelInput`, naming the input by id:
 
 ```json
-"modelInput": { "id": "7d4e9a1c…", "mountAs": "Wyoming_tracking" }
+"modelInput": { "id": "7d4e9a1c…" }
 ```
 
-At run time the linked input is materialised at `data/<mountAs>/` and mounted
-read-only at `/wbm/data`, which is where a bundled `data/<dataSubdir>/` sits
-today. Nothing about how the model reads its inputs changes.
+At run time the linked input is fetched into a cache shared by every snapshot that
+links it (`<model_input_dir>/<id>/`, `openghm snapshot fetch`) and mounted
+read-only: its root at `/wbm/data` and its `data_init/` at `/wbm/data_init`. The
+snapshot names the input and nothing else about it. Nothing about how the model
+reads its inputs changes.
 
 The namespace is **open**. Publishing is restricted to admins at first, but the
 design assumes any user will publish into it, so by
@@ -68,19 +69,18 @@ bytes are unprocessed, which these are not — they are prepared model inputs.
 
 ## Consequences
 
-A snapshot no longer contains its input data. `data/<dataSubdir>/` and
-`data_init/` leave the bundled tree and become the mount target that the linked
-input fills at run time, which removes about 49 GB from every snapshot and the
-within-snapshot duplication with it.
+A snapshot no longer contains its input data. `data/` and `data_init/` are not in
+its layout; the linked input fills `/wbm/data` and `/wbm/data_init` at run time.
+That removes about 49 GB from every snapshot and the within-snapshot duplication
+with it.
 
 The pin in `metadata.json` becomes load-bearing in a way it was not before:
 previously the bytes were inside the artifact, now the artifact names them. This
 is the same relationship the container already has, and it rests on the same
 guarantee — a published id is immutable (rule 1).
 
-Model input needs a spec of its own before any of this can be published, which
-is a mission, not a detail. Until it exists, snapshots keep their bundled `data/`
-and this decision describes the destination only.
+Model input has a spec of its own (`schemas/model-input-spec/`), and a published
+model input is what a snapshot's `uses.modelInput.id` resolves to.
 
 `raw_data` disappears as a term. This supersedes
 [ADR 0002](0002-five-versioned-axes.md) in part — axis 3 becomes model input,

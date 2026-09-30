@@ -159,8 +159,9 @@ def _build_command_template(job: JobDB) -> str:
     # actually run, and setting ANVIL_CONTAINER_IMAGE alone will produce
     # failing jobs rather than working ones. Their runscript is /bin/bash, so
     # they take a command, not these flags; a real run binds a snapshot's
-    # data/data_init/wbm_init/gdal_test_files plus per-run spool/wbm_output/
-    # WBM_run_state and executes /wbm/model/wbm.pl against an init file — see
+    # model/utilities/wbm_init/gdal_test_files, its model input (data,
+    # data_init) and per-run spool/wbm_output/WBM_run_state, and executes
+    # /wbm/model/wbm.pl against an init file — see
     # images/wbm-v2-lite/run/wbm-run and images/wbm-v2-lite/test/*.slurm.
     # Closing that gap needs a job-to-snapshot/init mapping this model has no
     # field for; it is open item 11 in devdocs/reference/open-items.md.

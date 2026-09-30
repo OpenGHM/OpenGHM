@@ -25,6 +25,8 @@ from openghm.errors import OpenghmError
 
 ID = "0f" * 32
 PREFIX = f"snapshots/{ID}/"
+MI_ID = "1e" * 32
+MI_PREFIX = f"model-inputs/{MI_ID}/"
 IMAGE_KEY = "containers/wbm-x-lite/1.0.0/wbm-x-lite-1.0.0.sif"
 PAGE = 3   # keys per listing page, so a tree this size takes several requests
 
@@ -114,6 +116,25 @@ class Bucket:
     def put(self, rel, body: bytes, **kw):
         self.objects[PREFIX + rel] = _Obj(body, **kw)
 
+    def put_mi(self, rel, body: bytes, **kw):
+        self.objects[MI_PREFIX + rel] = _Obj(body, **kw)
+
+    def publish_model_input(self):
+        """A model input the way ``model-input-spec`` lays it out: root files,
+        ``data_init/``, and data directories, all hashed, ``metadata.json`` too."""
+        hashed = {
+            "metadata.json": (json.dumps({"id": MI_ID}).encode(), _MODE_REG),
+            "data_init/climate/t2m.init": (b"{ File => 'climate/t2m/*.nc' }\n", _MODE_REG),
+            "climate/t2m/2000-01-01.nc": (b"n" * 50, _MODE_REG),
+            "network/flowdir.tif": (b"t" * 20, _MODE_REG),
+        }
+        for rel, (body, mode) in hashed.items():
+            self.put_mi(rel, body, mode=mode)
+        sums = "".join(f"{hashlib.sha256(b).hexdigest()}  ./{rel}\n"
+                       for rel, (b, _m) in sorted(hashed.items()))
+        self.put_mi("SHA256SUMS", sums.encode())
+        return self
+
     def publish(self, *, spool=True, image_body=b"pretend sif"):
         """Fill the bucket with a snapshot the way ``snapshot-layout.md`` lays it out."""
         hashed = {
@@ -121,7 +142,10 @@ class Bucket:
             "model/lib/RIMS.pm": (b"1;\n", _MODE_REG),
             "utilities/tool": (b"#!/bin/sh\n", _MODE_EXE),
             "wbm_init/wbm_test.init": (b"{ Output_dir => 'x' }\n", _MODE_REG),
-            "data/sub/a.nc": (b"a" * 100, _MODE_REG),
+            "gdal_test_files/a.nc": (b"a" * 100, _MODE_REG),
+            # published trees still carry a copy of the model input; it is never fetched
+            "data/sub/a.nc": (b"d" * 100, _MODE_REG),
+            "data_init/old.init": (b"{}\n", _MODE_REG),
             "WBM_run_state/state.bin": (b"state", _MODE_REG),   # in SHA256SUMS, never fetched
         }
         meta = {
@@ -130,7 +154,7 @@ class Bucket:
                 "image": "wbm-x-lite", "version": "1.0.0",
                 "digest": "sha256:" + hashlib.sha256(image_body).hexdigest(),
                 "https": f"{self.url}/{IMAGE_KEY}",
-            }},
+            }, "modelInput": {"id": MI_ID}},
         }
         hashed["metadata.json"] = (json.dumps(meta).encode(), _MODE_REG)
         for rel, (body, mode) in hashed.items():
@@ -151,16 +175,17 @@ class Bucket:
 def bucket(monkeypatch):
     monkeypatch.setattr(fetch, "_BACKOFF", 0.0)
     b = Bucket()
-    yield b.publish()
+    yield b.publish().publish_model_input()
     b.close()
 
 
 def _cfg(tmp_path) -> Config:
-    return Config(sif_dir=str(tmp_path / "sif"))
+    return Config(sif_dir=str(tmp_path / "sif"), model_input_dir=str(tmp_path / "mi"))
 
 
 def _run(bucket, tmp_path, **kw):
     kw.setdefault("dest", str(tmp_path / "snap"))
+    kw.setdefault("model_input", False)   # the model input has its own tests below
     opts = fetch.FetchOptions(snapshot_id=ID, base_url=bucket.url, **kw)
     return fetch.fetch_snapshot(opts, _cfg(tmp_path))
 
@@ -180,7 +205,7 @@ def test_fetch_auto_downloads_tree_spool_and_image(bucket, tmp_path):
     assert (result.downloaded, result.skipped) == (5 + 2 + 2 + 1, 0)
     assert bucket.lists > 1                       # the listing was paginated
     assert (snap / "model" / "wbm.pl").read_bytes().startswith(b"#!/usr/bin/perl")
-    assert (snap / "data" / "sub" / "a.nc").read_bytes() == b"a" * 100
+    assert (snap / "gdal_test_files" / "a.nc").read_bytes() == b"a" * 100
     assert not (snap / "WBM_run_state").exists()
     # wbm_output/ is there, as the layout requires, but its contents are not
     assert (snap / "wbm_output").is_dir() and not any((snap / "wbm_output").iterdir())
@@ -238,28 +263,39 @@ def test_spool_is_checked_by_md5_when_the_etag_is_one(bucket, tmp_path):
     assert (tmp_path / "snap" / "spool" / "big" / "multi.bin").exists()   # multipart: size only
 
 
+def test_data_and_data_init_are_not_fetched_even_if_published(bucket, tmp_path):
+    result = _run(bucket, tmp_path)
+    snap = tmp_path / "snap"
+    assert result.ok, result.failed
+    assert not (snap / "data").exists() and not (snap / "data_init").exists()
+    assert not any(k.startswith((PREFIX + "data/", PREFIX + "data_init/")) for k in bucket.gets)
+    # an unhashed stray under data/ is ignored too, not reported
+    bucket.put("data/sub/stray.nc", b"stray")
+    assert _run(bucket, tmp_path).ok
+
+
 # ── integrity ──────────────────────────────────────────────────────────────────
 
 
 def test_sha256sums_mismatch_fails_and_leaves_no_file(bucket, tmp_path):
-    bucket.objects[PREFIX + "data/sub/a.nc"].body = b"b" * 100   # same size, other bytes
+    bucket.objects[PREFIX + "gdal_test_files/a.nc"].body = b"b" * 100   # same size, other bytes
     result = _run(bucket, tmp_path)
     assert not result.ok
-    assert [p for p, _ in result.failed] == ["data/sub/a.nc"]
+    assert [p for p, _ in result.failed] == ["gdal_test_files/a.nc"]
     assert "sha256" in result.failed[0][1]
     snap = tmp_path / "snap"
-    assert not (snap / "data" / "sub" / "a.nc").exists() and not list(snap.rglob("*.part"))
+    assert not (snap / "gdal_test_files" / "a.nc").exists() and not list(snap.rglob("*.part"))
     assert (snap / "model" / "wbm.pl").exists()        # the others were still fetched
 
 
 def test_a_wrong_size_fails(bucket, tmp_path, monkeypatch):
     # the object serves 99 bytes; the listing says 100
-    bucket.objects[PREFIX + "data/sub/a.nc"].body = b"a" * 99
+    bucket.objects[PREFIX + "gdal_test_files/a.nc"].body = b"a" * 99
     real = fetch.list_objects
     monkeypatch.setattr(fetch, "list_objects", lambda base, prefix: [
         (k, 100 if k.endswith("a.nc") else size, etag) for k, size, etag in real(base, prefix)])
     result = _run(bucket, tmp_path)
-    assert [p for p, _ in result.failed] == ["data/sub/a.nc"]
+    assert [p for p, _ in result.failed] == ["gdal_test_files/a.nc"]
     assert "size 99" in result.failed[0][1]
 
 
@@ -279,11 +315,11 @@ def test_sums_line_without_an_object_fails(bucket, tmp_path):
 
 
 def test_unhashed_object_outside_spool_fails(bucket, tmp_path):
-    bucket.put("data/sub/extra.nc", b"stray")
+    bucket.put("gdal_test_files/extra.nc", b"stray")
     result = _run(bucket, tmp_path)
-    assert [p for p, _ in result.failed] == ["data/sub/extra.nc"]
+    assert [p for p, _ in result.failed] == ["gdal_test_files/extra.nc"]
     assert "SHA256SUMS" in result.failed[0][1]
-    assert not (tmp_path / "snap" / "data" / "sub" / "extra.nc").exists()
+    assert not (tmp_path / "snap" / "gdal_test_files" / "extra.nc").exists()
 
 
 def test_unknown_snapshot_and_bad_id(bucket, tmp_path):
@@ -316,7 +352,7 @@ def test_a_second_run_downloads_nothing(bucket, tmp_path):
 def test_resume_refetches_only_what_is_not_valid(bucket, tmp_path):
     _run(bucket, tmp_path)
     snap = tmp_path / "snap"
-    (snap / "data" / "sub" / "a.nc").write_bytes(b"z" * 100)     # right size, wrong hash
+    (snap / "gdal_test_files" / "a.nc").write_bytes(b"z" * 100)     # right size, wrong hash
     (snap / "spool" / "plain.bin").write_bytes(b"short")         # wrong size
     (snap / "model" / "lib" / "RIMS.pm").unlink()                # missing
     (snap / "model" / "wbm.pl.part").write_bytes(b"half")        # a killed run's leftover
@@ -324,8 +360,8 @@ def test_resume_refetches_only_what_is_not_valid(bucket, tmp_path):
     result = _run(bucket, tmp_path)
     assert result.ok and result.downloaded == 3
     assert sorted(bucket.gets) == sorted(PREFIX + r for r in
-                                         ("data/sub/a.nc", "spool/plain.bin", "model/lib/RIMS.pm"))
-    assert (snap / "data" / "sub" / "a.nc").read_bytes() == b"a" * 100
+                                         ("gdal_test_files/a.nc", "spool/plain.bin", "model/lib/RIMS.pm"))
+    assert (snap / "gdal_test_files" / "a.nc").read_bytes() == b"a" * 100
 
 
 # ── image ──────────────────────────────────────────────────────────────────────
@@ -355,33 +391,197 @@ def test_a_cached_image_is_not_downloaded_again(bucket, tmp_path):
     assert IMAGE_KEY not in bucket.gets and result.image_path
 
 
+# ── the model input ────────────────────────────────────────────────────────────
+
+
+def _mi_dir(tmp_path) -> Path:
+    return tmp_path / "mi" / MI_ID
+
+
+def test_snapshot_fetch_also_fetches_the_linked_model_input(bucket, tmp_path):
+    result = _run(bucket, tmp_path, model_input=True)
+    mi = _mi_dir(tmp_path)
+    assert result.ok, result.failed
+    # 10 for the snapshot + its image, and the model input's 4 files + SHA256SUMS
+    assert (result.downloaded, result.skipped) == (10 + 5, 0)
+    assert result.model_input_path == str(mi)
+    assert (mi / "climate" / "t2m" / "2000-01-01.nc").read_bytes() == b"n" * 50
+    assert (mi / "data_init" / "climate" / "t2m.init").exists()
+    assert (mi / "metadata.json").exists() and (mi / "SHA256SUMS").exists()
+    assert not list(mi.rglob("*.part"))
+    # the input is in the cache, not in the snapshot
+    assert not (tmp_path / "snap" / "data").exists()
+
+
+def test_no_model_input_leaves_it_out(bucket, tmp_path):
+    result = _run(bucket, tmp_path, model_input=False)
+    assert result.ok and result.model_input_path is None
+    assert not (tmp_path / "mi").exists()
+    assert not any(k.startswith(MI_PREFIX) for k in bucket.gets)
+
+
+def test_a_shared_model_input_downloads_once(bucket, tmp_path):
+    first = _run(bucket, tmp_path, model_input=True)
+    bucket.gets.clear()
+    other = _run(bucket, tmp_path, model_input=True, dest=str(tmp_path / "snap2"))
+    assert other.ok
+    assert not any(k.startswith(MI_PREFIX) for k in bucket.gets)
+    # the second snapshot's tree and spool download; the input (5 files) and the image are skipped
+    assert other.skipped == 5 + 1 and other.downloaded == first.downloaded - 5 - 1
+
+
+def test_a_model_input_file_with_a_wrong_hash_fails(bucket, tmp_path):
+    bucket.objects[MI_PREFIX + "climate/t2m/2000-01-01.nc"].body = b"m" * 50
+    result = _run(bucket, tmp_path, model_input=True)
+    assert [p for p, _ in result.failed] == [f"model-inputs/{MI_ID}/climate/t2m/2000-01-01.nc"]
+    assert "sha256" in result.failed[0][1]
+    assert result.model_input_path is None
+    assert (tmp_path / "snap" / "model" / "wbm.pl").exists()   # the snapshot is still there
+
+
+def test_a_missing_model_input_is_a_failure_not_a_crash(bucket, tmp_path):
+    for k in [k for k in bucket.objects if k.startswith(MI_PREFIX)]:
+        del bucket.objects[k]
+    result = _run(bucket, tmp_path, model_input=True)
+    assert [p for p, _ in result.failed] == [f"model input {MI_ID}"]
+    assert "nothing under" in result.failed[0][1]
+    assert (tmp_path / "snap" / "model" / "wbm.pl").exists()
+
+
+def test_a_snapshot_with_no_model_input_link_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch, "_BACKOFF", 0.0)
+    b = Bucket().publish()
+    try:
+        meta = json.loads(b.objects[PREFIX + "metadata.json"].body)
+        del meta["uses"]["modelInput"]
+        body = json.dumps(meta).encode()
+        b.put("metadata.json", body)
+        sums = b.objects[PREFIX + "SHA256SUMS"].body.decode().splitlines()
+        sums = [f"{hashlib.sha256(body).hexdigest()}  ./metadata.json" if l.endswith("./metadata.json") else l
+                for l in sums]
+        b.put("SHA256SUMS", ("\n".join(sums) + "\n").encode())
+        with pytest.raises(OpenghmError, match="uses.modelInput.id"):
+            _run(b, tmp_path, model_input=True)
+        assert _run(b, tmp_path, model_input=False).ok
+    finally:
+        b.close()
+
+
+def _fetch_mi(bucket, tmp_path, **kw):
+    opts = fetch.ModelInputOptions(model_input_id=MI_ID, base_url=bucket.url, **kw)
+    return fetch.fetch_model_input(opts, _cfg(tmp_path))
+
+
+def test_model_input_fetch_defaults_to_the_cache(bucket, tmp_path):
+    result = _fetch_mi(bucket, tmp_path)
+    assert result.ok and (result.downloaded, result.skipped) == (5, 0)
+    assert result.dest == result.model_input_path == str(_mi_dir(tmp_path))
+    assert (_mi_dir(tmp_path) / "network" / "flowdir.tif").read_bytes() == b"t" * 20
+    assert fetch.summary_line(result).startswith("downloaded 5, skipped 0, failed 0")
+    again = _fetch_mi(bucket, tmp_path)
+    assert (again.downloaded, again.skipped) == (0, 5)
+
+
+def test_model_input_fetch_to_a_dest(bucket, tmp_path):
+    result = _fetch_mi(bucket, tmp_path, dest=str(tmp_path / "elsewhere"))
+    assert result.ok and (tmp_path / "elsewhere" / "data_init" / "climate" / "t2m.init").exists()
+    assert not (tmp_path / "mi").exists()
+
+
+def test_model_input_fetch_fetches_every_directory(bucket, tmp_path):
+    # no directory is excluded, not even one named like a snapshot's
+    bucket.put_mi("data/extra.nc", b"x")
+    bucket.put_mi("spool/s.bin", b"y")
+    sums = bucket.objects[MI_PREFIX + "SHA256SUMS"].body.decode()
+    sums += f"{hashlib.sha256(b'x').hexdigest()}  ./data/extra.nc\n{hashlib.sha256(b'y').hexdigest()}  ./spool/s.bin\n"
+    bucket.put_mi("SHA256SUMS", sums.encode())
+    result = _fetch_mi(bucket, tmp_path)
+    assert result.ok, result.failed
+    assert (_mi_dir(tmp_path) / "data" / "extra.nc").exists() and (_mi_dir(tmp_path) / "spool" / "s.bin").exists()
+
+
+def test_model_input_fetch_errors(bucket, tmp_path):
+    with pytest.raises(OpenghmError, match="nothing under model-inputs/"):
+        fetch.fetch_model_input(
+            fetch.ModelInputOptions(model_input_id="ab" * 32, base_url=bucket.url), _cfg(tmp_path))
+    with pytest.raises(OpenghmError, match="not a model input id"):
+        fetch.fetch_model_input(fetch.ModelInputOptions(model_input_id="../x", base_url=bucket.url),
+                                _cfg(tmp_path))
+    # a snapshot id is not a model input id: nothing lives under that prefix
+    with pytest.raises(OpenghmError, match="nothing under"):
+        fetch.fetch_model_input(fetch.ModelInputOptions(model_input_id=ID, base_url=bucket.url), _cfg(tmp_path))
+
+
+def test_model_input_fetch_reports_a_bad_file(bucket, tmp_path):
+    bucket.objects[MI_PREFIX + "network/flowdir.tif"].body = b"u" * 20
+    result = _fetch_mi(bucket, tmp_path)
+    assert [p for p, _ in result.failed] == ["network/flowdir.tif"]
+    assert result.model_input_path is None
+    assert not (_mi_dir(tmp_path) / "network" / "flowdir.tif").exists()
+
+
 # ── the command ────────────────────────────────────────────────────────────────
 
 
 def test_cli_fetch_help():
     out = CliRunner().invoke(cli, ["snapshot", "fetch", "--help"])
     assert out.exit_code == 0
-    for flag in ("--dest", "--spool", "--no-image", "--jobs"):
+    for flag in ("--dest", "--spool", "--no-image", "--no-model-input", "--jobs"):
         assert flag in out.output
 
 
 def _invoke(bucket, tmp_path, monkeypatch, *args):
     monkeypatch.setattr(fetch, "S3_BASE", bucket.url)
     cfg = tmp_path / "config.toml"
-    cfg.write_text(f'sif_dir = "{tmp_path / "sif"}"\n')
+    cfg.write_text(f'sif_dir = "{tmp_path / "sif"}"\nmodel_input_dir = "{tmp_path / "mi"}"\n')
     return CliRunner().invoke(
         cli, ["snapshot", "fetch", ID, "--config", str(cfg), "--dest", str(tmp_path / "snap"), *args])
 
 
 def test_cli_fetch_reports_and_exits_0(bucket, tmp_path, monkeypatch):
-    out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
+    out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2", "--no-model-input")
     assert out.exit_code == 0, out.output
     assert "downloaded 10, skipped 0, failed 0" in out.output
     assert "spool: 2 files" in out.output and str(_image_path(tmp_path)) in out.output
+    assert "model input:" not in out.output and not (tmp_path / "mi").exists()
+
+
+def test_cli_fetch_includes_the_model_input_by_default(bucket, tmp_path, monkeypatch):
+    out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
+    assert out.exit_code == 0, out.output
+    assert "downloaded 15, skipped 0, failed 0" in out.output
+    assert f"model input: {_mi_dir(tmp_path)}" in out.output
+    assert (_mi_dir(tmp_path) / "data_init" / "climate" / "t2m.init").exists()
+    assert not (tmp_path / "snap" / "data").exists()
+
+
+def test_cli_model_input_fetch(bucket, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch, "S3_BASE", bucket.url)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'model_input_dir = "{tmp_path / "mi"}"\n')
+    out = CliRunner().invoke(cli, ["model-input", "fetch", MI_ID, "--config", str(cfg), "--jobs", "2"])
+    assert out.exit_code == 0, out.output
+    assert f"model input: {_mi_dir(tmp_path)}" in out.output
+    assert "downloaded 5, skipped 0, failed 0" in out.output
+    out = CliRunner().invoke(cli, ["model-input", "fetch", MI_ID, "--config", str(cfg),
+                                   "--dest", str(tmp_path / "there")])
+    assert out.exit_code == 0 and f"model input: {tmp_path / 'there'}" in out.output
+    assert (tmp_path / "there" / "metadata.json").exists()
+
+
+def test_cli_model_input_fetch_errors(bucket, tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch, "S3_BASE", bucket.url)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'model_input_dir = "{tmp_path / "mi"}"\n')
+    out = CliRunner().invoke(cli, ["model-input", "fetch", "ab" * 32, "--config", str(cfg)])
+    assert out.exit_code == 2 and "nothing under model-inputs/" in out.output
+    bucket.objects[MI_PREFIX + "network/flowdir.tif"].body = b"u" * 20
+    out = CliRunner().invoke(cli, ["model-input", "fetch", MI_ID, "--config", str(cfg)])
+    assert out.exit_code == 1 and "failed 1" in out.output and "network/flowdir.tif" in out.output
 
 
 def test_cli_fetch_exits_1_and_lists_failures(bucket, tmp_path, monkeypatch):
-    bucket.objects[PREFIX + "data/sub/a.nc"].body = b"b" * 100
+    bucket.objects[PREFIX + "gdal_test_files/a.nc"].body = b"b" * 100
     out = _invoke(bucket, tmp_path, monkeypatch, "--spool", "skip", "--no-image")
     assert out.exit_code == 1
-    assert "failed 1" in out.output and "data/sub/a.nc" in out.output
+    assert "failed 1" in out.output and "gdal_test_files/a.nc" in out.output

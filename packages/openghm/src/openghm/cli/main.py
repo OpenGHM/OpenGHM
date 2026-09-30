@@ -339,7 +339,7 @@ def sim_submit_cmd(**p) -> None:
     try:
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_submit(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
-                                  check_image=not p["dry_run"])
+                                  check_assets=not p["dry_run"])
         # Capture sbatch stdout on a real submit so we can record the SLURM job ID.
         result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"] or not p["dry_run"])
     except OpenghmError as e:
@@ -385,7 +385,7 @@ def sim_run_cmd(**p) -> None:
     try:
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
-                              check_image=not p["dry_run"])
+                              check_assets=not p["dry_run"])
         result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"])
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
@@ -575,20 +575,25 @@ snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
               help="auto: download spool/ if the snapshot has one; skip: never")
 @click.option("--no-image", "no_image", is_flag=True,
               help="do not download the container image the snapshot pins")
+@click.option("--no-model-input", "no_model_input", is_flag=True,
+              help="do not download the model input the snapshot links")
 @click.option("--jobs", type=click.IntRange(min=1), default=8, show_default=True,
               help="parallel downloads")
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="config file (default: ~/.openghm/config.toml)")
 def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_image: bool,
-                       jobs: int, config_path: Optional[str]) -> None:
+                       no_model_input: bool, jobs: int, config_path: Optional[str]) -> None:
     """download snapshots/<id>/ from the public bucket, ready for `sim`
 
-    Everything except wbm_output/ (output is carried, not consumed) and
-    WBM_run_state/; spool/ only if the snapshot has one and --spool is auto.
-    Each file is checked against SHA256SUMS (spool files by size and MD5) and
-    gets its mode from the object's metadata. The pinned container image goes
-    into sif_dir, checked against its digest. Re-running resumes: files already
-    valid are skipped.
+    Everything except wbm_output/ (output is carried, not consumed),
+    WBM_run_state/ and data/, data_init/ (the input is the model input);
+    spool/ only if the snapshot has one and --spool is auto. Each file is
+    checked against SHA256SUMS (spool files by size and MD5) and gets its mode
+    from the object's metadata. The model input it links
+    (uses.modelInput.id) goes into model_input_dir, and the pinned container
+    image into sif_dir, each checked like the snapshot. Re-running resumes:
+    files already valid are skipped, so a model input shared by several
+    snapshots downloads once.
     """
     from rich.console import Console
 
@@ -606,7 +611,8 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
     try:
         cfg = load_config(path=config_path).config
         result = fetch_snapshot(
-            FetchOptions(snapshot_id=snapshot_id, dest=dest, spool=spool, image=not no_image, jobs=jobs),
+            FetchOptions(snapshot_id=snapshot_id, dest=dest, spool=spool, image=not no_image,
+                         model_input=not no_model_input, jobs=jobs),
             cfg, console=err if tty else None, on_progress=progress,
         )
     except OpenghmError as e:
@@ -619,6 +625,8 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
         click.echo(f"spool: {result.spool_files} files")
     else:
         click.echo(f"spool: {'not fetched (--spool skip)' if result.spool == 'skipped' else 'none in this snapshot'}")
+    if result.model_input_path:
+        click.echo(f"model input: {result.model_input_path}")
     if result.image_path:
         click.echo(f"image: {result.image_path}")
     click.echo(summary_line(result))
@@ -631,10 +639,56 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
 
 @cli.group("model-input")
 def model_input_group() -> None:
-    """validate a model input folder against the published model-input spec (ADR 0015)."""
+    """fetch a published model input, and validate a model input folder against the model-input spec (ADR 0015)."""
 
 
 model_input_group.command("validate")(_validate_cmd("model-input-spec"))
+
+
+@model_input_group.command("fetch")
+@click.argument("model_input_id", metavar="<id>")
+@click.option("--dest", default=None, metavar="DIR",
+              help="where to put the tree (default: <model_input_dir>/<id>, where `sim` looks)")
+@click.option("--jobs", type=click.IntRange(min=1), default=8, show_default=True,
+              help="parallel downloads")
+@click.option("--config", "config_path", default=None, metavar="PATH",
+              help="config file (default: ~/.openghm/config.toml)")
+def model_input_fetch_cmd(model_input_id: str, dest: Optional[str], jobs: int,
+                          config_path: Optional[str]) -> None:
+    """download model-inputs/<id>/ from the public bucket into the model-input cache
+
+    Every file is checked against SHA256SUMS and gets its mode from the
+    object's metadata. Re-running resumes: files already valid are skipped.
+    `openghm snapshot fetch` does this for the model input a snapshot links.
+    """
+    from ..fetch import ModelInputOptions, fetch_model_input, format_failures, summary_line
+
+    tty = sys.stderr.isatty()
+
+    def progress(done: int, total: int) -> None:
+        if tty:
+            click.echo(f"\r  {done}/{total} files", nl=False, err=True)
+        elif done % 1000 == 0:
+            click.echo(f"  {done}/{total} files", err=True)
+
+    try:
+        cfg = load_config(path=config_path).config
+        result = fetch_model_input(
+            ModelInputOptions(model_input_id=model_input_id, dest=dest, jobs=jobs),
+            cfg, on_progress=progress,
+        )
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    if tty:
+        click.echo("", err=True)
+    click.echo(f"model input: {result.dest}")
+    click.echo(summary_line(result))
+    if result.failed:
+        click.echo("failed:", err=True)
+        for line in format_failures(result):
+            click.echo(line, err=True)
+        raise SystemExit(1)
 
 
 # ---- setup: init + image download -------------------------------------------

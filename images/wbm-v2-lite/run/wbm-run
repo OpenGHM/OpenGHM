@@ -2,17 +2,20 @@
 # Launcher for the lightweight WBM full-model container.
 #
 # The image holds only the environment (NO embedded code). The snapshot's
-# model/ and utilities/, plus data + I/O, are bound in, split into a read root
-# and a write root so a shared read-only snapshot is never written to:
+# model/ and utilities/, the model input, plus I/O, are bound in, split into
+# read roots and a write root so a shared read-only snapshot or model input is
+# never written to:
 #
-#   -r ROOT    read root   (snapshot): ROOT/model, utilities, data/<subdir>,
-#                          data_init, wbm_init, gdal_test_files
-#   -s SUBDIR  data subdir under ROOT/data  -> /wbm/data
+#   -r ROOT    read root   (snapshot): ROOT/model, utilities, wbm_init,
+#                          gdal_test_files
+#   -m MI      model input (the directory openghm fetches, e.g.
+#                          ~/.openghm/model-inputs/<id>): MI -> /wbm/data,
+#                          MI/data_init -> /wbm/data_init
 #   -w WORK    write root  (per-run): WORK/{spool,wbm_output,WBM_run_state}
 #                          (created if missing)
 #
 # Everything after `--` is the command run in the container, e.g.
-#   wbm-run -r $SNAP -s wbm_ancillary_data_v2.0.0 -w $WORK -- \
+#   wbm-run -r $SNAP -m ~/.openghm/model-inputs/$MODEL_INPUT_ID -w $WORK -- \
 #       /wbm/model/wbm.pl -v /wbm/wbm_init/wbm_test.init
 #
 # The container starts in / (--pwd /), so an init's relative paths resolve
@@ -24,26 +27,26 @@
 set -eu
 
 SIF=${SIF:-/home/x-openghm/apps/wbm/v2-lite/wbm_v2_lite.sif}
-ROOT="" WORK="" SUB=""
+ROOT="" WORK="" MI=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -r) ROOT=$2; shift 2 ;;
-    -s) SUB=$2;  shift 2 ;;
+    -m) MI=$2;   shift 2 ;;
     -w) WORK=$2; shift 2 ;;
     --) shift; break ;;
     *)  echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$ROOT" ] && [ -n "$WORK" ] && [ -n "$SUB" ] || {
-  echo "usage: wbm-run -r READ_ROOT -s DATA_SUBDIR -w WRITE_ROOT -- CMD..." >&2; exit 2; }
+[ -n "$ROOT" ] && [ -n "$WORK" ] && [ -n "$MI" ] || {
+  echo "usage: wbm-run -r READ_ROOT -m MODEL_INPUT_DIR -w WRITE_ROOT -- CMD..." >&2; exit 2; }
 
 mkdir -p "$WORK/spool" "$WORK/wbm_output" "$WORK/WBM_run_state"
 
 exec singularity exec -c -e --pwd / \
   -B "$ROOT/model:/wbm/model:ro" \
   -B "$ROOT/utilities:/wbm/utilities:ro" \
-  -B "$ROOT/data/$SUB:/wbm/data" \
-  -B "$ROOT/data_init:/wbm/data_init" \
+  -B "$MI:/wbm/data:ro" \
+  -B "$MI/data_init:/wbm/data_init:ro" \
   -B "$ROOT/wbm_init:/wbm/wbm_init" \
   -B "$ROOT/gdal_test_files:/wbm/gdal_test_files" \
   -B "$WORK/spool:/wbm/spool" \

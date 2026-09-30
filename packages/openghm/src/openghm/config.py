@@ -47,6 +47,10 @@ class Config:
     sif: str = "~/.openghm/sif/wbm-tools-lite/2026-05-31/wbm-tools-lite-2026-05-31.sif"
     #: Cache root for downloaded images (``openghm sif pull`` / ``openghm init``).
     sif_dir: str = "~/.openghm/sif"
+    #: Cache root for model inputs (``openghm snapshot fetch`` / ``openghm model-input
+    #: fetch``): each one is ``<model_input_dir>/<id>/``, shared by every snapshot
+    #: that links it.
+    model_input_dir: str = "~/.openghm/model-inputs"
     #: Image ref for the docker runtime (local builds).
     docker_image: str = "wbm-lite:latest"
 
@@ -97,6 +101,14 @@ class Config:
         """
         return os.path.join(os.path.expanduser(self.sif_dir), image, version, filename)
 
+    def model_input_path(self, model_input_id: str) -> str:
+        """Where the model input ``<id>`` is cached: ``<model_input_dir>/<id>``.
+
+        ``sim`` binds it at ``/wbm/data``; ``openghm snapshot fetch`` and
+        ``openghm model-input fetch`` put it here.
+        """
+        return os.path.join(os.path.expanduser(self.model_input_dir), model_input_id)
+
     def resolve_output_base(self) -> str:
         """Per-sim work/output root, with ``~`` expanded."""
         return os.path.expanduser(self.output_base)
@@ -115,6 +127,7 @@ def _render_default_toml(c: Config) -> str:
             f'runtime       = "{c.runtime}"   # singularity | apptainer | docker',
             f'sif           = "{c.sif}"   # tools-lite image (network/spatial/temporal)',
             f'sif_dir       = "{c.sif_dir}"   # cache root for downloaded images',
+            f'model_input_dir = "{c.model_input_dir}"   # cache root for downloaded model inputs',
             f'docker_image  = "{c.docker_image}"',
             "",
             "# sim submit / sim run defaults (per-sim work/output root + SLURM):",

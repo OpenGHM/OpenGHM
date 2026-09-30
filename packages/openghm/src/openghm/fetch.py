@@ -1,18 +1,25 @@
-"""``openghm snapshot fetch`` — download a published snapshot tree, ready to run.
+"""``openghm snapshot fetch`` / ``openghm model-input fetch`` — download a
+published tree, ready to run.
 
-Reads ``snapshots/<id>/`` from the public bucket with anonymous HTTPS (no
-credentials, no S3 client): ListObjectsV2 for the keys, plain GETs for the
-bytes. Stdlib only, so it runs on Anvil's python 3.9 with the rest of the package.
+Reads ``snapshots/<id>/`` or ``model-inputs/<id>/`` from the public bucket with
+anonymous HTTPS (no credentials, no S3 client): ListObjectsV2 for the keys, plain
+GETs for the bytes. Stdlib only, so it runs on Anvil's python 3.9 with the rest of
+the package.
 
-What is downloaded:
+What a snapshot fetch downloads:
 
 - everything under ``snapshots/<id>/`` **except** ``wbm_output/`` (a snapshot
   carries output it does not consume, ADR 0009; the fetched tree gets an empty
-  one, which the layout requires) and ``WBM_run_state/`` (a new run starts its
-  own);
+  one, which the layout requires), ``WBM_run_state/`` (a new run starts its
+  own), and ``data/`` and ``data_init/`` (the input lives in the model input, ADR
+  0015, even where a published tree still carries a copy);
 - ``spool/`` only with ``spool="auto"`` and only if the snapshot has one;
+- the model input the document links (``uses.modelInput.id``), into the
+  ``model_input_dir`` cache, unless ``model_input=False``;
 - the container image the document pins (``uses.container.https``), into the
   ``sif_dir`` cache, unless ``image=False``.
+
+A model input fetch downloads all of ``model-inputs/<id>/``, checked the same way.
 
 How each file is checked:
 
@@ -54,7 +61,7 @@ from .errors import OpenghmError
 S3_BASE = "https://s3.anvil.rcac.purdue.edu/openghm"
 
 #: Top-level directories of a snapshot that are never fetched.
-EXCLUDED_DIRS = ("wbm_output", "WBM_run_state")
+EXCLUDED_DIRS = ("wbm_output", "WBM_run_state", "data", "data_init")
 SPOOL_DIR = "spool"
 SPOOL_MODES = ("auto", "skip")
 
@@ -86,6 +93,20 @@ class FetchOptions:
     spool: str = "auto"
     #: Fetch the pinned container image too.
     image: bool = True
+    #: Fetch the linked model input too, into ``config.model_input_path(id)``.
+    model_input: bool = True
+    jobs: int = 8
+    #: The bucket's URL; defaults to :data:`S3_BASE` (looked up at call time).
+    base_url: Optional[str] = None
+
+
+@dataclass
+class ModelInputOptions:
+    """Inputs for ``model-input fetch`` (see the CLI for flag names)."""
+
+    model_input_id: str
+    #: Where the tree goes. Defaults to ``config.model_input_path(model_input_id)``.
+    dest: Optional[str] = None
     jobs: int = 8
     #: The bucket's URL; defaults to :data:`S3_BASE` (looked up at call time).
     base_url: Optional[str] = None
@@ -114,6 +135,8 @@ class FetchResult:
     spool_files: int = 0
     #: Absolute path of the pinned image, when it was requested and is valid.
     image_path: Optional[str] = None
+    #: Absolute path of the linked model input, when it was requested and is valid.
+    model_input_path: Optional[str] = None
 
     @property
     def ok(self) -> bool:
@@ -188,12 +211,16 @@ def parse_sums(text: str) -> Dict[str, str]:
     return sums
 
 
-def select(rel: str, spool: str) -> Optional[str]:
-    """Whether a snapshot-relative path is fetched: ``None`` if so, else why not."""
+def select(rel: str, spool: Optional[str], excluded: Tuple[str, ...] = EXCLUDED_DIRS) -> Optional[str]:
+    """Whether a tree-relative path is fetched: ``None`` if so, else why not.
+
+    ``spool`` is ``"auto"`` / ``"skip"`` for a snapshot, ``None`` for a tree
+    with no spool (a model input), where ``spool/`` is an ordinary directory.
+    """
     top = rel.split("/", 1)[0]
-    if top in EXCLUDED_DIRS:
+    if top in excluded:
         return f"{top}/ is not fetched"
-    if top == SPOOL_DIR and spool != "auto":
+    if spool is not None and top == SPOOL_DIR and spool != "auto":
         return "spool/ skipped"
     return None
 
@@ -300,7 +327,100 @@ def _fetch_item(base_url: str, prefix: str, dest: str, item: _Item) -> Tuple[str
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-# ── the whole snapshot ──────────────────────────────────────────────────────────
+# ── a whole tree ────────────────────────────────────────────────────────────────
+
+
+def _fetch_tree(
+    base: str,
+    prefix: str,
+    dest: str,
+    result: FetchResult,
+    *,
+    kind: str,
+    excluded: Tuple[str, ...],
+    spool: Optional[str],
+    jobs: int,
+    on_progress: Optional[Callable[[int, int], None]],
+) -> dict:
+    """Download ``<prefix>*`` into ``dest``, checked against its ``SHA256SUMS``.
+
+    Shared by snapshots and model inputs. Counts go into ``result``, per-file
+    failures into ``result.failed``. Returns the parsed ``metadata.json``. Raises
+    :class:`OpenghmError` for what stops the whole fetch: no objects under the
+    prefix, no ``SHA256SUMS`` or ``metadata.json`` (``kind`` names what is not
+    there), an unreadable ``metadata.json``.
+    """
+    listing = list_objects(base, prefix)
+    if not listing:
+        raise OpenghmError(f"nothing under {prefix} in {base} (is the {kind} id right?)")
+
+    # What is on offer, by tree-relative path.
+    on_offer: Dict[str, Tuple[int, str]] = {}
+    for key, size, etag in listing:
+        rel = key[len(prefix):]
+        if not rel or rel.endswith("/"):
+            continue          # a directory placeholder
+        if not _safe_rel(rel):
+            result.failed.append((rel, "unsafe path in the listing"))
+            continue
+        on_offer[rel] = (size, etag)
+    for name in (METADATA_NAME, SUMS_NAME):
+        if name not in on_offer:
+            raise OpenghmError(f"{prefix}{name} is not in the bucket; this is not a {kind}")
+
+    if spool is not None:
+        spool_present = any(r.split("/", 1)[0] == SPOOL_DIR for r in on_offer)
+        result.spool = ("skipped" if spool == "skip" else "fetched" if spool_present else "absent")
+
+    # SHA256SUMS first, then metadata.json (which it may list): everything else
+    # is checked against them.
+    def head(name: str, sha256: Optional[str]) -> None:
+        size, etag = on_offer[name]
+        outcome, n = _fetch_item(base, prefix, dest, _Item(name, size, etag, sha256))
+        _count(result, outcome, n)
+
+    head(SUMS_NAME, None)
+    with open(os.path.join(dest, SUMS_NAME), "r", encoding="utf-8") as fh:
+        sums = parse_sums(fh.read())
+    head(METADATA_NAME, sums.get(METADATA_NAME))
+    try:
+        with open(os.path.join(dest, METADATA_NAME), "r", encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise OpenghmError(f"cannot read {METADATA_NAME}: {e}")
+    if not isinstance(meta, dict):
+        raise OpenghmError(f"{METADATA_NAME} is not a JSON object")
+
+    # What to fetch, and what the document and the bucket disagree about.
+    items: List[_Item] = []
+    for rel, sha256 in sums.items():
+        if select(rel, spool, excluded) is None and rel not in on_offer:
+            result.failed.append((rel, f"listed in {SUMS_NAME} but not in the bucket"))
+    for rel, (size, etag) in sorted(on_offer.items()):
+        if rel in (METADATA_NAME, SUMS_NAME) or select(rel, spool, excluded) is not None:
+            continue
+        sha256 = sums.get(rel)
+        if sha256 is None and not (spool is not None and rel.split("/", 1)[0] == SPOOL_DIR):
+            result.failed.append((rel, f"in the bucket but has no {SUMS_NAME} line"))
+            continue
+        items.append(_Item(rel, size, etag, sha256))
+    if spool is not None:
+        result.spool_files = sum(1 for i in items if i.rel.split("/", 1)[0] == SPOOL_DIR)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+        futures = {pool.submit(_fetch_item, base, prefix, dest, i): i for i in items}
+        for fut in as_completed(futures):
+            item = futures[fut]
+            try:
+                outcome, n = fut.result()
+                _count(result, outcome, n)
+            except (OpenghmError, OSError, http.client.HTTPException) as e:
+                result.failed.append((item.rel, str(e)))
+            done += 1
+            if on_progress:
+                on_progress(done, len(items))
+    return meta
 
 
 def fetch_snapshot(
@@ -326,84 +446,86 @@ def fetch_snapshot(
     dest = os.path.abspath(opts.dest or opts.snapshot_id)
     result = FetchResult(dest=dest)
 
-    listing = list_objects(base, prefix)
-    if not listing:
-        raise OpenghmError(f"nothing under {prefix} in {base} (is the snapshot id right?)")
-
-    # What is on offer, by snapshot-relative path.
-    on_offer: Dict[str, Tuple[int, str]] = {}
-    for key, size, etag in listing:
-        rel = key[len(prefix):]
-        if not rel or rel.endswith("/"):
-            continue          # a directory placeholder
-        if not _safe_rel(rel):
-            result.failed.append((rel, "unsafe path in the listing"))
-            continue
-        on_offer[rel] = (size, etag)
-    for name in (METADATA_NAME, SUMS_NAME):
-        if name not in on_offer:
-            raise OpenghmError(f"{prefix}{name} is not in the bucket; this is not a snapshot")
-
-    spool_present = any(r.split("/", 1)[0] == SPOOL_DIR for r in on_offer)
-    result.spool = ("skipped" if opts.spool == "skip" else "fetched" if spool_present else "absent")
-
-    # SHA256SUMS first, then metadata.json (which it may list): everything else
-    # is checked against them.
-    def head(name: str, sha256: Optional[str]) -> None:
-        size, etag = on_offer[name]
-        outcome, n = _fetch_item(base, prefix, dest, _Item(name, size, etag, sha256))
-        _count(result, outcome, n)
-
-    head(SUMS_NAME, None)
-    with open(os.path.join(dest, SUMS_NAME), "r", encoding="utf-8") as fh:
-        sums = parse_sums(fh.read())
-    head(METADATA_NAME, sums.get(METADATA_NAME))
-    try:
-        with open(os.path.join(dest, METADATA_NAME), "r", encoding="utf-8") as fh:
-            container = (json.load(fh).get("uses") or {}).get("container") or {}
-    except (OSError, ValueError) as e:
-        raise OpenghmError(f"cannot read {METADATA_NAME}: {e}")
-    image_spec = assets.spec_from_container(container) if opts.image else None
-
-    # What to fetch, and what the document and the bucket disagree about.
-    items: List[_Item] = []
-    for rel, sha256 in sums.items():
-        if select(rel, opts.spool) is None and rel not in on_offer:
-            result.failed.append((rel, f"listed in {SUMS_NAME} but not in the bucket"))
-    for rel, (size, etag) in sorted(on_offer.items()):
-        if rel in (METADATA_NAME, SUMS_NAME) or select(rel, opts.spool) is not None:
-            continue
-        sha256 = sums.get(rel)
-        if sha256 is None and rel.split("/", 1)[0] != SPOOL_DIR:
-            result.failed.append((rel, f"in the bucket but has no {SUMS_NAME} line"))
-            continue
-        items.append(_Item(rel, size, etag, sha256))
-    result.spool_files = sum(1 for i in items if i.rel.split("/", 1)[0] == SPOOL_DIR)
-
-    done = 0
-    with ThreadPoolExecutor(max_workers=max(1, opts.jobs)) as pool:
-        futures = {pool.submit(_fetch_item, base, prefix, dest, i): i for i in items}
-        for fut in as_completed(futures):
-            item = futures[fut]
-            try:
-                outcome, n = fut.result()
-                _count(result, outcome, n)
-            except (OpenghmError, OSError, http.client.HTTPException) as e:
-                result.failed.append((item.rel, str(e)))
-            done += 1
-            if on_progress:
-                on_progress(done, len(items))
+    meta = _fetch_tree(base, prefix, dest, result, kind="snapshot", excluded=EXCLUDED_DIRS,
+                       spool=opts.spool, jobs=opts.jobs, on_progress=on_progress)
+    uses = meta.get("uses") or {}
+    image_spec = assets.spec_from_container(uses.get("container") or {}) if opts.image else None
+    model_input_id = _model_input_id(meta) if opts.model_input else None
 
     # The layout requires wbm_output/, and its contents are not fetched: an
     # empty one keeps the tree valid (`openghm snapshot validate`) without
     # pretending to carry the published output.
     os.makedirs(os.path.join(dest, "wbm_output"), exist_ok=True)
 
+    if model_input_id is not None:
+        _fetch_linked_model_input(model_input_id, base, config, result, opts.jobs, on_progress)
     if image_spec is not None:
         _fetch_image(image_spec, config, result, console)
 
     result.failed.sort()
     return result
+
+
+def fetch_model_input(
+    opts: ModelInputOptions,
+    config,
+    *,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+) -> FetchResult:
+    """Download model input ``opts.model_input_id`` into ``opts.dest``.
+
+    ``dest`` defaults to the ``model_input_dir`` cache, where ``sim`` looks for
+    it. Errors and failures are reported as for :func:`fetch_snapshot`.
+    """
+    if not _ID_RE.match(opts.model_input_id):
+        raise OpenghmError(f"not a model input id: {opts.model_input_id!r}")
+    base = (opts.base_url or S3_BASE).rstrip("/")
+    prefix = f"model-inputs/{opts.model_input_id}/"
+    dest = os.path.abspath(opts.dest or config.model_input_path(opts.model_input_id))
+    result = FetchResult(dest=dest)
+    _fetch_tree(base, prefix, dest, result, kind="model input", excluded=(), spool=None,
+                jobs=opts.jobs, on_progress=on_progress)
+    if not result.failed:
+        result.model_input_path = dest
+    result.failed.sort()
+    return result
+
+
+def _model_input_id(meta: dict) -> str:
+    """``uses.modelInput.id`` of a snapshot's ``metadata.json``."""
+    mid = ((meta.get("uses") or {}).get("modelInput") or {}).get("id")
+    if not mid:
+        raise OpenghmError(
+            "uses.modelInput.id is missing in metadata.json "
+            "(run `openghm snapshot validate` on this folder, or pass --no-model-input)"
+        )
+    if not isinstance(mid, str) or not _ID_RE.match(mid):
+        raise OpenghmError(f"uses.modelInput.id is not a model input id: {mid!r}")
+    return mid
+
+
+def _fetch_linked_model_input(
+    model_input_id: str, base: str, config, result: FetchResult, jobs: int,
+    on_progress: Optional[Callable[[int, int], None]],
+) -> None:
+    """The linked model input into the cache; its counts and failures join ``result``.
+
+    A second snapshot that links the same input finds every file valid and skips
+    them all, so a shared input downloads once.
+    """
+    sub = FetchResult(dest=config.model_input_path(model_input_id))
+    try:
+        _fetch_tree(base, f"model-inputs/{model_input_id}/", sub.dest, sub, kind="model input",
+                    excluded=(), spool=None, jobs=jobs, on_progress=on_progress)
+    except OpenghmError as e:
+        result.failed.append((f"model input {model_input_id}", str(e)))
+        return
+    result.downloaded += sub.downloaded
+    result.skipped += sub.skipped
+    result.bytes_downloaded += sub.bytes_downloaded
+    result.failed.extend((f"model-inputs/{model_input_id}/{rel}", why) for rel, why in sub.failed)
+    if not sub.failed:
+        result.model_input_path = sub.dest
 
 
 def _count(result: FetchResult, outcome: str, n: int) -> None:

@@ -217,8 +217,8 @@
         </div>
 
         <div class="t-row">
-          <code>├── data/</code>
-          <span class="note">bundled — inputs unique to this study</span>
+          <code>├── gdal_test_files/</code>
+          <span class="note">bundled — GDAL fixtures the model probes at startup</span>
         </div>
 
         <div class="spacer"></div>
@@ -229,7 +229,7 @@
         </div>
 
         <div class="t-row link">
-          <code>│     ├── conformsTo   snapshot-spec 1.1.0</code>
+          <code>│     ├── $schema      snapshot-spec 1.0.0</code>
           <span class="note">→ spec repository · semver</span>
         </div>
 
@@ -239,8 +239,8 @@
         </div>
 
         <div class="t-row link">
-          <code>│     ├── rawData      merra2-forcing@v1</code>
-          <span class="note">→ shared data store · version</span>
+          <code>│     ├── modelInput   7d4e9a…</code>
+          <span class="note">→ model input store · id</span>
         </div>
 
         <div class="t-row self">
@@ -284,9 +284,9 @@
   <title id="dgm-title">Snapshot assembly and run graph</title>
   <desc id="dgm-desc">
     A spec repository sits at the top. Below it a read-only snapshot folder holds metadata.json
-    above three sibling boxes: the published wbm_output, the bundled input content, and a dashed
+    above three sibling boxes: the published wbm_output, the bundled code and configuration, and a dashed
     spool cache. metadata.json makes two dashed pin edges — one up to the spec repository, one
-    right to a group of external stores holding the image registry and the shared data store.
+    right to a group of external stores holding the image registry and the model input store.
     The bundled content flows down into a WBM run on a solid edge; the spool is bound into the
     run in place, read-write, on a dashed conditional edge; the external stores feed the run from the right. The run writes down
     into a writable per-simulation scratch directory containing wbm_output and WBM_run_state. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
@@ -342,8 +342,8 @@
   <rect x="412" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-b g-ink g-bd" x="495" y="246" text-anchor="middle" font-size="13">bundled content</text>
   <text class="g-m g-ink"      x="495" y="266" text-anchor="middle" font-size="11.5">model/  utilities/</text>
-  <text class="g-m g-ink"      x="495" y="284" text-anchor="middle" font-size="11.5">wbm_init/  data/</text>
-  <text class="g-b g-mut"      x="495" y="310" text-anchor="middle" font-size="11">49 GB &#183; Global</text>
+  <text class="g-m g-ink"      x="495" y="284" text-anchor="middle" font-size="11.5">wbm_init/  gdal_test_files/</text>
+  <text class="g-b g-mut"      x="495" y="310" text-anchor="middle" font-size="11">495 MB &#183; Global</text>
   <text class="g-b g-mut"      x="495" y="328" text-anchor="middle" font-size="11">defines identity</text>
 
   <!-- s3 · spool cache -->
@@ -368,8 +368,8 @@
   <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 &#183; by digest</text>
 
   <rect x="812" y="526" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="900" y="550" text-anchor="middle" font-size="13">Shared data store</text>
-  <text class="g-m g-acc"      x="900" y="570" text-anchor="middle" font-size="10.5">Anvil S3 &#183; by version</text>
+  <text class="g-b g-bd g-acc" x="900" y="550" text-anchor="middle" font-size="13">Model input</text>
+  <text class="g-m g-acc"      x="900" y="570" text-anchor="middle" font-size="10.5">Anvil S3 &#183; by id</text>
 
   <!-- ── per-sim scratch (writable) ──────────────────────────────────────── -->
   <rect x="215" y="650" width="560" height="136" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
@@ -427,10 +427,10 @@
         <span><span class="swatch dash"></span> conditional — only if the reuse envelope matches</span>
       </div>
       <figcaption>
-        Only <strong>five percent</strong> of a published snapshot is input data. On the Global
-        snapshot the <code>data/</code> store is 49&nbsp;GB against 490&nbsp;GB of
-        <code>spool/</code> and roughly 470&nbsp;GB of results — 1,009&nbsp;GB in total. The two
-        large directories are the ones that need their own rules.
+        A published snapshot holds no input data: the model input it links is a separate
+        artifact (49&nbsp;GB for Global). What the snapshot itself holds is 490&nbsp;GB of
+        <code>spool/</code> and roughly 470&nbsp;GB of results. Those two large directories are
+        the ones that need their own rules.
         <code>wbm_output/</code> appears on both sides for different reasons: inside the snapshot
         it is the <strong>record of what was published</strong>, carried as-is with no identifier
         of its own and never mounted; in scratch it is what this run produced. Nothing connects

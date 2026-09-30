@@ -103,25 +103,23 @@ included ([rule 1](../../AGENTS.md#the-rules)).
 
 ## `layout/<version>.json`
 
-The real file, matching what the three staged snapshots on Anvil have today —
-not an aspirational shape:
+The real file:
 
 ```json
 {
   "specVersion": "1.0.0",
   "required": [
     "metadata.json", "model/", "utilities/", "wbm_init/",
-    "data/", "data_init/", "gdal_test_files/", "wbm_output/"
+    "gdal_test_files/", "wbm_output/"
   ],
   "optional": ["SHA256SUMS", "spool/", "meta_data/", "WBM_run_state/"]
 }
 ```
 
-`data/` and `data_init/` are required because a snapshot bundles its input
-data today. [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)
-moves that data out to a linked, separately published model input. When it
-moves, both entries leave `required` in 1.0.0 itself: the project is in
-development, so the spec is edited in place, not bumped.
+`data/` and `data_init/` are in neither list: a snapshot holds no input data. It
+links a separately published model input by `uses.modelInput.id`
+([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), and the
+run binds that input's root at `/wbm/data` and its `data_init/` at `/wbm/data_init`.
 
 `SHA256SUMS` is optional, and stays optional: it is an integrity check a
 consumer may run, not part of a snapshot's identity

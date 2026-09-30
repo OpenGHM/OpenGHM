@@ -44,20 +44,22 @@ _METADATA = {
         "recommendedCompute": {"cores": 16, "walltime": "15:00"},
     },
     "id": "1" * 64,
-    "uses": {"container": {
-        "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
-        "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
-    }},
+    "uses": {
+        "container": {
+            "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
+            "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
+        },
+        "modelInput": {"id": "2" * 64},
+    },
 }
 
 
 def _make_snapshot(root: Path, *, metadata=_METADATA, init_name="wbm_test.init",
-                   data_subdirs=("wbm_ancillary_data_v2.0.0",), write_init=True) -> Path:
+                   write_init=True, cache_model_input=True) -> Path:
+    """A snapshot tree (it has no ``data/`` or ``data_init/``) and its caches."""
     snap = root / "wbm_storage_v2.0.0"
-    for d in ("data", "data_init", "model", "utilities", "gdal_test_files", "wbm_init"):
+    for d in ("model", "utilities", "gdal_test_files", "wbm_init"):
         (snap / d).mkdir(parents=True, exist_ok=True)
-    for sub in data_subdirs:
-        (snap / "data" / sub).mkdir(parents=True, exist_ok=True)
     if metadata is not None:
         (snap / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
     if write_init:
@@ -69,11 +71,16 @@ def _make_snapshot(root: Path, *, metadata=_METADATA, init_name="wbm_test.init",
         sif = Path(_config(root).image_path(pin.image, pin.version, pin.filename))
         sif.parent.mkdir(parents=True, exist_ok=True)
         sif.write_bytes(b"")
+    # the model input the document links, in the cache `_config` points at
+    mid = (((metadata or {}).get("uses") or {}).get("modelInput") or {}).get("id")
+    if mid and cache_model_input:
+        (Path(_config(root).model_input_path(mid)) / "data_init").mkdir(parents=True, exist_ok=True)
     return snap
 
 
 def _config(tmp_path: Path) -> Config:
     return Config(output_base=str(tmp_path / "out"), sif_dir=str(tmp_path / "sif"),
+                  model_input_dir=str(tmp_path / "model-inputs"),
                   account="abc123456", partition="shared")
 
 
@@ -93,9 +100,12 @@ def test_submit_split_mounts_and_sif(tmp_path):
     _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
     assert _ctx.image == str(tmp_path / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif")
-    # reads come from the snapshot, bound read-only
+    # reads come from the model input cache and the snapshot, bound read-only
+    mi = str(tmp_path / "model-inputs" / ("2" * 64))
     assert _find(built, "/wbm/data").readonly is True
-    assert _find(built, "/wbm/data").host == str(snap / "data" / "wbm_ancillary_data_v2.0.0")
+    assert _find(built, "/wbm/data").host == mi
+    assert _find(built, "/wbm/data_init").readonly is True
+    assert _find(built, "/wbm/data_init").host == mi + "/data_init"
     assert _find(built, "/wbm/model").readonly is True
     # writes go to per-sim scratch, writable
     for cpath in ("/wbm/wbm_output", "/wbm/WBM_run_state"):
@@ -174,6 +184,9 @@ def test_sidecar_records_provenance(tmp_path):
     assert sidecar["simulation_id"] == "sim1"
     assert sidecar["init"] == "wbm_test.init"
     assert sidecar["wbm_version"] == "2.0.0"
+    assert sidecar["model_input"] == "2" * 64
+    assert sidecar["model_input_path"] == str(tmp_path / "model-inputs" / ("2" * 64))
+    assert "data_subdir" not in sidecar
     assert sidecar["user_info"] == "alice@x.edu"
     assert sidecar["submitted_at"] == "2026-07-05T00:00:00Z"
     assert sidecar["slurm_job_id"] is None
@@ -183,7 +196,7 @@ def test_cwd_default(tmp_path, monkeypatch):
     snap = _make_snapshot(tmp_path)
     monkeypatch.chdir(snap)
     _ctx, built = build_submit(SubmitOptions(simulation_id="sim1"), _config(tmp_path))  # no path → cwd
-    assert _find(built, "/wbm/data").host == str(snap / "data" / "wbm_ancillary_data_v2.0.0")
+    assert _find(built, "/wbm/data").host == str(tmp_path / "model-inputs" / ("2" * 64))
 
 
 # ── --spool snapshot | fresh ─────────────────────────────────────────────────
@@ -341,7 +354,7 @@ def test_missing_image_names_the_commands(tmp_path):
     assert "openghm sif pull wbm-v2-lite:2.0.0" in msg
     # a dry run prints the plan without the image, and --sif replaces the lookup
     build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path),
-                 check_image=False)
+                 check_assets=False)
     ctx, _ = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"),
                           _config(tmp_path), sif="/x/my.sif")
     assert ctx.image == "/x/my.sif"
@@ -380,12 +393,36 @@ def test_bad_sim_id(tmp_path):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="bad/id"), _config(tmp_path))
 
 
-@pytest.mark.parametrize("subdirs", [(), ("a", "b")])
-def test_ambiguous_data_subdir(tmp_path, subdirs):
-    # The spec has no dataSubdir field, so data/ having exactly one child is
-    # the only thing that can answer this.
-    snap = _make_snapshot(tmp_path, data_subdirs=subdirs)
-    with pytest.raises(OpenghmError, match="exactly one subdirectory"):
+def test_snapshot_data_is_not_read(tmp_path):
+    # a published tree may still carry data/ and data_init/; the run uses the model input
+    snap = _make_snapshot(tmp_path)
+    (snap / "data" / "old").mkdir(parents=True)
+    (snap / "data_init").mkdir()
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert all(str(snap / "data") not in m.host and m.host != str(snap / "data_init")
+               for m in built.mounts)
+
+
+def test_missing_model_input_names_the_commands(tmp_path):
+    snap = _make_snapshot(tmp_path, cache_model_input=False)
+    mid = "2" * 64
+    with pytest.raises(OpenghmError) as e:
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    msg = str(e.value)
+    assert str(tmp_path / "model-inputs" / mid) in msg
+    assert f"openghm snapshot fetch {_METADATA['id']}" in msg
+    assert f"openghm model-input fetch {mid}" in msg
+    # a dry run prints the plan without it
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"),
+                               _config(tmp_path), check_assets=False)
+    assert _find(built, "/wbm/data").host == str(tmp_path / "model-inputs" / mid)
+
+
+def test_missing_model_input_id(tmp_path):
+    meta = json.loads(json.dumps(_METADATA))
+    del meta["uses"]["modelInput"]
+    snap = _make_snapshot(tmp_path, metadata=meta)
+    with pytest.raises(OpenghmError, match="uses.modelInput.id"):
         build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
 
 

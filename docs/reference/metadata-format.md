@@ -93,8 +93,7 @@ maps to ids for browsing.
       "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v1-lite/1.0.0/wbm-v1-lite-1.0.0.sif"
     },
     "modelInput": {
-      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d",
-      "mountAs": "Wyoming_tracking"
+      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d"
     }
   },
 
@@ -114,17 +113,20 @@ maps to ids for browsing.
 
 ### Selectors
 
-`init` and `mountAs` are **selectors, not paths**. `wbm_init/` holds several
-`.init` files — the Wyoming snapshot on Anvil has three — so the snapshot has to
-say which one this simulation runs. The parent directory is not recorded because
+`simulation.init` is a **selector, not a path**. `wbm_init/` holds several `.init`
+files — the Wyoming snapshot on Anvil has three — so the snapshot has to say which
+one this simulation runs. The parent directory is not recorded because
 [`layout/<version>.json`](snapshot-spec.md#layoutversionjson) already makes it
-required. The spec ([snapshot-spec.md](snapshot-spec.md)) needs to define both
+required. The spec ([snapshot-spec.md](snapshot-spec.md)) needs to define it
 precisely — that definition is missing today:
 
 | Field | Definition to add | Resolves to |
 |---|---|---|
 | `simulation.init` | path **relative to `wbm_init/`**, required — a snapshot with several init files has no default | `<snapshot>/wbm_init/<init>` → mounted at `/wbm/wbm_init/<init>` |
-| `uses.modelInput.mountAs` | name of the `data/` child the linked model input is materialised as | `<snapshot>/data/<mountAs>` → mounted at `/wbm/data` |
+
+`uses.modelInput.id` is a link, not a selector: it names a published model input,
+and the run binds that input's root at `/wbm/data` and its `data_init/` at
+`/wbm/data_init`. The snapshot records nothing else about it.
 
 Defining `init` as relative to `wbm_init/` rather than as a bare filename costs
 nothing now — every real value is a plain filename — and leaves room for
@@ -188,7 +190,7 @@ the validator enforce it instead.
 #### Where an input variable's name and unit come from
 
 Each `MT_*` key in the `.init` points at an **MT record** — itself a `.init`
-file, under the snapshot's own `data/` tree:
+file, under the linked model input's tree (mounted at `/wbm/data`):
 
 ```perl
 MT_Precip => { Primary => '/wbm/data/climate/precip/merra2_prectotcorr_d.init' },

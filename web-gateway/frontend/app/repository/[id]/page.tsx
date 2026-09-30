@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { fetchDatasetById, fetchDatasetLinks } from "@/lib/repository/actions";
+import { fetchDatasetById, fetchDatasetLinks, fetchModelInputById } from "@/lib/repository/actions";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -43,6 +43,11 @@ export default async function DatasetDetailPage({
   if (!dataset) notFound();
 
   const { about, simulation, uses, runtime } = dataset;
+  // The snapshot links its model input by id. Show the catalogue's name and
+  // link to its page when the catalogue holds it; a lookup failure only
+  // costs the name, never the page.
+  const modelInputId = uses.modelInput.id;
+  const modelInput = await fetchModelInputById(modelInputId).catch(() => null);
   const temporalLabel = `${simulation.temporalCoverage.start} – ${simulation.temporalCoverage.end}`;
   const resolutionLabel = `${simulation.resolution.value} ${simulation.resolution.unit}`;
 
@@ -342,7 +347,8 @@ export default async function DatasetDetailPage({
                     <InfoRow
                       icon={<Container className="size-4" />}
                       label="Model Input"
-                      value={uses.modelInput.mountAs}
+                      value={modelInput?.about.name ?? `${modelInputId.slice(0, 12)}…`}
+                      internalHref={modelInput ? `/repository/model-inputs/${modelInputId}` : undefined}
                       iconColor="text-teal-500"
                     />
                     <InfoRow
@@ -446,12 +452,14 @@ function InfoRow({
   label,
   value,
   href,
+  internalHref,
   iconColor = "text-muted-foreground",
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   href?: string;
+  internalHref?: string;
   iconColor?: string;
 }) {
   return (
@@ -469,6 +477,13 @@ function InfoRow({
             >
               {value}
             </a>
+          ) : internalHref ? (
+            <Link
+              href={internalHref}
+              className="break-all text-[#006994] transition-colors hover:text-[#00b4d8]"
+            >
+              {value}
+            </Link>
           ) : (
             value
           )}

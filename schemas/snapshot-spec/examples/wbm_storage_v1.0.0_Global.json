@@ -112,8 +112,7 @@
       "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v1-lite/1.0.0/wbm-v1-lite-1.0.0.sif"
     },
     "modelInput": {
-      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d",
-      "mountAs": "Global_tracking"
+      "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d"
     }
   },
 

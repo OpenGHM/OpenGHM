@@ -24,7 +24,7 @@ MODEL_INPUT_EXAMPLE = json.loads(
 )
 
 SNAPSHOT_LAYOUT_DIRS = [
-    "model", "utilities", "wbm_init", "data", "data_init", "gdal_test_files", "wbm_output",
+    "model", "utilities", "wbm_init", "gdal_test_files", "wbm_output",
 ]
 MODEL_INPUT_LAYOUT_DIRS = ["data_init"]
 
@@ -166,10 +166,18 @@ def test_layout_passes_on_a_complete_folder(tmp_path):
 
 def test_layout_fails_on_a_missing_required_path(tmp_path):
     folder = _make_snapshot_folder(tmp_path)
-    (folder / "data_init").rmdir()
+    (folder / "gdal_test_files").rmdir()
     result = spec.validate_layout(folder, spec="snapshot-spec")
     assert not result.ok
-    assert "data_init/" in result.missing_required
+    assert "gdal_test_files/" in result.missing_required
+
+
+def test_layout_does_not_require_the_input_data(tmp_path):
+    # a snapshot links its model input (ADR 0015); data/ and data_init/ are not its layout
+    folder = _make_snapshot_folder(tmp_path)
+    assert not (folder / "data").exists() and not (folder / "data_init").exists()
+    result = spec.validate_layout(folder, spec="snapshot-spec")
+    assert result.ok and "data/" not in result.missing_required and "data_init/" not in result.missing_required
 
 
 def test_layout_does_not_require_optional_paths(tmp_path):

@@ -10,20 +10,19 @@ The on-disk shape of a snapshot, and how its identity is computed.
 ├── SHA256SUMS                       # integrity manifest — inputs only; NOT PRESENT YET, see below
 ├── model/  utilities/               # WBM code, hashed (ADR 0008)
 ├── wbm_init/                        # run configuration
-├── data/<mountAs>/                  # input data — LEAVING the bundle (ADR 0015)
-├── data_init/                       # input init fragments — LEAVING the bundle (ADR 0015)
 ├── gdal_test_files/                 # GDAL fixtures the model probes at startup
 ├── wbm_output/<runId>/              # published results (ADR 0009)
 └── spool/                           # cache — NOT in SHA256SUMS
     └── spool-manifest.json
 ```
 
-`data/` and `data_init/` are drawn as they exist in the three snapshots on Anvil
-today. [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)
-moves them out: a snapshot will link one published model input by id and the
-run will materialise it at `data/<mountAs>/`. Until model input has a spec of
-its own, they stay bundled — and duplicated, both across snapshots and, for
-`data_init/`, within one.
+A snapshot holds no input data: no `data/`, no `data_init/`. It links one published
+model input by `uses.modelInput.id`
+([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), which
+`openghm snapshot fetch` puts in a shared cache and `sim` binds at `/wbm/data`
+and `/wbm/data_init`. The three published snapshots hold neither directory; the
+project-space staging copies on Anvil keep theirs, because their test scripts
+read them.
 
 **The three snapshots published at `snapshots/<id>/` each have a
 `SHA256SUMS`** (mission `2026-09-23-publish-the-staged-snapshots`, private),
@@ -42,18 +41,19 @@ guaranteed one. All three published snapshots also have `spool/`. v2.0.0's
 `schemas/snapshot-spec/layout/<version>.json` ([metadata-format.md](metadata-format.md)) is the machine-readable
 form of this tree, and the one that decides required from optional.
 
-Sizes are not evenly distributed — measured on the Global snapshot
-(`toolkits/docs/wbm_s3_direct_journey.md`):
+Sizes are not evenly distributed — measured on the Global snapshot while it still
+bundled its input (`toolkits/docs/wbm_s3_direct_journey.md`):
 
 | Component | Global size | Share |
 |---|---|---|
-| `data/` — input store | **49 GB** | 5 % |
+| `data/` — input store, now the model input's | **49 GB** | 5 % |
 | `spool/` — regenerable cache | **490 GB** | 49 % |
 | `wbm_output/` — published results | **≈470 GB** | 47 % |
-| **whole snapshot** | **1,009 GB** | |
+| **whole snapshot, then** | **1,009 GB** | |
 
-95 % of a published snapshot is not input data. Tiering decisions ([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)) are
-about those two directories.
+`spool/` and `wbm_output/` are what a snapshot's bytes are. Tiering decisions
+([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)) are about those
+two directories.
 
 ## Generate `SHA256SUMS`
 
@@ -80,7 +80,8 @@ it is carried in `metadata.json`.
 
 `openghm snapshot fetch <id>` is one such consumer: it checks every file it
 downloads against `SHA256SUMS` (a spool file, which has no line, by size and
-MD5), and does not download `wbm_output/` or `WBM_run_state/`
+MD5), and does not download `wbm_output/` or `WBM_run_state/`. It then does the
+same for the linked model input, into its own cache, which has its own `SHA256SUMS`
 ([packages/openghm/README.md](../../packages/openghm/README.md#fetching-a-snapshot-openghm-snapshot-fetch)).
 
 ## Mint the id

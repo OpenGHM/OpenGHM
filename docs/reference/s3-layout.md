@@ -142,7 +142,8 @@ own index. Listing `snapshots/` gives ids, which is the point.
 This is no longer aspirational: `snapshots/<id>/` holds three published
 snapshots this way (v2.0.0, Wyoming and Global; mission
 `2026-09-23-publish-the-staged-snapshots`, private), each with a
-`metadata.json` and a `SHA256SUMS`, every key public-read. The
+`metadata.json` and a `SHA256SUMS`, every key public-read, and none with a
+`data/` or `data_init/` (the input is under `model-inputs/`). The
 slug-keyed trees they were copied from (`snapshots/wbm_storage_v2.0.0/`,
 `…_v1.0.0_Wyoming/`, `…_v1.0.0_Global/`, uploaded by Xiao Liu) were
 deleted on 2026-09-29. By then the id-keyed trees held their bytes, and,
@@ -215,17 +216,20 @@ This is no longer aspirational: `model-inputs/` holds two published model
 inputs this way (mission `2026-09-24-publish-the-model-inputs`, private), the
 two ids the three published snapshots already cite in `uses.modelInput.id`:
 
-- `model-inputs/52585562…/` — `wbm_ancillary_data_v2.0.0`, 1,542 keys, copied
-  from `snapshots/fc66a2cd…/data/wbm_ancillary_data_v2.0.0/`.
-- `model-inputs/ff0ba2e5…/` — `wbm_ancillary_data_v1.0.0`, 32,959 keys, copied
-  from `snapshots/245430de…/data/Wyoming_tracking/` (Global's
-  `data/Global_tracking/` is byte-identical; Wyoming's was used because it is
+- `model-inputs/52585562…/` — `wbm_ancillary_data_v2.0.0`, 1,542 keys, first
+  published from `snapshots/fc66a2cd…/data/wbm_ancillary_data_v2.0.0/`.
+- `model-inputs/ff0ba2e5…/` — `wbm_ancillary_data_v1.0.0`, 32,959 keys, first
+  published from `snapshots/245430de…/data/Wyoming_tracking/` (Global's
+  `data/Global_tracking/` was byte-identical; Wyoming's was used because it was
   listed first).
+
+The snapshots hold no `data/` or `data_init/` keys any more: the model input is
+the only copy, and each snapshot reaches it through `uses.modelInput.id`.
 
 Each has a `metadata.json` and a `SHA256SUMS`, every key public-read, and both
 were re-hashed anonymously from `model-inputs/<id>/` after publishing. Unlike
 [Upload and lock](#upload-and-lock)'s snapshot copy, these copied
-**server-side**: the source trees under `snapshots/<snapshot-id>/data/<child>/`
+**server-side**: the source trees, then under `snapshots/<snapshot-id>/data/<child>/`,
 were uploaded by our own `EES260008` identity rather than Xiao Liu's, so
 `s3cmd`'s `CopyObject` works here (`ops/docs/reference/anvil-environment.md`,
 private). The publish script, `ops/anvil/publish_model_input.sh` (private),

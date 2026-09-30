@@ -5,8 +5,6 @@
     "model/",
     "utilities/",
     "wbm_init/",
-    "data/",
-    "data_init/",
     "gdal_test_files/",
     "wbm_output/"
   ],

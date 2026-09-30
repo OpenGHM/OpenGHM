@@ -32,10 +32,13 @@ _METADATA = {
         "init": "wbm_test.init",
         "recommendedCompute": {"cores": 16, "walltime": "15:00"},
     },
-    "uses": {"container": {
-        "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
-        "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
-    }},
+    "uses": {
+        "container": {
+            "image": "wbm-v2-lite", "version": "2.0.0", "digest": "sha256:" + "a" * 64,
+            "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
+        },
+        "modelInput": {"id": "2" * 64},
+    },
 }
 
 
@@ -44,21 +47,27 @@ def tmp_sif(root: Path) -> Path:
     return root / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif"
 
 
+def tmp_model_input(root: Path) -> Path:
+    """Where ``_config`` looks for the model input the snapshot links."""
+    return root / "model-inputs" / ("2" * 64)
+
+
 def _make_snapshot(root: Path) -> Path:
     snap = root / "wbm_storage_v2.0.0"
-    for d in ("data/wbm_ancillary_data_v2.0.0", "data_init", "model", "utilities",
-              "gdal_test_files", "wbm_init"):
+    for d in ("model", "utilities", "gdal_test_files", "wbm_init"):
         (snap / d).mkdir(parents=True, exist_ok=True)
     (snap / "metadata.json").write_text(json.dumps(_METADATA), encoding="utf-8")
     (snap / "wbm_init" / "wbm_test.init").write_text(_INIT_TEMPLATE, encoding="utf-8")
     sif = tmp_sif(root)
     sif.parent.mkdir(parents=True, exist_ok=True)
     sif.write_bytes(b"")
+    (tmp_model_input(root) / "data_init").mkdir(parents=True, exist_ok=True)
     return snap
 
 
 def _config(tmp_path: Path) -> Config:
-    return Config(output_base=str(tmp_path / "out"), sif_dir=str(tmp_path / "sif"))
+    return Config(output_base=str(tmp_path / "out"), sif_dir=str(tmp_path / "sif"),
+                  model_input_dir=str(tmp_path / "model-inputs"))
 
 
 def _find(built, container):
@@ -83,6 +92,9 @@ def test_run_argv_is_container_exec_not_sbatch(tmp_path):
     # no sbatch script is generated for a local run
     assert not any(f.host_path.endswith(".sbatch") for f in built.generated_files)
     assert built.display.startswith("singularity exec")
+    # the model input comes from the cache
+    assert _find(built, "/wbm/data").host == str(tmp_model_input(tmp_path))
+    assert _find(built, "/wbm/data_init").host == str(tmp_model_input(tmp_path) / "data_init")
 
 
 def test_run_docker_argv(tmp_path):

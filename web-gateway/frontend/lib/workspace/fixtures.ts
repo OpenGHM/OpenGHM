@@ -226,7 +226,7 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
     },
     uses: {
       container: { image: "wbm", version: "2.0.0", digest: "sha256:fake", oras: "", https: "" },
-      modelInput: { id: "fake-model-input-id", mountAs: "default" },
+      modelInput: { id: "fake-model-input-id" },
     },
     runtime: {
       generatedAt: "2026-01-01T00:00:00Z",

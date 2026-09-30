@@ -211,10 +211,6 @@ export interface Uses {
      * Minted at publish, same rule as the snapshot id (ADR 0014). Two snapshots built from the same input data share this value.
      */
     id: string;
-    /**
-     * Selector, not a path: the data/ child this model input is materialised as. Resolves to <snapshot>/data/<mountAs>, mounted at /wbm/data.
-     */
-    mountAs: string;
   };
 }
 export interface Runtime {

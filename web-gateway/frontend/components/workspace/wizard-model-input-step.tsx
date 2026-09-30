@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Search, Loader2, Database, Waves, CheckCircle2, AlertTriangle, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -185,9 +186,14 @@ export function WizardModelInputStep({
                   Inherited: {inherited.about.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Mounted as{" "}
-                  <code className="font-mono">{snapshot.uses.modelInput.mountAs}</code> — found
-                  in the catalogue.
+                  Model input{" "}
+                  <Link
+                    href={`/repository/model-inputs/${inheritedId}`}
+                    className="font-mono text-[#006994] hover:underline"
+                  >
+                    {inheritedId.slice(0, 12)}…
+                  </Link>{" "}
+                  — found in the catalogue.
                 </p>
               </div>
             </div>
