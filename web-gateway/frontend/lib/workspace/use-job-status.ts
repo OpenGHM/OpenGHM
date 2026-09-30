@@ -16,7 +16,7 @@ function intervalFor(status: JobStatus): number {
 
 export interface UseJobStatusResult {
   status: JobStatus;
-  slurmJobId: number | null;
+  slurmJobId: string | null;
   submittedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
@@ -42,7 +42,7 @@ export function useJobStatus(
 ): UseJobStatusResult {
   const disabled = options?.disabled ?? false;
   const [status, setStatus] = useState<JobStatus>(initialStatus);
-  const [slurmJobId, setSlurmJobId] = useState<number | null>(
+  const [slurmJobId, setSlurmJobId] = useState<string | null>(
     initialData?.slurm_job_id ?? null
   );
   const [submittedAt, setSubmittedAt] = useState<string | null>(

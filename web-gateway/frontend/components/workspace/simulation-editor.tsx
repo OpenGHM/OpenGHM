@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ComputeFields } from "@/components/workspace/compute-fields";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { updateSimulation } from "@/lib/jobs/actions";
+import { UNSUPPORTED_REASON, validateSlurmConfig } from "@/lib/jobs/compute";
 import { fetchModelInputById } from "@/lib/repository/actions";
-import type { Job, JobParameters, PartialAbout } from "@/lib/jobs/types";
+import type { Job, JobParameters, PartialAbout, SlurmConfig } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 import { ModelInputSection, type ModelInputSectionChoice } from "@/components/workspace/model-input-section";
 
@@ -132,6 +134,17 @@ export function SimulationEditor({
   const [south, setSouth] = useState(String(job.parameters.spatial_domain?.south ?? ""));
   const [east, setEast] = useState(String(job.parameters.spatial_domain?.east ?? ""));
   const [west, setWest] = useState(String(job.parameters.spatial_domain?.west ?? ""));
+  // Not editable here. Kept so a draft that arrived with some (through the
+  // API) can have them removed, because a submit refuses them.
+  const [customParams, setCustomParams] = useState(job.parameters.custom_params);
+  const hasCustomParams = customParams !== null && Object.keys(customParams).length > 0;
+
+  // -- Compute form state ------------------------------------------------------
+  const [compute, setCompute] = useState<SlurmConfig>({
+    cores: job.slurm_config.cores ?? null,
+    walltime: job.slurm_config.walltime ?? null,
+  });
+  const computeInvalid = Object.keys(validateSlurmConfig(compute)).length > 0;
 
   const variableOptions = useMemo(() => {
     const set = new Set(availableVariables);
@@ -169,12 +182,17 @@ export function SimulationEditor({
             }
           : null,
         variables: Array.from(selectedVars),
-        custom_params: job.parameters.custom_params,
+        custom_params: customParams,
       };
       const about = buildAboutPayload({ name, description, category, license, keywords, creators });
       const model_input_id = modelInputChoice.mode === "chosen" ? modelInputChoice.id : null;
 
-      const result = await updateSimulation(job.id, { about, parameters, model_input_id });
+      const result = await updateSimulation(job.id, {
+        about,
+        parameters,
+        model_input_id,
+        slurm_config: compute,
+      });
       if (!result.ok) {
         if (result.reason === "session_expired") {
           setSessionExpired(true);
@@ -345,36 +363,65 @@ export function SimulationEditor({
           )}
 
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            {/* The toolkit has no option for a spatial subset yet, so a submit
+                refuses one (ADR 0025). It can be switched off, not on. */}
+            <label
+              className={`flex items-center gap-2 text-xs font-medium ${
+                spatialEnabled ? "text-muted-foreground" : "text-muted-foreground/60"
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={spatialEnabled}
+                disabled={!spatialEnabled}
                 onChange={(e) => setSpatialEnabled(e.target.checked)}
                 className="size-3.5 rounded border-slate-300"
               />
               Restrict to a spatial subset
             </label>
+            <p className="text-xs text-muted-foreground">
+              {spatialEnabled
+                ? "A subset cannot run yet. Switch it off to submit."
+                : UNSUPPORTED_REASON.spatialSubset}
+            </p>
             {spatialEnabled && (
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">North</Label>
-                  <Input type="number" value={north} onChange={(e) => setNorth(e.target.value)} />
+                  <Input type="number" value={north} disabled onChange={(e) => setNorth(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">South</Label>
-                  <Input type="number" value={south} onChange={(e) => setSouth(e.target.value)} />
+                  <Input type="number" value={south} disabled onChange={(e) => setSouth(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">East</Label>
-                  <Input type="number" value={east} onChange={(e) => setEast(e.target.value)} />
+                  <Input type="number" value={east} disabled onChange={(e) => setEast(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">West</Label>
-                  <Input type="number" value={west} onChange={(e) => setWest(e.target.value)} />
+                  <Input type="number" value={west} disabled onChange={(e) => setWest(e.target.value)} />
                 </div>
               </div>
             )}
           </div>
+
+          {hasCustomParams && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <p>
+                This draft has custom parameters. {UNSUPPORTED_REASON.customParams} Remove them to submit.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 shrink-0 bg-white sm:min-h-8"
+                onClick={() => setCustomParams(null)}
+              >
+                Remove
+              </Button>
+            </div>
+          )}
 
           <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
@@ -388,8 +435,27 @@ export function SimulationEditor({
         </CardContent>
       </Card>
 
+      {/* Compute — what SLURM is asked for. Account and partition are the
+          gateway's, so only cores and walltime are here. */}
+      <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+        <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+          <CardTitle className="text-lg font-semibold text-foreground">Compute</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-5 pb-6">
+          <ComputeFields
+            config={compute}
+            recommended={dataset?.simulation.recommendedCompute ?? null}
+            onChange={setCompute}
+          />
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} className="bg-[#006994] hover:bg-[#005a7a]">
+        <Button
+          onClick={handleSave}
+          disabled={saving || computeInvalid}
+          className="min-h-10 bg-[#006994] hover:bg-[#005a7a] sm:min-h-9"
+        >
           {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
           Save
         </Button>

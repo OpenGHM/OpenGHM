@@ -1,10 +1,11 @@
 /**
  * Shared state shape for the new-simulation wizard (`app/workspace/new/`).
- * Nothing here is persisted until the final submit step: the wizard is a
- * local staging area over real catalogue data (`Dataset`, `ModelInput`),
- * built before a `Job` exists at all.
+ * Nothing here is persisted until the review step's "Save as draft" or
+ * "Submit": the wizard is a local staging area over real catalogue data
+ * (`Dataset`, `ModelInput`), built before a `Job` exists at all.
  */
 import type { Dataset, ModelInput } from "@/lib/repository/types";
+import type { Recommended } from "@/lib/jobs/compute";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 
 export const WIZARD_STEPS = ["snapshot", "model-input", "parameters", "review"] as const;
@@ -55,16 +56,15 @@ export function defaultParametersFor(snapshot: Dataset): JobParameters {
   };
 }
 
-/** SLURM defaults from the snapshot's `recommendedCompute` — the closest
- *  real hint the spec has to "how big a job is this." Partition/account are
- *  gateway conventions (see the pre-wizard review page), not spec fields. */
-export function defaultSlurmConfigFor(snapshot: Dataset): SlurmConfig {
-  return {
-    partition: "shared",
-    account: null,
-    walltime: snapshot.simulation.recommendedCompute.walltime,
-    nodes: 1,
-    ntasks: snapshot.simulation.recommendedCompute.cores,
-    memory: null,
-  };
+/** Nothing chosen: a draft with no cores or walltime of its own asks SLURM
+ *  for the snapshot's `recommendedCompute`, which the backend reads itself.
+ *  Copying it here would pin a value the user never chose (and a snapshot's
+ *  walltime may be past what a draft may ask for). */
+export function defaultSlurmConfigFor(): SlurmConfig {
+  return { cores: null, walltime: null };
+}
+
+/** The snapshot's own `recommendedCompute`, shown as what an empty field means. */
+export function recommendedComputeFor(snapshot: Dataset): Recommended {
+  return snapshot.simulation.recommendedCompute;
 }

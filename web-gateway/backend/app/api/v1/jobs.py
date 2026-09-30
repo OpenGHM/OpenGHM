@@ -1,13 +1,21 @@
-"""Jobs API — submit, list, status, cancel, logs."""
+"""Jobs API — drafts, submit, list, status, cancel, logs."""
 
+import asyncio
 import logging
 import math
+import posixpath
 import random
 import string
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from slurmly.exceptions import (
+    InvalidJobSpec,
+    SbatchError,
+    SbatchParseError,
+    SlurmlyError,
+)
 
 from app.core.audit import AuditCategory, log_event
 from app.core.authz import can, require_active_user, require_permission, require_submitter
@@ -18,21 +26,20 @@ from app.models.job import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
-    JobCreateRequest,
     JobListResponse,
     JobLogsResponse,
+    JobDB,
     JobParameters,
     JobResponse,
     JobStatsResponse,
     JobStatusResponse,
-    JobSubmitResponse,
     ModelInputState,
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
 )
 from app.models.user import TokenPayload
-from app.services import slurm
+from app.services import job_script, slurm
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +143,10 @@ def _doc_to_response(
         completed_at=doc.get("completed_at"),
         updated_at=doc.get("updated_at"),
         output_s3_key=doc.get("output_s3_key"),
+        toolkit=doc.get("toolkit"),
+        work_dir=doc.get("work_dir"),
+        remote_job_dir=doc.get("remote_job_dir"),
+        last_submit_error=doc.get("last_submit_error"),
     )
 
 
@@ -240,14 +251,9 @@ def _derive_simulation_parameters(dataset_doc: dict) -> JobParameters:
     (T4): the temporal coverage and output variables it was run with become
     the starting point a user overrides, rather than a blank form. Pure —
     takes a plain dict, returns a new model, touches no Mongo — the source
-    document is read here and nowhere written back to."""
-    simulation = dataset_doc.get("simulation", {})
-    temporal = simulation.get("temporalCoverage", {})
-    return JobParameters(
-        temporal_range_start=str(temporal.get("start", "")),
-        temporal_range_end=str(temporal.get("end", "")),
-        variables=[v["name"] for v in simulation.get("outputVariables", [])],
-    )
+    document is read here and nowhere written back to. Submit compares the
+    draft against the same derivation (`job_script.run_overrides`)."""
+    return job_script.snapshot_defaults(dataset_doc)
 
 
 def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
@@ -264,109 +270,6 @@ def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
             status_code=403, detail="Requires permission: job:view:any"
         )
     return {} if user_id == "*" else {"user_id": user_id}
-
-
-# ---------------------------------------------------------------------------
-# POST /jobs  —  Submit
-# ---------------------------------------------------------------------------
-
-
-@router.post("", response_model=JobSubmitResponse, status_code=status.HTTP_201_CREATED)
-async def submit_job(
-    body: JobCreateRequest,
-    user: TokenPayload = Depends(require_submitter),
-):
-    db = get_db()
-
-    # Resolve dataset title from the catalogue (best-effort — falls back to
-    # the bare id if the dataset isn't there, rather than failing the submit).
-    # `db.catalog` doesn't exist — datasets live in `db.datasets`
-    # (app/api/v1/repository.py); `about.name` is the spec's name field, not
-    # the legacy `title`. The stored record is an envelope
-    # ({_id, document, owner_user_id, visibility, registered_at}, mission
-    # 2026-09-23-catalogue-envelope) — unwrap to the spec document.
-    dataset_title = body.dataset_id  # fallback
-    dataset_envelope = await db.datasets.find_one({"_id": body.dataset_id})
-    dataset_doc = (dataset_envelope or {}).get("document")
-    if dataset_doc:
-        dataset_title = dataset_doc.get("about", {}).get("name", body.dataset_id)
-
-    # Build slurm config with server defaults
-    slurm_cfg = SlurmConfig(
-        partition=(body.slurm_config.partition if body.slurm_config else None)
-        or settings.ANVIL_PARTITION,
-        account=(body.slurm_config.account if body.slurm_config else None)
-        or settings.ANVIL_ACCOUNT,
-        walltime=(body.slurm_config.walltime if body.slurm_config else None)
-        or settings.JOB_DEFAULT_WALLTIME,
-        nodes=(body.slurm_config.nodes if body.slurm_config else None)
-        or settings.JOB_DEFAULT_NODES,
-        ntasks=(body.slurm_config.ntasks if body.slurm_config else None)
-        or settings.JOB_DEFAULT_NTASKS,
-        memory=body.slurm_config.memory if body.slurm_config else None,
-    )
-
-    now = datetime.now(timezone.utc)
-    job_id = str(uuid.uuid4())
-    sim_id = _generate_sim_id(now)
-
-    doc = {
-        "_id": job_id,
-        "sim_id": sim_id,
-        "user_id": user.sub,
-        "user_email": user.email,
-        "dataset_id": body.dataset_id,
-        "dataset_title": dataset_title,
-        "slurm_job_id": None,
-        "slurm_job_name": sim_id,
-        "status": "PENDING",
-        "status_reason": None,
-        "parameters": body.parameters.model_dump(),
-        "slurm_config": slurm_cfg.model_dump(),
-        "internal_job_id": None,
-        "remote_job_dir": None,
-        "remote_script_path": None,
-        "stdout_path": None,
-        "stderr_path": None,
-        "slurmly_submitted_at": None,
-        "output_s3_key": None,
-        "created_at": now,
-        "submitted_at": None,
-        "started_at": None,
-        "completed_at": None,
-        "updated_at": now,
-    }
-    await db.jobs.insert_one(doc)
-
-    # Attempt Slurm submission
-    try:
-        await slurm.submit_job(job_id)
-        final_status = "SUBMITTED"
-    except Exception as exc:
-        logger.error("Job %s submission failed: %s", job_id, exc)
-        final_status = "FAILED"
-
-    # Re-read to get final status (submit_job may have updated it)
-    updated = await db.jobs.find_one({"_id": job_id})
-    resolved_status = updated["status"] if updated else final_status
-
-    await log_event(
-        "job_submitted",
-        actor_id=user.sub,
-        actor_email=user.email,
-        target_id=job_id,
-        category=AuditCategory.JOB,
-        detail={
-            "sim_id": sim_id,
-            "dataset_id": body.dataset_id,
-            "status": resolved_status,
-        },
-    )
-
-    return JobSubmitResponse(
-        job_id=job_id,
-        status=resolved_status,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -460,11 +363,250 @@ async def update_simulation(
         effective = await _resolve_effective_model_input(doc)
         return _doc_to_response(doc, effective=effective)
 
+    if "slurm_config" in changes:
+        # Only the fields the client sent change; `null` goes back to the
+        # snapshot's recommended compute.
+        sent = changes["slurm_config"]
+        stored = doc.get("slurm_config") or {}
+        changes["slurm_config"] = SlurmConfig(
+            **({} if sent is None else {**stored, **sent})
+        ).model_dump()
+
     changes["updated_at"] = datetime.now(timezone.utc)
     await db.jobs.update_one({"_id": job_id}, {"$set": changes})
     updated = await db.jobs.find_one({"_id": job_id})
     effective = await _resolve_effective_model_input(updated)
     return _doc_to_response(updated, effective=effective)
+
+
+# ---------------------------------------------------------------------------
+# POST /jobs/{job_id}/submit  —  Run a draft on Anvil
+# ---------------------------------------------------------------------------
+#
+# The one way a simulation reaches SLURM (ADR 0025): the owner's DRAFT becomes
+# a slurmly batch job whose body fetches the snapshot and runs `openghm sim
+# run`. The draft is claimed first with a conditional update, so two submits
+# cannot both pass; if Anvil then refuses or cannot be reached, it is handed
+# back as a DRAFT with `last_submit_error`, never left in a state SLURM does
+# not know about.
+
+
+def _error(http_status: int, code: str, message: str, **extra) -> HTTPException:
+    """An HTTPException whose `detail` is `{"code", "message", **extra}`, the
+    same shape `app.core.authz` refuses with."""
+    return HTTPException(
+        status_code=http_status, detail={"code": code, "message": message, **extra}
+    )
+
+
+_ANVIL_NOT_CONFIGURED = (
+    "This gateway is not set up to run simulations on Anvil yet. "
+    "Ask an administrator. Your draft is unchanged."
+)
+_ANVIL_UNREACHABLE = (
+    "Anvil could not be reached, so nothing was submitted. "
+    "Your draft is unchanged. Try again in a few minutes."
+)
+
+
+def _sbatch_refusal_message(exc: Exception) -> str:
+    detail = ""
+    if isinstance(exc, SbatchError):
+        detail = (exc.stderr or exc.stdout or "").strip()
+    detail = (detail or str(exc)).strip()[:500]
+    return f"SLURM refused the job: {detail} Your draft is unchanged."
+
+
+@router.post(
+    "/{job_id}/submit",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_simulation(
+    job_id: str,
+    user: TokenPayload = Depends(require_submitter),
+):
+    db = get_db()
+    # Owner only, like edit and delete: no "any" permission submits someone
+    # else's draft, and everyone else gets the 404 a missing id gets.
+    doc = await _get_job_for(job_id, user, None)
+    if not _is_editable(doc):
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "not_a_draft",
+            f"Only a draft can be submitted; this simulation is {doc['status']}.",
+        )
+    if not slurm.toolkit_configured():
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "anvil_not_configured",
+            _ANVIL_NOT_CONFIGURED,
+        )
+
+    envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+    if envelope is None:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "snapshot_not_found",
+            "The snapshot this simulation is based on is no longer in the repository.",
+        )
+    snapshot = envelope["document"]
+    job = JobDB(**doc)
+
+    fields = job_script.unsupported_fields(job.parameters, job.model_input_id, snapshot)
+    if fields:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "unsupported_fields",
+            "These settings cannot run yet, because the toolkit has no option for "
+            f"them: {', '.join(fields)}. Reset them to the snapshot's own values "
+            "and submit again.",
+            fields=fields,
+        )
+
+    now = datetime.now(timezone.utc)
+    sim_id = _generate_sim_id(now)
+    home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
+    try:
+        overrides = job_script.run_overrides(job.parameters, snapshot)
+        body = job_script.render_job_body(
+            snapshot_id=job.dataset_id,
+            sim_id=sim_id,
+            openghm_home=home,
+            cache_dir=settings.ANVIL_CACHE_DIR,
+            fetch_lock=settings.ANVIL_FETCH_LOCK,
+            run_start=overrides.run_start,
+            run_end=overrides.run_end,
+            output_vars=overrides.output_vars,
+        )
+        toolkit = {"home": home, "commit": job_script.toolkit_commit(home)}
+        slurm.resolve_compute(job.slurm_config, snapshot)
+    except job_script.SubmitInputError as exc:
+        raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_parameters", str(exc))
+
+    # The claim. `updated_at` is part of the filter so that a PATCH landing
+    # between the read above and here is not submitted half-rendered.
+    claimed = await db.jobs.update_one(
+        {"_id": job_id, "status": "DRAFT", "updated_at": doc["updated_at"]},
+        {
+            "$set": {
+                "status": "SUBMITTED",
+                "sim_id": sim_id,
+                "slurm_job_name": sim_id,
+                "toolkit": toolkit,
+                "work_dir": posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id),
+                "status_reason": None,
+                "updated_at": now,
+            },
+            "$unset": {"last_submit_error": ""},
+        },
+    )
+    if claimed.matched_count == 0:
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "not_a_draft",
+            "This simulation was changed or already submitted. Reload it and try again.",
+        )
+    job = JobDB(**(await db.jobs.find_one({"_id": job_id})))
+
+    try:
+        submitted = await slurm.submit_job(job, snapshot, body)
+    except Exception as exc:
+        if isinstance(exc, slurm.AnvilNotConfigured):
+            http_status, code, message = (
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "anvil_not_configured",
+                _ANVIL_NOT_CONFIGURED,
+            )
+        elif isinstance(exc, (SbatchError, InvalidJobSpec)):
+            http_status, code, message = (
+                status.HTTP_502_BAD_GATEWAY,
+                "sbatch_rejected",
+                _sbatch_refusal_message(exc),
+            )
+        elif isinstance(exc, job_script.SubmitInputError):
+            http_status, code, message = (
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "invalid_parameters",
+                str(exc),
+            )
+        elif isinstance(exc, (SlurmlyError, OSError, asyncio.TimeoutError)):
+            # Includes SbatchParseError: sbatch ran but its answer was lost,
+            # so a job may exist that this gateway never learned the id of.
+            http_status, code, message = (
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "anvil_unreachable",
+                _ANVIL_UNREACHABLE,
+            )
+        else:
+            await _return_to_draft(job_id, "internal_error", "The submit failed unexpectedly.")
+            raise
+        logger.error("Job %s submit failed (%s): %s", job_id, code, exc)
+        await _return_to_draft(job_id, code, message)
+        raise _error(http_status, code, message)
+
+    done = datetime.now(timezone.utc)
+    recorded = await db.jobs.update_one(
+        {"_id": job_id, "status": "SUBMITTED"},
+        {
+            "$set": {
+                "slurm_job_id": submitted.slurm_job_id,
+                "internal_job_id": submitted.internal_job_id,
+                "remote_job_dir": submitted.remote_job_dir,
+                "remote_script_path": submitted.remote_script_path,
+                "stdout_path": submitted.stdout_path,
+                "stderr_path": submitted.stderr_path,
+                "slurmly_submitted_at": submitted.submitted_at,
+                "submitted_at": done,
+                "updated_at": done,
+            }
+        },
+    )
+    if recorded.matched_count == 0:
+        # Cancelled in the moments between the claim and SLURM's answer: the
+        # job exists on Anvil but the user already said no to it.
+        logger.warning("Job %s left SUBMITTED during submit; cancelling %s", job_id, submitted.slurm_job_id)
+        try:
+            await slurm.cancel_job(submitted.slurm_job_id)
+        except Exception as exc:
+            logger.error("scancel of orphaned %s failed: %s", submitted.slurm_job_id, exc)
+
+    await log_event(
+        "job_submitted",
+        actor_id=user.sub,
+        actor_email=user.email,
+        target_id=job_id,
+        category=AuditCategory.JOB,
+        detail={
+            "sim_id": sim_id,
+            "dataset_id": job.dataset_id,
+            "slurm_job_id": submitted.slurm_job_id,
+            "status": "SUBMITTED",
+        },
+    )
+
+    updated = await db.jobs.find_one({"_id": job_id})
+    effective = await _resolve_effective_model_input(updated)
+    return _doc_to_response(updated, effective=effective)
+
+
+async def _return_to_draft(job_id: str, code: str, message: str) -> None:
+    """Undo the claim of a submit that never reached SLURM: back to DRAFT, the
+    submit-time fields removed (a draft carries no `sim_id`, see
+    `_new_draft_document`), and the reason kept for the UI."""
+    now = datetime.now(timezone.utc)
+    await get_db().jobs.update_one(
+        {"_id": job_id, "status": "SUBMITTED"},
+        {
+            "$set": {
+                "status": "DRAFT",
+                "slurm_job_name": "",
+                "last_submit_error": {"code": code, "message": message, "at": now},
+                "updated_at": now,
+            },
+            "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

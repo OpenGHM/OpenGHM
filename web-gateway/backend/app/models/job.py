@@ -8,10 +8,11 @@ change once a draft has moved past it (spec.md's "Two entities, not
 three").
 """
 
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.generated.snapshot import OpenGHMCitationBlock
 from app.models.partial import _partial_model
@@ -77,14 +78,65 @@ class JobParameters(BaseModel):
 
 
 class SlurmConfig(BaseModel):
-    """Slurm resource allocation overrides (all have server-side defaults)."""
+    """What a draft asks SLURM for. Both unset means the snapshot's own
+    `simulation.recommendedCompute` (`app.services.slurm.resolve_compute`).
+    The account and partition are the gateway's (settings), not the user's."""
 
-    partition: str | None = None
-    account: str | None = None
+    cores: int | None = None
     walltime: str | None = None
-    nodes: int | None = None
-    ntasks: int | None = None
-    memory: str | None = None
+
+
+#: Bounds for `SlurmConfigUpdate`. Anvil's documented per-job limits for the
+#: `shared` partition (https://rcac.purdue.edu/knowledge/anvil/run/partitions,
+#: the page slurmly's `purdue_anvil` preset cites) are 128 cores (one node) and
+#: 96 hours. Nothing in this repository records them, so they are unverified
+#: here: SLURM is the authority, and a request it refuses comes back as
+#: `sbatch_rejected` with its own message.
+MAX_CORES = 128
+MAX_WALLTIME_SECONDS = 96 * 3600
+
+_WALLTIME_RE = re.compile(r"^(\d{1,3}):([0-5]\d):([0-5]\d)$")
+
+
+class SlurmConfigUpdate(BaseModel):
+    """PATCH body's `slurm_config`: the two values a user may change. A field
+    left out keeps its stored value."""
+
+    cores: int | None = Field(default=None, ge=1, le=MAX_CORES)
+    walltime: str | None = Field(
+        default=None, description="HH:MM:SS, at most 96:00:00", examples=["02:00:00"]
+    )
+
+    @field_validator("walltime")
+    @classmethod
+    def _v_walltime(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        m = _WALLTIME_RE.match(v)
+        if m is None:
+            raise ValueError("walltime must be HH:MM:SS, for example 02:00:00")
+        seconds = int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3])
+        if not 0 < seconds <= MAX_WALLTIME_SECONDS:
+            raise ValueError("walltime must be more than zero and at most 96:00:00")
+        return v
+
+
+class ToolkitRef(BaseModel):
+    """The toolkit install a submitted job runs: its directory and the
+    commit it is pinned to (ADR 0025; rule 2)."""
+
+    home: str
+    commit: str
+
+
+class SubmitError(BaseModel):
+    """Why the last submit of a draft did not reach SLURM. The draft stays a
+    DRAFT; this is what the UI shows next to it. `code` is one of
+    `anvil_unreachable`, `sbatch_rejected`, `anvil_not_configured`."""
+
+    code: str
+    message: str
+    at: datetime
 
 
 # --- MongoDB document ---
@@ -141,6 +193,14 @@ class JobDB(BaseModel):
     stderr_path: str | None = None
     slurmly_submitted_at: str | None = None
 
+    # Set at submit (ADR 0025): the toolkit install the job runs, and the
+    # directory `sim run` writes under (<output_base>/<sim_id>, ADR 0023).
+    toolkit: ToolkitRef | None = None
+    work_dir: str | None = None
+    # Set when a submit failed before SLURM accepted the job, cleared by the
+    # next one. The draft it belongs to stayed a DRAFT.
+    last_submit_error: SubmitError | None = None
+
     # S3 outputs
     output_s3_key: str | None = None
 
@@ -159,14 +219,6 @@ class JobDB(BaseModel):
 
 
 # --- API request / response models ---
-
-
-class JobCreateRequest(BaseModel):
-    """POST /jobs body."""
-
-    dataset_id: str
-    parameters: JobParameters
-    slurm_config: SlurmConfig | None = None
 
 
 class SimulationDeriveRequest(BaseModel):
@@ -196,19 +248,15 @@ class SimulationUpdateRequest(BaseModel):
     slug: str | None = None
     about: PartialAbout | None = None
     parameters: JobParameters | None = None
+    #: Cores and walltime to ask SLURM for. Only the fields sent change;
+    #: `null` goes back to the snapshot's recommended compute.
+    slurm_config: SlurmConfigUpdate | None = None
     #: Set to override the base snapshot's model input, or explicitly to
     #: `null` to clear an override and go back to inheriting — `exclude_unset`
     #: in `update_simulation` means only a field actually present in the
     #: PATCH body changes anything, so omitting this key leaves whatever
     #: was there untouched, same as every other field here.
     model_input_id: str | None = None
-
-
-class JobSubmitResponse(BaseModel):
-    """Returned after POST /jobs."""
-
-    job_id: str
-    status: JobStatus
 
 
 class JobResponse(BaseModel):
@@ -246,6 +294,13 @@ class JobResponse(BaseModel):
     completed_at: datetime | None = None
     updated_at: datetime | None = None
     output_s3_key: str | None = None
+    #: Set once submitted (ADR 0025): the toolkit it runs, its work directory
+    #: on scratch, and slurmly's directory holding the script and its logs.
+    toolkit: ToolkitRef | None = None
+    work_dir: str | None = None
+    remote_job_dir: str | None = None
+    #: Why the last submit of this draft did not reach SLURM, if it did not.
+    last_submit_error: SubmitError | None = None
 
 
 class JobListResponse(BaseModel):

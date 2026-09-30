@@ -10,7 +10,10 @@ import { JobStatusPanel } from "@/components/workspace/job-status-panel";
 import { JobLogsPanel } from "@/components/workspace/job-logs-panel";
 import { SimulationEditor } from "@/components/workspace/simulation-editor";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
+import { SubmitSimulationButton } from "@/components/workspace/submit-simulation-button";
+import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
+import { describeSlurmTime, submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import { fakeSimulation, fakeLogs, fakeOutputFiles, fakeProgress } from "@/lib/workspace/fixtures";
 import { resolvePreviewStatus } from "@/lib/workspace/preview";
@@ -67,6 +70,13 @@ export default async function JobDetailPage({
   // dataset shouldn't block editing what the simulation already has.
   const dataset = isDraft ? await fetchDatasetById(job.dataset_id).catch(() => null) : null;
   const availableVariables = dataset?.simulation.outputVariables.map((v) => v.name) ?? [];
+  // Whether this user may submit (ADR 0024), so the button can say why not
+  // before the click. A failed lookup leaves it to the backend's answer.
+  const blockedReason = isPreview
+    ? "This is a design preview; nothing can be submitted from it."
+    : isDraft
+      ? submitBlockedReason(await fetchMe())
+      : null;
 
   const previewLogs = isPreview ? fakeLogs(job.status, job.id) : undefined;
   const previewParam = previewStatus ? `?preview=${previewStatus}` : "";
@@ -132,12 +142,18 @@ export default async function JobDetailPage({
                     <div>
                       <p className="font-medium text-foreground">Draft</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Not yet submitted to Anvil HPC. Everything above is
+                        Not yet submitted to Anvil HPC. Everything on the left is
                         editable until then.
                       </p>
                     </div>
                   </CardContent>
                 </Card>
+
+                <SubmitSimulationButton
+                  job={job}
+                  recommended={dataset?.simulation.recommendedCompute ?? null}
+                  blockedReason={blockedReason}
+                />
 
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardContent className="py-4">
@@ -229,34 +245,46 @@ export default async function JobDetailPage({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-5 pb-6">
-                    <div className="grid grid-cols-3 gap-3 text-sm">
+                    <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                       {[
                         {
-                          label: "Partition",
-                          value: job.slurm_config.partition,
+                          label: "Cores",
+                          value: job.slurm_config.cores ?? "Snapshot's recommendation",
                         },
-                        { label: "Account", value: job.slurm_config.account },
-                        { label: "Walltime", value: job.slurm_config.walltime },
-                        { label: "Nodes", value: job.slurm_config.nodes },
-                        { label: "Tasks", value: job.slurm_config.ntasks },
                         {
-                          label: "Memory",
-                          value: job.slurm_config.memory || "Default",
+                          label: "Walltime",
+                          value: job.slurm_config.walltime
+                            ? describeSlurmTime(job.slurm_config.walltime)
+                            : "Snapshot's recommendation + 50%",
+                        },
+                        {
+                          label: "Toolkit commit",
+                          value: job.toolkit?.commit ?? null,
+                          mono: true,
+                        },
+                        {
+                          label: "Work directory",
+                          value: job.work_dir,
+                          mono: true,
                         },
                       ].map((item) => (
                         <div
                           key={item.label}
-                          className="rounded-lg bg-slate-50 p-3"
+                          className="min-w-0 rounded-lg bg-slate-50 p-3"
                         >
                           <dt className="text-xs text-muted-foreground">
                             {item.label}
                           </dt>
-                          <dd className="mt-0.5 font-medium text-foreground">
+                          <dd
+                            className={`mt-0.5 break-words font-medium text-foreground ${
+                              item.mono ? "font-mono text-xs" : ""
+                            }`}
+                          >
                             {String(item.value ?? "—")}
                           </dd>
                         </div>
                       ))}
-                    </div>
+                    </dl>
                   </CardContent>
                 </Card>
 

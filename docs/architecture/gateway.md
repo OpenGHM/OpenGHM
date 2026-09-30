@@ -232,39 +232,60 @@ no job-output link to return.
 
 ### Jobs — SSH, and no queue
 
-`POST /jobs` inserts the job document and then **awaits the SLURM submission in
-the request**. There is no worker and no broker.
-`web-gateway/backend/app/services/slurm.py` holds one lazily-created
-`slurmly.SlurmSSHClient` behind an asyncio lock and does
-`sbatch` / `squeue` / `sacct` / `scancel` / SFTP-log-tail over that one SSH
-connection, as `x-openghm`, with the key from `ANVIL_SSH_KEY_CONTENT`
+A simulation is created as a DRAFT (`POST /jobs/derive/{dataset_id}`) and
+edited with PATCH, including its `slurm_config` (cores, walltime).
+`POST /jobs/{id}/submit` then **awaits the SLURM submission in the request**.
+There is no worker and no broker.
+`web-gateway/backend/app/services/slurm.py` holds one lazily created
+`slurmly.SlurmSSHClient` behind an asyncio lock. It runs `sbatch`, `squeue`,
+`sacct`, `scancel` and the SFTP log tail over that one SSH connection, as
+`x-openghm`, with the key from `ANVIL_SSH_KEY_CONTENT`
 (`ops/docs/reference/secrets.md`, private).
+
+**What a job runs** ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
+slurmly writes the `#SBATCH` lines and its module preamble.
+`web-gateway/backend/app/services/job_script.py` renders the body. The body runs the `openghm`
+toolkit installed on Anvil at `ANVIL_OPENGHM_HOME`, whose directory is named
+for the public commit it was built from:
+
+1. `openghm snapshot fetch <id>` into `ANVIL_CACHE_DIR/snapshots/<id>`,
+   held under `flock ANVIL_FETCH_LOCK`. The lock lives on `/home`, because
+   `flock` on the GPFS scratch filesystem only locks within one node. The
+   fetch verifies the tree, the linked model input and the pinned image, and
+   downloads what is missing.
+2. `openghm sim run` on that tree, with `--id <sim_id>` and `--spool fresh`.
+   `--run-start`, `--run-end` and `--output-vars` are passed only when the
+   draft differs from the snapshot's own values.
+
+SLURM is asked for `--cpus-per-task` and `--time`:
+- cores come from the draft's `slurm_config`, or else the snapshot's
+  `simulation.recommendedCompute.cores`;
+- walltime comes from the draft's `slurm_config`, or else the snapshot's
+  recommended walltime × 1.5 (SLURM rounds a value with seconds up to the
+  minute);
+- the account (`ANVIL_ACCOUNT`) and partition come from settings.
+
+The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
+`work_dir` (`ANVIL_OUTPUT_BASE/<sim_id>`) and slurmly's `remote_job_dir`
+(`ANVIL_REMOTE_BASE_DIR/jobs/…`).
+
+**What submit refuses.**
+- A draft that overrides its model input, subsets the snapshot's spatial
+  domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
+  has no option for these yet (open item 9).
+- An Anvil that cannot be reached: 503 `anvil_unreachable`.
+- An sbatch that says no: 502 `sbatch_rejected`.
+
+After a refusal the draft goes **back to DRAFT**, with `last_submit_error`.
+The DRAFT→SUBMITTED claim is one conditional update, so a double click or a
+concurrent PATCH cannot submit twice. Who may submit at all is
+[ADR 0024](../decisions/0024-who-may-run-a-simulation.md).
 
 Status is pulled, never pushed. A background asyncio task started in the
 lifespan handler sweeps every non-terminal job every
-`JOB_BACKGROUND_SYNC_INTERVAL` seconds (60), and the status route runs the same
+`JOB_BACKGROUND_SYNC_INTERVAL` seconds (60). The status route runs the same
 `update_job_status()` on demand. The frontend polls; there are no server-sent
 events.
-
-The batch script's body is one `apptainer run` line built from
-`ANVIL_CONTAINER_IMAGE`, with job parameters passed as `OPENGHM_*` environment
-variables. **`ANVIL_CONTAINER_IMAGE` is unset in both `ops/k8s/dev/` and
-`ops/k8s/prod/`**, so every deployed job runs the fallback the code emits
-instead: a single `echo`. Jobs submit, queue, run and complete correctly — they
-just do not compute anything.
-
-Such a job now says so. `is_placeholder_run()` is checked at submission and
-writes `status_reason` onto the job document, which the job page already
-renders, and the backend logs a warning once per pod at startup. A COMPLETED
-job that computed nothing is no longer indistinguishable from one that did.
-
-Setting the variable is **not** the remaining step, and doing it alone would
-turn silent no-ops into failures: the deployed SIFs' runscript is `/bin/bash`,
-so they take a command rather than those flags, and a real run binds a staged
-snapshot and executes `wbm.pl` against an init file
-(`ops/docs/reference/anvil-environment.md`, private).
-Nothing in the job model names a snapshot or an init —
-[open item 9](../reference/open-items.md).
 
 Nothing uploads output, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job

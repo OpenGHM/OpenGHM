@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -25,7 +24,8 @@ from slurmly.polling import is_terminal
 from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.job import TERMINAL_STATUSES, JobDB
+from app.models.job import TERMINAL_STATUSES, JobDB, SlurmConfig
+from app.services.job_script import SubmitInputError, with_headroom
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,17 @@ _client: SlurmSSHClient | None = None
 _client_lock = asyncio.Lock()
 
 
+class AnvilNotConfigured(RuntimeError):
+    """The gateway has no way to reach or run anything on Anvil yet: SSH
+    credentials or the toolkit install are not set."""
+
+
+def toolkit_configured() -> bool:
+    """Whether a toolkit install is named (`ANVIL_OPENGHM_HOME`). Without one
+    a submit runs nothing (ADR 0025)."""
+    return bool(settings.ANVIL_OPENGHM_HOME)
+
+
 def _resolve_remote_base_dir() -> str:
     return settings.ANVIL_REMOTE_BASE_DIR.replace(
         "{username}", settings.ANVIL_SSH_USERNAME
@@ -72,7 +83,7 @@ async def get_slurm_client() -> SlurmSSHClient:
 
         has_key = settings.ANVIL_SSH_KEY_CONTENT or settings.ANVIL_SSH_KEY_PATH
         if not settings.ANVIL_SSH_USERNAME or not has_key:
-            raise RuntimeError(
+            raise AnvilNotConfigured(
                 "ANVIL_SSH_USERNAME and one of ANVIL_SSH_KEY_CONTENT / "
                 "ANVIL_SSH_KEY_PATH must be configured"
             )
@@ -130,88 +141,43 @@ def client_state() -> str:
 # ---------------------------------------------------------------------------
 
 
-# Recorded on the job document (and shown in the UI) whenever a submission
-# runs the placeholder instead of a model, so a COMPLETED job that computed
-# nothing cannot be mistaken for one that did. See is_placeholder_run().
-PLACEHOLDER_REASON = (
-    "Placeholder run: ANVIL_CONTAINER_IMAGE is not set, so this job executed "
-    "no model. Nothing was computed and no output was produced."
-)
+def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str]:
+    """`(cores, walltime)` a job asks SLURM for: the draft's own choice, else
+    the snapshot's `simulation.recommendedCompute` (the spec requires both
+    there, so a real snapshot always answers).
 
-
-def is_placeholder_run() -> bool:
-    """True when submissions cannot run a model, only the smoke-test echo."""
-    return not settings.ANVIL_CONTAINER_IMAGE
-
-
-def _build_command_template(job: JobDB) -> str:
-    """Bash command body executed inside the slurmly-rendered batch script.
-
-    slurmly's execution_profile (anvil_cpu_modules) supplies the module-load
-    preamble; we just emit the simulation command.
+    Cores are the recommendation as it is. A walltime the draft chose is sent
+    as written; the snapshot's is sent with 50% headroom (`with_headroom`),
+    because the recommendation is what a run took, not what it is safe to ask
+    for. Both are SLURM `--time` syntax: `15:00` is fifteen minutes.
     """
-    container = settings.ANVIL_CONTAINER_IMAGE
-    if not container:
-        # Smoke-test fallback: emit a recognisable line so dev jobs still produce output.
-        return 'echo "OPENGHM placeholder run — set ANVIL_CONTAINER_IMAGE for real jobs"'
-
-    # NOTE: this invocation does not match how the deployed WBM images are
-    # actually run, and setting ANVIL_CONTAINER_IMAGE alone will produce
-    # failing jobs rather than working ones. Their runscript is /bin/bash, so
-    # they take a command, not these flags; a real run binds a snapshot's
-    # model/utilities/wbm_init/gdal_test_files, its model input (data,
-    # data_init) and per-run spool/wbm_output/WBM_run_state, and executes
-    # /wbm/model/wbm.pl against an init file — see
-    # images/wbm-v2-lite/run/wbm-run and images/wbm-v2-lite/test/*.slurm.
-    # Closing that gap needs a job-to-snapshot/init mapping this model has no
-    # field for; it is open item 11 in devdocs/reference/open-items.md.
-    return (
-        f"apptainer run {container} "
-        '--temporal-start "$OPENGHM_TEMPORAL_START" '
-        '--temporal-end "$OPENGHM_TEMPORAL_END"'
+    recommended = snapshot.get("simulation", {}).get("recommendedCompute") or {}
+    cores = slurm_config.cores or recommended.get("cores")
+    walltime = slurm_config.walltime or (
+        with_headroom(str(recommended["walltime"])) if recommended.get("walltime") else None
     )
+    if not cores or not walltime:
+        raise SubmitInputError(
+            "The snapshot does not say how many cores and how much time it needs, "
+            "and the simulation does not either."
+        )
+    return int(cores), str(walltime)
 
 
-def _build_env(job: JobDB) -> dict[str, str]:
-    params = job.parameters
-    env: dict[str, str] = {
-        "OPENGHM_TEMPORAL_START": params.temporal_range_start,
-        "OPENGHM_TEMPORAL_END": params.temporal_range_end,
-        "OPENGHM_DATASET_ID": job.dataset_id,
-    }
-
-    if params.spatial_domain:
-        sd = params.spatial_domain
-        env["OPENGHM_SPATIAL_NORTH"] = str(sd.north)
-        env["OPENGHM_SPATIAL_SOUTH"] = str(sd.south)
-        env["OPENGHM_SPATIAL_EAST"] = str(sd.east)
-        env["OPENGHM_SPATIAL_WEST"] = str(sd.west)
-
-    if params.variables:
-        env["OPENGHM_VARIABLES"] = ",".join(params.variables)
-
-    if params.custom_params:
-        for key, val in params.custom_params.items():
-            safe_key = re.sub(r"[^A-Za-z0-9_]", "_", key).upper()
-            env[f"OPENGHM_CUSTOM_{safe_key}"] = val
-
-    return env
-
-
-def _build_job_spec(job: JobDB) -> JobSpec:
-    cfg = job.slurm_config
+def build_job_spec(job: JobDB, snapshot: dict, body: str) -> JobSpec:
+    """The slurmly spec for a gateway job. `--cpus-per-task`, not
+    `--nodes`/`--ntasks`: the toolkit runs one container, and that is how it
+    asks for cores itself. The account and partition are the gateway's."""
+    cores, walltime = resolve_compute(job.slurm_config, snapshot)
     return JobSpec(
-        name=job.slurm_job_name,
-        command_template=_build_command_template(job),
-        partition=cfg.partition or settings.ANVIL_PARTITION,
-        account=cfg.account or settings.ANVIL_ACCOUNT or None,
+        name=job.slurm_job_name or job.sim_id or job.id,
+        command_template=body,
+        partition=settings.ANVIL_PARTITION,
+        account=settings.ANVIL_ACCOUNT or None,
         qos=settings.ANVIL_QOS,
-        nodes=cfg.nodes or settings.JOB_DEFAULT_NODES,
-        ntasks=cfg.ntasks or settings.JOB_DEFAULT_NTASKS,
-        memory=cfg.memory,
-        time_limit=cfg.walltime or settings.JOB_DEFAULT_WALLTIME,
+        cpus_per_task=cores,
+        time_limit=walltime,
         execution_profile=settings.ANVIL_EXECUTION_PROFILE,
-        env=_build_env(job),
         metadata={"openghm_job_id": job.id, "dataset_id": job.dataset_id},
     )
 
@@ -234,66 +200,25 @@ def _reconstruct_submitted_job(doc: dict[str, Any]) -> SubmittedJob:
 # ---------------------------------------------------------------------------
 
 
-async def submit_job(job_id: str) -> str:
-    """Submit a queued job to Slurm.
+async def submit_job(job: JobDB, snapshot: dict, body: str) -> SubmittedJob:
+    """Submit `job` to SLURM as a batch job whose body is `body`.
 
-    Updates the MongoDB document with slurmly's `SubmittedJob` fields.
-    On failure marks the job as FAILED and re-raises.
+    Transport only: nothing is written to MongoDB here. The caller (the submit
+    route) owns the job's state, because a failed submit must leave the draft a
+    draft, and decides from the exception what to tell the user. Raises
+    `SubmitInputError` for a request that cannot be built, `AnvilNotConfigured`,
+    and whatever slurmly raises (`SSHTransportError`, `SbatchError`, ...).
     """
-    db = get_db()
-    doc = await db.jobs.find_one({"_id": job_id})
-    if doc is None:
-        raise RuntimeError(f"Job {job_id} not found in database")
-
-    job = JobDB(**doc)
-    spec = _build_job_spec(job)
-
-    try:
-        client = await get_slurm_client()
-        submitted: SubmittedJob = await client.submit(spec)
-
-        now = datetime.now(timezone.utc)
-        updates: dict[str, Any] = {
-            "slurm_job_id": submitted.slurm_job_id,
-            "internal_job_id": submitted.internal_job_id,
-            "remote_job_dir": submitted.remote_job_dir,
-            "remote_script_path": submitted.remote_script_path,
-            "stdout_path": submitted.stdout_path,
-            "stderr_path": submitted.stderr_path,
-            "slurmly_submitted_at": submitted.submitted_at,
-            "status": "SUBMITTED",
-            "submitted_at": now,
-            "updated_at": now,
-        }
-        # Set here rather than on completion because update_job_status() only
-        # writes status_reason for timeout/non-zero exit — a placeholder run
-        # succeeds, so nothing later would ever mark it.
-        if is_placeholder_run():
-            updates["status_reason"] = PLACEHOLDER_REASON
-
-        await db.jobs.update_one({"_id": job_id}, {"$set": updates})
-
-        logger.info(
-            "Job %s submitted → slurm=%s remote=%s",
-            job_id,
-            submitted.slurm_job_id,
-            submitted.remote_job_dir,
-        )
-        return submitted.slurm_job_id
-
-    except Exception as exc:
-        await db.jobs.update_one(
-            {"_id": job_id},
-            {
-                "$set": {
-                    "status": "FAILED",
-                    "status_reason": str(exc),
-                    "updated_at": datetime.now(timezone.utc),
-                }
-            },
-        )
-        logger.error("Job %s submission failed: %s", job_id, exc)
-        raise
+    spec = build_job_spec(job, snapshot, body)
+    client = await get_slurm_client()
+    submitted: SubmittedJob = await client.submit(spec)
+    logger.info(
+        "Job %s submitted → slurm=%s remote=%s",
+        job.id,
+        submitted.slurm_job_id,
+        submitted.remote_job_dir,
+    )
+    return submitted
 
 
 # ---------------------------------------------------------------------------

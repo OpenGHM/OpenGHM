@@ -19,7 +19,7 @@ from app.services.background_sync import run_background_sync
 from app.services.slurm import (
     close_slurm_client,
     get_slurm_client,
-    is_placeholder_run,
+    toolkit_configured,
 )
 
 # Without this, the root logger defaults to WARNING and every logger.info()
@@ -148,15 +148,12 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("slurmly client init failed (jobs will not work): %s", exc)
 
-    # Announce the placeholder mode at boot as well as on each job. A
-    # deployment in this state accepts submissions and reports them COMPLETED
-    # having computed nothing, which is the kind of thing nobody notices
-    # unless it is said out loud once per pod.
-    if is_placeholder_run():
+    # Say once per pod that submits will be refused: a deployment without a
+    # toolkit install looks healthy until somebody presses Submit.
+    if not toolkit_configured():
         logger.warning(
-            "ANVIL_CONTAINER_IMAGE is not set — job submissions will run the "
-            "placeholder echo and compute nothing. Each such job records "
-            "status_reason so it is visible in the UI."
+            "ANVIL_OPENGHM_HOME is not set — job submissions will be refused "
+            "(503 anvil_not_configured) until a toolkit install is named."
         )
 
     # Startup: launch background job status sync

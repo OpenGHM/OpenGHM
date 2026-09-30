@@ -55,12 +55,8 @@ const BASE_PARAMETERS: Job["parameters"] = {
 };
 
 const BASE_SLURM: Job["slurm_config"] = {
-  partition: "shared",
-  account: null,
-  walltime: "15:00",
-  nodes: 1,
-  ntasks: 16,
-  memory: null,
+  cores: 16,
+  walltime: "00:15:00",
 };
 
 /**
@@ -90,7 +86,7 @@ export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}):
     model_input_id: null,
     effective_model_input_id: null,
     effective_model_input_state: "inherited",
-    slurm_job_id: status === "DRAFT" ? null : 12345680,
+    slurm_job_id: status === "DRAFT" ? null : "12345680",
     slurm_job_name: status === "DRAFT" ? "" : "wbm-sim",
     status,
     status_reason:
@@ -107,6 +103,10 @@ export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}):
     completed_at: completed,
     updated_at: completed ?? started ?? submitted ?? iso(4 * HOUR),
     output_s3_key: status === "COMPLETED" ? "outputs/sim-20260921-comp/" : null,
+    toolkit: null,
+    work_dir: null,
+    remote_job_dir: null,
+    last_submit_error: null,
     ...overrides,
   };
 }

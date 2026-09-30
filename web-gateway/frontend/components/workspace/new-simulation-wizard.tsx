@@ -10,11 +10,13 @@ import { WizardParametersStep } from "@/components/workspace/wizard-parameters-s
 import { WizardReviewStep } from "@/components/workspace/wizard-review-step";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
+import { validateSlurmConfig } from "@/lib/jobs/compute";
 import {
   type WizardStep,
   type ModelInputChoice,
   defaultParametersFor,
   defaultSlurmConfigFor,
+  recommendedComputeFor,
 } from "@/lib/workspace/wizard-types";
 
 // This component only ever owns steps 2–4 — "snapshot" (step 1) is the
@@ -27,9 +29,9 @@ const OWNED_STEPS: WizardStep[] = ["model-input", "parameters", "review"];
 
 /**
  * Steps 2–4 of the new-simulation flow: nothing here is real until the
- * Review step's Submit button — everything before it is local state over
- * the real catalogue (`fetchModelInputs`), staged so the user can move
- * back and forth without creating a draft on every click.
+ * Review step's "Save as draft" or "Submit" — everything before it is local
+ * state over the real catalogue (`fetchModelInputs`), staged so the user can
+ * move back and forth without creating a draft on every click.
  *
  * Step 1 (choosing the base snapshot) is no longer part of this component —
  * it is the picker route (`/workspace/new/pick`), which is the repository's
@@ -38,14 +40,17 @@ const OWNED_STEPS: WizardStep[] = ["model-input", "parameters", "review"];
  */
 export function NewSimulationWizard({
   snapshot,
+  submitBlockedReason,
 }: {
   snapshot: Dataset;
+  /** Why this user cannot submit (ADR 0024), or null. Saving a draft stays open. */
+  submitBlockedReason: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>("model-input");
   const [modelInputChoice, setModelInputChoice] = useState<ModelInputChoice>({ mode: "inherit" });
   const [parameters, setParameters] = useState<JobParameters>(() => defaultParametersFor(snapshot));
-  const [slurmConfig, setSlurmConfig] = useState<SlurmConfig>(() => defaultSlurmConfigFor(snapshot));
+  const [slurmConfig, setSlurmConfig] = useState<SlurmConfig>(() => defaultSlurmConfigFor());
 
   const stepIndex = OWNED_STEPS.indexOf(step);
 
@@ -53,7 +58,8 @@ export function NewSimulationWizard({
     step === "model-input" ||
     (step === "parameters" &&
       parameters.temporal_range_start <= parameters.temporal_range_end &&
-      parameters.variables.length > 0);
+      parameters.variables.length > 0 &&
+      Object.keys(validateSlurmConfig(slurmConfig)).length === 0);
 
   const goNext = () => {
     const next = OWNED_STEPS[stepIndex + 1];
@@ -100,10 +106,12 @@ export function NewSimulationWizard({
             modelInputChoice={modelInputChoice}
             parameters={parameters}
             slurmConfig={slurmConfig}
+            recommended={recommendedComputeFor(snapshot)}
+            blockedReason={submitBlockedReason}
           />
         )}
 
-        {/* Back / Next — the Review step has its own Submit button instead.
+        {/* Back / Next — the Review step has its own Save and Submit buttons instead.
             Back is never disabled: from the first step here it leaves for
             the picker instead of stopping. */}
         {step !== "review" && (
@@ -115,7 +123,7 @@ export function NewSimulationWizard({
             <Button
               onClick={goNext}
               disabled={!canGoNext}
-              className="bg-[#006994] hover:bg-[#005a7a] font-semibold"
+              className="min-h-10 bg-[#006994] font-semibold hover:bg-[#005a7a] sm:min-h-9"
             >
               Next
               <ArrowRight className="ml-1.5 size-4" />

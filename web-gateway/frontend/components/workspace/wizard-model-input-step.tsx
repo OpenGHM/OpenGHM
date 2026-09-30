@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchModelInputById, fetchModelInputs } from "@/lib/repository/actions";
+import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
 import type { Dataset, ModelInput, ModelInputListResponse } from "@/lib/repository/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
 
@@ -20,21 +21,29 @@ const EMPTY_RESULT: ModelInputListResponse = {
 function ModelInputMiniCard({
   modelInput,
   selected,
+  disabled,
   onSelect,
 }: {
   modelInput: ModelInput;
   selected: boolean;
+  /** The card is shown for browsing but cannot be chosen (see the step). */
+  disabled: boolean;
   onSelect: () => void;
 }) {
   const datasetCount = modelInput.datasets.length;
   const networkCount = modelInput.networks?.length ?? 0;
 
   return (
-    <button type="button" onClick={onSelect} className="block h-full w-full text-left">
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className="block h-full w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
+    >
       <Card
-        className={`h-full gap-0 py-0 transition-all hover:-translate-y-0.5 hover:shadow-md ${
-          selected ? "border-[#006994] ring-2 ring-[#006994]/30" : "hover:border-[#006994]/40"
-        }`}
+        className={`h-full gap-0 py-0 transition-all ${
+          selected ? "border-[#006994] ring-2 ring-[#006994]/30" : ""
+        } ${disabled ? "" : "hover:-translate-y-0.5 hover:border-[#006994]/40 hover:shadow-md"}`}
       >
         <CardContent className="p-4">
           <div className="mb-1.5 flex items-start justify-between gap-2">
@@ -207,8 +216,8 @@ export function WizardModelInputStep({
                 <p className="text-xs text-muted-foreground">
                   The snapshot cites model input{" "}
                   <code className="font-mono">{inheritedId.slice(0, 12)}…</code>, which the
-                  model-inputs catalogue does not hold. This is common, not an error — pick a
-                  replacement below if the run needs one.
+                  model-inputs catalogue does not hold. This is common, not an error: the run
+                  fetches it by id.
                 </p>
               </div>
             </div>
@@ -217,8 +226,14 @@ export function WizardModelInputStep({
       </Card>
 
       {/* Catalogue browser */}
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">Choose a different model input</p>
+      {/* The toolkit has no option for a model input other than the
+          snapshot's own, so a submit refuses an override (ADR 0025). The
+          catalogue can still be browsed. */}
+      <div className="mb-3 space-y-1">
+        <p className="text-sm font-medium text-foreground">Model inputs in the catalogue</p>
+        <p id="model-input-override-reason" className="text-xs text-muted-foreground">
+          {UNSUPPORTED_REASON.modelInput}
+        </p>
       </div>
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -250,6 +265,7 @@ export function WizardModelInputStep({
               key={mi.id}
               modelInput={mi}
               selected={choice.mode === "chosen" && choice.modelInput.id === mi.id}
+              disabled
               onSelect={() => onChoiceChange({ mode: "chosen", modelInput: mi })}
             />
           ))}

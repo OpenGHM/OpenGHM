@@ -5,7 +5,6 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SubmitJobDialog } from "@/components/jobs/submit-job-dialog";
 import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
 import {
   ArrowLeft,
@@ -25,6 +24,7 @@ import {
   BookOpen,
   Shield,
   Cpu,
+  Play,
   Server,
 } from "lucide-react";
 import { CitationCard } from "@/components/repository/citation-card";
@@ -98,16 +98,21 @@ export default async function DatasetDetailPage({
       {/* Main Content */}
       <main className="flex-1 bg-slate-50">
         <div className="mx-auto max-w-[1280px] px-10 py-10">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/repository">
                 <ArrowLeft className="mr-1.5 size-4" />
                 Back to Repository
               </Link>
             </Button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <DeriveSimulationButton datasetId={dataset.id} />
-              <SubmitJobDialog dataset={dataset} />
+              <Button asChild size="lg" className="gap-2 px-6 text-base font-semibold">
+                <Link href={`/workspace/new/configure?snapshotId=${encodeURIComponent(dataset.id)}`}>
+                  <Play className="size-5" aria-hidden="true" />
+                  Run this snapshot
+                </Link>
+              </Button>
             </div>
           </div>
 

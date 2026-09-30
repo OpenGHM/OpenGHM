@@ -4,6 +4,9 @@ import { Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ComputeFields } from "@/components/workspace/compute-fields";
+import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
+import { recommendedComputeFor } from "@/lib/workspace/wizard-types";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 
@@ -20,8 +23,6 @@ export function WizardParametersStep({
   onParametersChange: (parameters: JobParameters) => void;
   onSlurmConfigChange: (slurmConfig: SlurmConfig) => void;
 }) {
-  const spatialEnabled = parameters.spatial_domain !== null;
-
   const toggleVar = (name: string) => {
     const has = parameters.variables.includes(name);
     onParametersChange({
@@ -99,44 +100,21 @@ export function WizardParametersStep({
           </div>
 
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            {/* The toolkit has no option for a spatial subset, so a submit
+                refuses one (ADR 0025): the control stays, switched off. */}
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60">
               <input
                 type="checkbox"
-                checked={spatialEnabled}
-                onChange={(e) =>
-                  onParametersChange({
-                    ...parameters,
-                    spatial_domain: e.target.checked
-                      ? { north: 0, south: 0, east: 0, west: 0 }
-                      : null,
-                  })
-                }
+                checked={false}
+                disabled
+                aria-describedby="spatial-subset-reason"
                 className="size-3.5 rounded border-slate-300"
               />
               Restrict to a spatial subset
             </label>
-            {spatialEnabled && parameters.spatial_domain && (
-              <div className="grid grid-cols-4 gap-3">
-                {(["north", "south", "east", "west"] as const).map((edge) => (
-                  <div key={edge} className="space-y-1">
-                    <Label className="text-xs capitalize text-muted-foreground">{edge}</Label>
-                    <Input
-                      type="number"
-                      value={parameters.spatial_domain![edge]}
-                      onChange={(e) =>
-                        onParametersChange({
-                          ...parameters,
-                          spatial_domain: {
-                            ...parameters.spatial_domain!,
-                            [edge]: Number(e.target.value) || 0,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+            <p id="spatial-subset-reason" className="text-xs text-muted-foreground">
+              {UNSUPPORTED_REASON.spatialSubset}
+            </p>
           </div>
 
           <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground">
@@ -151,82 +129,17 @@ export function WizardParametersStep({
         </CardContent>
       </Card>
 
-      {/* SLURM settings */}
+      {/* Compute */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-[#006994]/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-          <CardTitle className="text-lg font-semibold text-foreground">SLURM Settings</CardTitle>
+        <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+          <CardTitle className="text-lg font-semibold text-foreground">Compute</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Partition</Label>
-              <Input
-                value={slurmConfig.partition ?? ""}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, partition: e.target.value || null })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Account</Label>
-              <Input
-                placeholder="optional"
-                value={slurmConfig.account ?? ""}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, account: e.target.value || null })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Walltime</Label>
-              <Input
-                placeholder="hh:mm:ss"
-                value={slurmConfig.walltime ?? ""}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, walltime: e.target.value || null })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Nodes</Label>
-              <Input
-                type="number"
-                min={1}
-                value={slurmConfig.nodes ?? 1}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, nodes: Number(e.target.value) || 1 })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Tasks</Label>
-              <Input
-                type="number"
-                min={1}
-                value={slurmConfig.ntasks ?? 1}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, ntasks: Number(e.target.value) || 1 })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Memory</Label>
-              <Input
-                placeholder="optional, e.g. 32G"
-                value={slurmConfig.memory ?? ""}
-                onChange={(e) =>
-                  onSlurmConfigChange({ ...slurmConfig, memory: e.target.value || null })
-                }
-              />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Defaulted from the snapshot&apos;s recommended compute (
-            {snapshot.simulation.recommendedCompute.cores} cores,{" "}
-            {snapshot.simulation.recommendedCompute.walltime}). Simulation editing does not yet
-            accept SLURM sizing on a draft, so this is recorded for review — the run will use
-            cluster defaults until that lands.
-          </p>
+          <ComputeFields
+            config={slurmConfig}
+            recommended={recommendedComputeFor(snapshot)}
+            onChange={onSlurmConfigChange}
+          />
         </CardContent>
       </Card>
     </div>

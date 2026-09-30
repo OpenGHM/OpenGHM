@@ -2,7 +2,7 @@
 touch, plus document and token builders for route-level tests.
 
 The fake covers exactly what the routes call — `find_one`, `insert_one`,
-`update_one` (`$set`), `delete_one`, `count_documents` — with equality, `$in`
+`update_one` (`$set`, `$unset`), `delete_one`, `count_documents` — with equality, `$in`
 and `$ne` matching. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
 """
@@ -93,10 +93,12 @@ class FakeCollection:
         self.docs[doc["_id"]] = copy.deepcopy(doc)
 
     async def update_one(self, query: dict, update: dict):
-        assert set(update) == {"$set"}, "fake Mongo: only $set is supported"
+        assert set(update) <= {"$set", "$unset"}, "fake Mongo: only $set and $unset are supported"
         for doc in self.docs.values():
             if _matches(doc, query):
-                doc.update(copy.deepcopy(update["$set"]))
+                doc.update(copy.deepcopy(update.get("$set", {})))
+                for key in update.get("$unset", {}):
+                    doc.pop(key, None)
                 return type("R", (), {"matched_count": 1})()
         return type("R", (), {"matched_count": 0})()
 
@@ -168,7 +170,7 @@ def make_job(job_id: str, owner: str, status: str = "DRAFT") -> dict:
         "parameters": {
             "temporal_range_start": "2000-01-01",
             "temporal_range_end": "2000-12-31",
-            "variables": [],
+            "variables": ["runoff", "discharge"],
         },
         "slurm_config": {},
         "created_at": NOW,

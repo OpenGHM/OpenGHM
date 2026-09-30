@@ -71,16 +71,11 @@ CALLERS: dict[str, dict] = {
     },
 }
 
-SUBMIT_BODY = {
-    "dataset_id": "ds-1",
-    "parameters": {"temporal_range_start": "2000-01-01", "temporal_range_end": "2000-12-31"},
-}
-
 # name -> (method, path template, JSON body, status of the job it targets)
 ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
     "list": ("GET", "/api/v1/jobs", None, None),
     "stats": ("GET", "/api/v1/jobs/stats", None, None),
-    "submit": ("POST", "/api/v1/jobs", SUBMIT_BODY, None),
+    "submit": ("POST", "/api/v1/jobs/{id}/submit", None, "DRAFT"),
     "derive": ("POST", "/api/v1/jobs/derive/ds-1", {}, None),
     "get": ("GET", "/api/v1/jobs/{id}", None, "RUNNING"),
     "status": ("GET", "/api/v1/jobs/{id}/status", None, "RUNNING"),
@@ -99,8 +94,10 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
 # - Everyone else who is not the owner gets 404 for the job routes, the same
 #   answer as for a missing id. staff and admin hold job:view:any and
 #   job:cancel:any but deliberately no edit/delete "any": 404 for those.
-# - `submit` is the gate of ADR 0024; `derive` (a draft) only needs an active
-#   account, so an unverified, unpermitted or mock user may still prepare one.
+# - `submit` is the gate of ADR 0024, then the owner alone (404 for anyone
+#   else, staff and admin included: no "any" permission submits another
+#   user's draft); `derive` (a draft) only needs an active account, so an
+#   unverified, unpermitted or mock user may still prepare one.
 NOT_OWNER = {"list": 200, "stats": 200, "get": 404, "status": 404, "logs": 404,
              "cancel": 404, "patch": 404, "delete": 404}
 EXPECTED: dict[str, dict[str, int]] = {
@@ -109,13 +106,13 @@ EXPECTED: dict[str, dict[str, int]] = {
     "unverified": {**NOT_OWNER, "submit": 403, "derive": 201},
     "deactivated": {**NOT_OWNER, "submit": 403, "derive": 403},
     "not_permitted": {**NOT_OWNER, "submit": 403, "derive": 201},
-    "permitted_other": {**NOT_OWNER, "submit": 201, "derive": 201},
-    "owner": {"list": 200, "stats": 200, "submit": 201, "derive": 201, "get": 200,
+    "permitted_other": {**NOT_OWNER, "submit": 404, "derive": 201},
+    "owner": {"list": 200, "stats": 200, "submit": 202, "derive": 201, "get": 200,
               "status": 200, "logs": 200, "cancel": 200, "patch": 200, "delete": 204},
     "staff": {**NOT_OWNER, "get": 200, "status": 200, "logs": 200, "cancel": 200,
-              "submit": 201, "derive": 201},
+              "submit": 404, "derive": 201},
     "admin": {**NOT_OWNER, "get": 200, "status": 200, "logs": 200, "cancel": 200,
-              "submit": 201, "derive": 201},
+              "submit": 404, "derive": 201},
     # A mock identity may prepare drafts (no allocation spent) but never runs.
     "mock": {**NOT_OWNER, "submit": 403, "derive": 201},
     # Holds job:view:any and job:cancel:any like any admin, but never runs.
@@ -176,8 +173,16 @@ def test_staff_cancelling_another_users_job_is_allowed_and_recorded(client, db):
 # ---- the submit gate's refusals are distinguishable --------------------
 
 
-def _submit(client, headers):
-    return client.post("/api/v1/jobs", json=SUBMIT_BODY, headers=headers)
+_draft_count = 0
+
+
+def _submit(client, db, headers, owner=OWNER):
+    """Submit a fresh draft owned by `owner`."""
+    global _draft_count
+    _draft_count += 1
+    job_id = f"draft-{_draft_count}"
+    db.jobs.docs[job_id] = make_job(job_id, owner, "DRAFT")
+    return client.post(f"/api/v1/jobs/{job_id}/submit", headers=headers)
 
 
 @pytest.mark.parametrize(
@@ -191,7 +196,7 @@ def _submit(client, headers):
 )
 def test_submit_refusal_carries_a_stable_code(client, db, caller, code):
     db.users.docs[caller] = CALLERS[caller]["user"]
-    response = _submit(client, CALLERS[caller]["headers"])
+    response = _submit(client, db, CALLERS[caller]["headers"])
     assert response.status_code == 403
     detail = response.json()["detail"]
     assert detail["code"] == code
@@ -201,20 +206,20 @@ def test_submit_refusal_carries_a_stable_code(client, db, caller, code):
 def test_submit_trusts_the_database_role_not_the_token(client, db):
     """A token claiming `admin` for a user who is only `user` in the database."""
     db.users.docs["liar"] = make_user("liar", Role.USER, can_run_simulations=False)
-    response = _submit(client, token_for("liar", Role.ADMIN))
+    response = _submit(client, db, token_for("liar", Role.ADMIN))
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "not_permitted_to_run"
 
 
 def test_submit_with_a_valid_token_but_no_user_document(client, db):
-    response = _submit(client, token_for("ghost"))
+    response = _submit(client, db, token_for("ghost"))
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "account_not_found"
 
 
 def test_legacy_user_document_without_the_flag_is_not_permitted(client, db):
     db.users.docs["legacy"] = make_user("legacy")  # no can_run_simulations key
-    response = _submit(client, token_for("legacy"))
+    response = _submit(client, db, token_for("legacy"))
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "not_permitted_to_run"
 
@@ -238,10 +243,12 @@ def test_a_mock_identity_is_refused_whatever_the_environment(
     monkeypatch.setattr(settings, "ENVIRONMENT", environment)
     monkeypatch.setattr(settings, "ALLOW_MOCK_AUTH", allow_mock)
     db.users.docs["mock-admin-001"] = make_user("mock-admin-001", Role.ADMIN)
-    response = _submit(client, token_for("mock-admin-001", Role.ADMIN))
+    response = _submit(
+        client, db, token_for("mock-admin-001", Role.ADMIN), owner="mock-admin-001"
+    )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "mock_identity"
-    assert not [j for j in db.jobs.docs.values() if j["user_id"] == "mock-admin-001"]
+    assert {j["status"] for j in db.jobs.docs.values()} == {"DRAFT"}
 
 
 # ---- the active-job limit ----------------------------------------------
@@ -255,7 +262,7 @@ def test_limit_answers_429_then_allows_a_submit_after_a_job_ends(client, db):
     db.jobs.docs["draft"] = make_job("draft", OWNER, "DRAFT")  # does not count
     db.jobs.docs["c"] = make_job("c", OWNER, "COMPLETED")  # does not count
 
-    blocked = _submit(client, headers)
+    blocked = _submit(client, db, headers)
     assert blocked.status_code == 429
     detail = blocked.json()["detail"]
     assert detail["code"] == "active_job_limit"
@@ -263,9 +270,9 @@ def test_limit_answers_429_then_allows_a_submit_after_a_job_ends(client, db):
     assert "2" in detail["message"] and "cancel" in detail["message"]
 
     db.jobs.docs["b"]["status"] = "COMPLETED"
-    assert _submit(client, headers).status_code == 201
+    assert _submit(client, db, headers).status_code == 202
     # That submit is now active (SUBMITTED) next to "a": at the limit again.
-    assert _submit(client, headers).status_code == 429
+    assert _submit(client, db, headers).status_code == 429
 
 
 @pytest.mark.parametrize("status", ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"])
@@ -273,14 +280,14 @@ def test_every_active_status_counts_against_the_limit(client, db, status):
     db.users.docs[OWNER] = CALLERS["owner"]["user"]
     db.jobs.docs["a"] = make_job("a", OWNER, status)
     db.jobs.docs["b"] = make_job("b", OWNER, "RUNNING")
-    assert _submit(client, CALLERS["owner"]["headers"]).status_code == 429
+    assert _submit(client, db, CALLERS["owner"]["headers"]).status_code == 429
 
 
 def test_another_users_active_jobs_do_not_count(client, db):
     db.users.docs[OWNER] = CALLERS["owner"]["user"]
     db.jobs.docs["a"] = make_job("a", "someone-else", "RUNNING")
     db.jobs.docs["b"] = make_job("b", "someone-else", "RUNNING")
-    assert _submit(client, CALLERS["owner"]["headers"]).status_code == 201
+    assert _submit(client, db, CALLERS["owner"]["headers"]).status_code == 202
 
 
 @pytest.mark.parametrize("caller", ["staff", "admin"])
@@ -288,4 +295,4 @@ def test_staff_and_admin_are_exempt_from_the_limit(client, db, caller):
     db.users.docs[caller] = CALLERS[caller]["user"]
     for i in range(3):
         db.jobs.docs[f"j{i}"] = make_job(f"j{i}", caller, "RUNNING")
-    assert _submit(client, CALLERS[caller]["headers"]).status_code == 201
+    assert _submit(client, db, CALLERS[caller]["headers"], owner=caller).status_code == 202

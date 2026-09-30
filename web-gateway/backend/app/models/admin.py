@@ -37,13 +37,12 @@ class RuntimeSettingsSummary(BaseModel):
 
     jwt_expire_minutes: int
     refresh_token_expire_days: int
-    job_default_walltime: str
-    job_default_nodes: int
-    job_default_ntasks: int
     job_background_sync_interval: int
     anvil_host: str
     anvil_partition: str
     anvil_execution_profile: str
+    #: Empty when no toolkit is installed for this gateway (submit refuses).
+    anvil_openghm_home: str
     s3_bucket: str
     cors_origins: list[str]
 

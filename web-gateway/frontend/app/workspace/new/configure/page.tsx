@@ -4,6 +4,8 @@ import { redirect, notFound } from "next/navigation";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { NewSimulationWizard } from "@/components/workspace/new-simulation-wizard";
+import { fetchMe } from "@/lib/account/actions";
+import { submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 
 /**
@@ -32,7 +34,10 @@ export default async function ConfigureSimulationPage({
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        <NewSimulationWizard snapshot={snapshot} />
+        <NewSimulationWizard
+          snapshot={snapshot}
+          submitBlockedReason={submitBlockedReason(await fetchMe())}
+        />
       </main>
       <Footer />
     </div>

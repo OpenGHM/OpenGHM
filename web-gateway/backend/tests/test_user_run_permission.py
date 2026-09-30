@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from app.core.roles import Role
 
-from route_helpers import make_user, token_for
+from route_helpers import make_job, make_user, token_for
 
 
 def test_me_exposes_the_flag_and_defaults_it_to_false(client, db):
@@ -44,19 +44,16 @@ def test_admin_grants_and_revokes_the_flag_and_it_is_audited(client, db):
 def test_granting_takes_effect_on_the_very_next_submit(client, db):
     db.users.docs["admin"] = make_user("admin", Role.ADMIN)
     db.users.docs["alice"] = make_user("alice")
-    body = {
-        "dataset_id": "ds-1",
-        "parameters": {"temporal_range_start": "2000-01-01", "temporal_range_end": "2000-12-31"},
-    }
+    db.jobs.docs["draft-1"] = make_job("draft-1", "alice", "DRAFT")
     alice = token_for("alice")  # one token throughout: the gate reads the database
 
-    assert client.post("/api/v1/jobs", json=body, headers=alice).status_code == 403
+    assert client.post("/api/v1/jobs/draft-1/submit", headers=alice).status_code == 403
     client.patch(
         "/api/v1/users/alice",
         json={"can_run_simulations": True},
         headers=token_for("admin", Role.ADMIN),
     )
-    assert client.post("/api/v1/jobs", json=body, headers=alice).status_code == 201
+    assert client.post("/api/v1/jobs/draft-1/submit", headers=alice).status_code == 202
 
 
 def test_only_an_admin_may_change_the_flag(client, db):

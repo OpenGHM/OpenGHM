@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slurmly import SubmittedJob
 from route_helpers import FakeDB
 
 from app.api.v1 import jobs as jobs_router
@@ -29,16 +30,30 @@ def db(monkeypatch) -> FakeDB:
         "document": {
             "about": {"name": "Dataset one"},
             "simulation": {
+                "spatialCoverage": {
+                    "northlimit": 57.1667, "southlimit": 21.75,
+                    "eastlimit": -60.5833, "westlimit": -127.8333,
+                },
                 "temporalCoverage": {"start": "2000-01-01", "end": "2000-12-31"},
-                "outputVariables": [],
+                "outputVariables": [{"name": "runoff"}, {"name": "discharge"}],
+                "recommendedCompute": {"cores": 16, "walltime": "15:00"},
             },
         },
     }
 
     # No SSH: stand-ins for the four slurm service calls the job routes make.
-    async def submit_job(job_id: str) -> str:
-        await fake.jobs.update_one({"_id": job_id}, {"$set": {"status": "SUBMITTED"}})
-        return "12345"
+    # The submit route does its own bookkeeping, so the fake only answers with
+    # what slurmly would (tests/test_job_submit.py swaps it to make it fail).
+    async def submit_job(job, snapshot, body):
+        return SubmittedJob(
+            internal_job_id="slurmly-1a2b3c4d",
+            slurm_job_id="12345",
+            remote_job_dir="/anvil/scratch/x-openghm/openghm/slurmly-1a2b3c4d",
+            remote_script_path="/anvil/scratch/x-openghm/openghm/slurmly-1a2b3c4d/run.sh",
+            stdout_path="/anvil/scratch/x-openghm/openghm/slurmly-1a2b3c4d/stdout.log",
+            stderr_path="/anvil/scratch/x-openghm/openghm/slurmly-1a2b3c4d/stderr.log",
+            submitted_at="2026-09-30T00:00:00Z",
+        )
 
     async def update_job_status(job_id: str) -> dict:
         return await fake.jobs.find_one({"_id": job_id})
@@ -55,6 +70,7 @@ def db(monkeypatch) -> FakeDB:
     monkeypatch.setattr(slurm, "get_job_logs", get_job_logs)
 
     monkeypatch.setattr(settings, "JOB_MAX_ACTIVE_PER_USER", 2)
+    monkeypatch.setattr(settings, "ANVIL_OPENGHM_HOME", "/home/x-openghm/apps/openghm/abc1234")
     # A developer's local .env turns the X-Mock-Role bypass on; a test that
     # wants it says so, every other one runs as production.
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")

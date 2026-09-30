@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { fetchModelInputById, fetchModelInputs } from "@/lib/repository/actions";
+import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
 import type { ModelInput, ModelInputListResponse } from "@/lib/repository/types";
 
 const EMPTY_RESULT: ModelInputListResponse = {
@@ -212,11 +213,11 @@ export function ModelInputSection({
                   <>
                     The snapshot cites model input{" "}
                     <code className="font-mono">{inheritedId.slice(0, 12)}…</code>, which the
-                    model-inputs catalogue does not hold. This is common, not an error — pick a
-                    replacement below if the run needs one.
+                    model-inputs catalogue does not hold. This is common, not an error: the run
+                    fetches it by id.
                   </>
                 ) : (
-                  "Could not resolve the base snapshot to check what it cites. Pick an override below if this run needs one."
+                  "Could not resolve the base snapshot to check what it cites."
                 )}
               </p>
             </div>
@@ -224,9 +225,25 @@ export function ModelInputSection({
         )}
 
         {!browsing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setBrowsing(true)}>
-            {choice.mode === "chosen" ? "Choose a different model input" : "Choose a model input"}
-          </Button>
+          <div className="space-y-1.5">
+            {/* The toolkit has no option for a model input other than the
+                snapshot's own, so a submit refuses an override (ADR 0025).
+                An existing one can still be reverted above. */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled
+              aria-describedby="model-input-override-reason"
+              className="min-h-10 sm:min-h-8"
+              onClick={() => setBrowsing(true)}
+            >
+              {choice.mode === "chosen" ? "Choose a different model input" : "Choose a model input"}
+            </Button>
+            <p id="model-input-override-reason" className="text-xs text-muted-foreground">
+              {UNSUPPORTED_REASON.modelInput}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3 pt-1">
             <div className="relative">

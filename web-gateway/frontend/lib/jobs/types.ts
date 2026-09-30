@@ -35,13 +35,33 @@ export interface JobParameters {
   custom_params: Record<string, string> | null;
 }
 
+/** What a draft asks SLURM for. Both null means the snapshot's own
+ *  `simulation.recommendedCompute`. The account and partition are the
+ *  gateway's, not the user's (app/models/job.py). */
 export interface SlurmConfig {
-  partition: string | null;
-  account: string | null;
+  cores: number | null;
+  /** `HH:MM:SS` when the user chose it; a snapshot's own recommendation is
+   *  never copied in here. */
   walltime: string | null;
-  nodes: number | null;
-  ntasks: number | null;
-  memory: string | null;
+}
+
+/** The limits the backend enforces on a draft's `slurm_config`
+ *  (`MAX_CORES`, `MAX_WALLTIME_SECONDS` in app/models/job.py). */
+export const MAX_CORES = 128;
+export const MAX_WALLTIME = "96:00:00";
+
+/** The toolkit install a submitted job runs (ADR 0025). */
+export interface ToolkitRef {
+  home: string;
+  commit: string;
+}
+
+/** Why the last submit of a draft did not reach SLURM. The draft stayed a
+ *  draft. */
+export interface SubmitError {
+  code: string;
+  message: string;
+  at: string;
 }
 
 // ─── `about` — a simulation's citation block, editable one field at a time
@@ -75,7 +95,7 @@ export interface Job {
   /** `inherited-missing` means the base snapshot cites an input the
    *  catalogue does not hold, which is common in the shipped examples. */
   effective_model_input_state: "inherited" | "chosen" | "inherited-missing";
-  slurm_job_id: number | null;
+  slurm_job_id: string | null;
   slurm_job_name: string;
   status: JobStatus;
   status_reason: string | null;
@@ -87,6 +107,12 @@ export interface Job {
   started_at: string | null;
   completed_at: string | null;
   output_s3_key: string | null;
+  /** Set once submitted: the toolkit it runs, its work directory on scratch,
+   *  and the directory holding the batch script and its logs. */
+  toolkit: ToolkitRef | null;
+  work_dir: string | null;
+  remote_job_dir: string | null;
+  last_submit_error: SubmitError | null;
 }
 
 export interface JobListResponse {
@@ -94,17 +120,6 @@ export interface JobListResponse {
   total_count: number;
   page: number;
   total_pages: number;
-}
-
-export interface JobSubmitRequest {
-  dataset_id: string;
-  parameters: JobParameters;
-  slurm_config?: Partial<SlurmConfig>;
-}
-
-export interface JobSubmitResponse {
-  job_id: string;
-  status: JobStatus;
 }
 
 /** POST /jobs/derive/{dataset_id} body. */
@@ -122,6 +137,9 @@ export interface SimulationUpdateRequest {
   slug?: string | null;
   about?: PartialAbout | null;
   parameters?: JobParameters | null;
+  /** Cores and walltime. Only the fields sent change; `null` goes back to
+   *  the snapshot's recommended compute. */
+  slurm_config?: Partial<SlurmConfig> | null;
   /** Set to override the base snapshot's model input, or explicitly to
    *  `null` to clear an override and go back to inheriting. Omitting the
    *  key entirely leaves whatever was there untouched. */
@@ -132,7 +150,7 @@ export interface JobStatusResponse {
   job_id: string;
   sim_id: string | null;
   status: JobStatus;
-  slurm_job_id: number | null;
+  slurm_job_id: string | null;
   submitted_at: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -154,11 +172,20 @@ export interface JobLogsResponse {
  *   for both, ADR 0024).
  * - `error`: anything else; `message` is safe to show (the backend's `detail`
  *   when it sent one, or `detail.message` for the `{ code, message }` of the
- *   submit gates' 403 and 429). `code` is that machine-readable code, if any.
+ *   submit gates' 403 and 429, and of the submit route's own answers). `code`
+ *   is that machine-readable code, if any.
  */
 export type ActionFailure =
   | { ok: false; reason: "session_expired" }
   | { ok: false; reason: "not_found" }
-  | { ok: false; reason: "error"; message: string; status?: number; code?: string };
+  | {
+      ok: false;
+      reason: "error";
+      message: string;
+      status?: number;
+      code?: string;
+      /** The field names of an `unsupported_fields` refusal. */
+      fields?: string[];
+    };
 
 export type ActionResult<T> = { ok: true; data: T } | ActionFailure;

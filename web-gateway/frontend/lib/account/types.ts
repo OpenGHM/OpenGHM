@@ -8,6 +8,9 @@ export interface UserProfile {
   organization: string | null;
   email_verified: boolean;
   is_active: boolean;
+  /** Whether an administrator has allowed this user to run simulations
+   *  (ADR 0024). Admin and staff may always run, whatever this says. */
+  can_run_simulations: boolean;
   created_at: string | null;
 }
 

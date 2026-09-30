@@ -12,15 +12,41 @@ import {
   Globe,
   Layers,
   Loader2,
+  Lock,
   Rocket,
+  Save,
+  Send,
   Tag,
 } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { deriveSimulation, updateSimulation } from "@/lib/jobs/actions";
+import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
+import {
+  deriveSimulation,
+  submitSimulation,
+  updateSimulation,
+} from "@/lib/jobs/actions";
+import {
+  describeSlurmTime,
+  effectiveCompute,
+  slurmConfigPatch,
+  type Recommended,
+} from "@/lib/jobs/compute";
 import type { Dataset } from "@/lib/repository/types";
-import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
+import type { ActionFailure, JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
 
 function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; inheritedId: string }) {
@@ -55,57 +81,96 @@ export function WizardReviewStep({
   modelInputChoice,
   parameters,
   slurmConfig,
+  recommended,
+  blockedReason,
 }: {
   snapshot: Dataset;
   modelInputChoice: ModelInputChoice;
   parameters: JobParameters;
   slurmConfig: SlurmConfig;
+  recommended: Recommended;
+  /** Why this user cannot submit (ADR 0024), or null. Saving a draft is
+   *  always open to them. */
+  blockedReason: string | null;
 }) {
   const router = useRouter();
-  const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<"save" | "submit" | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Set once the draft exists, so a retry after a failed submit submits the
+  // same draft rather than making a second one.
+  const [draftId, setDraftId] = useState<string | null>(null);
 
   const { start, end } = snapshot.simulation.temporalCoverage;
   const { value: resolutionValue, unit: resolutionUnit } = snapshot.simulation.resolution;
+  const compute = effectiveCompute(slurmConfig, recommended);
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
+  const fail = (result: ActionFailure) => {
+    if (result.reason === "session_expired") {
+      setSessionExpired(true);
+      toast.error("Your session has expired.");
+      return;
+    }
+    const message =
+      result.reason === "error" ? describeSubmitFailure(result) : "This simulation no longer exists.";
+    setError(message);
+    toast.error(message);
+  };
+
+  /** The draft: derived from the snapshot, then given the parameters and the
+   *  cores and walltime the wizard changed. Returns its id, or null after
+   *  showing why not. */
+  const saveDraft = async (): Promise<string | null> => {
+    if (draftId) return draftId;
+    const derived = await deriveSimulation(snapshot.id, {
+      model_input_id: modelInputChoice.mode === "chosen" ? modelInputChoice.modelInput.id : undefined,
+    });
+    if (!derived.ok) {
+      fail(derived);
+      return null;
+    }
+    const patched = await updateSimulation(derived.data.id, {
+      parameters,
+      slurm_config: slurmConfigPatch(slurmConfig),
+    });
+    // The draft exists from here on, whether or not this PATCH took.
+    setDraftId(derived.data.id);
+    if (!patched.ok) {
+      fail(patched);
+      return null;
+    }
+    return derived.data.id;
+  };
+
+  const run = async (kind: "save" | "submit") => {
+    if (pending) return;
+    setPending(kind);
     setError(null);
     setSessionExpired(false);
     try {
-      // Real creation path (mission 2026-09-21): derive a DRAFT from the
-      // base snapshot, optionally overriding its model input up front,
-      // then patch in whatever parameters the wizard changed from the
-      // snapshot's own defaults. SLURM sizing isn't sent — SimulationUpdateRequest
-      // has no slurm_config field yet (app/models/job.py) — it stays local
-      // to this review, not persisted.
-      const derived = await deriveSimulation(snapshot.id, {
-        model_input_id: modelInputChoice.mode === "chosen" ? modelInputChoice.modelInput.id : undefined,
-      });
-      const result = derived.ok
-        ? await updateSimulation(derived.data.id, { parameters })
-        : derived;
-      if (!result.ok) {
-        if (result.reason === "session_expired") {
-          setSessionExpired(true);
-          toast.error("Your session has expired.");
-        } else {
-          const msg = result.reason === "error" ? result.message : "Failed to create simulation";
-          setError(msg);
-          toast.error(msg);
-        }
-        setSubmitting(false);
+      const id = await saveDraft();
+      if (!id) return;
+      if (kind === "save") {
+        toast.success("Draft saved.");
+        router.push(`/workspace/${id}`);
         return;
       }
-
-      toast.success("Simulation created.");
-      router.push(`/workspace/${result.data.id}`);
+      const submitted = await submitSimulation(id);
+      if (!submitted.ok) {
+        fail(submitted);
+        return;
+      }
+      toast.success("Submitted to Anvil.");
+      router.push(`/workspace/${id}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to create simulation";
-      setError(msg);
-      toast.error(msg);
-      setSubmitting(false);
+      const message =
+        err instanceof Error ? err.message : "Something went wrong. Check My Simulations before trying again.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setPending(null);
+      setConfirmOpen(false);
     }
   };
 
@@ -113,7 +178,10 @@ export function WizardReviewStep({
     <div className="mx-auto max-w-[1024px] px-10 py-8">
       {sessionExpired && <SessionExpiredBanner className="mb-6" />}
       {error && (
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div
+          role="alert"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <p>{error}</p>
         </div>
@@ -217,64 +285,159 @@ export function WizardReviewStep({
           </Card>
         </div>
 
-        {/* Right: SLURM + submit */}
+        {/* Right: compute + actions */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Cpu className="size-4 text-blue-600" />
-                SLURM Configuration
+          <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+            <CardHeader className="border-b bg-gradient-to-r from-violet-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-violet-500/10">
+                  <Cpu className="size-4 text-violet-600" aria-hidden="true" />
+                </div>
+                Compute
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
+            <CardContent className="space-y-2 pt-5 pb-6 text-sm">
+              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
                 <span className="text-muted-foreground">Cluster</span>
                 <span className="font-medium">Anvil (Purdue)</span>
               </div>
-              <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
-                <span className="text-muted-foreground">Partition</span>
-                <span className="font-medium">{slurmConfig.partition ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
-                <span className="text-muted-foreground">Walltime</span>
-                <span className="font-medium">{slurmConfig.walltime ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2">
-                <span className="text-muted-foreground">Nodes / Tasks</span>
-                <span className="font-medium">
-                  {slurmConfig.nodes ?? "—"} / {slurmConfig.ntasks ?? "—"}
+              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                <span className="text-muted-foreground">Cores</span>
+                <span className="text-right font-medium">
+                  {compute.cores ?? "—"}
+                  {compute.coresSource === "snapshot" && compute.cores !== null && (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      snapshot&apos;s recommendation
+                    </span>
+                  )}
                 </span>
               </div>
-              <p className="pt-1 text-xs text-muted-foreground">
-                Not yet persisted — the simulation is created with cluster defaults until draft
-                editing accepts SLURM sizing.
-              </p>
+              <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                <span className="text-muted-foreground">Walltime</span>
+                <span className="text-right font-medium">
+                  {compute.walltime ? describeSlurmTime(compute.walltime) : "—"}
+                  {compute.walltimeSource === "snapshot" && compute.walltime !== null && (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      snapshot&apos;s recommendation + 50%
+                    </span>
+                  )}
+                </span>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border-[#006994]/20 bg-[#006994]/5">
-            <CardContent className="space-y-3 pt-5">
+          <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+            <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Rocket className="size-4 text-primary" aria-hidden="true" />
+                </div>
+                Save or run
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-5 pb-6">
               <p className="text-sm text-muted-foreground">
-                This creates a draft simulation from the snapshot above. Nothing runs yet — WBM
-                execution isn&apos;t wired up on the backend.
+                Save this as a draft to keep editing it, or submit it to run on Anvil now.
               </p>
-              <Button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="w-full bg-[#006994] hover:bg-[#005a7a] font-semibold"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    Creating…
-                  </>
-                ) : (
-                  <>
-                    <Rocket className="mr-2 size-4" />
-                    Submit Simulation
-                  </>
-                )}
-              </Button>
+
+              {draftId && (
+                <p className="text-sm text-muted-foreground">
+                  Your draft was saved.{" "}
+                  <Link href={`/workspace/${draftId}`} className="font-medium text-primary hover:underline">
+                    Open it
+                  </Link>
+                </p>
+              )}
+
+              {blockedReason && (
+                <div
+                  id="wizard-submit-blocked"
+                  className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
+                >
+                  <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <p>{blockedReason}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void run("save")}
+                  disabled={pending !== null || draftId !== null}
+                  className="min-h-10 w-full font-semibold"
+                >
+                  {pending === "save" ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Save aria-hidden="true" />
+                  )}
+                  {pending === "save" ? "Saving…" : "Save as draft"}
+                </Button>
+
+                <AlertDialog
+                  open={confirmOpen}
+                  // Stay open while the request is in flight.
+                  onOpenChange={(next) => {
+                    if (pending === null) setConfirmOpen(next);
+                  }}
+                >
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      disabled={pending !== null || blockedReason !== null}
+                      aria-describedby={blockedReason ? "wizard-submit-blocked" : undefined}
+                      className="min-h-10 w-full font-semibold"
+                    >
+                      <Send aria-hidden="true" />
+                      Submit
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Submit this simulation to Anvil?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This saves the draft and starts the run. It spends compute time. Check
+                        the summary first.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <SubmitSummary
+                      snapshotTitle={snapshot.about.name}
+                      start={parameters.temporal_range_start}
+                      end={parameters.temporal_range_end}
+                      variables={parameters.variables}
+                      cores={compute.cores}
+                      coresFromSnapshot={compute.coresSource === "snapshot"}
+                      walltime={compute.walltime}
+                      walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={pending !== null} className="min-h-10 sm:min-h-9">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={pending !== null}
+                        className="min-h-10 sm:min-h-9"
+                        onClick={(event) => {
+                          // Radix closes the dialog on Action; keep it open
+                          // until the submit has answered.
+                          event.preventDefault();
+                          void run("submit");
+                        }}
+                      >
+                        {pending === "submit" ? (
+                          <>
+                            <Loader2 className="animate-spin" aria-hidden="true" />
+                            Submitting…
+                          </>
+                        ) : (
+                          "Submit to Anvil"
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardContent>
           </Card>
         </div>

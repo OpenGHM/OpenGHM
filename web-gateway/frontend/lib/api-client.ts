@@ -7,8 +7,10 @@ const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8100";
  * Creates an Axios instance pre-configured to call FastAPI.
  * Must only be called from Server Components, Server Actions, or Route Handlers.
  * The browser never calls FastAPI directly (except the register endpoint).
+ * `timeoutMs` raises the 10 s default for the one call that legitimately takes
+ * longer (submitting a job opens an SSH session to Anvil).
  */
-export async function getApiClient() {
+export async function getApiClient(options: { timeoutMs?: number } = {}) {
   const session = await auth();
 
   const headers: Record<string, string> = {
@@ -34,7 +36,7 @@ export async function getApiClient() {
   return axios.create({
     baseURL: BACKEND_URL,
     headers,
-    timeout: 10_000,
+    timeout: options.timeoutMs ?? 10_000,
     paramsSerializer: { indexes: null },
   });
 }

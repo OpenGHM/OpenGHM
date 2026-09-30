@@ -9,15 +9,15 @@ const STEP_TITLES: Record<WizardStep, { title: string; subtitle: string }> = {
   },
   "model-input": {
     title: "Model Input",
-    subtitle: "Inherit the base snapshot's model input, or run against a different one",
+    subtitle: "Runs use the base snapshot's own model input",
   },
   parameters: {
     title: "Parameters",
-    subtitle: "Temporal range, output variables, and SLURM sizing",
+    subtitle: "Run period, output variables, cores and walltime",
   },
   review: {
     title: "Review & Submit",
-    subtitle: "Confirm the simulation before it's created",
+    subtitle: "Save it as a draft, or submit it to run on Anvil",
   },
 };
 

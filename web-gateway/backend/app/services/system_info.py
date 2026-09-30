@@ -66,13 +66,11 @@ def _settings_summary() -> RuntimeSettingsSummary:
     return RuntimeSettingsSummary(
         jwt_expire_minutes=settings.JWT_EXPIRE_MINUTES,
         refresh_token_expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
-        job_default_walltime=settings.JOB_DEFAULT_WALLTIME,
-        job_default_nodes=settings.JOB_DEFAULT_NODES,
-        job_default_ntasks=settings.JOB_DEFAULT_NTASKS,
         job_background_sync_interval=settings.JOB_BACKGROUND_SYNC_INTERVAL,
         anvil_host=settings.ANVIL_SSH_HOST,
         anvil_partition=settings.ANVIL_PARTITION,
         anvil_execution_profile=settings.ANVIL_EXECUTION_PROFILE,
+        anvil_openghm_home=settings.ANVIL_OPENGHM_HOME,
         s3_bucket=settings.S3_BUCKET,
         cors_origins=settings.CORS_ORIGINS,
     )

@@ -9,13 +9,13 @@ import type {
   JobLogsResponse,
   JobStatsResponse,
   JobStatusResponse,
-  JobSubmitRequest,
-  JobSubmitResponse,
   SimulationDeriveRequest,
   SimulationUpdateRequest,
 } from "@/lib/jobs/types";
 
 type ApiClient = Awaited<ReturnType<typeof getApiClient>>;
+
+const SUBMIT_TIMEOUT_MS = 60_000;
 
 function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFailure {
   const response = (
@@ -28,21 +28,27 @@ function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFail
   }
   // `detail` is a plain string on most routes, and `{ code, message }` on the
   // submit gates' 403 and 429 (mock_identity, email_not_verified,
-  // not_permitted_to_run, active_job_limit, ...).
+  // not_permitted_to_run, active_job_limit, ...) and on the submit route's own
+  // answers (not_a_draft, unsupported_fields with `fields`, anvil_unreachable,
+  // sbatch_rejected, ...).
   const detail = response?.data?.detail;
   let message: string | null = null;
   let code: string | undefined;
+  let fields: string[] | undefined;
   if (typeof detail === "string") {
     message = detail;
   } else if (detail && typeof detail === "object") {
-    const d = detail as { code?: unknown; message?: unknown };
+    const d = detail as { code?: unknown; message?: unknown; fields?: unknown };
     if (typeof d.message === "string") message = d.message;
     if (typeof d.code === "string") code = d.code;
+    if (Array.isArray(d.fields) && d.fields.every((f) => typeof f === "string")) {
+      fields = d.fields as string[];
+    }
   }
   if (message === null) {
     message = error instanceof Error ? error.message : "Request failed.";
   }
-  return { ok: false, reason: "error", message, status, code };
+  return { ok: false, reason: "error", message, status, code, fields };
 }
 
 /**
@@ -53,10 +59,11 @@ function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFail
  */
 async function run<T>(
   call: (client: ApiClient) => Promise<T>,
-  notFoundStatuses: number[] = [404]
+  notFoundStatuses: number[] = [404],
+  timeoutMs?: number
 ): Promise<ActionResult<T>> {
   try {
-    const client = await getApiClient();
+    const client = await getApiClient({ timeoutMs });
     return { ok: true, data: await call(client) };
   } catch (error: unknown) {
     return describeFailure(error, notFoundStatuses);
@@ -64,16 +71,26 @@ async function run<T>(
 }
 
 /**
- * Submit a new simulation job.
+ * Submit a DRAFT to Anvil (ADR 0025). Owner only, and only for a user an
+ * administrator has allowed to run simulations (ADR 0024). Nothing runs until
+ * this succeeds; if Anvil does not take it the draft stays a draft and the
+ * failure comes back as `{ reason: "error", code, message }`.
+ *
+ * Its own 60 s timeout: the backend opens an SSH session to Anvil and uploads
+ * the script before it answers, which the 10 s default does not allow for.
  */
-export async function submitJob(
-  request: JobSubmitRequest
-): Promise<ActionResult<JobSubmitResponse>> {
+export async function submitSimulation(jobId: string): Promise<ActionResult<Job>> {
   // 403 here means "not permitted to run" (ADR 0024), not "not found".
-  return run(async (client) => {
-    const res = await client.post<JobSubmitResponse>("/api/v1/jobs", request);
-    return res.data;
-  });
+  return run(
+    async (client) => {
+      const res = await client.post<Job>(
+        `/api/v1/jobs/${encodeURIComponent(jobId)}/submit`
+      );
+      return res.data;
+    },
+    [404],
+    SUBMIT_TIMEOUT_MS
+  );
 }
 
 /**
@@ -97,8 +114,8 @@ export async function fetchJobs(
 
 /**
  * Create a new DRAFT simulation pre-filled from a published snapshot
- * (T4/T9) — the only creation path for a simulation short of the existing
- * immediate-submit flow. The source dataset is only ever read.
+ * (T4/T9) — the only creation path for a simulation. The source dataset is
+ * only ever read.
  */
 export async function deriveSimulation(
   datasetId: string,

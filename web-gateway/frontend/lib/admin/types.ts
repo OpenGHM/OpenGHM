@@ -94,13 +94,11 @@ export interface FeatureStatus {
 export interface RuntimeSettingsSummary {
   jwt_expire_minutes: number;
   refresh_token_expire_days: number;
-  job_default_walltime: string;
-  job_default_nodes: number;
-  job_default_ntasks: number;
   job_background_sync_interval: number;
   anvil_host: string;
   anvil_partition: string;
   anvil_execution_profile: string;
+  anvil_openghm_home: string;
   s3_bucket: string;
   cors_origins: string[];
 }

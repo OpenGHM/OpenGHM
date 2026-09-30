@@ -92,12 +92,25 @@ class Settings(BaseSettings):
     ANVIL_ACCOUNT: str = ""
     ANVIL_MAX_CONCURRENT_COMMANDS: int = 4
     ANVIL_EXECUTION_PROFILE: str = "anvil_cpu_modules"
-    ANVIL_CONTAINER_IMAGE: str = ""
+    # The pinned toolkit install a job runs (ADR 0025): a directory named for
+    # the public commit, holding bin/openghm and gateway.toml. Empty means no
+    # toolkit is installed for this gateway, so submit refuses (503
+    # anvil_not_configured) rather than run anything.
+    ANVIL_OPENGHM_HOME: str = ""
+    # Shared snapshot / model-input / image caches on scratch (ADR 0025), and
+    # where `sim run` writes <sim_id>/ (ADR 0023). ANVIL_OUTPUT_BASE must equal
+    # the output_base in the toolkit's gateway.toml: the job records
+    # <output_base>/<sim_id> as its work directory without asking the toolkit.
+    ANVIL_CACHE_DIR: str = "/anvil/scratch/x-openghm/cache"
+    ANVIL_OUTPUT_BASE: str = "/anvil/scratch/x-openghm/simulations"
+    # The one lock every job's `snapshot fetch` takes (ADR 0025). It must live
+    # on /home (NFS): flock on /anvil (GPFS) is node-local, so two jobs on
+    # different nodes both held a lock on scratch at once (Anvil jobs 20974770
+    # and 20974771), while on /home it serialised across nodes (20974926 on
+    # a000, 20974927 on a004). The directory must exist on Anvil.
+    ANVIL_FETCH_LOCK: str = "/home/x-openghm/apps/openghm/locks/fetch.lock"
 
-    # Job defaults
-    JOB_DEFAULT_WALLTIME: str = "02:00:00"
-    JOB_DEFAULT_NODES: int = 1
-    JOB_DEFAULT_NTASKS: int = 1
+    # Jobs
     JOB_STATUS_POLL_INTERVAL: int = 10
     JOB_BACKGROUND_SYNC_INTERVAL: int = 60
     # How many active jobs (PENDING/SUBMITTED/RUNNING/COMPLETING) one user

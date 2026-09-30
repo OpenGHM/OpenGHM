@@ -29,7 +29,12 @@ did not exist yet. That reason is gone.
 The job's body runs the toolkit.** Two steps, in order:
 
 1. `openghm snapshot fetch <id>` into a shared cache on Anvil scratch, under
-   `flock` so two jobs never fetch the same tree at once.
+   one `flock` so two jobs never fetch at once. A fetch also writes the
+   model-input and image caches, which snapshots share. The lock file is on
+   `/home` (NFS), not scratch: on the GPFS scratch filesystem `flock` is
+   node-local. Two jobs on nodes a000 and a001 held the same scratch lock at
+   once (jobs 20974770 and 20974771, 2026-09-30). A `/home` lock serialised
+   a000 and a004 (jobs 20974926 and 20974927).
 2. `openghm sim run <cache>/<id> --id <sim_id>` with the draft's run period
    and output variables, and a spool of its own, so that no two runs share
    one.
@@ -49,8 +54,12 @@ The job's body runs the toolkit.** Two steps, in order:
 - **The work of each run stays under `output_base/<sim_id>/`** on scratch
   (ADR 0023). slurmly's own job directory, holding the script and its logs,
   sits beside it.
-- SLURM gets `--cpus-per-task` and `--time` from the draft, falling back to
-  the snapshot's `simulation.recommendedCompute`. It also gets the account.
+- SLURM gets `--cpus-per-task` and `--time` from the draft. Without a
+  draft value, cores fall back to the snapshot's
+  `simulation.recommendedCompute.cores`, and walltime to its recommended
+  walltime × 1.5. SLURM rounds a value with seconds up to the minute. The first gateway-shaped v2 run
+  used 13:49 of the snapshot's 15:00 (job 20974812), too little headroom to
+  request as is. The account is also passed.
 
 ## Alternatives considered
 
@@ -70,8 +79,9 @@ The job's body runs the toolkit.** Two steps, in order:
   - custom init parameters.
 
   The submit route refuses those fields (open item 9, narrowed).
-- WBM uses its own default of 4 threads whatever SLURM grants, because the
-  toolkit passes no thread count.
+- WBM used about one core of the 16 it was granted (job 20974812), because
+  the toolkit passes no thread count. Each run is charged for cores it does
+  not use (open item 22).
 - A run builds its own spool, which costs time on every run. Sharing a
   published spool read-only would need evidence that WBM never writes to a
   complete one.
