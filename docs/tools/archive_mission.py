@@ -19,9 +19,10 @@ record. The other four become sections, in the order they were written.
 Links *between* the mission's own documents become anchors within the merged
 file. Depth is otherwise unchanged: a folder and `archive/` sit side by side.
 
-Refuses to run while `spec.md` says anything but `Status: done`. A mission
-whose verification is still waiting on someone else's cluster is not done, and
-this is the last point at which that is easy to notice.
+Refuses to run while `spec.md` says anything but `Status: done` or
+`Status: abandoned`. A mission whose verification is still waiting on someone
+else's cluster is not done, and this is the last point at which that is easy
+to notice. An abandoned mission is finished too, and collapses the same way.
 """
 import pathlib, re, subprocess, sys
 
@@ -51,8 +52,8 @@ def main(argv):
 
     spec = (src / "spec.md").read_text()
     status = re.search(r"^\| \*\*Status\*\* \| (\S+)", spec, re.M)
-    if not status or status.group(1) != "done":
-        sys.exit(f"{src.name}: Status is {status.group(1) if status else 'unset'!r}, not 'done'. "
+    if not status or status.group(1) not in ("done", "abandoned"):
+        sys.exit(f"{src.name}: Status is {status.group(1) if status else 'unset'!r}, not 'done' or 'abandoned'. "
                  "Finish the verification — including anything an operator has to run — first.")
 
     out, missing = [], []

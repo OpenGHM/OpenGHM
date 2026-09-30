@@ -20,7 +20,8 @@ for notebooks, batch scripts, and a future GUI.
 and `sim status` reads live `sacct` records. The test suite covers the
 processing-tool goldens, the dry-run contract, `sim` build/run + management, image
 assets, `snapshot fetch` and `model-input fetch` (against a local HTTP fixture), `init`, the library API
-and the wizard. `snapshot fetch` and `sim --spool` have not yet run on Anvil. **Full library/API reference:**
+and the wizard. On Anvil, a published snapshot fetched with `snapshot fetch` and run with
+`sim submit`, with and without `--spool`, reproduced its published output bit-for-bit. **Full library/API reference:**
 [`docs/library.md`](docs/library.md).
 
 ## Install
