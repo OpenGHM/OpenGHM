@@ -149,9 +149,10 @@ read-only from the moment it is submitted (mission `2026-09-20-simulations`,
 private). `POST /api/v1/jobs/derive/{dataset_id}` creates a draft pre-filled
 from a published snapshot's parameters — the only creation path, since
 starting one from nothing would need a model-input catalogue the gateway
-does not have yet. `PATCH`/`DELETE /api/v1/jobs/{id}` refuse with `409` once
-the status has moved past `DRAFT`, so a finished run's own record cannot be
-rewritten under it. A simulation and a snapshot are deliberately not the same
+does not have yet. `PATCH /api/v1/jobs/{id}` refuses with `409` once the
+status has moved past `DRAFT`, so a finished run's own record cannot be
+rewritten under it. `DELETE` removes a draft, or a finished job together with
+its files on Anvil (§5); an active job gets `409 job_active`. A simulation and a snapshot are deliberately not the same
 document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
 and `slurmJobId`, none of which a draft can honestly carry, and a
 finished simulation is not itself in `datasets` until someone publishes it —
@@ -163,7 +164,7 @@ A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
 inherits whichever model input its base snapshot's own `uses.modelInput.id`
 names; set, it overrides that. `_resolve_effective_model_input()` in
-`app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
+`web-gateway/backend/app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
 or `inherited-missing` (the base snapshot cites an id the `model_inputs`
 catalogue does not hold, which is the common case among the shipped
 examples, not an edge case) — and both the reopened draft's own page and the
@@ -257,6 +258,16 @@ for the public commit it was built from:
    `--run-start`, `--run-end` and `--output-vars` are passed only when the
    draft differs from the snapshot's own values.
 
+Each step runs through a `step` wrapper that records its exit code, and an
+`EXIT` trap (with `TERM`, `INT` and `HUP` trapped too) writes `outcome.json`
+into slurmly's job directory with the toolkit venv's Python
+([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)). The record
+holds the phase reached, each step's exit code, whether the run was staged,
+the WBM markers (`All Done!`, `Failed to warp`, `Nothing to do`) and log tail,
+and the output manifest. The script exits non-zero when those facts are not a
+success, so SLURM's state agrees. The body's schema is the docstring of
+`job_script.py`.
+
 SLURM is asked for `--cpus-per-task` and `--time`:
 - cores come from the draft's `slurm_config`, or else the snapshot's
   `simulation.recommendedCompute.cores`;
@@ -273,8 +284,12 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
-- An Anvil that cannot be reached: 503 `anvil_unreachable`.
-- An sbatch that says no: 502 `sbatch_rejected`.
+- An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
+  already have run (the connection dropped, or its answer did not parse), the
+  route runs `scancel --name=<sim_id>` at once; if that fails too, the name
+  stays in the draft's `orphan_sim_ids` and the sweep retries it.
+- An sbatch that says no: 502 `sbatch_rejected`. slurmly's leftover job
+  directory, found by the attempt's `sim_id` in its `metadata.json`, is removed.
 
 After a refusal the draft goes **back to DRAFT**, with `last_submit_error`.
 The DRAFT→SUBMITTED claim is one conditional update, so a double click or a
@@ -282,10 +297,34 @@ concurrent PATCH cannot submit twice. Who may submit at all is
 [ADR 0024](../decisions/0024-who-may-run-a-simulation.md).
 
 Status is pulled, never pushed. A background asyncio task started in the
-lifespan handler sweeps every non-terminal job every
-`JOB_BACKGROUND_SYNC_INTERVAL` seconds (60). The status route runs the same
-`update_job_status()` on demand. The frontend polls; there are no server-sent
-events.
+lifespan handler runs a sweep every `JOB_BACKGROUND_SYNC_INTERVAL` seconds
+(60): one batched `get_jobs` for every non-terminal job, then the orphan
+`scancel` retries, then the daily purge check. A lookup that fails skips the
+tick. The status route settles one job the same way (`update_job_status()`).
+The frontend polls; there are no server-sent events.
+
+**How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
+The first time the sweep sees a terminal SLURM state it reads `outcome.json`
+and the stderr tail once, and `web-gateway/backend/app/services/job_verdict.py`'s `classify`
+names one cause: SLURM's `CANCELLED` first, then SLURM's kills (`TIMEOUT`,
+`OUT_OF_MEMORY`, the node-failure family), then the record. The job stores
+`status`, `failure {cause, phase, message, excerpt}`, the record, the raw
+`slurm_state` and `slurm_exit_code`, and SLURM's own `slurm_start` and
+`slurm_end`. A job absent from every lookup for `JOB_LOST_AFTER_SECONDS`
+(600) is judged from its record, or is `lost`. Every status write is
+conditional on the status it read.
+
+**Cancel** records `cancel_requested_at` and runs `scancel`; the status stays
+until SLURM reports `CANCELLED`, and the UI shows *Cancelling*. A job with no
+SLURM id yet is cancelled at once.
+
+**Files.** A job owns two directories on scratch: slurmly's job directory and
+`work_dir`. The shared caches are never removed by a job. `DELETE` removes
+both directories, the work directory only if it is exactly
+`ANVIL_OUTPUT_BASE/<sim_id>` and not a symlink, and then the document; if a
+removal fails the document stays. The gateway deletes nothing on its own:
+Anvil purges scratch files untouched for 30 days, and a daily check sets
+`files: purged` on a job whose work directory is gone.
 
 Nothing uploads output, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
@@ -318,8 +357,9 @@ success and failure, registration, password reset, role and status changes, SSO
 account creation and linking), `job` is operational (submission, cancellation,
 SLURM transitions).
 
-Job-status events are written **only at genuine transitions**. `update_job_status()`
-runs on every background tick and every status-page load, so the audit call
-lives inside its `new_status != current` branch. A poll that finds nothing
-changed never reaches it. That placement is the only thing keeping the log from
-filling with polling noise — preserve it if that function is ever restructured.
+Job-status events are written **only at genuine transitions**. The sweep runs
+on every background tick and every status-page load, so the audit call lives
+in `slurm._move`, after a conditional write that changed the status. A poll
+that finds nothing changed never reaches it. That placement is the only thing
+keeping the log from filling with polling noise — preserve it if that code is
+ever restructured. A delete writes `job_deleted` with the paths it removed.
