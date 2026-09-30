@@ -458,7 +458,7 @@ async def reset_password(body: ResetPasswordRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset link")
 
     expires_at = user.get("reset_token_expires_at")
-    if expires_at is None or expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if expires_at is None or expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset link")
 
     await db.users.update_one(
@@ -497,7 +497,7 @@ async def verify_email(body: VerifyEmailRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification link")
 
     expires_at = user.get("verify_token_expires_at")
-    if expires_at is None or expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if expires_at is None or expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification link")
 
     await db.users.update_one(
@@ -529,7 +529,7 @@ async def confirm_link(body: ConfirmLinkRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired link")
 
     expires_at = user.get("link_token_expires_at")
-    if expires_at is None or expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if expires_at is None or expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired link")
 
     pending_link = user["pending_link"]
@@ -569,7 +569,7 @@ async def resend_verification(current_user: TokenPayload = Depends(get_current_u
 
     last_sent = user.get("verify_token_sent_at")
     if last_sent is not None:
-        elapsed = datetime.now(timezone.utc) - last_sent.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - last_sent
         if elapsed < VERIFY_RESEND_COOLDOWN:
             wait = int((VERIFY_RESEND_COOLDOWN - elapsed).total_seconds())
             raise HTTPException(

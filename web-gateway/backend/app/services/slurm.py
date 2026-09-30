@@ -301,9 +301,10 @@ _SUBMIT_GRACE_SECONDS = 120
 
 
 def _as_utc(value: datetime | str | None) -> datetime | None:
-    """A timestamp as an aware UTC datetime. Mongo hands datetimes back naive
-    (UTC); slurmly's are ISO strings, sometimes with a `Z` and sometimes bare
-    (sacct's parsable form). `Unknown`, `None`, empty and garbage are None."""
+    """A timestamp as an aware UTC datetime. Mongo's are already aware (the
+    client is tz_aware); slurmly's are ISO strings, sometimes with a `Z` and
+    sometimes bare (sacct's parsable form). `Unknown`, `None`, empty and
+    garbage are None."""
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     if not isinstance(value, str):

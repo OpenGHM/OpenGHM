@@ -5,20 +5,42 @@ The fake covers exactly what the routes call — `find_one`, `find`, `insert_one
 `update_one` (`$set`, `$unset`, `$addToSet`, `$pull`), `delete_one`,
 `count_documents` — with equality, `$in`, `$ne` and `$exists` matching. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
+
+Datetimes behave like a `tz_aware=True` Motor client (app/core/database.py):
+whatever goes in, BSON keeps as UTC milliseconds, and what comes out is aware
+UTC. A route that compares a document's datetime with a naive one fails here
+as it would against a real database, and a route's JSON carries the offset.
 """
 
 from __future__ import annotations
 
 import copy
 from datetime import datetime, timezone
+from typing import Any
 
 from app.core.roles import Role
 from app.core.security import create_access_token
 
 
+def bson_roundtrip(value: Any) -> Any:
+    """A copy of `value` as a tz-aware Motor client returns it after storing it:
+    every datetime aware UTC, truncated to milliseconds like BSON's date; a
+    naive datetime is taken as UTC, as the driver does on write."""
+    if isinstance(value, datetime):
+        value = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        value = value.astimezone(timezone.utc)
+        return value.replace(microsecond=value.microsecond // 1000 * 1000)
+    if isinstance(value, dict):
+        return {k: bson_roundtrip(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [bson_roundtrip(v) for v in value]
+    return copy.deepcopy(value)
+
+
 def _matches(doc: dict, query: dict) -> bool:
     for key, cond in query.items():
         value = doc.get(key)
+        cond = bson_roundtrip(cond)
         if isinstance(cond, dict):
             for op, arg in cond.items():
                 if op == "$in":
@@ -92,7 +114,7 @@ class FakeCollection:
         return FakeAggregate([{"_id": k, "count": v} for k, v in counts.items()])
 
     async def insert_one(self, doc: dict):
-        self.docs[doc["_id"]] = copy.deepcopy(doc)
+        self.docs[doc["_id"]] = bson_roundtrip(doc)
 
     async def update_one(self, query: dict, update: dict):
         assert set(update) <= {"$set", "$unset", "$addToSet", "$pull"}, (
@@ -100,15 +122,16 @@ class FakeCollection:
         )
         for doc in self.docs.values():
             if _matches(doc, query):
-                doc.update(copy.deepcopy(update.get("$set", {})))
+                doc.update(bson_roundtrip(update.get("$set", {})))
                 for key in update.get("$unset", {}):
                     doc.pop(key, None)
                 for key, item in update.get("$addToSet", {}).items():
                     items = doc.setdefault(key, [])
+                    item = bson_roundtrip(item)
                     if item not in items:
-                        items.append(copy.deepcopy(item))
+                        items.append(item)
                 for key, item in update.get("$pull", {}).items():
-                    doc[key] = [i for i in doc.get(key, []) if i != item]
+                    doc[key] = [i for i in doc.get(key, []) if i != bson_roundtrip(item)]
                 return type("R", (), {"matched_count": 1})()
         return type("R", (), {"matched_count": 0})()
 

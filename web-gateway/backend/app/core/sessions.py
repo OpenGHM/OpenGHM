@@ -82,9 +82,7 @@ async def find_session_by_token(raw_token: str) -> dict | None:
         return None
 
     expires_at = doc.get("expires_at")
-    if expires_at is None or expires_at.replace(tzinfo=timezone.utc) < datetime.now(
-        timezone.utc
-    ):
+    if expires_at is None or expires_at < datetime.now(timezone.utc):
         return None
     return doc
 

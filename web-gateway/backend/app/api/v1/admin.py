@@ -126,12 +126,9 @@ async def _time_series(
             }
         },
     ]
-    raw = {row["_id"]: row["count"] async for row in db[collection].aggregate(pipeline)}
-    # Motor's client isn't tz_aware, so datetimes it returns (including
-    # $dateTrunc output) come back naive UTC — comparing them directly
-    # against the tz-aware bucket keys below would never match, silently
-    # returning an all-zero series. Normalize both sides to aware UTC.
-    counts = {k.replace(tzinfo=timezone.utc): v for k, v in raw.items()}
+    # The Motor client is tz_aware (app/core/database.py), so $dateTrunc's
+    # bucket keys are aware UTC and match the bucket starts computed below.
+    counts = {row["_id"]: row["count"] async for row in db[collection].aggregate(pipeline)}
 
     points = []
     for i in range(buckets):

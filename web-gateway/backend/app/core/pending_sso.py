@@ -48,7 +48,7 @@ async def find_pending(token_hash: str) -> dict | None:
     doc = await get_db()[COLLECTION].find_one({"_id": token_hash})
     if doc is None:
         return None
-    if doc["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    if doc["expires_at"] < datetime.now(timezone.utc):
         return None
     return doc
 
