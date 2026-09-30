@@ -1,4 +1,5 @@
-import { auth } from "@/lib/auth";
+import { pathWithQuery } from "@/lib/auth-redirect";
+import { requireSession } from "@/lib/auth-guard";
 import { redirect, notFound } from "next/navigation";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
@@ -14,12 +15,14 @@ import { fetchDatasetById } from "@/lib/repository/actions";
 export default async function ConfigureSimulationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ snapshotId?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
+  const rawParams = await searchParams;
+  await requireSession(pathWithQuery("/workspace/new/configure", rawParams));
 
-  const { snapshotId } = await searchParams;
+  const snapshotId = Array.isArray(rawParams.snapshotId)
+    ? rawParams.snapshotId[0]
+    : rawParams.snapshotId;
   if (!snapshotId) redirect("/workspace/new/pick");
 
   const snapshot = await fetchDatasetById(snapshotId);

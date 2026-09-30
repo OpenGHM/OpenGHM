@@ -1,0 +1,193 @@
+"""In-memory stand-in for the Mongo collections the job and user routes
+touch, plus document and token builders for route-level tests.
+
+The fake covers exactly what the routes call — `find_one`, `insert_one`,
+`update_one` (`$set`), `delete_one`, `count_documents` — with equality, `$in`
+and `$ne` matching. It is not a Mongo emulator: a route that starts using
+another operator fails loudly here instead of silently matching nothing.
+"""
+
+from __future__ import annotations
+
+import copy
+from datetime import datetime, timezone
+
+from app.core.roles import Role
+from app.core.security import create_access_token
+
+
+def _matches(doc: dict, query: dict) -> bool:
+    for key, cond in query.items():
+        value = doc.get(key)
+        if isinstance(cond, dict):
+            for op, arg in cond.items():
+                if op == "$in":
+                    ok = value in arg
+                elif op == "$ne":
+                    ok = value != arg
+                else:
+                    raise NotImplementedError(f"fake Mongo: unsupported operator {op}")
+                if not ok:
+                    return False
+        elif value != cond:
+            return False
+    return True
+
+
+class FakeCursor:
+    def __init__(self, docs: list[dict]) -> None:
+        self._docs = docs
+
+    def sort(self, key: str, direction: int):
+        self._docs.sort(key=lambda d: d[key], reverse=direction < 0)
+        return self
+
+    def skip(self, n: int):
+        self._docs = self._docs[n:]
+        return self
+
+    def limit(self, n: int):
+        self._docs = self._docs[:n]
+        return self
+
+    def __aiter__(self):
+        async def gen():
+            for doc in self._docs:
+                yield doc
+
+        return gen()
+
+
+class FakeAggregate:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    async def to_list(self, _length):
+        return self._rows
+
+
+class FakeCollection:
+    def __init__(self) -> None:
+        self.docs: dict[str, dict] = {}
+
+    async def find_one(self, query: dict, **_kw):
+        for doc in self.docs.values():
+            if _matches(doc, query):
+                return copy.deepcopy(doc)
+        return None
+
+    def find(self, query: dict):
+        return FakeCursor([copy.deepcopy(d) for d in self.docs.values() if _matches(d, query)])
+
+    def aggregate(self, pipeline: list[dict]):
+        # Only the stats route's shape: [{"$match": q}, {"$group": count by status}].
+        match, group = pipeline
+        assert group == {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+        counts: dict[str, int] = {}
+        for d in self.docs.values():
+            if _matches(d, match["$match"]):
+                counts[d["status"]] = counts.get(d["status"], 0) + 1
+        return FakeAggregate([{"_id": k, "count": v} for k, v in counts.items()])
+
+    async def insert_one(self, doc: dict):
+        self.docs[doc["_id"]] = copy.deepcopy(doc)
+
+    async def update_one(self, query: dict, update: dict):
+        assert set(update) == {"$set"}, "fake Mongo: only $set is supported"
+        for doc in self.docs.values():
+            if _matches(doc, query):
+                doc.update(copy.deepcopy(update["$set"]))
+                return type("R", (), {"matched_count": 1})()
+        return type("R", (), {"matched_count": 0})()
+
+    async def delete_one(self, query: dict):
+        for key, doc in list(self.docs.items()):
+            if _matches(doc, query):
+                del self.docs[key]
+                break
+
+    async def count_documents(self, query: dict) -> int:
+        return sum(1 for d in self.docs.values() if _matches(d, query))
+
+
+class FakeDB:
+    def __init__(self) -> None:
+        self._collections: dict[str, FakeCollection] = {}
+
+    def __getattr__(self, name: str) -> FakeCollection:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self._collections.setdefault(name, FakeCollection())
+
+    def __getitem__(self, name: str) -> FakeCollection:
+        return getattr(self, name)
+
+
+NOW = datetime(2026, 9, 30, tzinfo=timezone.utc)
+
+
+def make_user(
+    sub: str,
+    role: Role = Role.USER,
+    *,
+    email_verified: bool = True,
+    is_active: bool = True,
+    can_run_simulations: bool | None = None,
+) -> dict:
+    """A user document. `can_run_simulations=None` leaves the key out, like a
+    legacy document."""
+    doc = {
+        "_id": sub,
+        "email": f"{sub}@example.org",
+        "name": sub,
+        "role": role.value,
+        "email_verified": email_verified,
+        "is_active": is_active,
+        "created_at": NOW,
+        "updated_at": NOW,
+    }
+    if can_run_simulations is not None:
+        doc["can_run_simulations"] = can_run_simulations
+    return doc
+
+
+def make_job(job_id: str, owner: str, status: str = "DRAFT") -> dict:
+    doc = {
+        "_id": job_id,
+        "user_id": owner,
+        "user_email": f"{owner}@example.org",
+        "dataset_id": "ds-1",
+        "dataset_title": "Dataset one",
+        "slug": None,
+        "about": None,
+        "model_input_id": None,
+        "slurm_job_id": "12345" if status != "DRAFT" else None,
+        "slurm_job_name": "",
+        "status": status,
+        "status_reason": None,
+        "parameters": {
+            "temporal_range_start": "2000-01-01",
+            "temporal_range_end": "2000-12-31",
+            "variables": [],
+        },
+        "slurm_config": {},
+        "created_at": NOW,
+        "submitted_at": None,
+        "started_at": None,
+        "completed_at": None,
+        "updated_at": NOW,
+    }
+    if status != "DRAFT":
+        # A draft has no `sim_id` key at all (see jobs._new_draft_document).
+        doc["sim_id"] = f"sim-{job_id}"
+    return doc
+
+
+def token_for(sub: str, role: Role = Role.USER) -> dict[str, str]:
+    """Authorization header carrying a token minted by the app's own function."""
+    token = create_access_token(
+        {"sub": sub, "email": f"{sub}@example.org", "role": role.value, "name": sub}
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+

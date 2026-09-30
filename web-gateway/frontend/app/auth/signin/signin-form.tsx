@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardContent } from "@/components/ui/card";
+import { safeCallbackUrl } from "@/lib/auth-redirect";
 
 type DevAccount = { label: string; email: string; password: string };
 
@@ -20,6 +21,8 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered");
   const reset = searchParams.get("reset");
+  // Same-origin relative paths only — never follow an arbitrary URL.
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
   const [cilogonEnabled, setCilogonEnabled] = useState(false);
 
   // Checked via the live provider list rather than a NEXT_PUBLIC_ env var:
@@ -46,7 +49,6 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
     if (result?.error) {
       setError("Invalid email or password.");
     } else {
-      const callbackUrl = searchParams.get("callbackUrl") ?? "/";
       router.push(callbackUrl);
     }
     setLoading(false);
@@ -64,7 +66,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
       setError("Dev login failed.");
       setLoading(false);
     } else {
-      router.push(searchParams.get("callbackUrl") ?? "/");
+      router.push(callbackUrl);
     }
   }
 
@@ -135,7 +137,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
           variant="outline"
           className="w-full"
           disabled={loading}
-          onClick={() => signIn("cilogon", { callbackUrl: searchParams.get("callbackUrl") ?? "/" })}
+          onClick={() => signIn("cilogon", { callbackUrl })}
         >
           Sign in with CILogon
         </Button>

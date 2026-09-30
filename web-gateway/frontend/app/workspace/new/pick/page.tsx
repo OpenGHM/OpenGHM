@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { pathWithQuery } from "@/lib/auth-redirect";
+import { requireSession } from "@/lib/auth-guard";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Header } from "@/components/landing/header";
@@ -22,10 +22,8 @@ export default async function PickSnapshotPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
-
   const rawParams = await searchParams;
+  await requireSession(pathWithQuery("/workspace/new/pick", rawParams));
   const params = toURLSearchParams(rawParams);
   const filters = parseDatasetFilters(params);
 

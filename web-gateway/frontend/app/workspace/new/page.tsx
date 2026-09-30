@@ -1,5 +1,4 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
 import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
@@ -27,14 +26,14 @@ function displayName(job: Job): string {
  * picker (`/workspace/new/pick`), which is the repository's own search.
  */
 export default async function NewSimulationEntryPage() {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
+  await requireSession("/workspace/new");
 
   let jobs: Job[] = [];
   try {
     const jobData = await fetchJobs(1);
     jobs = jobData.items;
-  } catch {
+  } catch (error) {
+    if (isUnauthorizedError(error)) redirectToSignIn("/workspace/new");
     // Backend unavailable — falls through to the empty state.
   }
 

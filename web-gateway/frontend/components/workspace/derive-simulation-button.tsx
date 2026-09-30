@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { deriveSimulation } from "@/lib/jobs/actions";
 
 /**
@@ -17,13 +18,27 @@ export function DeriveSimulationButton({ datasetId }: { datasetId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const handleClick = () => {
     setError(null);
+    setSessionExpired(false);
     startTransition(async () => {
       try {
-        const job = await deriveSimulation(datasetId);
-        router.push(`/workspace/${job.id}`);
+        const result = await deriveSimulation(datasetId);
+        if (!result.ok) {
+          if (result.reason === "session_expired") {
+            setSessionExpired(true);
+            toast.error("Your session has expired.");
+          } else {
+            const msg =
+              result.reason === "error" ? result.message : "Failed to create simulation";
+            setError(msg);
+            toast.error(msg);
+          }
+          return;
+        }
+        router.push(`/workspace/${result.data.id}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create simulation";
         setError(msg);
@@ -48,6 +63,7 @@ export function DeriveSimulationButton({ datasetId }: { datasetId: string }) {
         )}
         New simulation from this snapshot
       </Button>
+      {sessionExpired && <SessionExpiredBanner className="w-full max-w-md" />}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );

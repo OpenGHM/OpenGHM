@@ -10,11 +10,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.audit import AuditCategory, log_event
-from app.core.authz import can, require_permission
+from app.core.authz import can, require_active_user, require_permission, require_submitter
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import Permission
 from app.models.job import (
+    ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
     JobCreateRequest,
@@ -143,28 +144,36 @@ def _is_owner(doc: dict, user: TokenPayload) -> bool:
     return doc["user_id"] == user.sub
 
 
-def _can_access_job(doc: dict, user: TokenPayload, escalated: Permission) -> bool:
+def _can_access_job(
+    doc: dict, user: TokenPayload, escalated: Permission | None
+) -> bool:
     """Whether `user` may act on `doc`: its owner, or a holder of
-    `escalated`. Pure — a dict standing in for a Mongo document, a
+    `escalated` (None: the owner alone). Pure — a dict standing in for a Mongo document, a
     TokenPayload standing in for the authenticated caller — so the second-
     user isolation guarantee (spec.md's acceptance criteria) is testable
     without Mongo or a request (tests/test_jobs_drafts.py)."""
-    return _is_owner(doc, user) or can(user, escalated)
+    return _is_owner(doc, user) or (escalated is not None and can(user, escalated))
 
 
-async def _get_job_for(job_id: str, user: TokenPayload, escalated: Permission) -> dict:
+async def _get_job_for(
+    job_id: str, user: TokenPayload, escalated: Permission | None
+) -> dict:
     """Fetch a job the caller may act on: its owner, or a holder of `escalated`.
+
+    The one door every by-id job route goes through. A job that exists but
+    that the caller may not act on is a 404, identical to a missing one
+    (ADR 0024): a 403 would confirm to a stranger that the id exists.
 
     The permission passed in matches the verb being performed (JOB_VIEW_ANY
     for read paths, JOB_CANCEL_ANY for cancel) rather than a single "is this
     an admin" check, so viewing and cancelling can be granted independently.
+    Pass None for a verb with no "any" permission (edit, delete): the owner
+    alone may perform it.
     """
     db = get_db()
     doc = await db.jobs.find_one({"_id": job_id})
-    if doc is None:
+    if doc is None or not _can_access_job(doc, user, escalated):
         raise HTTPException(status_code=404, detail="Job not found")
-    if not _can_access_job(doc, user, escalated):
-        raise HTTPException(status_code=403, detail="Not authorised")
     return doc
 
 
@@ -265,7 +274,7 @@ def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
 @router.post("", response_model=JobSubmitResponse, status_code=status.HTTP_201_CREATED)
 async def submit_job(
     body: JobCreateRequest,
-    user: TokenPayload = Depends(require_permission(Permission.JOB_SUBMIT)),
+    user: TokenPayload = Depends(require_submitter),
 ):
     db = get_db()
 
@@ -381,7 +390,7 @@ async def submit_job(
 async def derive_simulation(
     dataset_id: str,
     body: SimulationDeriveRequest = SimulationDeriveRequest(),
-    user: TokenPayload = Depends(require_permission(Permission.JOB_SUBMIT)),
+    user: TokenPayload = Depends(require_active_user),
 ):
     db = get_db()
     # Envelope shape (mission 2026-09-23-catalogue-envelope) — unwrap to the
@@ -435,14 +444,11 @@ async def update_simulation(
     user: TokenPayload = Depends(require_permission(Permission.JOB_EDIT_OWN)),
 ):
     db = get_db()
-    doc = await db.jobs.find_one({"_id": job_id})
-    if doc is None or not _is_owner(doc, user):
-        # Not an "any" edit permission: mutating someone else's private,
-        # unpublished simulation is out of scope (see app.core.roles). A
-        # mismatch here is treated the same as a nonexistent simulation
-        # rather than a 403, so existence isn't leaked to a caller who only
-        # holds JOB_VIEW_ANY.
-        raise HTTPException(status_code=404, detail="Job not found")
+    # No "any" edit permission: mutating someone else's private, unpublished
+    # simulation is out of scope (see app.core.roles), so the owner alone
+    # passes — and everyone else, JOB_VIEW_ANY holders included, gets the
+    # same 404 as for a missing id.
+    doc = await _get_job_for(job_id, user, None)
     if not _is_editable(doc):
         raise HTTPException(
             status_code=409,
@@ -472,9 +478,7 @@ async def delete_simulation(
     user: TokenPayload = Depends(require_permission(Permission.JOB_DELETE_OWN)),
 ):
     db = get_db()
-    doc = await db.jobs.find_one({"_id": job_id})
-    if doc is None or not _is_owner(doc, user):
-        raise HTTPException(status_code=404, detail="Job not found")
+    doc = await _get_job_for(job_id, user, None)
     if not _is_editable(doc):
         raise HTTPException(
             status_code=409,
@@ -503,7 +507,7 @@ async def list_jobs(
     if status_filter:
         upper = status_filter.upper()
         if upper == "ACTIVE":
-            query["status"] = {"$in": ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"]}
+            query["status"] = {"$in": ACTIVE_STATUSES}
         else:
             query["status"] = upper
 
@@ -542,7 +546,7 @@ async def get_job_stats(
     results = await db.jobs.aggregate(pipeline).to_list(None)
     counts: dict[str, int] = {r["_id"]: r["count"] for r in results}
     total = sum(counts.values())
-    running = sum(counts.get(s, 0) for s in ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"])
+    running = sum(counts.get(s, 0) for s in ACTIVE_STATUSES)
     return JobStatsResponse(
         total=total,
         running=running,

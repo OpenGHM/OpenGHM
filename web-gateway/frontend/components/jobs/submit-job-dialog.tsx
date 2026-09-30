@@ -7,6 +7,7 @@ import { Play, X, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { submitJob } from "@/lib/jobs/actions";
 import type { Dataset } from "@/lib/repository/types";
 
@@ -23,6 +24,7 @@ export function SubmitJobDialog({ dataset }: Props) {
   const [open, setOpen] = useState(false);
   const [submitting, startSubmit] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // -- Form state ---------------------------------------------------------
@@ -50,6 +52,7 @@ export function SubmitJobDialog({ dataset }: Props) {
 
   const handleSubmit = () => {
     setError(null);
+    setSessionExpired(false);
     startSubmit(async () => {
       try {
         const res = await submitJob({
@@ -73,9 +76,21 @@ export function SubmitJobDialog({ dataset }: Props) {
           },
         });
 
+        if (!res.ok) {
+          if (res.reason === "session_expired") {
+            setSessionExpired(true);
+            toast.error("Your session has expired.");
+          } else {
+            const msg = res.reason === "error" ? res.message : "Submission failed";
+            setError(msg);
+            toast.error(msg);
+          }
+          return;
+        }
+
         setOpen(false);
         toast.success("Simulation submitted.");
-        router.push(`/workspace/${res.job_id}`);
+        router.push(`/workspace/${res.data.job_id}`);
       } catch (err: unknown) {
         const msg =
           err instanceof Error ? err.message : "Submission failed";
@@ -228,6 +243,8 @@ export function SubmitJobDialog({ dataset }: Props) {
                   </div>
                 )}
               </div>
+
+              {sessionExpired && <SessionExpiredBanner />}
 
               {/* Error */}
               {error && (

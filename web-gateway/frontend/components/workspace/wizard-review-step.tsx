@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { deriveSimulation, updateSimulation } from "@/lib/jobs/actions";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
@@ -63,6 +64,7 @@ export function WizardReviewStep({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const { start, end } = snapshot.simulation.temporalCoverage;
   const { value: resolutionValue, unit: resolutionUnit } = snapshot.simulation.resolution;
@@ -70,6 +72,7 @@ export function WizardReviewStep({
   const handleSubmit = async () => {
     setSubmitting(true);
     setError(null);
+    setSessionExpired(false);
     try {
       // Real creation path (mission 2026-09-21): derive a DRAFT from the
       // base snapshot, optionally overriding its model input up front,
@@ -77,13 +80,27 @@ export function WizardReviewStep({
       // snapshot's own defaults. SLURM sizing isn't sent — SimulationUpdateRequest
       // has no slurm_config field yet (app/models/job.py) — it stays local
       // to this review, not persisted.
-      const job = await deriveSimulation(snapshot.id, {
+      const derived = await deriveSimulation(snapshot.id, {
         model_input_id: modelInputChoice.mode === "chosen" ? modelInputChoice.modelInput.id : undefined,
       });
-      const updated = await updateSimulation(job.id, { parameters });
+      const result = derived.ok
+        ? await updateSimulation(derived.data.id, { parameters })
+        : derived;
+      if (!result.ok) {
+        if (result.reason === "session_expired") {
+          setSessionExpired(true);
+          toast.error("Your session has expired.");
+        } else {
+          const msg = result.reason === "error" ? result.message : "Failed to create simulation";
+          setError(msg);
+          toast.error(msg);
+        }
+        setSubmitting(false);
+        return;
+      }
 
       toast.success("Simulation created.");
-      router.push(`/workspace/${updated.id}`);
+      router.push(`/workspace/${result.data.id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create simulation";
       setError(msg);
@@ -94,6 +111,7 @@ export function WizardReviewStep({
 
   return (
     <div className="mx-auto max-w-[1024px] px-10 py-8">
+      {sessionExpired && <SessionExpiredBanner className="mb-6" />}
       {error && (
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle className="mt-0.5 size-4 shrink-0" />

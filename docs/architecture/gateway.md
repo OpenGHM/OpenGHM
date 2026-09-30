@@ -70,7 +70,8 @@ environment.
 
 `proxy.ts` at the frontend root is the NextAuth middleware — Next.js 16 renamed
 `middleware.ts` to `proxy.ts`. It redirects unauthenticated requests for
-`/dashboard`, `/simulations` and `/admin` to the sign-in page. It is a
+`/dashboard`, `/workspace` and `/admin` to the sign-in page, with the path
+and query as `callbackUrl`. It is a
 redirect, not the authorization check; that happens in FastAPI
 ([authentication.md](authentication.md)).
 

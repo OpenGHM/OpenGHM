@@ -89,17 +89,22 @@ export async function revokeAllUserSessions(userId: string): Promise<{ ok: boole
 
 export async function updateUser(
   userId: string,
-  updates: { role?: UserRole; is_active?: boolean }
+  updates: { role?: UserRole; is_active?: boolean; can_run_simulations?: boolean }
 ): Promise<{ ok: boolean; message?: string; user?: AdminUser }> {
   try {
     const client = await getApiClient();
     const res = await client.patch<AdminUser>(`/api/v1/users/${userId}`, updates);
     return { ok: true, user: res.data };
   } catch (err) {
-    const detail =
-      (err as { response?: { data?: { detail?: string } } })?.response?.data
-        ?.detail ?? "Update failed.";
-    return { ok: false, message: detail };
+    const detail = (err as { response?: { data?: { detail?: unknown } } })?.response
+      ?.data?.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail && typeof (detail as { message?: unknown }).message === "string"
+          ? (detail as { message: string }).message
+          : "Update failed.";
+    return { ok: false, message };
   }
 }
 

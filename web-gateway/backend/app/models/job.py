@@ -36,6 +36,9 @@ JobStatus = Literal[
 PartialAbout = _partial_model(OpenGHMCitationBlock)
 
 TERMINAL_STATUSES: set[str] = {"COMPLETED", "FAILED", "CANCELLED"}
+#: Statuses that count against `JOB_MAX_ACTIVE_PER_USER` and that the
+#: `status=ACTIVE` list filter and the stats "running" count select.
+ACTIVE_STATUSES: list[str] = ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"]
 CANCELLABLE_STATUSES: set[str] = {"PENDING", "SUBMITTED", "RUNNING", "COMPLETING"}
 
 #: The three states `app.api.v1.jobs._resolve_model_input` (T1) can produce

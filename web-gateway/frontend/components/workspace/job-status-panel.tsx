@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   Clock,
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { useJobStatus } from "@/lib/workspace/use-job-status";
 import { cancelJob } from "@/lib/jobs/actions";
 import type { JobStatus, JobStatusResponse } from "@/lib/jobs/types";
@@ -61,10 +62,13 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
     completedAt,
     statusReason,
     isPolling,
+    sessionExpired: pollExpired,
     refresh,
   } = useJobStatus(jobId, initialStatus, initialData, { disabled: preview });
 
   const [cancelling, startCancel] = useTransition();
+  const [actionExpired, setActionExpired] = useState(false);
+  const sessionExpired = pollExpired || actionExpired;
 
   const handleCancel = () => {
     if (preview) {
@@ -73,9 +77,19 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
     }
     startCancel(async () => {
       try {
-        await cancelJob(jobId);
-        toast.success("Job cancelled.");
-        refresh();
+        const result = await cancelJob(jobId);
+        if (result.ok) {
+          setActionExpired(false);
+          toast.success("Job cancelled.");
+          refresh();
+        } else if (result.reason === "session_expired") {
+          setActionExpired(true);
+          toast.error("Your session has expired. Sign in to cancel this job.");
+        } else if (result.reason === "not_found") {
+          toast.error("This job no longer exists.");
+        } else {
+          toast.error(result.message || "Failed to cancel job.");
+        }
       } catch {
         toast.error("Failed to cancel job.");
       }
@@ -135,6 +149,8 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
             </div>
           </div>
         )}
+
+        {sessionExpired && <SessionExpiredBanner />}
 
         {/* Polling indicator */}
         {isPolling && (

@@ -35,8 +35,36 @@ org-chart rank baked into every call site. `repository:manage` is defined and
 no endpoint uses it — the catalogue is seed data
 ([gateway.md §4](gateway.md#4-where-state-lives)).
 
-The frontend's `proxy.ts` also gates `/dashboard`, `/simulations`, `/admin`,
+**Running a simulation needs more than a role**
+([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every run spends
+the one shared SLURM allocation, so the routes that create or submit a job do
+not trust the token. They read the user's document at call time, through
+`require_active_user` (a draft) and `require_submitter` (a submit) in
+`authz.py`.
+
+- **A submit needs:**
+  - `is_active` and `email_verified`;
+  - role `admin` or `staff`, or role `user` with `can_run_simulations: true`.
+    Only an admin sets that flag, on `PATCH /users/{id}`, and the change is
+    audited as `user_admin_updated`.
+  - no more than `JOB_MAX_ACTIVE_PER_USER` active jobs. Admin and staff are
+    exempt.
+- **A mock identity** (`security.py`'s `MOCK_USERS`) may create drafts but
+  never submit, in any environment.
+- **Refusals** carry `detail = {code, message}`:
+  - 403: `mock_identity`, `account_not_found`, `account_inactive`,
+    `email_not_verified`, `not_permitted_to_run`, `permission_required`;
+  - 429: `active_job_limit`.
+- **A job the caller may not see is a 404** on every by-id job route, the same
+  as a missing one. Staff and admin see and cancel through `job:view:any` and
+  `job:cancel:any`.
+
+The frontend's `proxy.ts` also gates `/dashboard`, `/workspace` and `/admin`,
 but that is a redirect for the user's benefit. Nothing is authorized there.
+It keeps the query in `callbackUrl`, and treats a session whose refresh failed
+(`session.error`) as signed out. The one exception is a server action from a
+page that is already open, which is let through so it can return "session
+expired" as data. A job page then shows a sign-in banner instead of an error.
 
 ## 2. Three ways to become a request identity
 

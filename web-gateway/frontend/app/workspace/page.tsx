@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { pathWithQuery } from "@/lib/auth-redirect";
+import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
 import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
@@ -22,19 +22,26 @@ const EMPTY_STATS: JobStatsResponse = { total: 0, running: 0, completed: 0, fail
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; status?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
-
   const params = await searchParams;
-  const page = Math.max(1, Number(params.page) || 1);
-  const statusFilter = params.status || undefined;
+  const here = pathWithQuery("/workspace", params);
+  await requireSession(here);
+
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const page = Math.max(1, Number(first(params.page)) || 1);
+  const statusFilter = first(params.status) || undefined;
 
   const [data, stats] = await Promise.allSettled([
     fetchJobs(page, statusFilter),
     fetchJobStats(),
   ]);
+
+  // A 401 with a session that looked fine: the backend no longer accepts the
+  // token. Sign in again rather than showing an empty list.
+  for (const r of [data, stats]) {
+    if (r.status === "rejected" && isUnauthorizedError(r.reason)) redirectToSignIn(here);
+  }
 
   const jobData = data.status === "fulfilled" ? data.value : null;
   const statsData = stats.status === "fulfilled" ? stats.value : EMPTY_STATS;

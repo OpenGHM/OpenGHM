@@ -41,6 +41,15 @@ MOCK_USERS: dict[Role, dict] = {
     },
 }
 
+# Every `sub` a mock identity can carry. A mock caller has no user document,
+# and must never reach SLURM whatever ENVIRONMENT says — app.core.authz
+# refuses by these ids, not by the environment.
+MOCK_USER_IDS: frozenset[str] = frozenset(u["sub"] for u in MOCK_USERS.values())
+
+
+def is_mock_identity(sub: str) -> bool:
+    return sub in MOCK_USER_IDS
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()

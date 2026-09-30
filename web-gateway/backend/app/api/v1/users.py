@@ -34,6 +34,7 @@ def _to_user_response(doc: dict) -> UserResponse:
         organization=doc.get("organization"),
         email_verified=doc.get("email_verified", False),
         is_active=doc.get("is_active", True),
+        can_run_simulations=doc.get("can_run_simulations", False),
         created_at=doc.get("created_at"),
     )
 
@@ -174,6 +175,7 @@ async def get_user_detail(
         organization=doc.get("organization"),
         email_verified=doc.get("email_verified", False),
         is_active=doc.get("is_active", True),
+        can_run_simulations=doc.get("can_run_simulations", False),
         created_at=doc.get("created_at"),
         updated_at=doc.get("updated_at"),
         sso_provider=doc.get("sso_provider"),
@@ -270,11 +272,13 @@ async def admin_update_user(
     body: UserAdminUpdateRequest,
     current_user: TokenPayload = Depends(require_permission(Permission.USER_MANAGE)),
 ):
-    """Admin-only: change a user's role or active status.
+    """Admin-only: change a user's role, active status or run permission.
 
-    Two guards that exist independently of each other:
+    `can_run_simulations` (ADR 0024) is granted and revoked here and nowhere
+    else; the change lands in the `user_admin_updated` audit event with the
+    other fields. Two guards that exist independently of each other:
 
-    1. Never targets the caller's own account, for either field. Role
+    1. Never targets the caller's own account, for any field. Role
        self-changes are an obvious self-escalation/self-demotion risk;
        self-deactivation is a subtler lockout risk (an admin disabling their
        own account with no other admin around to undo it) that isn't
@@ -287,7 +291,7 @@ async def admin_update_user(
     if user_id == current_user.sub:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You cannot change your own role or active status.",
+            detail="You cannot change your own role, active status or run permission.",
         )
 
     db = get_db()

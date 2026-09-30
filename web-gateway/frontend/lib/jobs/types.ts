@@ -145,3 +145,20 @@ export interface JobLogsResponse {
   stderr: string;
   truncated: boolean;
 }
+
+/**
+ * What a Workspace server action returns instead of throwing on the failures
+ * a screen must handle:
+ * - `session_expired`: the backend answered 401. Show SessionExpiredBanner.
+ * - `not_found`: the job is missing, or is not yours (the backend answers 404
+ *   for both, ADR 0024).
+ * - `error`: anything else; `message` is safe to show (the backend's `detail`
+ *   when it sent one, or `detail.message` for the `{ code, message }` of the
+ *   submit gates' 403 and 429). `code` is that machine-readable code, if any.
+ */
+export type ActionFailure =
+  | { ok: false; reason: "session_expired" }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "error"; message: string; status?: number; code?: string };
+
+export type ActionResult<T> = { ok: true; data: T } | ActionFailure;

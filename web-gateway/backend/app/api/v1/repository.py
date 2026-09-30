@@ -137,8 +137,8 @@ async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
 
 @router.post("/datasets", status_code=201)
 async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
-    """Add a snapshot to the catalogue (open item 13 — this collection had no
-    writer at all before this endpoint). The body is exactly one
+    """Add a snapshot to the catalogue (this collection had no writer at all
+    before this endpoint). The body is exactly one
     ``metadata.json`` document, stored under ``document`` in an envelope
     beside the gateway's own record of the registration
     (mission 2026-09-23-catalogue-envelope; see

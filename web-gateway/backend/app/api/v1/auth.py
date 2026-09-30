@@ -170,6 +170,7 @@ async def _issue_tokens(
             organization=doc.get("organization"),
             email_verified=doc.get("email_verified", False),
             is_active=doc.get("is_active", True),
+            can_run_simulations=doc.get("can_run_simulations", False),
             created_at=doc.get("created_at"),
         ),
     )

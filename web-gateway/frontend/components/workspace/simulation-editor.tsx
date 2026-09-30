@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { updateSimulation } from "@/lib/jobs/actions";
 import { fetchModelInputById } from "@/lib/repository/actions";
 import type { Job, JobParameters, PartialAbout } from "@/lib/jobs/types";
@@ -82,6 +83,7 @@ export function SimulationEditor({
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // -- Model input form state -------------------------------------------------
   // `modelInputChoice.mode === "chosen"` is the PATCH payload's source of
@@ -153,6 +155,7 @@ export function SimulationEditor({
   const handleSave = async () => {
     setSaving(true);
     setError(null);
+    setSessionExpired(false);
     try {
       const parameters: JobParameters = {
         temporal_range_start: start,
@@ -171,7 +174,19 @@ export function SimulationEditor({
       const about = buildAboutPayload({ name, description, category, license, keywords, creators });
       const model_input_id = modelInputChoice.mode === "chosen" ? modelInputChoice.id : null;
 
-      await updateSimulation(job.id, { about, parameters, model_input_id });
+      const result = await updateSimulation(job.id, { about, parameters, model_input_id });
+      if (!result.ok) {
+        if (result.reason === "session_expired") {
+          setSessionExpired(true);
+          toast.error("Your session has expired. Sign in to save your changes.");
+        } else {
+          const msg =
+            result.reason === "error" ? result.message : "This simulation no longer exists.";
+          setError(msg);
+          toast.error(msg);
+        }
+        return;
+      }
       toast.success("Saved.");
       router.refresh();
     } catch (err) {
@@ -185,6 +200,7 @@ export function SimulationEditor({
 
   return (
     <div className="space-y-8">
+      {sessionExpired && <SessionExpiredBanner />}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}

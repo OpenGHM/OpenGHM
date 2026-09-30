@@ -60,6 +60,29 @@ export function UserRoleStatusCard({
     });
   }
 
+  // Admin and staff may always run; a guest never may (ADR 0024). Only a
+  // `user` depends on the flag, so only a `user` gets a working switch.
+  const runImplicit = user.role === "admin" || user.role === "staff";
+  const runNever = user.role === "guest";
+  const canRun = runImplicit || (!runNever && user.can_run_simulations);
+  const runDisabled = disabled || runImplicit || runNever;
+
+  function handleToggleRun() {
+    setError("");
+    const next = !user.can_run_simulations;
+    startTransition(async () => {
+      const result = await updateUser(user.id, { can_run_simulations: next });
+      if (!result.ok) {
+        const message = result.message ?? "Failed to update run permission.";
+        setError(message);
+        toast.error(message);
+      } else {
+        toast.success(next ? "Can now run simulations." : "Can no longer run simulations.");
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -140,8 +163,42 @@ export function UserRoleStatusCard({
               {user.is_active ? "Active" : "Deactivated"}
             </button>
           </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <span id="run-permission-label" className="text-sm text-slate-500">
+                Can run simulations
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={canRun}
+                aria-labelledby="run-permission-label"
+                aria-describedby="run-permission-help"
+                onClick={handleToggleRun}
+                disabled={runDisabled}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  canRun ? "bg-primary" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                    canRun ? "translate-x-5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+            <p id="run-permission-help" className="text-xs text-slate-400">
+              Admin and staff can always run simulations. A user needs this switch on. Each
+              run spends the shared ees260008 allocation.
+              {runImplicit && " Always permitted for this role."}
+              {runNever && " A guest can never run simulations."}
+            </p>
+          </div>
           {isSelf && (
-            <p className="text-xs text-slate-400">You can&apos;t change your own role or status.</p>
+            <p className="text-xs text-slate-400">
+              You can&apos;t change your own role, status or run permission.
+            </p>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>

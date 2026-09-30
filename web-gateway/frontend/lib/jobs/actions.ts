@@ -2,6 +2,8 @@
 
 import { getApiClient } from "@/lib/api-client";
 import type {
+  ActionFailure,
+  ActionResult,
   Job,
   JobListResponse,
   JobLogsResponse,
@@ -13,15 +15,65 @@ import type {
   SimulationUpdateRequest,
 } from "@/lib/jobs/types";
 
+type ApiClient = Awaited<ReturnType<typeof getApiClient>>;
+
+function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFailure {
+  const response = (
+    error as { response?: { status?: number; data?: { detail?: unknown } } }
+  )?.response;
+  const status = response?.status;
+  if (status === 401) return { ok: false, reason: "session_expired" };
+  if (status !== undefined && notFoundStatuses.includes(status)) {
+    return { ok: false, reason: "not_found" };
+  }
+  // `detail` is a plain string on most routes, and `{ code, message }` on the
+  // submit gates' 403 and 429 (mock_identity, email_not_verified,
+  // not_permitted_to_run, active_job_limit, ...).
+  const detail = response?.data?.detail;
+  let message: string | null = null;
+  let code: string | undefined;
+  if (typeof detail === "string") {
+    message = detail;
+  } else if (detail && typeof detail === "object") {
+    const d = detail as { code?: unknown; message?: unknown };
+    if (typeof d.message === "string") message = d.message;
+    if (typeof d.code === "string") code = d.code;
+  }
+  if (message === null) {
+    message = error instanceof Error ? error.message : "Request failed.";
+  }
+  return { ok: false, reason: "error", message, status, code };
+}
+
+/**
+ * Runs one backend call and folds its failures into an ActionResult, so a
+ * 401 reaches the screen as data instead of a thrown error. `notFoundStatuses`
+ * are the statuses that mean "this job is not there for you": 404 everywhere
+ * (ADR 0024), plus 403 where a caller may still hold an old-contract answer.
+ */
+async function run<T>(
+  call: (client: ApiClient) => Promise<T>,
+  notFoundStatuses: number[] = [404]
+): Promise<ActionResult<T>> {
+  try {
+    const client = await getApiClient();
+    return { ok: true, data: await call(client) };
+  } catch (error: unknown) {
+    return describeFailure(error, notFoundStatuses);
+  }
+}
+
 /**
  * Submit a new simulation job.
  */
 export async function submitJob(
   request: JobSubmitRequest
-): Promise<JobSubmitResponse> {
-  const client = await getApiClient();
-  const res = await client.post<JobSubmitResponse>("/api/v1/jobs", request);
-  return res.data;
+): Promise<ActionResult<JobSubmitResponse>> {
+  // 403 here means "not permitted to run" (ADR 0024), not "not found".
+  return run(async (client) => {
+    const res = await client.post<JobSubmitResponse>("/api/v1/jobs", request);
+    return res.data;
+  });
 }
 
 /**
@@ -51,13 +103,14 @@ export async function fetchJobs(
 export async function deriveSimulation(
   datasetId: string,
   request: SimulationDeriveRequest = {}
-): Promise<Job> {
-  const client = await getApiClient();
-  const res = await client.post<Job>(
-    `/api/v1/jobs/derive/${encodeURIComponent(datasetId)}`,
-    request
-  );
-  return res.data;
+): Promise<ActionResult<Job>> {
+  return run(async (client) => {
+    const res = await client.post<Job>(
+      `/api/v1/jobs/derive/${encodeURIComponent(datasetId)}`,
+      request
+    );
+    return res.data;
+  });
 }
 
 /**
@@ -69,35 +122,29 @@ export async function deriveSimulation(
 export async function updateSimulation(
   jobId: string,
   request: SimulationUpdateRequest
-): Promise<Job> {
-  const client = await getApiClient();
-  const res = await client.patch<Job>(
-    `/api/v1/jobs/${encodeURIComponent(jobId)}`,
-    request
-  );
-  return res.data;
+): Promise<ActionResult<Job>> {
+  return run(async (client) => {
+    const res = await client.patch<Job>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}`,
+      request
+    );
+    return res.data;
+  });
 }
 
 /**
- * Fetch a single job by ID.
+ * Fetch a single job by ID. Used by server components: `not_found` becomes the
+ * page's notFound(), `session_expired` a redirect to sign in (see
+ * redirectToSignIn in lib/auth-guard.ts).
+ *
+ * The backend answers 404 for a job that is missing or not yours (ADR 0024).
+ * 403 is still treated as not-found so an old backend degrades the same way.
  */
-export async function fetchJob(jobId: string): Promise<Job | null> {
-  try {
-    const client = await getApiClient();
+export async function fetchJob(jobId: string): Promise<ActionResult<Job>> {
+  return run(async (client) => {
     const res = await client.get<Job>(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
     return res.data;
-  } catch (error: unknown) {
-    const axiosError = error as { response?: { status?: number } };
-    // The existing (non-draft) job routes return 403 for a non-owner
-    // rather than 404 — a different contract than the new draft routes,
-    // which use 404 to avoid leaking existence. Not reconciled here (see
-    // docs/reference/open-items.md); treated the same as "not found" so
-    // visiting someone else's job from the Workspace table degrades to
-    // the page's normal notFound() instead of an unhandled error.
-    const status = axiosError?.response?.status;
-    if (status === 404 || status === 403) return null;
-    throw error;
-  }
+  }, [404, 403]);
 }
 
 /**
@@ -105,12 +152,13 @@ export async function fetchJob(jobId: string): Promise<Job | null> {
  */
 export async function pollJobStatus(
   jobId: string
-): Promise<JobStatusResponse> {
-  const client = await getApiClient();
-  const res = await client.get<JobStatusResponse>(
-    `/api/v1/jobs/${encodeURIComponent(jobId)}/status`
-  );
-  return res.data;
+): Promise<ActionResult<JobStatusResponse>> {
+  return run(async (client) => {
+    const res = await client.get<JobStatusResponse>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/status`
+    );
+    return res.data;
+  });
 }
 
 /**
@@ -118,12 +166,13 @@ export async function pollJobStatus(
  */
 export async function cancelJob(
   jobId: string
-): Promise<JobStatusResponse> {
-  const client = await getApiClient();
-  const res = await client.post<JobStatusResponse>(
-    `/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`
-  );
-  return res.data;
+): Promise<ActionResult<JobStatusResponse>> {
+  return run(async (client) => {
+    const res = await client.post<JobStatusResponse>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`
+    );
+    return res.data;
+  });
 }
 
 /**
@@ -131,12 +180,13 @@ export async function cancelJob(
  */
 export async function fetchJobLogs(
   jobId: string
-): Promise<JobLogsResponse> {
-  const client = await getApiClient();
-  const res = await client.get<JobLogsResponse>(
-    `/api/v1/jobs/${encodeURIComponent(jobId)}/logs`
-  );
-  return res.data;
+): Promise<ActionResult<JobLogsResponse>> {
+  return run(async (client) => {
+    const res = await client.get<JobLogsResponse>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/logs`
+    );
+    return res.data;
+  });
 }
 
 /**

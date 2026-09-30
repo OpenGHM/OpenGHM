@@ -9,8 +9,8 @@ Mirrors test_repository.py's approach, and salvages the abandoned
 `_derive_simulation_parameters` are pure — a dict standing in for a Mongo
 document, a `TokenPayload` standing in for the authenticated caller — so
 they are tested directly with no Mongo, no FastAPI TestClient, and no
-fixtures. There is no test-client harness and this mission does not build
-one. Live end-to-end verification (real Mongo, real HTTP, two real
+fixtures. The route-level harness that mission did not build now exists (see
+tests/conftest.py and tests/test_job_access.py). Live end-to-end verification (real Mongo, real HTTP, two real
 accounts) is run separately with `curl` against the local dev stack per
 plan.md.
 """

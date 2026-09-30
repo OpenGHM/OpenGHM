@@ -1,5 +1,6 @@
-import { auth } from "@/lib/auth";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
+import { pathWithQuery } from "@/lib/auth-redirect";
+import { redirectToSignIn, requireSession } from "@/lib/auth-guard";
 import Link from "next/link";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
@@ -34,17 +35,28 @@ export default async function JobDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
-
   const { id } = await params;
-  const { preview: previewRaw } = await searchParams;
+  const query = await searchParams;
+  const here = pathWithQuery(`/workspace/${encodeURIComponent(id)}`, query);
+  await requireSession(here);
+
+  const previewRaw = Array.isArray(query.preview) ? query.preview[0] : query.preview;
   const previewStatus = resolvePreviewStatus(previewRaw);
 
-  const job = previewStatus ? fakeSimulation(previewStatus, { id }) : await fetchJob(id);
-  if (!job) notFound();
+  let job;
+  if (previewStatus) {
+    job = fakeSimulation(previewStatus, { id });
+  } else {
+    const result = await fetchJob(id);
+    if (!result.ok) {
+      if (result.reason === "session_expired") redirectToSignIn(here);
+      if (result.reason === "not_found") notFound();
+      throw new Error(result.message);
+    }
+    job = result.data;
+  }
 
   const isDraft = job.status === "DRAFT";
   const isPreview = previewStatus !== null;

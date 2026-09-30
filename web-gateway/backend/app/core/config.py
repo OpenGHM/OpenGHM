@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     JOB_DEFAULT_NTASKS: int = 1
     JOB_STATUS_POLL_INTERVAL: int = 10
     JOB_BACKGROUND_SYNC_INTERVAL: int = 60
+    # How many active jobs (PENDING/SUBMITTED/RUNNING/COMPLETING) one user
+    # may have at once — every job spends the one shared SLURM allocation
+    # (ADR 0024). admin and staff are exempt. See app.core.authz.require_submitter.
+    JOB_MAX_ACTIVE_PER_USER: int = 2
 
 
 settings = Settings()

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Terminal, ChevronDown, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { fetchJobLogs } from "@/lib/jobs/actions";
 import type { JobLogsResponse, JobStatus } from "@/lib/jobs/types";
 
@@ -21,6 +22,7 @@ export function JobLogsPanel({ jobId, jobStatus, previewLogs }: Props) {
   const [stderr, setStderr] = useState<string | null>(previewLogs?.stderr ?? null);
   const [truncated, setTruncated] = useState(previewLogs?.truncated ?? false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [loaded, setLoaded] = useState(previewLogs !== undefined);
   const [loading, startLoad] = useTransition();
   const [tab, setTab] = useState<"stdout" | "stderr">("stdout");
@@ -37,9 +39,17 @@ export function JobLogsPanel({ jobId, jobStatus, previewLogs }: Props) {
       return;
     }
     setError(null);
+    setSessionExpired(false);
     startLoad(async () => {
       try {
-        const data = await fetchJobLogs(jobId);
+        const result = await fetchJobLogs(jobId);
+        if (!result.ok) {
+          if (result.reason === "session_expired") setSessionExpired(true);
+          else if (result.reason === "not_found") setError("This job no longer exists.");
+          else setError(result.message || "Failed to fetch logs");
+          return;
+        }
+        const data = result.data;
         setStdout(data.stdout);
         setStderr(data.stderr);
         setTruncated(data.truncated);
@@ -121,6 +131,8 @@ export function JobLogsPanel({ jobId, jobStatus, previewLogs }: Props) {
             </Button>
           </div>
         )}
+
+        {sessionExpired && <SessionExpiredBanner className="mt-3" />}
 
         {error && (
           <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">

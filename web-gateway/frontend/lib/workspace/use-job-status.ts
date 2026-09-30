@@ -22,13 +22,17 @@ export interface UseJobStatusResult {
   completedAt: string | null;
   statusReason: string | null;
   isPolling: boolean;
+  /** The backend answered 401: polling has stopped. Show SessionExpiredBanner.
+   *  Cleared if a manual `refresh()` succeeds. */
+  sessionExpired: boolean;
   /** Force an immediate refresh. */
   refresh: () => void;
 }
 
 /**
  * Custom hook that polls GET /jobs/{id}/status at an adaptive interval.
- * Automatically stops when the job reaches a terminal state.
+ * Automatically stops when the job reaches a terminal state, when the
+ * session has expired (401), or when the job is gone (404).
  */
 export function useJobStatus(
   jobId: string,
@@ -55,6 +59,8 @@ export function useJobStatus(
   );
   const [isPolling, setIsPolling] = useState(!disabled && !isTerminalStatus(initialStatus));
 
+  const [sessionExpired, setSessionExpired] = useState(false);
+
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,9 +68,26 @@ export function useJobStatus(
     if (disabled) return;
     if (!mountedRef.current) return;
     try {
-      const data = await pollJobStatus(jobId);
+      const result = await pollJobStatus(jobId);
       if (!mountedRef.current) return;
 
+      if (!result.ok) {
+        if (result.reason === "session_expired") {
+          // Retrying a 401 cannot succeed until the user signs in again.
+          setSessionExpired(true);
+          setIsPolling(false);
+        } else if (result.reason === "not_found") {
+          // Deleted, or never ours: nothing left to watch.
+          setIsPolling(false);
+        } else {
+          // Transient failure — retry after a delay.
+          timerRef.current = setTimeout(doFetch, SLOW_INTERVAL);
+        }
+        return;
+      }
+
+      const data = result.data;
+      setSessionExpired(false);
       setStatus(data.status);
       setSlurmJobId(data.slurm_job_id);
       setSubmittedAt(data.submitted_at);
@@ -75,12 +98,13 @@ export function useJobStatus(
       if (isTerminalStatus(data.status)) {
         setIsPolling(false);
       } else {
+        setIsPolling(true);
         // Schedule next poll
         timerRef.current = setTimeout(doFetch, intervalFor(data.status));
       }
     } catch {
       if (!mountedRef.current) return;
-      // Retry after a delay on error
+      // Network-level failure (the action itself could not run) — retry after a delay
       timerRef.current = setTimeout(doFetch, SLOW_INTERVAL);
     }
   }, [jobId, disabled]);
@@ -113,6 +137,7 @@ export function useJobStatus(
     completedAt,
     statusReason,
     isPolling,
+    sessionExpired,
     refresh,
   };
 }

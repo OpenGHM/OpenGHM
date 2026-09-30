@@ -37,6 +37,11 @@ class UserDB(BaseModel):
     reset_token_hash: str | None = None
     reset_token_expires_at: datetime | None = None
     is_active: bool = True
+    # Whether a `role: user` may submit a simulation (ADR 0024). Only an
+    # administrator sets it. admin and staff are permitted implicitly, so it
+    # matters for role `user` alone. Legacy documents carry no such key: absent
+    # means False.
+    can_run_simulations: bool = False
     sso_provider: str | None = None
     sso_external_id: str | None = None
     # Set when a self-typed email (register, or ORCID's complete-sso-signup)
@@ -67,6 +72,7 @@ class UserResponse(BaseModel):
     organization: str | None = None
     email_verified: bool = False
     is_active: bool = True
+    can_run_simulations: bool = False
     created_at: datetime | None = None
 
 
@@ -161,13 +167,14 @@ class UserAdminUpdateRequest(BaseModel):
     """PATCH /users/{user_id} — admin-only (Permission.USER_MANAGE).
 
     Deliberately separate from UserUpdateRequest: this is the one place
-    role and is_active can be changed, and it's never reachable from a
-    user editing their own profile (see app/api/v1/users.py's self-role and
+    role, is_active and can_run_simulations can be changed, and it's never
+    reachable from a user editing their own profile (see app/api/v1/users.py's self-role and
     last-admin guards for why that matters).
     """
 
     role: RoleField | None = None
     is_active: bool | None = None
+    can_run_simulations: bool | None = None
 
 
 class AuditLogEntry(BaseModel):
