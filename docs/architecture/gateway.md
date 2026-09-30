@@ -296,12 +296,28 @@ The DRAFT→SUBMITTED claim is one conditional update, so a double click or a
 concurrent PATCH cannot submit twice. Who may submit at all is
 [ADR 0024](../decisions/0024-who-may-run-a-simulation.md).
 
-Status is pulled, never pushed. A background asyncio task started in the
-lifespan handler runs a sweep every `JOB_BACKGROUND_SYNC_INTERVAL` seconds
-(60): one batched `get_jobs` for every non-terminal job, then the orphan
-`scancel` retries, then the daily purge check. A lookup that fails skips the
-tick. The status route settles one job the same way (`update_job_status()`).
-The frontend polls; there are no server-sent events.
+Status is pulled, never pushed
+([ADR 0027](../decisions/0027-live-updates-are-polled.md)). A background
+asyncio task started in the lifespan handler runs a sweep every
+`JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL` seconds (10) while a job is active, and
+every `JOB_BACKGROUND_SYNC_INTERVAL` (60) when none is: one batched
+`get_jobs` for every non-terminal job, then the orphan `scancel` retries, then
+the daily purge check. A lookup that fails skips the tick. The status route
+settles one job the same way (`update_job_status()`).
+
+**Watching a job.** `web-gateway/backend/app/services/job_live.py` shares SLURM's answers
+in process for `JOB_LIVE_TTL_SECONDS` (5): the sweep and every viewer's
+status poll use one lookup per job per window, and a job is settled by one
+caller at a time. The status answer carries `live`: SLURM's queue reason,
+time limit and start estimate, and, for a running job, the progress read
+from the WBM log's last per-day line (`Spinup k/N (date)` or
+`File <name> (date)`). `GET /jobs/{id}/logs?stream=stdout|stderr|wbm` reads
+one chunk by byte offset (base64 over one SSH command), and
+`GET /jobs/{id}/logs/{stream}/download` streams the whole file up to
+`JOB_LOG_DOWNLOAD_MAX_BYTES` (50 MiB). The browser polls every 5 s through
+server actions, and not at all while its tab is hidden; the download goes
+through the one Next route handler for jobs,
+`web-gateway/frontend/app/api/jobs/[id]/logs/[stream]/route.ts`.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

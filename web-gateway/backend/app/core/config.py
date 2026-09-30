@@ -112,7 +112,18 @@ class Settings(BaseSettings):
 
     # Jobs
     JOB_STATUS_POLL_INTERVAL: int = 10
+    # The sweep's interval when no job is active; while one is, it runs every
+    # JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL (ADR 0027).
     JOB_BACKGROUND_SYNC_INTERVAL: int = 60
+    JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL: int = 10
+    # How long a SLURM answer, a progress read or a log read is shared between
+    # the callers that ask for it (app.services.job_live, ADR 0027).
+    JOB_LIVE_TTL_SECONDS: int = 5
+    # Log reads are by byte offset: the default and the largest chunk one call
+    # returns, and the largest file the download route streams.
+    JOB_LOG_READ_DEFAULT_BYTES: int = 262144
+    JOB_LOG_READ_MAX_BYTES: int = 1048576
+    JOB_LOG_DOWNLOAD_MAX_BYTES: int = 52428800
     # How many active jobs (PENDING/SUBMITTED/RUNNING/COMPLETING) one user
     # may have at once — every job spends the one shared SLURM allocation
     # (ADR 0024). admin and staff are exempt. See app.core.authz.require_submitter.

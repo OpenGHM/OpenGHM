@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from slurmly.exceptions import (
     InvalidJobSpec,
     SbatchError,
@@ -27,12 +28,13 @@ from app.models.job import (
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
     JobListResponse,
-    JobLogsResponse,
+    JobLogResponse,
     JobDB,
     JobParameters,
     JobResponse,
     JobStatsResponse,
     JobStatusResponse,
+    LogStream,
     ModelInputState,
     SimulationDeriveRequest,
     SimulationUpdateRequest,
@@ -40,7 +42,7 @@ from app.models.job import (
     verdict_fields,
 )
 from app.models.user import TokenPayload
-from app.services import job_script, slurm
+from app.services import job_live, job_script, slurm
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +154,9 @@ def _doc_to_response(
     )
 
 
-def _status_response(doc: dict) -> JobStatusResponse:
-    """What the polling endpoint and the cancel route answer with."""
+def _status_response(doc: dict, live: dict | None = None) -> JobStatusResponse:
+    """What the polling endpoint and the cancel route answer with. `live` is
+    the SLURM-derived part, which only the polling endpoint gives."""
     return JobStatusResponse(
         job_id=doc["_id"],
         sim_id=doc.get("sim_id"),
@@ -164,6 +167,7 @@ def _status_response(doc: dict) -> JobStatusResponse:
         completed_at=doc.get("completed_at"),
         status_reason=doc.get("status_reason"),
         work_dir=doc.get("work_dir"),
+        live=live,
         **verdict_fields(doc),
     )
 
@@ -840,7 +844,7 @@ async def get_job_status(
             logger.warning("Status poll failed for %s: %s", job_id, exc)
             # Return stale data
 
-    return _status_response(doc)
+    return _status_response(doc, live=await job_live.live_state(doc))
 
 
 # ---------------------------------------------------------------------------
@@ -965,26 +969,80 @@ def _job_changed() -> HTTPException:
 
 
 # ---------------------------------------------------------------------------
-# GET /jobs/{job_id}/logs
+# GET /jobs/{job_id}/logs  —  one chunk of one log, by byte offset (ADR 0027)
 # ---------------------------------------------------------------------------
 
+_ANVIL_LOG_UNREACHABLE = "Anvil could not be reached, so the log could not be read. Try again in a few minutes."
+_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
-@router.get("/{job_id}/logs", response_model=JobLogsResponse)
+
+@router.get("/{job_id}/logs", response_model=JobLogResponse)
 async def get_job_logs(
     job_id: str,
+    stream: LogStream,
+    offset: int | None = Query(None, ge=0, description="Byte to start at; omitted: the end of the file"),
+    # At least 4: a chunk never ends inside a UTF-8 sequence (up to 3 bytes held back).
+    limit: int = Query(settings.JOB_LOG_READ_DEFAULT_BYTES, ge=4, le=settings.JOB_LOG_READ_MAX_BYTES),
     user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
 ):
-    await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
-
+    doc = await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
     try:
-        stdout, stderr, truncated = await slurm.get_job_logs(job_id)
+        chunk = await slurm.read_log(doc, stream, offset, limit)
     except Exception as exc:
-        logger.error("Log retrieval failed for %s: %s", job_id, exc)
-        raise HTTPException(status_code=502, detail=str(exc))
+        logger.warning("Log read failed for %s (%s): %s", job_id, stream, exc)
+        raise _error(status.HTTP_502_BAD_GATEWAY, "anvil_unreachable", _ANVIL_LOG_UNREACHABLE)
+    return JobLogResponse(job_id=job_id, stream=stream, **chunk)
 
-    return JobLogsResponse(
-        job_id=job_id,
-        stdout=stdout,
-        stderr=stderr,
-        truncated=truncated,
+
+@router.get("/{job_id}/logs/{stream}/download")
+async def download_job_log(
+    job_id: str,
+    stream: LogStream,
+    user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
+):
+    doc = await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
+    try:
+        path = await slurm.log_path(doc, stream)
+        first = await slurm.read_log_bytes(path, 0, _DOWNLOAD_CHUNK_BYTES) if path else None
+    except Exception as exc:
+        logger.warning("Log download failed for %s (%s): %s", job_id, stream, exc)
+        raise _error(status.HTTP_502_BAD_GATEWAY, "anvil_unreachable", _ANVIL_LOG_UNREACHABLE)
+    if first is None:
+        raise _error(
+            status.HTTP_404_NOT_FOUND, "log_missing", "This log is not on Anvil (yet, or it has been purged)."
+        )
+    size, data = first
+    limit = settings.JOB_LOG_DOWNLOAD_MAX_BYTES
+    if size > limit:
+        raise _error(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            "log_too_large",
+            f"This log is {size / 1e6:.1f} MB, above the {limit / 1e6:.0f} MB download limit. "
+            f"It is on Anvil at {path}.",
+            size=size,
+            max=limit,
+            path=path,
+        )
+
+    async def body():
+        # Exactly `size` bytes, as Content-Length says: a running job's log may
+        # grow while it is sent, and the growth is left for the next download.
+        sent = min(len(data), size)
+        yield data[:sent]
+        while sent < size:
+            chunk = await slurm.read_log_bytes(path, sent, min(_DOWNLOAD_CHUNK_BYTES, size - sent))
+            if chunk is None or not chunk[1]:
+                raise RuntimeError(f"{path} shrank while it was being downloaded")
+            yield chunk[1][: size - sent]
+            sent += len(chunk[1])
+
+    # The file's name comes from the job, not the request; an id is always a safe one.
+    name = doc["sim_id"] if job_script.is_valid_id(doc.get("sim_id")) else job_id
+    return StreamingResponse(
+        body(),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}-{stream}.log"',
+            "Content-Length": str(size),
+        },
     )

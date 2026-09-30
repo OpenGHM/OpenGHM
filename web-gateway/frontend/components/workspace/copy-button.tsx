@@ -13,10 +13,12 @@ export function CopyButton({
   text,
   label,
   className,
+  disabled = false,
 }: {
   text: string;
   label: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -37,6 +39,7 @@ export function CopyButton({
       variant="outline"
       size="sm"
       onClick={() => void copy()}
+      disabled={disabled}
       aria-label={`Copy ${label}`}
       className={`min-h-10 shrink-0 gap-1.5 px-3 text-xs text-muted-foreground hover:text-foreground sm:min-h-8 ${className ?? ""}`}
     >

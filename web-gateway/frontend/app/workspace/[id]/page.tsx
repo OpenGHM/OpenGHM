@@ -7,7 +7,8 @@ import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { JobStatusPanel } from "@/components/workspace/job-status-panel";
-import { JobLogsPanel } from "@/components/workspace/job-logs-panel";
+import { LogViewer } from "@/components/workspace/log-viewer";
+import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { SimulationEditor } from "@/components/workspace/simulation-editor";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
 import { SubmitSimulationButton } from "@/components/workspace/submit-simulation-button";
@@ -16,7 +17,7 @@ import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
 import { describeSlurmTime, submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
-import { previewSimulation, fakeLogs, fakeProgress } from "@/lib/workspace/fixtures";
+import { previewSimulation, fakeLogs, fakeLive } from "@/lib/workspace/fixtures";
 import { resolvePreview } from "@/lib/workspace/preview";
 import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
 import { QueuedNoticeCard } from "@/components/workspace/queued-notice-card";
@@ -86,7 +87,7 @@ export default async function JobDetailPage({
       : null;
   const viewerEmail = job.status === "CANCELLED" ? ((await me())?.email ?? null) : null;
 
-  const previewLogs = isPreview ? fakeLogs(job.status, job.id) : undefined;
+  const previewLogs = isPreview ? fakeLogs(job.status) : undefined;
   const previewParam = preview ? `?preview=${preview.key}` : "";
 
   return (
@@ -186,6 +187,31 @@ export default async function JobDetailPage({
               </div>
             </div>
           ) : (
+            // One poll loop for the whole grid: the status panel, the queue and
+            // progress cards and the logs all read the same answer.
+            <LiveJobProvider
+              jobId={job.id}
+              initialStatus={job.status}
+              initialData={{
+                slurm_job_id: job.slurm_job_id,
+                submitted_at: job.submitted_at,
+                started_at: job.started_at,
+                completed_at: job.completed_at,
+                status_reason: job.status_reason,
+                work_dir: job.work_dir,
+                slurm_state: job.slurm_state,
+                slurm_exit_code: job.slurm_exit_code,
+                slurm_start: job.slurm_start,
+                slurm_end: job.slurm_end,
+                failure: job.failure,
+                cancel_requested_at: job.cancel_requested_at,
+                cancel_requested_by_email: job.cancel_requested_by_email,
+                files: job.files,
+                output: job.output,
+                live: isPreview ? fakeLive(job) : null,
+              }}
+              preview={isPreview}
+            >
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
               {/* Left column — read-only once past DRAFT */}
               <div className="space-y-8">
@@ -306,47 +332,19 @@ export default async function JobDetailPage({
                 </Card>
 
                 {/* Logs */}
-                <JobLogsPanel
-                  jobId={job.id}
-                  jobStatus={job.status}
-                  previewLogs={previewLogs}
-                />
+                <LogViewer previewLogs={previewLogs} />
               </div>
 
               {/* Right column — Status */}
               <div className="space-y-6">
-                <JobStatusPanel
-                  jobId={job.id}
-                  initialStatus={job.status}
-                  initialData={{
-                    slurm_job_id: job.slurm_job_id,
-                    submitted_at: job.submitted_at,
-                    started_at: job.started_at,
-                    completed_at: job.completed_at,
-                    status_reason: job.status_reason,
-                    work_dir: job.work_dir,
-                    slurm_state: job.slurm_state,
-                    slurm_exit_code: job.slurm_exit_code,
-                    slurm_start: job.slurm_start,
-                    slurm_end: job.slurm_end,
-                    failure: job.failure,
-                    cancel_requested_at: job.cancel_requested_at,
-                    cancel_requested_by_email: job.cancel_requested_by_email,
-                    files: job.files,
-                    output: job.output,
-                  }}
-                  preview={isPreview}
-                />
+                <JobStatusPanel preview={isPreview} />
 
                 {(job.status === "PENDING" || job.status === "SUBMITTED") && (
                   <QueuedNoticeCard status={job.status} />
                 )}
 
                 {(job.status === "RUNNING" || job.status === "COMPLETING") && (
-                  <RunningProgressCard
-                    progress={isPreview ? fakeProgress() : undefined}
-                    startedAt={job.started_at}
-                  />
+                  <RunningProgressCard />
                 )}
 
                 {job.status === "COMPLETED" && (
@@ -379,6 +377,7 @@ export default async function JobDetailPage({
                 </Card>
               </div>
             </div>
+            </LiveJobProvider>
           )}
         </div>
       </main>

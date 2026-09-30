@@ -54,7 +54,7 @@ export function TimeStamp({
       ? formatUtcDate(value)
       : formatUtcDateTime(value);
 
-  const text = format === "relative" && hydrated ? formatRelative(value, now) : absolute;
+  const text = format === "relative" && hydrated ? formatRelative(value, now, TICK_MS) : absolute;
 
   return (
     <time

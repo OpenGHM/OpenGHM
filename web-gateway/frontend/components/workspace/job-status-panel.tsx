@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   Clock,
@@ -12,6 +11,8 @@ import {
   Ban,
   Loader2,
   RefreshCw,
+  Radio,
+  WifiOff,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -29,21 +30,80 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { TimeStamp } from "@/components/workspace/time-stamp";
-import { useJobStatus } from "@/lib/workspace/use-job-status";
+import { useLiveJobContext } from "@/components/workspace/live-job-provider";
+import { formatAge, formatLocalDateTime, formatUtcDateTime } from "@/lib/workspace/time";
+import { useNow } from "@/lib/workspace/use-now";
 import { cancelJob } from "@/lib/jobs/actions";
 import { displayStatus } from "@/lib/jobs/display-status";
-import type { JobStatus, JobStatusResponse } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 
 interface Props {
-  jobId: string;
-  initialStatus: JobStatus;
-  initialData?: Partial<JobStatusResponse>;
   /** Rendering fixture data (see lib/workspace/preview.ts) — no real job
-   *  behind `jobId`, so polling and cancelling would only hit the backend
-   *  with an id it has never heard of. Freezes the panel on `initialData`
-   *  and turns Cancel into a no-op explanation instead. */
+   *  behind the page, so cancelling would only hit the backend with an id it
+   *  has never heard of. Turns Cancel into a no-op explanation. (Polling is
+   *  stopped by the provider.) */
   preview?: boolean;
+}
+
+/**
+ * How fresh what is on screen is: when SLURM last answered, counted up each
+ * second in the browser only; or, after a failed poll, when the next try is.
+ * Not a live region: it changes every second and would be read out each time.
+ */
+function FreshnessLine() {
+  const { status, live, lastSuccessAt, lastError, retryInSeconds, refresh, sessionExpired } =
+    useLiveJobContext();
+  const now = useNow(1_000);
+
+  if (isTerminalStatus(status) || sessionExpired) return null;
+
+  if (lastError !== null) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <WifiOff className="size-3.5 shrink-0 text-status-cancelling" aria-hidden="true" />
+        <span>
+          {lastError} — retrying in {retryInSeconds ?? 0} s
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={refresh}
+          className="min-h-10 px-3 text-xs sm:min-h-8"
+        >
+          <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />
+          Retry now
+        </Button>
+      </div>
+    );
+  }
+
+  // SLURM's own timestamp when it gave one, else when the gateway last heard.
+  const checkedIso = live?.checked_at ?? (lastSuccessAt ? new Date(lastSuccessAt).toISOString() : null);
+  if (checkedIso === null) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Radio className="size-3.5" aria-hidden="true" />
+        Checking with SLURM…
+      </div>
+    );
+  }
+  const checkedMs = new Date(checkedIso).getTime();
+  const hydrated = now !== null;
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Radio className="size-3.5" aria-hidden="true" />
+      <span>
+        Checked with SLURM{" "}
+        <time
+          dateTime={checkedIso}
+          title={hydrated ? formatLocalDateTime(checkedIso) : formatUtcDateTime(checkedIso)}
+        >
+          {hydrated ? formatAge(now - checkedMs) : formatUtcDateTime(checkedIso)}
+        </time>
+      </span>
+    </div>
+  );
 }
 
 function TimelineRow({
@@ -65,9 +125,9 @@ function TimelineRow({
   );
 }
 
-export function JobStatusPanel({ jobId, initialStatus, initialData, preview = false }: Props) {
-  const router = useRouter();
+export function JobStatusPanel({ preview = false }: Props) {
   const {
+    jobId,
     view,
     status,
     slurmJobId,
@@ -76,26 +136,16 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
     completedAt,
     statusReason,
     cancelling,
-    isPolling,
+    lastError,
     sessionExpired: pollExpired,
     refresh,
     apply,
-  } = useJobStatus(jobId, initialStatus, initialData, { disabled: preview });
+  } = useLiveJobContext();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelPending, setCancelPending] = useState(false);
   const [actionExpired, setActionExpired] = useState(false);
   const sessionExpired = pollExpired || actionExpired;
-
-  // The cards beside this panel (queued, running, completed, failed,
-  // cancelled) are chosen on the server from the status it rendered with.
-  // When polling sees a different one, ask for the page again.
-  const renderedStatus = useRef(initialStatus);
-  useEffect(() => {
-    if (preview || status === renderedStatus.current) return;
-    renderedStatus.current = status;
-    router.refresh();
-  }, [status, preview, router]);
 
   const confirmCancel = async () => {
     if (cancelPending) return;
@@ -218,13 +268,7 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
 
         {sessionExpired && <SessionExpiredBanner />}
 
-        {/* Polling indicator */}
-        {isPolling && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3 motion-safe:animate-spin" aria-hidden="true" />
-            Checking status...
-          </div>
-        )}
+        <FreshnessLine />
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
@@ -286,7 +330,7 @@ export function JobStatusPanel({ jobId, initialStatus, initialData, preview = fa
               </AlertDialogContent>
             </AlertDialog>
           )}
-          {!preview && !isTerminalStatus(status) && (
+          {!preview && !isTerminalStatus(status) && lastError === null && (
             <Button variant="ghost" size="sm" onClick={refresh} className="min-h-10 sm:min-h-8">
               <RefreshCw className="mr-1.5 size-4" aria-hidden="true" />
               Refresh

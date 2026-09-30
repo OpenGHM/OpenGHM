@@ -20,7 +20,16 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
 from app.core import audit, authz
 from app.core.config import settings
-from app.services import slurm
+from app.services import job_live, slurm
+
+
+@pytest.fixture(autouse=True)
+def _fresh_job_live():
+    """The SLURM answers and reads job_live shares are process-wide; a test
+    starts without another's."""
+    job_live.reset()
+    yield
+    job_live.reset()
 
 
 @pytest.fixture
@@ -65,8 +74,8 @@ def db(monkeypatch) -> FakeDB:
     async def cancel_job(slurm_job_id: str) -> bool:
         return True
 
-    async def get_job_logs(job_id: str) -> tuple[str, str, bool]:
-        return "out", "err", False
+    async def read_log(doc: dict, stream: str, offset, limit) -> dict:
+        return {"exists": True, "data": "out", "offset": 0, "next_offset": 3, "size": 3, "eof": True}
 
     # What a submit that may have reached SLURM does to clean up after itself,
     # recorded rather than run. A test that cares reads or replaces them.
@@ -83,7 +92,7 @@ def db(monkeypatch) -> FakeDB:
     monkeypatch.setattr(slurm, "submit_job", submit_job)
     monkeypatch.setattr(slurm, "update_job_status", update_job_status)
     monkeypatch.setattr(slurm, "cancel_job", cancel_job)
-    monkeypatch.setattr(slurm, "get_job_logs", get_job_logs)
+    monkeypatch.setattr(slurm, "read_log", read_log)
     monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
     monkeypatch.setattr(slurm, "remove_failed_submit_dirs", remove_failed_submit_dirs)
 

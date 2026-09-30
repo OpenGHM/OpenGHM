@@ -6,9 +6,10 @@ import type {
   ActionResult,
   Job,
   JobListResponse,
-  JobLogsResponse,
+  JobLogChunk,
   JobStatsResponse,
   JobStatusResponse,
+  LogStream,
   SimulationDeriveRequest,
   SimulationUpdateRequest,
 } from "@/lib/jobs/types";
@@ -211,14 +212,24 @@ export async function deleteSimulation(jobId: string): Promise<ActionResult<null
 }
 
 /**
- * Fetch stdout/stderr logs for a job.
+ * Read one log of a job by byte offset (ADR 0027). Without `offset` the read
+ * is the tail: it starts `limit` bytes before the end, at a line start. With
+ * one it continues from there, and `next_offset` of the answer is the next
+ * `offset`. A missing file is `exists: false`, not a failure.
  */
-export async function fetchJobLogs(
-  jobId: string
-): Promise<ActionResult<JobLogsResponse>> {
+export async function fetchJobLog(
+  jobId: string,
+  stream: LogStream,
+  offset?: number,
+  limit?: number
+): Promise<ActionResult<JobLogChunk>> {
+  const params: Record<string, string | number> = { stream };
+  if (offset !== undefined) params.offset = offset;
+  if (limit !== undefined) params.limit = limit;
   return run(async (client) => {
-    const res = await client.get<JobLogsResponse>(
-      `/api/v1/jobs/${encodeURIComponent(jobId)}/logs`
+    const res = await client.get<JobLogChunk>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/logs`,
+      { params }
     );
     return res.data;
   });

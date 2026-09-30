@@ -49,10 +49,17 @@ export function formatLocalDateTime(iso: string): string {
   });
 }
 
-/** `just now`, `3 min ago`, `2 h ago`, `5 days ago`; later than `now` reads `in 3 min`. */
-export function formatRelative(iso: string, nowMs: number): string {
+/** `just now`, `3 min ago`, `2 h ago`, `5 days ago`; later than `now` reads `in 3 min`.
+ *
+ *  `nowMs` is often a clock rounded down to a tick (`TimeStamp` ticks every
+ *  30 s), so it can trail the real time by up to a tick and make an event that
+ *  just happened look like it is in the future. `toleranceMs` is that tick: a
+ *  time that far ahead or less is taken as now, never as `in a moment`. A time
+ *  really ahead (SLURM's estimated start) is further off than the tick. */
+export function formatRelative(iso: string, nowMs: number, toleranceMs = 0): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return iso;
+  if (then - nowMs > 0 && then - nowMs <= toleranceMs) return "just now";
   const diff = Math.round((nowMs - then) / 1000);
   const abs = Math.abs(diff);
   const future = diff < 0;
@@ -62,4 +69,31 @@ export function formatRelative(iso: string, nowMs: number): string {
   if (abs < 36 * 3600) return wrap(`${Math.round(abs / 3600)} h`);
   const days = Math.round(abs / 86_400);
   return wrap(`${days} ${days === 1 ? "day" : "days"}`);
+}
+
+/** How old something is, to the second while it is young: `5 s ago`,
+ *  `3 min ago`, `2 h ago`. For a freshness line that ticks each second;
+ *  `formatRelative` is for moments that are hours or days old. */
+export function formatAge(ageMs: number): string {
+  const s = Math.max(0, Math.floor(ageMs / 1000));
+  if (s < 60) return `${s} s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  return `${Math.floor(s / 3600)} h ago`;
+}
+
+/** A length of time: `42 s`, `4 min 12 s`, `1 h 5 min 3 s`. Zero parts are
+ *  dropped after the first; `withSeconds: false` rounds down to the minute
+ *  (`23 min`), for a limit rather than a stopwatch. Hours are not folded into
+ *  days: a 96 h walltime reads `96 h`. */
+export function formatDuration(totalSeconds: number, { withSeconds = true } = {}): string {
+  const total = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} h`);
+  if (m > 0) parts.push(`${m} min`);
+  if (withSeconds && (s > 0 || parts.length === 0)) parts.push(`${s} s`);
+  if (parts.length === 0) parts.push("0 min");
+  return parts.join(" ");
 }

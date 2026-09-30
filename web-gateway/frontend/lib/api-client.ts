@@ -11,11 +11,33 @@ const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8100";
  * longer (submitting a job opens an SSH session to Anvil).
  */
 export async function getApiClient(options: { timeoutMs?: number } = {}) {
-  const session = await auth();
+  const { headers } = await getBackendAuth();
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  return axios.create({
+    baseURL: BACKEND_URL,
+    headers: { "Content-Type": "application/json", ...headers },
+    timeout: options.timeoutMs ?? 10_000,
+    paramsSerializer: { indexes: null },
+  });
+}
+
+/** The backend's address, for the one caller that cannot use an Axios
+ *  instance: a route handler streaming a response body through. */
+export { BACKEND_URL };
+
+/**
+ * The credentials the backend is called with, for the signed-in user.
+ * `authenticated` is false when there is nothing to send (no session, or one
+ * whose token could not be refreshed), so a caller that must not reach the
+ * backend anonymously can answer 401 itself. Same rules for every caller: this
+ * is where they live.
+ */
+export async function getBackendAuth(): Promise<{
+  headers: Record<string, string>;
+  authenticated: boolean;
+}> {
+  const session = await auth();
+  const headers: Record<string, string> = {};
 
   if (session?.error) {
     // The jwt callback in auth.ts already tried and failed to refresh the
@@ -33,10 +55,5 @@ export async function getApiClient(options: { timeoutMs?: number } = {}) {
     headers["X-Mock-Role"] = session.user.role;
   }
 
-  return axios.create({
-    baseURL: BACKEND_URL,
-    headers,
-    timeout: options.timeoutMs ?? 10_000,
-    paramsSerializer: { indexes: null },
-  });
+  return { headers, authenticated: Object.keys(headers).length > 0 };
 }

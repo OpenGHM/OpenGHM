@@ -211,6 +211,37 @@ export interface SimulationUpdateRequest {
   model_input_id?: string | null;
 }
 
+/** Where a running WBM has got to, read from the last progress line of its
+ *  log (ADR 0027). */
+export interface JobProgress {
+  phase: "spinup" | "run";
+  /** Spin-up only: which loop of how many. */
+  loop: number | null;
+  loops: number | null;
+  /** The simulated date WBM has reached, `YYYY-MM-DD`. */
+  date: string;
+  /** The job's own run range. */
+  run_start: string | null;
+  run_end: string | null;
+  /** Run phase only, 0 to 1. A spin-up has none: its length is not known. */
+  fraction: number | null;
+  /** The WBM line it came from, at most 200 characters. */
+  line: string;
+  read_at: string;
+}
+
+/** What SLURM said about a live job at `checked_at` (ADR 0027). Not stored. */
+export interface JobLive {
+  checked_at: string;
+  /** SLURM's reason a pending job waits, verbatim; null when it gave none. */
+  queue_reason: string | null;
+  /** Only when SLURM gives a real estimate. */
+  estimated_start: string | null;
+  /** The walltime SLURM enforces. */
+  time_limit_seconds: number | null;
+  progress: JobProgress | null;
+}
+
 export interface JobStatusResponse extends JobVerdictFields {
   job_id: string;
   sim_id: string | null;
@@ -221,13 +252,24 @@ export interface JobStatusResponse extends JobVerdictFields {
   completed_at: string | null;
   status_reason: string | null;
   work_dir: string | null;
+  /** Null for a draft or ended job, and before SLURM has ever answered. */
+  live?: JobLive | null;
 }
 
-export interface JobLogsResponse {
+/** The three logs a job has: what WBM writes, and what SLURM captured. */
+export type LogStream = "stdout" | "stderr" | "wbm";
+
+/** GET /jobs/{id}/logs: the bytes `[offset, next_offset)` of one log. */
+export interface JobLogChunk {
   job_id: string;
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
+  stream: LogStream;
+  /** False: the file is not there (yet, purged, or no job directory). */
+  exists: boolean;
+  data: string;
+  offset: number;
+  next_offset: number;
+  size: number;
+  eof: boolean;
 }
 
 /**

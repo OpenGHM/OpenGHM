@@ -3,14 +3,16 @@
 All Anvil interactions (sbatch / squeue / sacct / scancel / SFTP log tail)
 go through a single shared `SlurmSSHClient`. This module exposes the same
 async surface that the API layer used previously — `submit_job`,
-`update_job_status`, `cancel_job`, `get_job_logs` — plus the sweep
+`update_job_status`, `cancel_job`, `read_log` — plus the sweep
 (`sync_active_jobs`, `clear_orphans`, `detect_purged_files`) that brings every
-job to its verdict (ADR 0026).
+job to its verdict (ADR 0026). The SLURM answers it acts on are shared with the
+status route through `job_live` (ADR 0027).
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import posixpath
@@ -32,6 +34,7 @@ from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.job import TERMINAL_STATUSES, JobDB, SlurmConfig
+from app.services import job_live
 from app.services.job_script import SubmitInputError, is_valid_id, with_headroom
 from app.services.job_verdict import classify
 
@@ -458,10 +461,17 @@ async def _settle(doc: dict, info: JobInfo | None) -> None:
         await _move(doc, fields, unset=unset)
 
 
+async def _settle_once(doc: dict, info: JobInfo | None) -> None:
+    """`_settle`, run by one caller at a time per job: the sweep and every
+    viewer's status poll that find a job over together reach one verdict."""
+    await job_live.single_flight(("settle", doc["_id"]), lambda: _settle(doc, info))
+
+
 async def sync_active_jobs() -> None:
     """One sweep: look up every job that has a SLURM id and no verdict, in one
     batched call, and settle each. If the lookup itself fails the whole tick
-    is skipped, so a broken connection records no misses."""
+    is skipped, so a broken connection records no misses. The answers are kept
+    for the status route (`job_live`), so a poll soon after asks SLURM nothing."""
     db = get_db()
     docs = [
         doc
@@ -473,22 +483,22 @@ async def sync_active_jobs() -> None:
         return
     ids = [str(doc["slurm_job_id"]) for doc in docs]
     try:
-        client = await get_slurm_client()
-        found = await client.get_jobs(ids)
+        found = await job_live.slurm_info(ids, refresh=True)
     except Exception as exc:
         logger.warning("Sweep: batched lookup of %d jobs failed, skipping this tick: %s", len(ids), exc)
         return
 
     for doc, slurm_id in zip(docs, ids):
         try:
-            await _settle(doc, found.get(slurm_id))
+            await _settle_once(doc, found.get(slurm_id))
         except Exception as exc:
             logger.warning("Sweep: job %s failed: %s", doc["_id"], exc)
 
 
 async def update_job_status(job_id: str) -> dict[str, Any]:
     """Refresh one job from Slurm the way the sweep does, for the status poll
-    (GET /jobs/{id}/status). Returns the (possibly updated) document."""
+    (GET /jobs/{id}/status). Returns the (possibly updated) document. The
+    lookup is shared with every other caller inside the TTL (`job_live`)."""
     db = get_db()
     doc = await db.jobs.find_one({"_id": job_id})
     if doc is None:
@@ -499,13 +509,16 @@ async def update_job_status(job_id: str) -> dict[str, Any]:
         return doc
 
     try:
-        client = await get_slurm_client()
-        found = await client.get_jobs([str(slurm_job_id)])
+        found = await job_live.slurm_info([str(slurm_job_id)])
     except Exception as exc:
         logger.warning("get_jobs failed for %s: %s", job_id, exc)
         return doc
 
-    await _settle(doc, found.get(str(slurm_job_id)))
+    # Read again: another caller may have settled the job while this one waited.
+    doc = await db.jobs.find_one({"_id": job_id}) or doc
+    if doc.get("status") in TERMINAL_STATUSES:
+        return doc
+    await _settle_once(doc, found.get(str(slurm_job_id)))
     return await db.jobs.find_one({"_id": job_id}) or doc
 
 
@@ -603,6 +616,18 @@ def _job_at(directory: str) -> SubmittedJob:
         raise RefusedPath(f"{directory} is not a slurmly job directory") from exc
 
 
+def _check_work_dir(doc: dict, work_dir: str) -> None:
+    """Raise `RefusedPath` unless `work_dir` is exactly
+    `<ANVIL_OUTPUT_BASE>/<sim_id>` for a `sim_id` of the id pattern."""
+    sim_id = doc.get("sim_id") or ""
+    if (
+        not is_valid_id(sim_id)
+        or ".." in work_dir.split("/")
+        or work_dir != posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
+    ):
+        raise RefusedPath(f"{work_dir!r} is not this simulation's directory under the output base")
+
+
 def removable_paths(doc: dict) -> tuple[str | None, str | None]:
     """`(slurmly job directory, work directory)` a job's delete removes, each
     None when the job has none recorded (ADR 0026). Raises `RefusedPath` for
@@ -620,13 +645,7 @@ def removable_paths(doc: dict) -> tuple[str | None, str | None]:
             raise RefusedPath(str(exc)) from exc
         _job_at(remote_dir)
     if work_dir:
-        sim_id = doc.get("sim_id") or ""
-        if (
-            not is_valid_id(sim_id)
-            or ".." in work_dir.split("/")
-            or work_dir != posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
-        ):
-            raise RefusedPath(f"{work_dir!r} is not this simulation's directory under the output base")
+        _check_work_dir(doc, work_dir)
     return remote_dir, work_dir
 
 
@@ -717,38 +736,227 @@ async def cancel_job(slurm_job_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# logs
+# logs: read by byte offset (ADR 0027)
 # ---------------------------------------------------------------------------
 
+#: The shell's exit status for "not a regular file".
+_NOT_A_FILE = 3
 
-_LOG_TAIL_LINES = 500
 
-
-async def get_job_logs(job_id: str) -> tuple[str, str, bool]:
-    """Tail stdout/stderr from Anvil. Returns (stdout, stderr, truncated)."""
-    db = get_db()
-    doc = await db.jobs.find_one({"_id": job_id})
-    if doc is None:
-        raise RuntimeError(f"Job {job_id} not found")
-
-    if not doc.get("remote_job_dir") or not doc.get("slurm_job_id"):
-        return ("", "", False)
-
-    try:
-        submitted = _reconstruct_submitted_job(doc)
-    except KeyError:
-        # Older row that pre-dates slurmly fields — nothing to tail.
-        return ("", "", False)
-
-    client = await get_slurm_client()
-    stdout_chunk = await client.tail_stdout(submitted, lines=_LOG_TAIL_LINES)
-    stderr_chunk = await client.tail_stderr(submitted, lines=_LOG_TAIL_LINES)
-
-    stdout = getattr(stdout_chunk, "content", "") or ""
-    stderr = getattr(stderr_chunk, "content", "") or ""
-    truncated = bool(
-        getattr(stdout_chunk, "truncated", False)
-        or getattr(stderr_chunk, "truncated", False)
+def build_log_read_command(path: str, offset: int | None, limit: int) -> str:
+    """One shell command that reads up to `limit` bytes of `path` from `offset`
+    (from `limit` bytes before the end when `offset` is None) and prints three
+    things: the file's size, the offset it started at, and the bytes,
+    base64-encoded so none is lost to a decoding. Exits 3 when `path` is not a
+    regular file (a symbolic link is refused: a job's own code writes there).
+    Plain POSIX, `wc`, `tail`, `head` and `base64`, so it runs the same on
+    Anvil (GNU) and on a developer's machine (BSD), where the tests run it."""
+    if offset is None:
+        start = f"start=$((size-{int(limit)})); if [ \"$start\" -lt 0 ]; then start=0; fi"
+    else:
+        start = f"start={int(offset)}"
+    return (
+        f"f={shlex.quote(path)}; "
+        f'if [ ! -f "$f" ] || [ -L "$f" ]; then exit {_NOT_A_FILE}; fi; '
+        "size=$(wc -c < \"$f\" | tr -d ' '); "
+        f"{start}; "
+        'echo "$size"; echo "$start"; '
+        f'tail -c +$((start+1)) -- "$f" | head -c {int(limit)} | base64'
     )
 
-    return (stdout, stderr, truncated)
+
+def _parse_raw(stdout: str) -> tuple[int, int, bytes]:
+    """`(size, start, bytes)` from the output of `build_log_read_command`."""
+    lines = stdout.split("\n", 2)
+    try:
+        # base64.b64decode skips the newlines GNU's `base64` wraps with.
+        return int(lines[0]), int(lines[1]), base64.b64decode(lines[2] if len(lines) > 2 else "")
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"unreadable log read: {stdout[:80]!r}") from exc
+
+
+def _utf8_incomplete_tail(data: bytes) -> int:
+    """How many bytes at the end of `data` begin a UTF-8 sequence it does not
+    finish (0 to 3), so a chunk can leave them for the next read."""
+    for back in range(1, min(3, len(data)) + 1):
+        byte = data[-back]
+        if byte < 0x80:
+            return 0
+        if byte >= 0xC0:  # a lead byte: how long its sequence is
+            need = 2 if byte < 0xE0 else 3 if byte < 0xF0 else 4 if byte < 0xF8 else 1
+            return back if back < need else 0
+    return 0
+
+
+def parse_log_read(
+    stdout: str, *, offset: int | None, terminal: bool
+) -> dict[str, Any]:
+    """The logs route's fields from the output of `build_log_read_command`.
+
+    Without an `offset` (a tail) that starts inside the file, the chunk begins
+    just after the first newline, so it opens on a line. The chunk never ends
+    inside a UTF-8 sequence: the incomplete bytes are left for the next read
+    (`next_offset` stops before them) unless the job has ended and the chunk
+    reaches the end of the file, where nothing more will come and they are
+    decoded as they are."""
+    size, start, data = _parse_raw(stdout)
+    if offset is None and start > 0:
+        newline = data.find(b"\n")
+        if newline >= 0:
+            skip = newline + 1
+        else:  # one line longer than the window: begin on a character instead
+            skip = 0
+            while skip < min(3, len(data)) and 0x80 <= data[skip] < 0xC0:
+                skip += 1
+        data, start = data[skip:], start + skip
+    if not (terminal and start + len(data) >= size):
+        data = data[: len(data) - _utf8_incomplete_tail(data)]
+    next_offset = start + len(data)
+    return {
+        "exists": True,
+        "data": data.decode("utf-8", errors="replace"),
+        "offset": start,
+        "next_offset": next_offset,
+        "size": max(size, next_offset),
+        "eof": next_offset >= size,
+    }
+
+
+async def _run_log_read(path: str, offset: int | None, limit: int) -> str | None:
+    """The output of one `build_log_read_command`, or None when `path` is not a
+    regular file. A transport failure raises."""
+    result = await run_remote(
+        build_log_read_command(path, offset, limit), operation="read_log", retry_safe=True
+    )
+    if result.exit_status == _NOT_A_FILE:
+        return None
+    if result.exit_status != 0:
+        raise RuntimeError(
+            f"reading {path} failed with exit {result.exit_status}: {result.stderr.strip()[:200]}"
+        )
+    return result.stdout
+
+
+async def read_log_bytes(path: str, offset: int, limit: int) -> tuple[int, bytes] | None:
+    """`(size, bytes)` of up to `limit` bytes of `path` from `offset`, exactly as
+    the file holds them (the download), or None when it is not a regular file."""
+    stdout = await _run_log_read(path, offset, limit)
+    if stdout is None:
+        return None
+    size, _, data = _parse_raw(stdout)
+    return size, data
+
+
+# A wbm log's path is found from the init files when the job has not ended.
+# Exit 4: no init names this simulation's output directory.
+_NO_INIT = 4
+_RESOLVE_WBM_LOG = r"""
+cd {work} 2>/dev/null && cd wbm_init 2>/dev/null || exit 3
+sim={sim}
+for f in *.init; do
+  [ -f "$f" ] || continue
+  out=$(sed -n "s/^[[:space:]]*Output_dir[[:space:]]*=>[[:space:]]*'\([^']*\)'.*/\1/p" "$f" | head -n 1)
+  case "$out" in
+    */wbm_output/"$sim"|*/wbm_output/"$sim"/)
+      sed -n "s/^[[:space:]]*ID[[:space:]]*=>[[:space:]]*'\([^']*\)'.*/\1/p" "$f" | head -n 1
+      exit 0;;
+  esac
+done
+exit {no_init}
+"""
+
+
+def _own_path(path: object, *, under: str) -> str | None:
+    """`path` if it is a file name directly inside the directory `under`."""
+    if not isinstance(path, str) or not path.startswith(under + "/"):
+        return None
+    name = path[len(under) + 1 :]
+    if name in ("", ".", "..") or "/" in name or "\x00" in name or "\n" in name:
+        return None
+    return path
+
+
+def _wbm_work_dir(doc: dict) -> str | None:
+    """The job's work directory if it is exactly `<output base>/<sim_id>`."""
+    work_dir = doc.get("work_dir")
+    if not isinstance(work_dir, str) or not work_dir:
+        return None
+    try:
+        _check_work_dir(doc, work_dir)
+    except RefusedPath:
+        return None
+    return work_dir
+
+
+async def log_path(doc: dict, stream: str) -> str | None:
+    """Where on Anvil the job's `stream` log is, or None when the job has no
+    such place (no directory yet, a path that is not the job's own). Whether
+    the file exists is for the read to say.
+
+    stdout and stderr are slurmly's, in the job's own directory. The WBM log
+    is `<work_dir>/<outcome.wbm.log>` once the job has ended, else the path
+    stored on the job, else the log of the init whose `Output_dir` is this
+    simulation's (stored when found). A transport failure raises."""
+    if stream in ("stdout", "stderr"):
+        remote_dir = doc.get("remote_job_dir")
+        if not remote_dir:
+            return None
+        try:
+            assert_safe_to_remove(remote_dir, remote_base_dir=_resolve_remote_base_dir())
+        except InvalidConfig:
+            return None
+        return _own_path(doc.get(f"{stream}_path"), under=remote_dir)
+
+    work_dir = _wbm_work_dir(doc)
+    if work_dir is None:
+        return None
+    sim_id = doc["sim_id"]
+    out_dir = posixpath.join(work_dir, "wbm_output", sim_id)
+    recorded = ((doc.get("outcome") or {}).get("wbm") or {}).get("log")
+    if isinstance(recorded, str):
+        relative = posixpath.join(work_dir, recorded)
+        if _own_path(relative, under=out_dir):
+            return relative
+    stored = _own_path(doc.get("wbm_log_path"), under=out_dir)
+    if stored:
+        return stored
+
+    result = await run_remote(
+        _RESOLVE_WBM_LOG.format(work=shlex.quote(work_dir), sim=shlex.quote(sim_id), no_init=_NO_INIT),
+        operation="resolve_wbm_log",
+        retry_safe=True,
+    )
+    if result.exit_status in (3, _NO_INIT):
+        return None
+    if result.exit_status != 0:
+        raise RuntimeError(f"finding the WBM log failed with exit {result.exit_status}")
+    run_id = result.stdout.strip()
+    if not is_valid_id(run_id):
+        return None
+    found = posixpath.join(out_dir, run_id + ".log")
+    await get_db().jobs.update_one({"_id": doc["_id"]}, {"$set": {"wbm_log_path": found}})
+    return found
+
+
+async def read_log(doc: dict, stream: str, offset: int | None, limit: int) -> dict[str, Any]:
+    """One chunk of the job's `stream` log, for the logs route: `exists`,
+    `data`, `offset`, `next_offset`, `size` and `eof` (`parse_log_read`).
+    Reads of the same job, stream, offset and limit share one command for the
+    TTL (`job_live`). A transport failure raises."""
+    path = await log_path(doc, stream)
+    if path is None:
+        return _absent(offset)
+    terminal = doc.get("status") in TERMINAL_STATUSES
+
+    async def read() -> dict[str, Any]:
+        stdout = await _run_log_read(path, offset, limit)
+        if stdout is None:
+            return _absent(offset)
+        return parse_log_read(stdout, offset=offset, terminal=terminal)
+
+    return await job_live.shared(("log", doc["_id"], stream, offset, limit, terminal), read)
+
+
+def _absent(offset: int | None) -> dict[str, Any]:
+    at = offset or 0
+    return {"exists": False, "data": "", "offset": at, "next_offset": at, "size": 0, "eof": True}

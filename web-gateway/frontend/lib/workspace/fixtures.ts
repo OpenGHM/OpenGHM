@@ -7,7 +7,7 @@
  * to S3 (Next 8), and no route returns a result listing.
  *
  * What is *not* invented is shape. Simulations are `Job`, logs are
- * `JobLogsResponse`, and any snapshot or model-input metadata comes from the
+ * one string per stream, and any snapshot or model-input metadata comes from the
  * generated spec types. A field name that does not exist in the spec does not
  * exist here either: the point of building this UI ahead of the plumbing is
  * that the plumbing can be built to fit it, which only works if the shapes are
@@ -20,8 +20,9 @@ import type {
   FailureCause,
   Job,
   JobFailure,
-  JobLogsResponse,
+  JobLive,
   JobStatus,
+  LogStream,
   OutputManifest,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
@@ -33,17 +34,6 @@ export interface FakeOutputFile {
   sizeBytes: number;
   /** What a download link would point at once job output reaches S3 (Next 8). */
   href: string | null;
-}
-
-/** Coarse progress for a running simulation. SLURM reports no percentage; this
- *  is derived from elapsed-vs-requested walltime, which is the honest proxy. */
-export interface FakeProgress {
-  elapsed: string;
-  requested: string;
-  /** 0–1, elapsed/requested, clamped. Not a measure of work done. */
-  fraction: number;
-  /** The step a WBM run is in, as its stdout would report it. */
-  stage: string;
 }
 
 const HOUR = 3_600_000;
@@ -76,7 +66,9 @@ export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}):
   const started =
     status === "DRAFT" || status === "PENDING" || status === "SUBMITTED"
       ? null
-      : iso(2 * HOUR);
+      : status === "RUNNING" || status === "COMPLETING"
+        ? iso(258_000) // 4 min 18 s in, so the walltime bar has something to show
+        : iso(2 * HOUR);
   const completed =
     status === "COMPLETED" || status === "FAILED" || status === "CANCELLED"
       ? iso(HOUR)
@@ -330,61 +322,94 @@ export function previewSimulation(
   return { ...build(), ...overrides };
 }
 
-/** stdout as a WBM run under SLURM would leave it. */
-export function fakeLogs(status: JobStatus, jobId: string): JobLogsResponse {
+/** A WBM log as a v2 run writes it (ADR 0027): one progress line per simulated
+ *  day, `Spinup` then `File`, and "All Done!" at the end of a good run. */
+function wbmLog({ days, done }: { days: number; done: boolean }): string {
+  const lines = ["Reading init: wbm_init/wbm_test.init", "Loading network: hyd_5m_global.asc"];
+  const balance = "Balance=(0.00,0.00,0.00,   8.20,  109.09,   0.81,  0.00, 0.00,0.00) Spool+=2";
+  lines.push(`Spinup 1/1 (2000-12-31) ${balance}`);
+  const start = Date.UTC(2001, 0, 1);
+  for (let d = 0; d < days; d++) {
+    const date = new Date(start + d * 86_400_000).toISOString().slice(0, 10);
+    lines.push(`File wbm_2001.nc (${date}) ${balance}`);
+  }
+  if (done) lines.push("All Done!");
+  return lines.join("\n");
+}
+
+/** The three logs a job in this state would have: `undefined` is a stream that
+ *  was never written. */
+export function fakeLogs(status: JobStatus): Partial<Record<LogStream, string>> {
   if (status === "FAILED") {
     return {
-      job_id: jobId,
-      stdout: [
-        "Loading network: hyd_5m_global.asc",
-        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
-        "Run: 2001-01-01 .. 2001-12-31",
-        "  2001-01 .. done",
-        "  2001-02 .. done",
-        "  2001-03 ..",
-      ].join("\n"),
+      wbm: wbmLog({ days: 62, done: false }),
+      stdout: "openghm: staged 412 files\nopenghm: running wbm.pl",
       stderr: [
         "Use of uninitialized value in numeric lt (<) at /wbm/model/wbm.pl line 2841.",
         "ERROR: cannot open data_init/climate/merra2_prectotcorr_d.init: No such file or directory",
         "  at /wbm/model/RIMS.pm line 1184.",
         "wbm.pl exited with status 1",
       ].join("\n"),
-      truncated: false,
     };
   }
   if (status === "COMPLETED") {
     return {
-      job_id: jobId,
-      stdout: [
-        "Loading network: hyd_5m_global.asc",
-        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
-        "Run: 2001-01-01 .. 2001-12-31",
-        ...Array.from({ length: 12 }, (_, i) =>
-          `  2001-${String(i + 1).padStart(2, "0")} .. done`),
-        "Writing wbm_output/ (3 variables, monthly + yearly aggregates)",
-        "Elapsed: 12:47",
-      ].join("\n"),
-      stderr: "",
-      truncated: false,
+      wbm: wbmLog({ days: 365, done: true }),
+      stdout: "openghm: staged 412 files\nopenghm: running wbm.pl\nopenghm: wrote 16 output files",
+      stderr: undefined,
     };
   }
   if (status === "RUNNING" || status === "COMPLETING") {
     return {
-      job_id: jobId,
-      stdout: [
-        "Loading network: hyd_5m_global.asc",
-        "Spinup 1/1: 2000-01-01 .. 2000-12-31",
-        "Run: 2001-01-01 .. 2001-12-31",
-        "  2001-01 .. done",
-        "  2001-02 .. done",
-        "  2001-03 .. done",
-        "  2001-04 ..",
-      ].join("\n"),
-      stderr: "",
-      truncated: true,
+      wbm: wbmLog({ days: 131, done: false }),
+      stdout: "openghm: staged 412 files\nopenghm: running wbm.pl",
+      stderr: undefined,
     };
   }
-  return { job_id: jobId, stdout: "", stderr: "", truncated: false };
+  return {};
+}
+
+/**
+ * What SLURM would say about a job in this state (`live` of the status
+ * answer, ADR 0027), for the dev preview: a queue reason while waiting, and the
+ * walltime and WBM's simulated date while running. Times are relative to now,
+ * so "checked 5 s ago" holds whenever the preview is opened.
+ */
+export function fakeLive(job: Job): JobLive | null {
+  const checked_at = iso(5_000);
+  if (job.status === "PENDING" || job.status === "SUBMITTED") {
+    return {
+      checked_at,
+      queue_reason: job.status === "PENDING" ? "Priority" : null,
+      estimated_start: null,
+      time_limit_seconds: 1380,
+      progress: null,
+    };
+  }
+  if (job.status === "RUNNING" || job.status === "COMPLETING") {
+    const { temporal_range_start: run_start, temporal_range_end: run_end } = job.parameters;
+    const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000;
+    const date = "2001-05-12";
+    const fraction = (day(date) - day(run_start) + 1) / (day(run_end) - day(run_start) + 1);
+    return {
+      checked_at,
+      queue_reason: null,
+      estimated_start: null,
+      time_limit_seconds: 1380,
+      progress: {
+        phase: "run",
+        loop: null,
+        loops: null,
+        date,
+        run_start,
+        run_end,
+        fraction,
+        line: "File wbm_2001.nc (2001-05-12) Balance=(0.00,0.00,0.00,   8.20,  109.09,   0.81,  0.00, 0.00,0.00) Spool+=2",
+        read_at: iso(5_000),
+      },
+    };
+  }
+  return null;
 }
 
 /** What a finished run would have written. Nothing serves these files. */
@@ -396,10 +421,6 @@ export function fakeOutputFiles(): FakeOutputFile[] {
     { path: "wbm_output/discharge_2001_yearly.nc", sizeBytes: 15_360_000, href: null },
     { path: "slurm-12345680.out", sizeBytes: 4_096, href: null },
   ];
-}
-
-export function fakeProgress(): FakeProgress {
-  return { elapsed: "4:18", requested: "15:00", fraction: 4.3 / 15, stage: "Run: 2001-04" };
 }
 
 /**

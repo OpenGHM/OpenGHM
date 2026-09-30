@@ -255,6 +255,9 @@ class JobDB(BaseModel):
     # The work directory's fate, and when it was last looked for.
     files: FilesState | None = None
     files_checked_at: datetime | None = None
+    # The WBM log's path on Anvil, stored the first time the logs route finds it
+    # from the init files (ADR 0027); once the job has ended `outcome` names it.
+    wbm_log_path: str | None = None
     # On a draft: a `sim_id` whose submit may have reached SLURM without the
     # gateway learning of it, and whose `scancel --name` has not yet worked.
     orphan_sim_ids: list[str] = Field(default_factory=list)
@@ -428,6 +431,34 @@ class JobListResponse(BaseModel):
     total_pages: int
 
 
+class JobProgress(BaseModel):
+    """How far WBM has got, from the last progress line of its log (ADR 0027)."""
+
+    phase: Literal["spinup", "run"]
+    # Spin-up only: which loop of how many.
+    loop: int | None = None
+    loops: int | None = None
+    #: The simulated date WBM has reached.
+    date: str
+    run_start: str | None = None
+    run_end: str | None = None
+    #: Run phase only; a spin-up's period is not known to the gateway.
+    fraction: float | None = None
+    #: The log line this was read from (at most 200 characters).
+    line: str
+    read_at: datetime
+
+
+class JobLive(BaseModel):
+    """What SLURM said about a job at `checked_at`. Not stored in Mongo."""
+
+    checked_at: datetime
+    queue_reason: str | None = None
+    estimated_start: datetime | None = None
+    time_limit_seconds: int | None = None
+    progress: JobProgress | None = None
+
+
 class JobStatusResponse(JobVerdictFields):
     """Lightweight status for polling."""
 
@@ -440,6 +471,7 @@ class JobStatusResponse(JobVerdictFields):
     completed_at: datetime | None = None
     status_reason: str | None = None
     work_dir: str | None = None
+    live: JobLive | None = None
 
 
 class JobStatsResponse(BaseModel):
@@ -451,10 +483,20 @@ class JobStatsResponse(BaseModel):
     failed: int
 
 
-class JobLogsResponse(BaseModel):
-    """Job stdout / stderr log contents."""
+LogStream = Literal["stdout", "stderr", "wbm"]
+
+
+class JobLogResponse(BaseModel):
+    """One chunk of one log, read by byte offset (ADR 0027): `data` is the text
+    of the bytes `[offset, next_offset)`, and `next_offset` is where the next
+    read starts."""
 
     job_id: str
-    stdout: str = ""
-    stderr: str = ""
-    truncated: bool = False
+    stream: LogStream
+    #: False: the file is not there (yet, or purged, or the job has no directory).
+    exists: bool
+    data: str = ""
+    offset: int = 0
+    next_offset: int = 0
+    size: int = 0
+    eof: bool = True

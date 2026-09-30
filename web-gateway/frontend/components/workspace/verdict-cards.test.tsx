@@ -18,6 +18,7 @@ import { CancelledNoticeCard } from "@/components/workspace/cancelled-notice-car
 import { CompletedResultsCard } from "@/components/workspace/completed-results-card";
 import { FailedNextStepsCard } from "@/components/workspace/failed-next-steps-card";
 import { JobStatusPanel } from "@/components/workspace/job-status-panel";
+import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { previewSimulation } from "@/lib/workspace/fixtures";
 import { FAILED_CAUSES, PREVIEW_GROUPS } from "@/lib/workspace/preview";
 import { FAILURE_COPY } from "@/lib/workspace/failure-copy";
@@ -124,12 +125,14 @@ describe("the status panel", () => {
   it("shows Cancelling, disabled, with a live region", () => {
     const job = previewSimulation("cancelling");
     const html = renderToString(
-      <JobStatusPanel
+      <LiveJobProvider
         jobId={job.id}
         initialStatus={job.status}
         initialData={{ cancel_requested_at: job.cancel_requested_at }}
         preview
-      />
+      >
+        <JobStatusPanel preview />
+      </LiveJobProvider>
     );
     expect(html).toContain("Cancelling");
     expect(html).toContain('aria-live="polite"');

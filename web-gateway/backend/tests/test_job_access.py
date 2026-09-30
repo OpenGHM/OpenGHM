@@ -79,7 +79,7 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
     "derive": ("POST", "/api/v1/jobs/derive/ds-1", {}, None),
     "get": ("GET", "/api/v1/jobs/{id}", None, "RUNNING"),
     "status": ("GET", "/api/v1/jobs/{id}/status", None, "RUNNING"),
-    "logs": ("GET", "/api/v1/jobs/{id}/logs", None, "RUNNING"),
+    "logs": ("GET", "/api/v1/jobs/{id}/logs?stream=stdout", None, "RUNNING"),
     "cancel": ("POST", "/api/v1/jobs/{id}/cancel", None, "RUNNING"),
     # PATCH and DELETE act on a draft: a submitted job is read-only (409).
     "patch": ("PATCH", "/api/v1/jobs/{id}", {"slug": "renamed"}, "DRAFT"),
@@ -146,7 +146,7 @@ def test_non_owner_404_is_the_same_answer_as_a_missing_id(client, db):
     db.users.docs["permitted_other"] = CALLERS["permitted_other"]["user"]
     db.jobs.docs["job-1"] = make_job("job-1", OWNER, "RUNNING")
     headers = CALLERS["permitted_other"]["headers"]
-    for suffix in ("", "/status", "/logs"):
+    for suffix in ("", "/status", "/logs?stream=stdout", "/logs/wbm/download"):
         real = client.get(f"/api/v1/jobs/job-1{suffix}", headers=headers)
         missing = client.get(f"/api/v1/jobs/nope{suffix}", headers=headers)
         assert (real.status_code, real.json()) == (missing.status_code, missing.json())
