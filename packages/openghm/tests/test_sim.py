@@ -164,12 +164,16 @@ _V2_INIT = (
 )
 
 
+# the same block without File_Size: --run-start is unchecked, so any date goes
+_V2_FREE = _V2_INIT.replace("          File_Size\t=> 'year',\n", "")
+
+
 def _build(template, **kw):
     return build_persim_init(template, "sim1", SubmitOptions(snapshot_dir="x", simulation_id="sim1", **kw))
 
 
 def test_run_start_inserted_before_run_end_when_init_has_none():
-    out = _build(_V2_INIT, run_start="2000-03-01")
+    out = _build(_V2_FREE, run_start="2000-03-01")
     assert (
         "          Output_dir\t=> '/wbm/wbm_output/sim1',\n"
         "          Run_Start => '2000-03-01',\n"
@@ -182,7 +186,7 @@ def test_run_start_inserted_before_run_end_when_init_has_none():
 
 
 def test_run_start_replaced_in_place_when_present():
-    out = _build(_V2_INIT.replace("          Run_End", "          Run_Start => '2000-01-01',\n          Run_End"),
+    out = _build(_V2_FREE.replace("          Run_End", "          Run_Start => '2000-01-01',\n          Run_End"),
                  run_start="2000-03-01")
     assert out.count("Run_Start") == 1
     assert "Run_Start => '2000-03-01'," in out
@@ -193,6 +197,55 @@ def test_run_start_with_both_keys_replaces_and_leaves_run_end():
     assert "Run_Start  => '2000-03-01'," in out
     assert "Run_End    => '2000-12-31'," in out
     assert out.count("Run_Start") == 1
+
+
+def test_run_start_year_files_accepts_jan_1():
+    out = _build(_V2_INIT, run_start="2000-01-01")
+    assert "Run_Start => '2000-01-01'," in out
+
+
+def test_run_start_year_files_rejects_mid_year_and_suggests_jan_1():
+    with pytest.raises(OpenghmError) as e:
+        _build(_V2_INIT, run_start="2000-03-01")
+    msg = str(e.value)
+    assert msg.startswith("--run-start 2000-03-01:")
+    assert "File_Size 'year'" in msg and "Use 2000-01-01." in msg
+
+
+def test_run_start_year_files_rejects_jan_2():
+    with pytest.raises(OpenghmError, match="Use 2000-01-01"):
+        _build(_V2_INIT, run_start="2000-01-02")
+
+
+_MONTH_INIT = _V2_INIT.replace("'year'", "'month'")
+
+
+def test_run_start_month_files_accepts_the_1st():
+    out = _build(_MONTH_INIT, run_start="2000-03-01")
+    assert "Run_Start => '2000-03-01'," in out
+
+
+def test_run_start_month_files_rejects_the_15th_and_suggests_the_1st():
+    with pytest.raises(OpenghmError) as e:
+        _build(_MONTH_INIT, run_start="2000-03-15")
+    msg = str(e.value)
+    assert "File_Size 'month'" in msg and "one output file per month" in msg and "Use 2000-03-01." in msg
+
+
+def test_run_start_unchecked_without_file_size_or_with_other_value():
+    assert "Run_Start => '2000-03-15'," in _build(_V2_FREE, run_start="2000-03-15")
+    other = _V2_INIT.replace("'year'", "'day'")
+    assert "Run_Start => '2000-03-15'," in _build(other, run_start="2000-03-15")
+
+
+def test_run_start_check_reads_double_quoted_and_spaced_file_size():
+    tpl = _V2_INIT.replace("File_Size\t=> 'year'", 'File_Size => "year"')
+    with pytest.raises(OpenghmError, match="Use 2000-01-01"):
+        _build(tpl, run_start="2000-03-01")
+
+
+def test_run_start_check_only_applies_when_run_start_given():
+    _build(_V2_INIT, run_end="2001-06-30")  # File_Size 'year', no --run-start: fine
 
 
 def test_run_start_without_either_key_still_raises():
@@ -240,7 +293,7 @@ def test_start_key_lookup_does_not_match_run_start_for_insert():
     ({"run_end": "2002-06-30"}, "Run_End", "2002-06-30"),
 ])
 def test_inserted_init_is_valid_perl(kw, key, expected):
-    tpl = _V2_INIT if "run_start" in kw else _V2_INIT.replace("Run_End\t=> '2001-12-31'", "Run_Start => '2000-01-01'")
+    tpl = _V2_FREE if "run_start" in kw else _V2_FREE.replace("Run_End\t=> '2001-12-31'", "Run_Start => '2000-01-01'")
     out = _build(tpl, **kw)
     res = subprocess.run(
         ["perl", "-e", f"my $h = do {{ local $/; eval <STDIN> }}; die $@ if $@; print $h->{{MT_Code_Name}}{{{key}}}"],

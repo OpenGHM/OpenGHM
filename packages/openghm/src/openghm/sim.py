@@ -279,6 +279,44 @@ def _insert_perl_key(content: str, entry: str, sibling: str, *, before: bool) ->
     return content[:pos] + f" {entry}" + content[pos:]
 
 
+_FILE_SIZE_RE = re.compile(r"\bFile_Size\b\s*=>\s*(?:'([^']*)'|\"([^\"]*)\")")
+_ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+
+
+def _check_run_start_alignment(content: str, run_start: str) -> None:
+    """Refuse a ``--run-start`` that WBM cannot start a run on.
+
+    ``File_Size`` (in ``MT_Code_Name``) sets how much one output file holds. WBM
+    writes the first step of a run into band 1 of a file, so the run must start on
+    the first day of a file, otherwise it dies after the spinup with::
+
+        Not coded to create NetCDF file with BAND # gt 1 for file-
+        /wbm/wbm_output/<sim_id>/daily/wbm_2000.nc It is 61...
+
+    Checked here, before staging, so the user is not charged an allocation to find
+    out. ``'year'`` (must be ``YYYY-01-01``) was seen failing on Anvil (job
+    20977065); ``'month'`` (``YYYY-MM-01``) follows from the same band rule and was
+    not run. An absent ``File_Size``, any other value, or a run start that is not
+    an ISO date is left alone (WBM's behaviour there is unverified).
+    """
+    m = _FILE_SIZE_RE.search(content)
+    size = (m.group(1) if m.group(1) is not None else m.group(2)) if m else None
+    d = _ISO_DATE_RE.match(run_start)
+    if size not in ("year", "month") or d is None:
+        return
+    year, month, day = d.groups()
+    if size == "year":
+        ok, suggest = (month, day) == ("01", "01"), f"{year}-01-01"
+    else:
+        ok, suggest = day == "01", f"{year}-{month}-01"
+    if not ok:
+        raise OpenghmError(
+            f"--run-start {run_start}: this init writes one output file per {size} "
+            f"(File_Size '{size}'), and WBM can only start a run on the first day of a "
+            f"file. Use {suggest}."
+        )
+
+
 def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) -> str:
     """Normalize output paths to absolute container paths, then apply overrides.
 
@@ -298,6 +336,7 @@ def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) ->
     # Run_Start / Run_End: the v2 wbm_test.init has Run_End but no Run_Start, so a
     # missing one is inserted beside the other and only a block with neither raises
     if opts.run_start is not None:
+        _check_run_start_alignment(template, opts.run_start)
         out = _set_perl_key(
             out, "Run_Start", opts.run_start, quote=True, required=True, label="--run-start",
             insert_before="Run_End",
