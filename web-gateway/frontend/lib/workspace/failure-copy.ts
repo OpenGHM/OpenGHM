@@ -24,25 +24,27 @@ export interface FailureCopy {
  * The only place the wording for a verdict cause lives (ADR 0026). The backend
  * names the cause; nothing else in the frontend spells one out.
  *
- * Plain copy: what happened, and what to do. The backend's own `message` and
- * the log excerpt are shown next to this, so this does not repeat them.
+ * Plain copy: what happened, and what to do. `body` is the fallback for a job
+ * whose verdict carries no `message` (an old document); when there is one, the
+ * card shows the message instead, because it names the facts of the run. So
+ * `body` must read on its own, and refer to nothing shown next to it.
  */
 export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   fetch_failed: {
     title: "The snapshot couldn't be downloaded",
-    body: "The job could not fetch the snapshot's files onto Anvil, so WBM never started. The message below names what failed.",
+    body: "The job could not fetch the snapshot's files onto Anvil, so WBM never started.",
     nextStep: "resubmit",
     tone: "danger",
   },
   run_refused: {
     title: "The run was refused before it started",
-    body: "The toolkit checked the snapshot and this simulation's settings and refused to start WBM. The message below says which check failed.",
+    body: "The toolkit checked the snapshot and this simulation's settings and refused to start WBM.",
     nextStep: "new_draft",
     tone: "danger",
   },
   wbm_error: {
     title: "WBM stopped with an error",
-    body: "WBM started and then exited with an error. The last lines of its log are below.",
+    body: "WBM started and then exited with an error. The job's logs say what it reported.",
     nextStep: "new_draft",
     tone: "danger",
   },
@@ -102,7 +104,7 @@ export const NEXT_STEP_COPY: Record<NextStep, string> = {
   resubmit_longer_walltime:
     "Start a new draft and pick a longer walltime before you submit it.",
   new_draft:
-    "Start a new draft, change what the message above points at, and submit it again.",
+    "Start a new draft, change what caused this, and submit it again.",
   contact_admin:
     "Start a new draft to try again. If it keeps happening, tell an administrator this simulation's ID.",
   none: "",
@@ -114,10 +116,10 @@ export function offersNewDraft(step: NextStep): boolean {
 }
 
 /** A FAILED job that carries no verdict: it ended before the gateway recorded
- *  causes. The card shows the reason the job stored, if any. */
+ *  causes. The card shows the reason the job stored, if any, in place of `body`. */
 export const UNRECORDED_FAILURE_COPY: FailureCopy = {
   title: "The run failed",
-  body: "This job failed before the gateway recorded why. The reason it stored, if any, is below; the job's logs may say more.",
+  body: "This job failed before the gateway recorded why. The job's logs may say more.",
   nextStep: "new_draft",
   tone: "danger",
 };

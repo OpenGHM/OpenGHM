@@ -26,7 +26,9 @@ describe("the failed card", () => {
   it.each(FAILED_CAUSES)("renders %s with its title, message and delete", (cause) => {
     const job = previewSimulation(`failed:${cause}`);
     const html = renderToString(<FailedNextStepsCard job={job} preview />);
-    expect(html).toContain(FAILURE_COPY[cause].title.replace(/'/g, "&#x27;"));
+    const escape = (t: string) => t.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
+    expect(html).toContain(escape(FAILURE_COPY[cause].title));
+    expect(html).toContain(escape(job.failure!.message));
     expect(html).toContain("Delete simulation");
     if (job.failure?.excerpt) expect(html).toContain("Log excerpt");
     if (job.slurm_state) expect(html).toContain(job.slurm_state);
@@ -38,6 +40,20 @@ describe("the failed card", () => {
     );
     expect(html).toContain("Start a new draft");
     expect(html).toContain("longer walltime");
+  });
+
+  it("shows the backend's message and not the per-cause body", () => {
+    const job = previewSimulation("failed:out_of_memory");
+    const html = renderToString(<FailedNextStepsCard job={job} preview />);
+    expect(html).toContain(job.failure!.message);
+    expect(html).not.toContain(FAILURE_COPY.out_of_memory.body);
+  });
+
+  it.each(FAILED_CAUSES)("shows the per-cause body when %s has no message", (cause) => {
+    const base = previewSimulation(`failed:${cause}`);
+    const job = { ...base, failure: { ...base.failure!, message: "" } };
+    const html = renderToString(<FailedNextStepsCard job={job} preview />);
+    expect(html).toContain(FAILURE_COPY[cause].body.replace(/'/g, "&#x27;"));
   });
 
   it("falls back to the stored reason for a job with no verdict", () => {

@@ -22,8 +22,10 @@ const TONE_ICON = {
 
 /**
  * FAILED — what happened, the message and log excerpt that show why, and what
- * to do next. The wording per cause is `FAILURE_COPY`; the backend's own
- * message and the excerpt are shown as they came. A failed simulation can't be
+ * to do next. The title and next step per cause are `FAILURE_COPY`. The one
+ * paragraph under the title is the backend's own message, which carries the
+ * facts of the run; `FAILURE_COPY`'s body stands in only when there is none.
+ * The excerpt is shown as it came. A failed simulation can't be
  * edited in place (PATCH /jobs/{id} is refused past DRAFT), so the next step is
  * a *new* draft from the same snapshot.
  */
@@ -38,8 +40,9 @@ export function FailedNextStepsCard({
   const copy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
   const hue = HUE[TONE_HUE[copy.tone]];
   const Icon = TONE_ICON[copy.tone];
-  // Without a verdict, the reason the job stored is all there is to show.
-  const message = failure?.message ?? job.status_reason;
+  // The backend's message is the specific one. Without a verdict, the reason
+  // the job stored is all there is; without either, the per-cause body.
+  const message = (failure ? failure.message : job.status_reason) || copy.body;
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
@@ -54,13 +57,9 @@ export function FailedNextStepsCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-5 pb-6">
-        <p className="text-sm text-muted-foreground">{copy.body}</p>
-
-        {message && (
-          <p className={`min-w-0 break-words rounded-lg border p-3 text-sm text-foreground ${hue.box}`}>
-            {message}
-          </p>
-        )}
+        <p className={`min-w-0 break-words rounded-lg border p-3 text-sm text-foreground ${hue.box}`}>
+          {message}
+        </p>
 
         <RunMetadata job={job} phase={failure?.phase} />
 

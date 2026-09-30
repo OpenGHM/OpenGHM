@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FailureCause } from "@/lib/jobs/types";
-import { FAILURE_COPY, NEXT_STEP_COPY, offersNewDraft } from "@/lib/workspace/failure-copy";
+import {
+  FAILURE_COPY,
+  NEXT_STEP_COPY,
+  UNRECORDED_FAILURE_COPY,
+  offersNewDraft,
+} from "@/lib/workspace/failure-copy";
 
 // The backend's vocabulary (ADR 0026). A cause added there must be added here,
 // and this list, in the same commit: the record below will not compile without it.
@@ -37,6 +42,15 @@ describe("FAILURE_COPY", () => {
       for (const text of [copy.title, copy.body]) {
         expect(text).not.toMatch(/not wired|illustrative|slurmly|sbatch|outcome\.json/i);
       }
+    }
+  });
+
+  it("has a body that stands on its own, as the fallback for a missing message", () => {
+    for (const copy of [...Object.values(FAILURE_COPY), UNRECORDED_FAILURE_COPY]) {
+      expect(copy.body).not.toMatch(/\b(below|above)\b/i);
+    }
+    for (const text of Object.values(NEXT_STEP_COPY)) {
+      expect(text).not.toMatch(/\b(below|above)\b/i);
     }
   });
 

@@ -153,7 +153,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "1:0",
     failure: {
       phase: "fetch",
-      message: "3 files could not be downloaded: inputs/precip_2001.nc, inputs/precip_2002.nc, inputs/tair_2001.nc",
+      message: "Could not download 3 of 412 snapshot files: inputs/precip_2001.nc, inputs/precip_2002.nc, inputs/tair_2001.nc",
       excerpt: STDERR_TAIL,
     },
   },
@@ -171,7 +171,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "1:0",
     failure: {
       phase: "run",
-      message: "WBM exited with status 1",
+      message: "WBM stopped with an error (exit code 1): cannot open data_init/climate/merra2_prectotcorr_d.init: No such file or directory",
       excerpt: [
         "Use of uninitialized value in numeric lt (<) at /wbm/model/wbm.pl line 2841.",
         "ERROR: cannot open data_init/climate/merra2_prectotcorr_d.init: No such file or directory",
@@ -202,7 +202,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:125",
     failure: {
       phase: "run",
-      message: "SLURM stopped the job for using more memory than it was given",
+      message: "The job ran out of memory and Anvil stopped it. Reduce what the simulation asks for or request more resources, then submit again.",
       excerpt: null,
     },
   },
