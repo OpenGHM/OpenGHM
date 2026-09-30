@@ -110,7 +110,11 @@ def test_the_same_exit_code_after_staging_is_a_wbm_error():
     assert v.failure.cause == "wbm_error"
     assert v.failure.phase == "run"
     assert "exit code 2" in v.failure.message
-    assert v.failure.excerpt == "reading forcing\ndied at RIMS/WBM.pm line 771."
+    assert v.failure.message.endswith(": container exited 2")
+    assert v.failure.excerpt == (
+        "container exited 2\n--- last lines of WBM's log ---\n"
+        "reading forcing\ndied at RIMS/WBM.pm line 771."
+    )
 
 
 def test_a_wbm_error_without_a_log_falls_back_to_stderr():
@@ -119,6 +123,75 @@ def test_a_wbm_error_without_a_log_falls_back_to_stderr():
     v = verdict("FAILED", outcome=rec, err=stderr("apptainer: image not found"))
     assert v.failure.cause == "wbm_error"
     assert v.failure.excerpt == "apptainer: image not found"
+
+
+# What Anvil job 20976785 left on stderr: the reason WBM stopped is here, not
+# in WBM's own log.
+REAL_STDERR = (
+    PREAMBLE + BODY_MARKER + "\n"
+    "  1000/1542 files\n"
+    "dpkg-architecture: warning: cannot determine CC system type, falling back to default (native compilation)\n"
+    "\n"
+    "Requested file (in read_GDAL)-\n"
+    "  /wbm/data/climate/airTemp/2002/MERRA2.T2M.2002-01-01.nc\n"
+    "does not exist. Aborting...\n"
+)
+
+
+def test_a_wbm_error_shows_why_wbm_stopped_then_the_end_of_its_log():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=True,
+                 wbm={"log": "x.log", "all_done": False, "markers": [],
+                      "tail": [f"File wbm_2001.nc day {i} Balance=0.0" for i in range(40)]})
+    v = verdict("FAILED", outcome=rec, err=REAL_STDERR)
+    assert v.failure.cause == "wbm_error"
+    assert "MERRA2.T2M.2002-01-01.nc does not exist" in v.failure.message
+    assert v.failure.message == (
+        "WBM stopped with an error (exit code 2): Requested file (in read_GDAL)- "
+        "/wbm/data/climate/airTemp/2002/MERRA2.T2M.2002-01-01.nc does not exist. Aborting..."
+    )
+    ex = v.failure.excerpt
+    assert ex.startswith("Requested file")
+    assert "--- last lines of WBM's log ---" in ex
+    head, log = ex.split("--- last lines of WBM's log ---\n")
+    assert "Balance=" in log and len(log.splitlines()) == 15
+    assert log.splitlines()[-1] == "File wbm_2001.nc day 39 Balance=0.0"
+    assert "1000/1542 files" not in ex
+    assert "dpkg-architecture" not in ex
+
+
+def test_a_silent_failure_gets_the_same_two_part_excerpt():
+    rec = record(wbm={"log": "x.log", "all_done": False, "markers": [], "tail": ["a", "b"]})
+    v = verdict("COMPLETED", outcome=rec, err=stderr("something on stderr"))
+    assert v.failure.cause == "wbm_silent_failure"
+    assert v.failure.excerpt == "something on stderr\n--- last lines of WBM's log ---\na\nb"
+
+
+def test_a_wbm_error_with_nothing_on_stderr_shows_the_log_alone():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=True, wbm={"log": "x.log", "all_done": False, "markers": [], "tail": ["a", "b"]})
+    v = verdict("FAILED", outcome=rec, err=stderr())
+    assert v.failure.excerpt == "a\nb"
+    assert v.failure.message.startswith("WBM stopped with an error (exit code 2).")
+
+
+def test_the_reason_in_a_wbm_error_message_is_cut_at_200_characters():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=True, wbm={"log": None, "all_done": False, "markers": [], "tail": []})
+    v = verdict("FAILED", outcome=rec, err=stderr("first paragraph", "", "w " * 300))
+    reason = v.failure.message.split("): ", 1)[1]
+    assert len(reason) == 200 and reason.endswith("…")
+    assert "first paragraph" not in reason
+
+
+def test_a_wbm_log_does_not_push_the_excerpt_over_8_kb():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}},
+                 staged=True, wbm={"log": "x.log", "all_done": False, "markers": [],
+                                   "tail": ["z" * 1000 for _ in range(15)]})
+    ex = verdict("FAILED", outcome=rec, err=stderr(*[("y" * 400) for _ in range(15)])).failure.excerpt
+    assert len(ex.encode()) <= 8 * 1024
+    assert ex.startswith("y" * 400)
+    assert "--- last lines of WBM's log ---" in ex
 
 
 def test_wbm_exiting_0_over_a_failure_marker_is_a_silent_failure():
@@ -320,6 +393,26 @@ def test_without_the_marker_the_whole_tail_is_the_excerpt():
     # The body never started (a module error, say): all of it is news.
     v = verdict("FAILED", outcome=None, err="Lmod has detected the following error: no such module\n")
     assert v.failure.excerpt == "Lmod has detected the following error: no such module"
+
+
+def test_a_timeout_excerpt_leaves_out_the_noise_lines():
+    v = verdict("TIMEOUT", outcome=None, err=stderr(
+        "  1000/1542 files",
+        "dpkg-architecture: warning: cannot determine CC system type, falling back to default",
+        "slurmstepd: error: DUE TO TIME LIMIT",
+    ))
+    assert v.failure.excerpt == "slurmstepd: error: DUE TO TIME LIMIT"
+
+
+def test_progress_fragments_joined_by_carriage_returns_are_noise_too():
+    v = verdict("TIMEOUT", outcome=None,
+                err=stderr("  10/1542 files\r  500/1542 files\r  1000/1542 files", "real news"))
+    assert v.failure.excerpt == "real news"
+
+
+def test_blank_runs_collapse_to_one_blank_line():
+    v = verdict("TIMEOUT", outcome=None, err=stderr("a", "", "  100/200 files", "", "", "b"))
+    assert v.failure.excerpt == "a\n\nb"
 
 
 def test_the_excerpt_is_the_last_60_lines_and_8_kb():

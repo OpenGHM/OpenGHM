@@ -17,6 +17,7 @@ Mongo. The first rule that matches wins:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -80,6 +81,14 @@ _MESSAGE: dict[str, str] = {
 
 _EXCERPT_LINES = 60
 _EXCERPT_BYTES = 8 * 1024
+_WBM_LOG_LINES = 15
+_WBM_LOG_SEPARATOR = "--- last lines of WBM's log ---"
+_REASON_CHARS = 200
+
+# Stderr lines that are noise, not news: the toolkit's fetch progress and the
+# container tooling's architecture warning.
+_PROGRESS = re.compile(r"^\s*\d+/\d+ files\s*$")
+_NOISE_PREFIXES = ("dpkg-architecture: warning:",)
 
 
 @dataclass(frozen=True)
@@ -145,7 +154,7 @@ def _from_record(record: dict | None, *, slurm_state: str | None, excerpt: str |
     wbm = record.get("wbm") or {}
     output = record.get("output") or {}
     phase = record.get("phase")
-    wbm_excerpt = "\n".join(wbm.get("tail") or []).strip() or None
+    wbm_tail = wbm.get("tail") or []
 
     # First failing fact first. A step that has an exit code and did not
     # exit 0 is a verdict; one that has none means the script stopped inside
@@ -156,7 +165,12 @@ def _from_record(record: dict | None, *, slurm_state: str | None, excerpt: str |
         code = run["exit_code"]
         if not record.get("staged"):
             return _fail("run_refused", excerpt=excerpt, detail=_openghm_message(excerpt), code=code)
-        return _fail("wbm_error", excerpt=wbm_excerpt or excerpt, code=code)
+        return _fail(
+            "wbm_error",
+            excerpt=_wbm_excerpt(excerpt, wbm_tail),
+            detail=_last_paragraph(excerpt),
+            code=code,
+        )
     if fetch is None or run is None:
         return _fail("outcome_missing", phase=phase, excerpt=excerpt, detail="stopped_before_run")
     if fetch.get("exit_code") is None or run.get("exit_code") is None:
@@ -166,11 +180,11 @@ def _from_record(record: dict | None, *, slurm_state: str | None, excerpt: str |
 
     markers = wbm.get("markers") or []
     if markers:
-        return _fail("wbm_silent_failure", excerpt=wbm_excerpt or excerpt, detail=f"marker:{markers[0]}")
+        return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail=f"marker:{markers[0]}")
     if not wbm.get("all_done"):
-        return _fail("wbm_silent_failure", excerpt=wbm_excerpt or excerpt, detail="no_all_done")
+        return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail="no_all_done")
     if not output.get("nc_count"):
-        return _fail("wbm_silent_failure", excerpt=wbm_excerpt or excerpt, detail="no_nc")
+        return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail="no_nc")
 
     # The record says success. SLURM has to agree, or the two disagree and
     # neither is to be trusted with the word "completed".
@@ -221,6 +235,8 @@ def _message(cause: str, *, detail: str | None, code: int | None, state: str | N
         why = detail or "the snapshot or its configuration is not valid"
         return f"The toolkit refused to run this simulation: {why}. Check the snapshot's settings and submit again."
     if cause == "wbm_error":
+        if detail:
+            return f"WBM stopped with an error (exit code {code}): {detail}"
         return (
             f"WBM stopped with an error (exit code {code}). The last lines of its "
             "log show what it was doing."
@@ -253,15 +269,68 @@ def _message(cause: str, *, detail: str | None, code: int | None, state: str | N
 def _stderr_excerpt(stderr_tail: str) -> str | None:
     """The part of stderr that is the job's own: after the body's marker,
     which keeps slurmly's `module list` out. With no marker the body never
-    started, and everything there is news. The last ~60 lines / 8 KB."""
-    text = stderr_tail or ""
+    started, and everything there is news. Known noise lines are dropped
+    (progress may arrive as `\\r` fragments: the last one is the line) and
+    blank runs collapse to one. The last ~60 lines / 8 KB."""
+    text = (stderr_tail or "").replace("\r\n", "\n")
     at = text.find(BODY_MARKER)
     if at != -1:
         text = text[at + len(BODY_MARKER):]
-    lines = text.strip("\n").splitlines()[-_EXCERPT_LINES:]
-    text = "\n".join(lines).strip()
+    lines: list[str] = []
+    for raw in text.split("\n"):
+        fragments = [f for f in raw.split("\r") if f.strip()]
+        line = fragments[-1].rstrip() if fragments else ""
+        if _PROGRESS.match(line) or line.lstrip().startswith(_NOISE_PREFIXES):
+            continue
+        if not line and (not lines or not lines[-1]):
+            continue
+        lines.append(line)
+    text = "\n".join(lines).strip("\n")
+    text = "\n".join(text.splitlines()[-_EXCERPT_LINES:]).strip()
     if len(text.encode("utf-8")) > _EXCERPT_BYTES:
         text = text.encode("utf-8")[-_EXCERPT_BYTES:].decode("utf-8", errors="ignore")
+    return text or None
+
+
+def _wbm_excerpt(excerpt: str | None, tail: list[str]) -> str | None:
+    """Why WBM stopped is on stderr; what it was doing is in its log. Both,
+    stderr first, the log's last lines after a separator. Within the byte cap
+    the log part is what gives way."""
+    log_lines = [str(x) for x in tail][-_WBM_LOG_LINES:]
+    while log_lines and not log_lines[0].strip():
+        log_lines.pop(0)
+    log = "\n".join(log_lines).strip()
+    if not log:
+        return excerpt
+    if not excerpt:
+        return _last_bytes(log, _EXCERPT_BYTES)
+    head = excerpt + "\n" + _WBM_LOG_SEPARATOR + "\n"
+    room = _EXCERPT_BYTES - len(head.encode("utf-8"))
+    if room <= 0:
+        return excerpt
+    return head + _last_bytes(log, room)
+
+
+def _last_bytes(text: str, limit: int) -> str:
+    """The end of `text` within `limit` bytes, from a line start if it can."""
+    if len(text.encode("utf-8")) <= limit:
+        return text
+    cut = text.encode("utf-8")[-limit:].decode("utf-8", errors="ignore")
+    return cut.split("\n", 1)[1] if "\n" in cut else cut
+
+
+def _last_paragraph(excerpt: str | None) -> str | None:
+    """The last block of consecutive non-blank lines, on one line, at most
+    200 characters: the reason a program gives just before it stops."""
+    block: list[str] = []
+    for line in reversed((excerpt or "").splitlines()):
+        if line.strip():
+            block.append(line.strip())
+        elif block:
+            break
+    text = " ".join(" ".join(reversed(block)).split())
+    if len(text) > _REASON_CHARS:
+        text = text[:_REASON_CHARS - 1].rstrip() + "…"
     return text or None
 
 
