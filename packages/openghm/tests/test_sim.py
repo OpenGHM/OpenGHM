@@ -164,8 +164,10 @@ _V2_INIT = (
 )
 
 
-# the same block without File_Size: --run-start is unchecked, so any date goes
-_V2_FREE = _V2_INIT.replace("          File_Size\t=> 'year',\n", "")
+# the same block with 'day' files: every day starts a file, so any --run-start goes
+_V2_FREE = _V2_INIT.replace("'year'", "'day'")
+# and without File_Size at all: WBM's default is one file per year
+_V2_NO_FILE_SIZE = _V2_INIT.replace("          File_Size\t=> 'year',\n", "")
 
 
 def _build(template, **kw):
@@ -193,8 +195,9 @@ def test_run_start_replaced_in_place_when_present():
 
 
 def test_run_start_with_both_keys_replaces_and_leaves_run_end():
-    out = _build(_INIT_TEMPLATE, run_start="2000-03-01")
-    assert "Run_Start  => '2000-03-01'," in out
+    # no File_Size, so the year rule applies: start on January 1
+    out = _build(_INIT_TEMPLATE, run_start="2000-01-01")
+    assert "Run_Start  => '2000-01-01'," in out
     assert "Run_End    => '2000-12-31'," in out
     assert out.count("Run_Start") == 1
 
@@ -232,10 +235,38 @@ def test_run_start_month_files_rejects_the_15th_and_suggests_the_1st():
     assert "File_Size 'month'" in msg and "one output file per month" in msg and "Use 2000-03-01." in msg
 
 
-def test_run_start_unchecked_without_file_size_or_with_other_value():
+def test_run_start_unchecked_with_day_files_or_another_value():
     assert "Run_Start => '2000-03-15'," in _build(_V2_FREE, run_start="2000-03-15")
-    other = _V2_INIT.replace("'year'", "'day'")
+    other = _V2_INIT.replace("'year'", "'decade'")
     assert "Run_Start => '2000-03-15'," in _build(other, run_start="2000-03-15")
+
+
+def test_run_start_without_file_size_is_the_year_rule():
+    # Code-read (WBM.pm:495, set_default(File_Size, 'year')), not a finished v1 run.
+    assert "Run_Start => '2000-01-01'," in _build(_V2_NO_FILE_SIZE, run_start="2000-01-01")
+    with pytest.raises(OpenghmError) as e:
+        _build(_V2_NO_FILE_SIZE, run_start="2000-03-01")
+    msg = str(e.value)
+    assert msg.startswith("--run-start 2000-03-01:")
+    assert "sets no File_Size" in msg and "one output file per year by default" in msg
+    assert "Use 2000-01-01." in msg
+    with pytest.raises(OpenghmError, match="Use 2000-01-01"):
+        _build(_V2_NO_FILE_SIZE, run_start="2000-01-02")
+
+
+def test_run_start_without_file_size_but_with_time_series_is_unchecked():
+    # hourly daily{N} forces 'day' files; monthly series are unverified: leave alone
+    for series in ("daily{24}", "monthly", "daily"):
+        tpl = _V2_NO_FILE_SIZE.replace(
+            "          MT_ID", f"          Time_Series\t=> '{series}',\n          MT_ID"
+        )
+        assert "Run_Start => '2000-03-15'," in _build(tpl, run_start="2000-03-15"), series
+
+
+def test_run_start_with_an_unreadable_file_size_value_is_unchecked():
+    # the key is there, so it is not "absent": only a quoted value is read
+    tpl = _V2_INIT.replace("'year'", "$size")
+    assert "Run_Start => '2000-03-15'," in _build(tpl, run_start="2000-03-15")
 
 
 def test_run_start_check_reads_double_quoted_and_spaced_file_size():
@@ -250,7 +281,7 @@ def test_run_start_check_only_applies_when_run_start_given():
 
 def test_run_start_without_either_key_still_raises():
     with pytest.raises(OpenghmError, match="--run-start: key 'Run_Start' not found"):
-        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_start="2000-03-01")
+        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_start="2000-01-01")
 
 
 def test_run_end_without_either_key_still_raises():
@@ -270,14 +301,14 @@ def test_run_end_inserted_after_run_start_when_init_has_none():
 
 def test_insert_keeps_tab_indentation():
     tpl = "{\n\tMT_Code_Name => {\n\t\tOutput_dir => 'x',\n\t\tRun_End => '2001-12-31'\n\t},\n}\n"
-    out = _build(tpl, run_start="2000-03-01")
-    assert "\t\tRun_Start => '2000-03-01',\n\t\tRun_End => '2001-12-31'\n" in out
+    out = _build(tpl, run_start="2000-01-01")
+    assert "\t\tRun_Start => '2000-01-01',\n\t\tRun_End => '2001-12-31'\n" in out
 
 
 def test_insert_into_one_line_hash_stays_on_the_line():
     tpl = "{ MT_Code_Name => { Output_dir => 'x', Run_End => '2001-12-31' } }\n"
-    out = _build(tpl, run_start="2000-03-01")
-    assert "Run_Start => '2000-03-01', Run_End => '2001-12-31' }" in out
+    out = _build(tpl, run_start="2000-01-01")
+    assert "Run_Start => '2000-01-01', Run_End => '2001-12-31' }" in out
 
 
 def test_start_key_lookup_does_not_match_run_start_for_insert():

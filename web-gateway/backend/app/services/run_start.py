@@ -13,8 +13,18 @@ The rule mirrors the toolkit's, and no more:
 
 * `'year'` and `'month'` are rules;
 * `'day'` makes every day the first day of a file, so it is no rule;
-* an init without `File_Size`, or with another value, is left alone, because
-  WBM's behaviour there has not been checked (the toolkit leaves it alone too).
+* an init with no `File_Size` key and no `Time_Series` key is `'year'`, WBM's
+  default (`images/wbm-tools-lite/wbm/model/RIMS/WBM.pm` line 495,
+  `set_default($MT_param{File_Size}, 'year')`);
+* an init with no `File_Size` but a `Time_Series` key is left alone (an hourly
+  `daily{N}` series forces `'day'` files, and monthly series were not checked),
+  and so is a `File_Size` with another value or one the pattern cannot read.
+
+What was run and what was read. A v2 job (Anvil job 20977065, `File_Size =>
+'year'`, start 2000-03-01) died after the spinup creating a file at a band
+greater than 1. The absent-`File_Size` rule is read from the model code, which
+the v1 model shares: no v1 run was taken to the end (a v1 job started
+2001-03-01 passed WBM's start-up and was in the spinup when its walltime ended).
 
 The init is read over Anvil S3's public HTTPS, as the backend has no S3
 credentials: `<S3_PUBLIC_BASE_URL>/<S3_BUCKET>/snapshots/<id>/wbm_init/<init>`,
@@ -42,13 +52,16 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 #: `"year"`: a run starts on January 1. `"month"`: on the first of a month.
-#: `"none"`: the init was read and sets no rule. `None` (not in this alias): the
+#: `"none"`: the init was read and sets no rule (`File_Size 'day'`, another
+#: value, or no `File_Size` beside a `Time_Series` key). `None` (not in this alias): the
 #: init could not be read, which is not the same as having no rule.
 RunStartAlignment = Literal["year", "month", "none"]
 
-# The toolkit's own pattern (sim.py `_FILE_SIZE_RE`), so the two cannot read one
-# init differently.
+# The toolkit's own patterns (sim.py `_FILE_SIZE_RE`, `_FILE_SIZE_KEY_RE`,
+# `_TIME_SERIES_KEY_RE`), so the two cannot read one init differently.
 _FILE_SIZE_RE = re.compile(r"\bFile_Size\b\s*=>\s*(?:'([^']*)'|\"([^\"]*)\")")
+_FILE_SIZE_KEY_RE = re.compile(r"\bFile_Size\b\s*=>")
+_TIME_SERIES_KEY_RE = re.compile(r"\bTime_Series\b\s*=>")
 _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
 _READ_TIMEOUT = 5.0
@@ -56,9 +69,12 @@ _RETRY_AFTER = 60.0
 
 
 def alignment_from_init(content: str) -> RunStartAlignment:
-    """The run-start rule an init's `File_Size` sets."""
+    """The run-start rule an init's `File_Size` sets; `'year'` for an init that
+    sets neither `File_Size` nor `Time_Series` (WBM's default)."""
     m = _FILE_SIZE_RE.search(content)
     size = (m.group(1) if m.group(1) is not None else m.group(2)) if m else None
+    if size is None and not _FILE_SIZE_KEY_RE.search(content) and not _TIME_SERIES_KEY_RE.search(content):
+        size = "year"
     return size if size in ("year", "month") else "none"  # type: ignore[return-value]
 
 

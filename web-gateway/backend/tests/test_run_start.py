@@ -3,8 +3,13 @@ from the init's `File_Size`, the answer GET /repository/datasets/{id} gives, and
 the 422s a PATCH and a submit give for a start WBM cannot run.
 
 The init text below is the real `wbm_init/wbm_test.init` of the published v2.0.0
-snapshot (fc66a2cd…), cut to its first block. Nothing here reaches S3: the read
+snapshot (fc66a2cd…), cut to its first block. `V1_SHAPED_INIT` is not a copy of
+a v1 init: it only has the property of the catalogue's two v1 inits that matters
+here, no `File_Size` and no `Time_Series` key. Nothing here reaches S3: the read
 is replaced, as in tests/conftest.py.
+
+An init with neither key is `year` because WBM's default is `'year'`
+(WBM.pm line 495). That is read from the model code, not from a finished v1 run.
 """
 
 from __future__ import annotations
@@ -31,6 +36,19 @@ MT_Code_Name	=>  {
 """
 
 
+# Shaped like the v1 snapshots' inits: neither File_Size nor Time_Series.
+V1_SHAPED_INIT = """{
+ID		=> 'Global_tracking',
+MT_Code_Name	=>  {
+          MT_ID		=> 'Global_tracking',
+          Output_dir	=> 'wbm/wbm_output/Global_tracking',
+          Run_Start	=> '2001-01-01',
+          Run_End	=> '2001-12-31'
+        },
+}
+"""
+
+
 def init_with(file_size_line: str) -> str:
     return "{\nMT_Code_Name => {\n" + file_size_line + "\n Run_End => '2001-12-31'\n},\n}\n"
 
@@ -46,10 +64,17 @@ def init_with(file_size_line: str) -> str:
         (init_with('File_Size=>"year",'), "year"),
         # 'day': every day starts a file, so there is no rule to keep.
         (init_with("File_Size => 'day',"), "none"),
-        # No File_Size, or a value the toolkit does not know: no rule, as in the toolkit.
-        (init_with("MT_ID => 'x',"), "none"),
+        # No File_Size and no Time_Series: WBM's default is 'year', as in the toolkit.
+        (V1_SHAPED_INIT, "year"),
+        (init_with("MT_ID => 'x',"), "year"),
+        ("", "year"),
+        # No File_Size beside a Time_Series key: unverified, left alone, as in the toolkit.
+        (init_with("Time_Series => 'daily',"), "none"),
+        (init_with("Time_Series => 'daily{24}',"), "none"),
+        (init_with("Time_Series => 'monthly',"), "none"),
+        # A value the toolkit does not know, or cannot read: no rule, as in the toolkit.
         (init_with("File_Size => 'decade',"), "none"),
-        ("", "none"),
+        (init_with("File_Size => $size,"), "none"),
     ],
 )
 def test_the_rule_is_read_from_file_size(text, expected):
@@ -62,8 +87,19 @@ def test_the_gateway_and_the_toolkit_agree_on_which_starts_are_refused():
     from openghm.errors import OpenghmError
     from openghm.sim import _check_run_start_alignment
 
-    inits = [WBM_TEST_INIT, init_with("File_Size => 'month',"), init_with("File_Size => 'day',"), init_with("MT_ID => 'x',")]
-    starts = ["2000-01-01", "2000-03-01", "2000-03-02", "2000-12-31", "2001-01-01"]
+    inits = [
+        WBM_TEST_INIT,
+        V1_SHAPED_INIT,
+        init_with("File_Size => 'month',"),
+        init_with("File_Size => 'day',"),
+        init_with("File_Size => 'decade',"),
+        init_with("File_Size => $size,"),
+        init_with("MT_ID => 'x',"),
+        init_with("Time_Series => 'daily',"),
+        init_with("Time_Series => 'daily{24}',"),
+        "",
+    ]
+    starts = ["2000-01-01", "2000-03-01", "2000-03-02", "2000-12-31", "2001-01-01", "not a date"]
     for text in inits:
         rule = run_start.alignment_from_init(text)
         for start in starts:
@@ -270,9 +306,21 @@ def test_an_unreadable_rule_blocks_nothing_on_a_patch(client, db, draft):
     assert db.jobs.docs["job-1"]["parameters"]["temporal_range_start"] == "2000-03-01"
 
 
-def test_a_snapshot_with_no_file_size_blocks_nothing(client, db, draft, monkeypatch):
+def test_a_snapshot_with_no_file_size_is_held_to_the_year_rule(client, db, draft, monkeypatch):
     async def fetch(url: str) -> str:
-        return init_with("MT_ID => 'x',")
+        return V1_SHAPED_INIT
+
+    monkeypatch.setattr(run_start, "_fetch_init", fetch)
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2000-03-01")}, headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "run_start_not_aligned"
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2001-01-01", "2001-12-31")}, headers=HEADERS)
+    assert r.status_code == 200
+
+
+def test_a_snapshot_with_a_time_series_and_no_file_size_blocks_nothing(client, db, draft, monkeypatch):
+    async def fetch(url: str) -> str:
+        return init_with("Time_Series => 'daily',")
 
     monkeypatch.setattr(run_start, "_fetch_init", fetch)
     r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2000-03-01")}, headers=HEADERS)

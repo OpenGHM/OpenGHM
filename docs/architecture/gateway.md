@@ -163,12 +163,16 @@ list *publish a simulation as a snapshot*).
 A draft's start date is checked against where its snapshot's model may start a
 run. WBM writes a run's first step into band 1 of an output file, so a run can
 only start on the first day of one: with `File_Size 'year'` in the init, on
-January 1, with `'month'`, on the first of a month. `web-gateway/backend/app/services/run_start.py`
-reads `File_Size` from the init that `simulation.init` names, over the public
-HTTPS read of §5, once per snapshot id, with the same pattern `openghm sim run`
-uses. `GET /api/v1/repository/datasets/{id}` carries the result as
-`runStartAlignment` (`year`, `month`, `none` for an init that sets no rule, or
-`null` when the init could not be read). The wizard's parameters step and the
+January 1, with `'month'`, on the first of a month. An init that sets neither
+`File_Size` nor `Time_Series` is `'year'` too, WBM's default
+(`images/wbm-tools-lite/wbm/model/RIMS/WBM.pm` line 495; read from the model
+code, no v1 run was taken to the end). `web-gateway/backend/app/services/run_start.py`
+reads `File_Size` and `Time_Series` from the init that `simulation.init` names,
+over the public HTTPS read of §5, once per snapshot id, with the same patterns
+`openghm sim run` uses. `GET /api/v1/repository/datasets/{id}` carries the
+result as `runStartAlignment` (`year`, `month`, `none` for `File_Size 'day'`,
+another value, or no `File_Size` beside a `Time_Series` key, or `null` when the
+init could not be read). The wizard's parameters step and the
 draft editor say the rule beside the Start date, flag a start that breaks it and
 offer the nearest valid one; `PATCH /jobs/{id}` and the submit answer `422
 run_start_not_aligned` for the same start. A rule that cannot be read blocks

@@ -280,6 +280,10 @@ def _insert_perl_key(content: str, entry: str, sibling: str, *, before: bool) ->
 
 
 _FILE_SIZE_RE = re.compile(r"\bFile_Size\b\s*=>\s*(?:'([^']*)'|\"([^\"]*)\")")
+# The keys themselves, whatever their value: "the init sets none" is a different
+# fact from "the init sets a value this pattern cannot read".
+_FILE_SIZE_KEY_RE = re.compile(r"\bFile_Size\b\s*=>")
+_TIME_SERIES_KEY_RE = re.compile(r"\bTime_Series\b\s*=>")
 _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
 
@@ -294,15 +298,36 @@ def _check_run_start_alignment(content: str, run_start: str) -> None:
         /wbm/wbm_output/<sim_id>/daily/wbm_2000.nc It is 61...
 
     Checked here, before staging, so the user is not charged an allocation to find
-    out. ``'year'`` (must be ``YYYY-01-01``) was seen failing on Anvil (job
-    20977065); ``'month'`` (``YYYY-MM-01``) follows from the same band rule and was
-    not run. An absent ``File_Size``, any other value, or a run start that is not
-    an ISO date is left alone (WBM's behaviour there is unverified).
+    out. The rule:
+
+    * ``'year'``: the run must start on ``YYYY-01-01``;
+    * ``'month'``: on ``YYYY-MM-01``;
+    * ``'day'``: no rule, every day starts a file;
+    * no ``File_Size`` key and no ``Time_Series`` key: WBM's default is
+      ``'year'`` (``WBM.pm`` line 495, ``set_default($MT_param{File_Size},
+      'year')``), so the ``'year'`` rule applies;
+    * anything else is left alone: no ``File_Size`` but a ``Time_Series`` key
+      (an hourly ``daily{N}`` series forces ``'day'``, and monthly series were not
+      checked), a ``File_Size`` value this pattern cannot read or WBM does not
+      know, or a run start that is not an ISO date.
+
+    What was run and what was read. Run: a v2 job (Anvil job 20977065, ``File_Size
+    => 'year'``, start 2000-03-01) died with the message above after the spinup.
+    Read, not run: the ``BAND gt 1`` die is the same code in the v1 model, and the
+    default above is in ``WBM.pm``; no v1 run was taken to the end (a v1 job
+    started 2001-03-01 passed WBM's start-up and was in the spinup when its
+    walltime ended), so the absent-``File_Size`` rule rests on the model code,
+    and ``'month'`` on the same band rule. Not run.
     """
+    d = _ISO_DATE_RE.match(run_start)
+    if d is None:
+        return
     m = _FILE_SIZE_RE.search(content)
     size = (m.group(1) if m.group(1) is not None else m.group(2)) if m else None
-    d = _ISO_DATE_RE.match(run_start)
-    if size not in ("year", "month") or d is None:
+    absent = False
+    if size is None and not _FILE_SIZE_KEY_RE.search(content) and not _TIME_SERIES_KEY_RE.search(content):
+        size, absent = "year", True
+    if size not in ("year", "month"):
         return
     year, month, day = d.groups()
     if size == "year":
@@ -310,10 +335,14 @@ def _check_run_start_alignment(content: str, run_start: str) -> None:
     else:
         ok, suggest = day == "01", f"{year}-{month}-01"
     if not ok:
+        why = (
+            f"this init sets no File_Size, so WBM writes one output file per {size} by default"
+            if absent
+            else f"this init writes one output file per {size} (File_Size '{size}')"
+        )
         raise OpenghmError(
-            f"--run-start {run_start}: this init writes one output file per {size} "
-            f"(File_Size '{size}'), and WBM can only start a run on the first day of a "
-            f"file. Use {suggest}."
+            f"--run-start {run_start}: {why}, and WBM can only start a run on the "
+            f"first day of a file. Use {suggest}."
         )
 
 
