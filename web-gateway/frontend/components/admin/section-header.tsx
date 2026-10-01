@@ -8,9 +8,9 @@ export function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{title}</h1>
         {description && <p className="text-sm text-slate-500">{description}</p>}
       </div>
       {action}

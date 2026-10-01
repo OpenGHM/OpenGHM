@@ -39,7 +39,7 @@ export function AdminNav({ role }: { role: UserRole }) {
             {role === "admin" ? "Admin" : "Staff (read-only)"}
           </p>
         </div>
-        <nav className="flex flex-col gap-0.5 px-2">
+        <nav aria-label="Admin" className="flex flex-col gap-0.5 px-2">
           {items.map((item) => {
             const isActive = item.exact
               ? pathname === item.href
@@ -56,7 +56,7 @@ export function AdminNav({ role }: { role: UserRole }) {
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={16} aria-hidden="true" />
                 {item.label}
               </Link>
             );
@@ -64,8 +64,8 @@ export function AdminNav({ role }: { role: UserRole }) {
         </nav>
       </aside>
 
-      {/* Mobile: horizontally scrollable pill row above the content. */}
-      <nav className="flex md:hidden gap-2 overflow-x-auto border-b border-sidebar-border bg-sidebar px-4 py-2">
+      {/* Mobile: a pill row above the content; it scrolls inside its own strip, never the page. */}
+      <nav aria-label="Admin" className="flex md:hidden gap-2 overflow-x-auto border-b border-sidebar-border bg-sidebar px-4 py-2">
         {items.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
@@ -75,7 +75,7 @@ export function AdminNav({ role }: { role: UserRole }) {
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex min-h-10 shrink-0 items-center rounded-full px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
                 isActive
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent"

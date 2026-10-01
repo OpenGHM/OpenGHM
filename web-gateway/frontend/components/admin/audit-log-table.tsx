@@ -1,12 +1,14 @@
 import Link from "next/link";
+import { TableHead, TableRow } from "@/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  StackedBody,
+  StackedCell,
+  StackedHeader,
+  StackedRow,
+  StackedTable,
+} from "@/components/admin/stacked-table";
+import { EmptyState } from "@/components/admin/admin-page";
+import { TimeStamp } from "@/components/common/time-stamp";
 import type { AuditCategory, AuditLogEntry } from "@/lib/admin/types";
 
 function ActionBadge({ action }: { action: string }) {
@@ -14,7 +16,7 @@ function ActionBadge({ action }: { action: string }) {
   return (
     <span
       className={`rounded px-2 py-0.5 text-xs font-medium ${
-        isFailure ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700"
+        isFailure ? "bg-destructive/10 text-destructive" : "bg-slate-100 text-slate-700"
       }`}
     >
       {action}
@@ -46,7 +48,8 @@ function CategoryTabs({
           <Link
             key={tab.label}
             href={href}
-            className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+            aria-current={isActive ? "page" : undefined}
+            className={`inline-flex items-center rounded-md px-3 py-1 text-sm font-medium transition-colors max-sm:min-h-10 ${
               isActive
                 ? "bg-slate-900 text-white"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -75,10 +78,14 @@ export function AuditLogTable({
     <>
       {showFilters && <CategoryTabs active={activeCategory} basePath={basePath} />}
       {entries.length === 0 ? (
-        <p className="text-sm text-slate-500">No audit events yet.</p>
+        <EmptyState title="No events to show.">
+          {activeCategory
+            ? "Nothing in this category yet. Try All."
+            : "Sign-ins and job activity will appear here as they happen."}
+        </EmptyState>
       ) : (
-        <Table>
-          <TableHeader>
+        <StackedTable>
+          <StackedHeader>
             <TableRow>
               <TableHead>Action</TableHead>
               <TableHead>Actor</TableHead>
@@ -86,32 +93,33 @@ export function AuditLogTable({
               <TableHead>Detail</TableHead>
               <TableHead>When</TableHead>
             </TableRow>
-          </TableHeader>
-          <TableBody>
+          </StackedHeader>
+          <StackedBody>
             {entries.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell>
+              <StackedRow key={e.id}>
+                <StackedCell>
                   <ActionBadge action={e.action} />
-                </TableCell>
-                <TableCell className="text-sm">
+                </StackedCell>
+                <StackedCell label="Actor" className="break-all text-sm">
                   {e.actor_email ?? e.actor_id}
-                </TableCell>
-                <TableCell className="text-sm text-slate-500">
+                </StackedCell>
+                <StackedCell label="Target" className="break-all text-sm text-slate-500">
                   {e.target_id ?? "—"}
-                </TableCell>
-                <TableCell
-                  className="text-xs text-slate-500 max-w-xs truncate"
+                </StackedCell>
+                <StackedCell
+                  label="Detail"
+                  className="break-all text-xs text-slate-500 sm:max-w-xs sm:truncate"
                   title={e.detail ? JSON.stringify(e.detail, null, 2) : undefined}
                 >
                   {e.detail ? JSON.stringify(e.detail) : "—"}
-                </TableCell>
-                <TableCell className="text-xs text-slate-500">
-                  {new Date(e.created_at).toLocaleString()}
-                </TableCell>
-              </TableRow>
+                </StackedCell>
+                <StackedCell label="When" className="text-xs text-slate-500">
+                  <TimeStamp value={e.created_at} format="datetime" />
+                </StackedCell>
+              </StackedRow>
             ))}
-          </TableBody>
-        </Table>
+          </StackedBody>
+        </StackedTable>
       )}
     </>
   );

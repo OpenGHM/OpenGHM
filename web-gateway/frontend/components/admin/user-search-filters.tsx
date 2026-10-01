@@ -62,13 +62,17 @@ export function UserSearchFilters({
 
   return (
     <div className="space-y-3">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+      <div className="relative sm:max-w-sm">
+        <Search
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+          aria-hidden="true"
+        />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name or email…"
-          className="pl-9"
+          aria-label="Search users by name or email"
+          className="pl-9 max-sm:h-10"
         />
       </div>
 
@@ -81,7 +85,7 @@ export function UserSearchFilters({
             onClick={() => pushParams({ role: tab.value })}
           />
         ))}
-        <span className="mx-1 h-4 w-px bg-slate-200" />
+        <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" aria-hidden="true" />
         {STATUS_TABS.map((tab) => (
           <FilterPill
             key={tab.label}
@@ -93,9 +97,9 @@ export function UserSearchFilters({
         {hasFilters && (
           <Link
             href="/admin/users"
-            className="ml-2 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 max-sm:min-h-10 sm:ml-2"
           >
-            <X className="size-3" />
+            <X className="size-3" aria-hidden="true" />
             Clear filters
           </Link>
         )}
@@ -117,7 +121,8 @@ function FilterPill({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+      aria-pressed={isActive}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 max-sm:px-4 ${
         isActive ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
       }`}
     >

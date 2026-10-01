@@ -1,14 +1,23 @@
+import { STATUS_LABEL } from "@/components/jobs/job-status-badge";
+import type { DisplayStatus } from "@/lib/jobs/display-status";
 import type { StatusCount } from "@/lib/admin/types";
 
+/** Each job status in its own hue: the `--status-*` tokens in app/globals.css,
+ *  the same colours the status badge uses. */
 const COLORS: Record<string, string> = {
-  PENDING: "var(--chart-3)",
-  SUBMITTED: "var(--chart-2)",
-  RUNNING: "var(--chart-4)",
-  COMPLETING: "var(--chart-4)",
-  COMPLETED: "var(--chart-2)",
-  FAILED: "var(--chart-5)",
-  CANCELLED: "var(--chart-3)",
+  DRAFT: "var(--status-draft)",
+  PENDING: "var(--status-pending)",
+  SUBMITTED: "var(--status-submitted)",
+  RUNNING: "var(--status-running)",
+  COMPLETING: "var(--status-running)",
+  CANCELLING: "var(--status-cancelling)",
+  COMPLETED: "var(--status-completed)",
+  FAILED: "var(--status-failed)",
+  CANCELLED: "var(--status-cancelled)",
 };
+const FALLBACK = "var(--status-pending)";
+
+const labelFor = (status: string) => STATUS_LABEL[status as DisplayStatus] ?? status;
 
 // Horizontal stacked bar rather than a donut: 7 statuses, several often
 // near-zero, and label placement inside donut slices gets cramped fast.
@@ -16,7 +25,11 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
   const nonZero = items.filter((i) => i.count > 0);
 
   if (total === 0) {
-    return <p className="text-sm text-slate-500">No jobs yet.</p>;
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+        No jobs yet. They will show here as people submit simulations.
+      </div>
+    );
   }
 
   return (
@@ -25,8 +38,8 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
         {nonZero.map((item) => (
           <div
             key={item.status}
-            style={{ width: `${(item.count / total) * 100}%`, backgroundColor: COLORS[item.status] ?? "var(--chart-1)" }}
-            title={`${item.status}: ${item.count}`}
+            style={{ width: `${(item.count / total) * 100}%`, backgroundColor: COLORS[item.status] ?? FALLBACK }}
+            title={`${labelFor(item.status)}: ${item.count}`}
           />
         ))}
       </div>
@@ -34,10 +47,11 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
         {items.map((item) => (
           <div key={item.status} className="flex items-center gap-1.5 text-xs">
             <span
+              aria-hidden="true"
               className="size-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: COLORS[item.status] ?? "var(--chart-1)" }}
+              style={{ backgroundColor: COLORS[item.status] ?? FALLBACK }}
             />
-            <span className="text-slate-600">{item.status}</span>
+            <span className="text-slate-600">{labelFor(item.status)}</span>
             <span className="ml-auto font-medium text-slate-900">{item.count}</span>
           </div>
         ))}

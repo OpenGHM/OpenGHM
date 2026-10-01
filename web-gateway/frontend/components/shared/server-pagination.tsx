@@ -35,13 +35,13 @@ export function ServerPagination({
     <div className="flex items-center justify-center gap-4 pt-4">
       {page > 1 ? (
         <Link href={hrefFor(page - 1)}>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="max-sm:h-10">
             <ChevronLeft className="mr-1 size-4" />
             Previous
           </Button>
         </Link>
       ) : (
-        <Button variant="ghost" size="sm" disabled>
+        <Button variant="ghost" size="sm" disabled className="max-sm:h-10">
           <ChevronLeft className="mr-1 size-4" />
           Previous
         </Button>
@@ -51,13 +51,13 @@ export function ServerPagination({
       </span>
       {page < totalPages ? (
         <Link href={hrefFor(page + 1)}>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="max-sm:h-10">
             Next
             <ChevronRight className="ml-1 size-4" />
           </Button>
         </Link>
       ) : (
-        <Button variant="ghost" size="sm" disabled>
+        <Button variant="ghost" size="sm" disabled className="max-sm:h-10">
           Next
           <ChevronRight className="ml-1 size-4" />
         </Button>

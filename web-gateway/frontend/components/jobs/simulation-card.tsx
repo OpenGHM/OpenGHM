@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock, Cpu, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { HUE } from "@/lib/jobs/status-hue";
@@ -42,12 +43,8 @@ export function SimulationCard({ job }: { job: Job }) {
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
-              <Calendar className="size-3.5" />
-              {new Date(job.created_at).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
+              <Calendar className="size-3.5" aria-hidden="true" />
+              <TimeStamp value={job.created_at} format="date" />
             </span>
 
             {job.started_at && job.completed_at && (

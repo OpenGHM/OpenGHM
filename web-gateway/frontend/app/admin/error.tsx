@@ -1,23 +1,23 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AdminPage } from "@/components/admin/admin-page";
 
-export default function AdminError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function AdminError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <div className="mx-auto max-w-6xl p-8">
-      <div className="rounded-lg border border-dashed border-red-200 bg-red-50 p-8 text-center space-y-3">
-        <p className="font-medium text-red-800">Something went wrong loading this page.</p>
-        <p className="text-sm text-red-600">{error.message}</p>
-        <Button variant="outline" onClick={reset}>
+    <AdminPage>
+      <div
+        role="alert"
+        className="flex flex-col items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-8 text-center text-destructive"
+      >
+        <AlertCircle className="size-5" aria-hidden="true" />
+        <p className="font-medium">Couldn&apos;t load this page.</p>
+        <p className="text-sm">Try again. If it keeps failing, the service may be unavailable.</p>
+        <Button variant="outline" onClick={reset} className="min-h-10 sm:min-h-9">
           Try again
         </Button>
       </div>
-    </div>
+    </AdminPage>
   );
 }

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPage, InlineError } from "@/components/admin/admin-page";
 import { SectionHeader } from "@/components/admin/section-header";
 import { UsersTable } from "@/components/admin/users-table";
 import { UserSearchFilters } from "@/components/admin/user-search-filters";
@@ -31,7 +32,7 @@ export default async function AdminUsersPage({
   const users = usersResult ?? EMPTY_USERS;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
+    <AdminPage>
       <SectionHeader
         title="Users"
         description={
@@ -45,11 +46,11 @@ export default async function AdminUsersPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{users.total_count} users</CardTitle>
+          <CardTitle>{usersResult === null ? "Users" : `${users.total_count} users`}</CardTitle>
         </CardHeader>
         <CardContent>
           {usersResult === null ? (
-            <p className="text-red-600 text-sm">Failed to load users.</p>
+            <InlineError title="Couldn't load users." />
           ) : (
             <>
               <UsersTable
@@ -67,6 +68,6 @@ export default async function AdminUsersPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </AdminPage>
   );
 }

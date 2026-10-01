@@ -16,6 +16,14 @@ export function BarChart({
   colorVar?: string;
   formatLabel?: (iso: string) => string;
 }) {
+  if (points.length === 0 || points.every((p) => p.count === 0)) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+        Nothing in this period yet.
+      </div>
+    );
+  }
+
   const max = Math.max(1, ...points.map((p) => p.count));
   const barWidth = WIDTH / points.length;
   const chartHeight = HEIGHT - PADDING_BOTTOM;
@@ -47,7 +55,7 @@ export function BarChart({
                 x={x + barWidth / 2}
                 y={HEIGHT - 4}
                 textAnchor="middle"
-                className="fill-slate-400"
+                className="fill-slate-500"
                 fontSize="9"
               >
                 {formatLabel ? formatLabel(p.bucket) : new Date(p.bucket).toLocaleDateString(undefined, { month: "short", day: "numeric" })}

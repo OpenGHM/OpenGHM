@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPage, InlineError } from "@/components/admin/admin-page";
 import { SectionHeader } from "@/components/admin/section-header";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { ServerPagination } from "@/components/shared/server-pagination";
@@ -20,16 +21,16 @@ export default async function AdminAuditPage({
   const auditLog = auditResult ?? EMPTY_AUDIT;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
+    <AdminPage>
       <SectionHeader title="Audit log" description="Authentication and job activity across the site." />
 
       <Card>
         <CardHeader>
-          <CardTitle>{auditLog.total_count} events</CardTitle>
+          <CardTitle>{auditResult === null ? "Events" : `${auditLog.total_count} events`}</CardTitle>
         </CardHeader>
         <CardContent>
           {auditResult === null ? (
-            <p className="text-red-600 text-sm">Failed to load audit log.</p>
+            <InlineError title="Couldn't load the audit log." />
           ) : (
             <>
               <AuditLogTable entries={auditLog.items} activeCategory={category} basePath="/admin/audit" />
@@ -43,6 +44,6 @@ export default async function AdminAuditPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </AdminPage>
   );
 }

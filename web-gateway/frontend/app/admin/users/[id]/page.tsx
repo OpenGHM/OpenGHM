@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPage, EmptyState, InlineError } from "@/components/admin/admin-page";
 import { UserRoleStatusCard } from "@/components/admin/user-role-status-card";
 import { UserSessionsTable } from "@/components/admin/user-sessions-table";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
@@ -42,19 +43,34 @@ export default async function AdminUserDetailPage({
       : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
-      <Link href="/admin/users" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
-        <ChevronLeft className="size-4" />
+    <AdminPage>
+      <Link
+        href="/admin/users"
+        className="inline-flex min-h-10 items-center gap-1 text-sm text-slate-500 hover:text-slate-700 sm:min-h-0"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
         Back to users
       </Link>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1 space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-1">
           <UserRoleStatusCard user={user} isSelf={user.id === session?.user.id} canManage={isAdmin} />
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
-          {isAdmin && <UserSessionsTable userId={id} sessions={sessions.items} />}
+        <div className="min-w-0 space-y-6 lg:col-span-2">
+          {isAdmin &&
+            (sessionsResult.status === "rejected" ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sessions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <InlineError title="Couldn't load this user's sessions." />
+                </CardContent>
+              </Card>
+            ) : (
+              <UserSessionsTable userId={id} sessions={sessions.items} />
+            ))}
 
           <Card>
             <CardHeader>
@@ -67,8 +83,12 @@ export default async function AdminUserDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {recentJobs.length === 0 ? (
-                <p className="text-sm text-slate-500">No jobs submitted yet.</p>
+              {jobsResult.status === "rejected" ? (
+                <InlineError title="Couldn't load this user's jobs." />
+              ) : recentJobs.length === 0 ? (
+                <EmptyState title="No jobs submitted yet.">
+                  Their simulations will appear here once they start one.
+                </EmptyState>
               ) : (
                 recentJobs.map((job) => <SimulationCard key={job.id} job={job} />)
               )}
@@ -80,11 +100,15 @@ export default async function AdminUserDetailPage({
               <CardTitle>Recent activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <AuditLogTable entries={userAuditEntries} showFilters={false} />
+              {auditResult.status === "rejected" ? (
+                <InlineError title="Couldn't load this user's activity." />
+              ) : (
+                <AuditLogTable entries={userAuditEntries} showFilters={false} />
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

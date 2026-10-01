@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPage, InlineError } from "@/components/admin/admin-page";
 import { SectionHeader } from "@/components/admin/section-header";
+import { SiteStatsCards } from "@/components/admin/site-stats-cards";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { BarChart } from "@/components/charts/bar-chart";
 import { StatusBreakdownChart } from "@/components/charts/status-breakdown-chart";
@@ -11,17 +13,8 @@ import {
   fetchTimeSeries,
   fetchJobStatusBreakdown,
 } from "@/lib/admin/actions";
-import type { JobStatsResponse } from "@/lib/jobs/types";
 import type { AuditLogListResponse, TimeSeriesResponse, StatusBreakdownResponse } from "@/lib/admin/types";
 
-const EMPTY_STATS: JobStatsResponse = {
-  total: 0,
-  running: 0,
-  completed: 0,
-  failed: 0,
-  draft: 0,
-  cancelled: 0,
-};
 const EMPTY_AUDIT: AuditLogListResponse = { items: [], total_count: 0, page: 1, total_pages: 1 };
 const EMPTY_SERIES: TimeSeriesResponse = {
   metric: "", granularity: "day", timezone: "UTC", start: "", end: "", total: 0, points: [],
@@ -39,7 +32,8 @@ export default async function AdminOverviewPage() {
       fetchJobStatusBreakdown(),
     ]);
 
-  const stats = statsResult.status === "fulfilled" ? statsResult.value : EMPTY_STATS;
+  // A figure that could not be loaded shows a dash, not a zero.
+  const stats = statsResult.status === "fulfilled" ? statsResult.value : null;
   const userCount = usersResult.status === "fulfilled" ? usersResult.value.total_count : null;
   const auditLog = auditResult.status === "fulfilled" ? auditResult.value : EMPTY_AUDIT;
   const jobsSeries = jobsSeriesResult.status === "fulfilled" ? jobsSeriesResult.value : EMPTY_SERIES;
@@ -47,41 +41,16 @@ export default async function AdminOverviewPage() {
   const breakdown = breakdownResult.status === "fulfilled" ? breakdownResult.value : EMPTY_BREAKDOWN;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-8">
+    <AdminPage>
       <SectionHeader title="Admin" description="Site-wide activity at a glance." />
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold text-slate-900">{userCount ?? "—"}</p>
-            <p className="text-sm text-slate-500">Total users</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
-            <p className="text-sm text-slate-500">Total jobs</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold text-amber-600">{stats.running}</p>
-            <p className="text-sm text-slate-500">Running</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
-            <p className="text-sm text-slate-500">Completed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
-            <p className="text-sm text-slate-500">Failed</p>
-          </CardContent>
-        </Card>
-      </div>
+      {(statsResult.status === "rejected" || usersResult.status === "rejected") && (
+        <InlineError title="Some totals could not be loaded.">
+          They show a dash for now. Reload the page to try again.
+        </InlineError>
+      )}
+
+      <SiteStatsCards stats={stats} userCount={userCount} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -90,7 +59,7 @@ export default async function AdminOverviewPage() {
           </CardHeader>
           <CardContent>
             {jobsSeriesResult.status === "rejected" ? (
-              <p className="text-sm text-slate-500">Metrics unavailable.</p>
+              <InlineError title="Couldn't load this chart." />
             ) : (
               <BarChart points={jobsSeries.points} colorVar="var(--chart-2)" />
             )}
@@ -102,7 +71,7 @@ export default async function AdminOverviewPage() {
           </CardHeader>
           <CardContent>
             {signupsSeriesResult.status === "rejected" ? (
-              <p className="text-sm text-slate-500">Metrics unavailable.</p>
+              <InlineError title="Couldn't load this chart." />
             ) : (
               <BarChart points={signupsSeries.points} colorVar="var(--chart-1)" />
             )}
@@ -116,7 +85,7 @@ export default async function AdminOverviewPage() {
         </CardHeader>
         <CardContent>
           {breakdownResult.status === "rejected" ? (
-            <p className="text-sm text-slate-500">Metrics unavailable.</p>
+            <InlineError title="Couldn't load this chart." />
           ) : (
             <StatusBreakdownChart items={breakdown.items} total={breakdown.total} />
           )}
@@ -124,7 +93,7 @@ export default async function AdminOverviewPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Link href="/admin/users">
+        <Link href="/admin/users" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="py-4">
               <p className="font-medium text-slate-900">Manage users →</p>
@@ -132,7 +101,7 @@ export default async function AdminOverviewPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/admin/jobs">
+        <Link href="/admin/jobs" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="py-4">
               <p className="font-medium text-slate-900">Site-wide jobs →</p>
@@ -140,7 +109,7 @@ export default async function AdminOverviewPage() {
             </CardContent>
           </Card>
         </Link>
-        <Link href="/admin/audit">
+        <Link href="/admin/audit" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="py-4">
               <p className="font-medium text-slate-900">Audit log →</p>
@@ -156,12 +125,12 @@ export default async function AdminOverviewPage() {
         </CardHeader>
         <CardContent>
           {auditResult.status === "rejected" ? (
-            <p className="text-red-600 text-sm">Failed to load audit log.</p>
+            <InlineError title="Couldn't load recent activity." />
           ) : (
             <AuditLogTable entries={auditLog.items.slice(0, 8)} showFilters={false} />
           )}
         </CardContent>
       </Card>
-    </div>
+    </AdminPage>
   );
 }

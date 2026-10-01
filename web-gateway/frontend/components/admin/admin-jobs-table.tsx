@@ -1,27 +1,31 @@
 import Link from "next/link";
+import { TableHead, TableRow } from "@/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  StackedBody,
+  StackedCell,
+  StackedHeader,
+  StackedRow,
+  StackedTable,
+} from "@/components/admin/stacked-table";
+import { EmptyState } from "@/components/admin/admin-page";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
 
-// JobResponse doesn't carry the owner's email (only user_id) — see the
-// admin console plan's note on this gap. Showing the raw id is honest
-// about what the API gives us rather than faking a lookup here.
+// A job carries its owner's id, not an email, so the id is what is shown.
 export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
   if (jobs.length === 0) {
-    return <p className="text-sm text-slate-500 py-6 text-center">No jobs match these filters.</p>;
+    return (
+      <EmptyState title="No jobs match these filters.">
+        Try another status, or clear the user filter.
+      </EmptyState>
+    );
   }
 
   return (
-    <Table>
-      <TableHeader>
+    <StackedTable>
+      <StackedHeader>
         <TableRow>
           <TableHead>Sim ID</TableHead>
           <TableHead>Owner</TableHead>
@@ -30,31 +34,41 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
           <TableHead>Slurm ID</TableHead>
           <TableHead>Submitted</TableHead>
         </TableRow>
-      </TableHeader>
-      <TableBody>
+      </StackedHeader>
+      <StackedBody>
         {jobs.map((job) => (
-          <TableRow key={job.id}>
-            <TableCell>
-              <Link href={`/workspace/${job.id}`} className="font-mono text-xs text-primary hover:underline">
+          <StackedRow key={job.id}>
+            <StackedCell>
+              <Link
+                href={`/workspace/${job.id}`}
+                className="inline-flex min-h-10 items-center font-mono text-xs text-primary hover:underline sm:min-h-0"
+              >
                 {job.sim_id || job.id.slice(0, 12)}
               </Link>
-            </TableCell>
-            <TableCell>
-              <Link href={`/admin/users/${job.user_id}`} className="text-xs text-slate-600 hover:underline">
+            </StackedCell>
+            <StackedCell label="Owner">
+              <Link
+                href={`/admin/users/${job.user_id}`}
+                className="break-all text-xs text-slate-600 hover:underline"
+              >
                 {job.user_id}
               </Link>
-            </TableCell>
-            <TableCell className="max-w-48 truncate text-sm">{job.dataset_title}</TableCell>
-            <TableCell>
+            </StackedCell>
+            <StackedCell label="Dataset" className="text-sm sm:max-w-48 sm:truncate">
+              {job.dataset_title}
+            </StackedCell>
+            <StackedCell label="Status">
               <JobStatusBadge status={displayStatus(job)} />
-            </TableCell>
-            <TableCell className="text-xs text-slate-500">{job.slurm_job_id ?? "—"}</TableCell>
-            <TableCell className="text-xs text-slate-500">
-              {new Date(job.created_at).toLocaleString()}
-            </TableCell>
-          </TableRow>
+            </StackedCell>
+            <StackedCell label="Slurm ID" className="text-xs text-slate-500">
+              {job.slurm_job_id ?? "—"}
+            </StackedCell>
+            <StackedCell label="Submitted" className="text-xs text-slate-500">
+              <TimeStamp value={job.created_at} format="datetime" />
+            </StackedCell>
+          </StackedRow>
         ))}
-      </TableBody>
-    </Table>
+      </StackedBody>
+    </StackedTable>
   );
 }
