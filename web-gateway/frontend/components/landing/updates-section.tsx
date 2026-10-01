@@ -38,27 +38,27 @@ const UPDATES: Update[] = [
 
 export function UpdatesSection() {
   return (
-    <section className="bg-white py-30">
-      <div className="mx-auto max-w-[1280px] px-10">
-        <div className="mb-15 flex items-end justify-between border-b border-muted pb-6">
+    <section className="bg-white py-16 lg:py-30">
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-10">
+        <div className="mb-8 flex flex-col items-start gap-4 border-b border-muted pb-6 sm:flex-row sm:items-end sm:justify-between lg:mb-15">
           <div>
             <span className="mb-4 block text-sm font-bold uppercase tracking-widest text-primary">
               What&apos;s New
             </span>
-            <h2 className="text-[42px] font-extrabold leading-tight tracking-tight text-[#0f172a]">
+            <h2 className="text-3xl font-extrabold leading-tight sm:text-4xl lg:text-[42px] tracking-tight text-[#0f172a]">
               Latest Datasets &amp; News
             </h2>
           </div>
-          <button className="rounded-xl border border-muted bg-white px-9 py-4 text-base font-semibold text-primary transition-all hover:bg-muted">
+          <button className="min-h-12 w-full rounded-xl border border-muted bg-white px-6 py-3 sm:w-auto sm:px-9 sm:py-4 text-base font-semibold text-primary transition-all hover:bg-muted">
             View all updates
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-8">
+        <div className="mx-auto grid max-w-md grid-cols-1 gap-6 md:max-w-none md:grid-cols-3 lg:gap-8">
           {UPDATES.map((update) => (
             <div
               key={update.title}
-              className="cursor-pointer overflow-hidden rounded-lg border border-muted transition-shadow hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
+              className="min-w-0 cursor-pointer overflow-hidden rounded-lg border border-muted transition-shadow hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
             >
               <Image
                 src={update.image}
@@ -77,7 +77,7 @@ export function UpdatesSection() {
                 <p className="mb-5 text-[15px] leading-relaxed text-slate-500">
                   {update.description}
                 </p>
-                <a className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                <a className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-primary">
                   {update.linkText}
                   <ArrowRight className="h-4 w-4" />
                 </a>

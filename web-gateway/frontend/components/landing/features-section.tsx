@@ -36,13 +36,13 @@ const FEATURES: Feature[] = [
 
 export function FeaturesSection() {
   return (
-    <section className="bg-muted py-30">
-      <div className="mx-auto max-w-[1280px] px-10">
-        <div className="mx-auto mb-20 max-w-[760px] text-center">
+    <section className="bg-muted py-16 lg:py-30">
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto mb-10 max-w-[760px] lg:mb-20 text-center">
           <span className="mb-4 block text-sm font-bold uppercase tracking-widest text-primary">
             Core Capabilities
           </span>
-          <h2 className="mb-6 text-[42px] font-extrabold leading-tight tracking-tight text-[#0f172a]">
+          <h2 className="mb-6 text-3xl font-extrabold leading-tight sm:text-4xl lg:text-[42px] tracking-tight text-[#0f172a]">
             A Comprehensive Platform for Hydrology
           </h2>
           <p className="text-lg leading-relaxed text-slate-600">
@@ -51,11 +51,11 @@ export function FeaturesSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
           {FEATURES.map((feature) => (
             <div
               key={feature.title}
-              className="flex cursor-pointer flex-col items-start gap-5 rounded-lg bg-white p-10 pb-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_2px_4px_-1px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.1)]"
+              className="flex cursor-pointer flex-col items-start gap-5 min-w-0 rounded-lg bg-white p-6 sm:p-8 lg:p-10 lg:pb-8 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_2px_4px_-1px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.1)]"
             >
               <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary text-primary">
                 <feature.icon className="h-8 w-8" />

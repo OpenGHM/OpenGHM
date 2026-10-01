@@ -7,11 +7,11 @@ const STATS = [
 
 export function StatsBar() {
   return (
-    <section className="border-b border-white/10 bg-[#0f172a] py-10 text-white">
-      <div className="mx-auto grid max-w-[1280px] grid-cols-4 gap-10 px-10 text-center">
+    <section className="border-b border-white/10 bg-[#0f172a] py-8 text-white lg:py-10">
+      <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-4 gap-y-8 px-4 text-center sm:px-6 lg:grid-cols-4 lg:gap-10 lg:px-10">
         {STATS.map((stat) => (
           <div key={stat.label}>
-            <h3 className="mb-2 text-4xl font-bold text-accent">
+            <h3 className="mb-2 text-3xl sm:text-4xl font-bold text-accent">
               {stat.value}
             </h3>
             <p className="text-sm font-medium uppercase tracking-wider text-slate-400">
