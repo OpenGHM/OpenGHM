@@ -173,7 +173,7 @@ function TitleLink({ href, name, className }: { href: string; name: string; clas
   return (
     <h3
       className={cn(
-        "min-w-0 leading-snug font-semibold break-words text-foreground transition-colors group-hover/card:text-primary group-has-[a:focus-visible]/card:text-primary motion-reduce:transition-none",
+        "min-w-0 leading-snug font-semibold break-words text-foreground",
         className
       )}
     >

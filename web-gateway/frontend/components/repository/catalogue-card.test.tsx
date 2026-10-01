@@ -313,11 +313,11 @@ describe("CatalogueCard layout", () => {
     expect(card.className).not.toMatch(/(^|\s)hover:-translate-y/);
   });
 
-  it.each(["list", "grid"] as const)("turns the title to the brand colour on card hover in the %s view", (view) => {
+  it.each(["list", "grid"] as const)("keeps the title colour on hover and focus in the %s view", (view) => {
     renderCard(snapshotItem(), [], view);
     const heading = screen.getByRole("heading", { level: 3 });
-    expect(heading.className).toContain("transition-colors");
-    expect(heading.className).toContain("group-hover/card:text-primary");
+    expect(heading.className).not.toContain("text-primary");
+    expect(heading.className).not.toContain("transition-colors");
     expect(heading.className).not.toContain("underline");
   });
 

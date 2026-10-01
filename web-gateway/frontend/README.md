@@ -73,9 +73,9 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   (`after:absolute after:inset-0`), so clicking anywhere on it opens the detail
   page. On hover (or keyboard focus of the link) the card rises 2px with
   a wider, softer shadow and a brand-tinted border, the map slowly zooms inside
-  its frame, the title turns primary and a round arrow chip fades into the
-  map's top-right corner; the rise and the zoom are `motion-safe:`, so under
-  reduced motion only the colour, shadow and arrow opacity change. When the link has
+  its frame and a round arrow chip fades into the map's top-right corner (the
+  title keeps its colour); the rise and the zoom are `motion-safe:`, so under
+  reduced motion only the shadow, border and arrow opacity change. When the link has
   keyboard focus the whole card also wears the focus ring. The tag chips and the
   keyword chips sit above the stretched link (`relative z-10`) with their own
   focus ring, and the date it was published is at the top right. All of an item's tags come first as primary-tint chips, then the
