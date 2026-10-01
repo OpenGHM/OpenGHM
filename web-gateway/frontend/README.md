@@ -86,7 +86,12 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   and the view). Groups are separated by rules and open and close with a + / –
   button. A group with no options is hidden, a long one shows six and a "Show
   all" toggle, and counts, shown as plain mono numbers, ignore the group's own
-  selection. Spatial resolution is single-select preset chips. Below `lg` the
+  selection. Spatial resolution has an "All" box, a Unit switch (°, ′, ″; it changes
+  only how the numbers are written, not the URL), a two-handle range slider
+  from 0 to 2° with its range written under it, and preset chips that put both
+  handles on one value. The filter is always in degrees
+  (`spatial_res_min` / `spatial_res_max`), and both handles at the ends mean
+  no filter. Below `lg` the
   card folds behind a "Filters" button; from `lg` it is a column beside the
   results.
 - Every filter lives in the URL, a facet as a repeated key

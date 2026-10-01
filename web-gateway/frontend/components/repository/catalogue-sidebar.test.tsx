@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CatalogueSidebar } from "./catalogue-sidebar";
 import { clearedFilters, EMPTY_CATALOGUE_FACETS } from "@/lib/repository/catalogue";
 import { TEMPORAL_RANGE_BOUNDS } from "@/lib/repository/data";
@@ -308,19 +308,183 @@ describe("CatalogueSidebar temporal coverage", () => {
   });
 });
 
+describe("CatalogueSidebar temporal coverage handles", () => {
+  it("shows the bounds again after a keyboard step and a Reset, not the stepped year", () => {
+    const ui = (state: CatalogueFilterState) => (
+      <CatalogueSidebar filters={state} facets={FACETS} onChange={vi.fn()} onClearAll={vi.fn()} />
+    );
+    const from = () => screen.getByLabelText("From") as HTMLInputElement;
+    const earliest = () => screen.getByRole("slider", { name: "Earliest year" });
+    const { rerender } = render(ui(filters()));
+    fireEvent.focus(earliest());
+    fireEvent.keyDown(earliest(), { key: "ArrowRight" });
+    expect(from().value).toBe("1991");
+    // The URL catches up with the step ...
+    rerender(ui(filters({ yearStart: 1991 })));
+    expect(from().value).toBe("1991");
+    // ... and Reset puts the filter back where the draft was made.
+    rerender(ui(filters()));
+    expect(from().value).toBe("1990");
+    expect(earliest().getAttribute("aria-valuenow")).toBe("1990");
+  });
+});
+
 describe("CatalogueSidebar spatial resolution", () => {
-  it("offers the presets as mono chips with Finest and Coarsest under them, and no slider or unit toggle", () => {
+  const FIVE_MIN = 5 / 60;
+  const res = (min: number | null, max: number | null) =>
+    filters({ spatialResMin: min, spatialResMax: max });
+  const resGroup = () => screen.getByRole("group", { name: "Spatial resolution" });
+  const thumb = (name: string) => screen.getByRole("slider", { name });
+
+  it("offers All, a unit, the range slider and the preset chips, in that order", () => {
     setup();
+    const g = resGroup();
+    const all = within(g).getByRole("checkbox", { name: "All" });
+    const unit = within(g).getByRole("button", { name: "Degrees" });
+    const finest = thumb("Finest resolution");
+    const chip = within(g).getByRole("button", { name: "30 arc-sec" });
+    const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(all, unit)).toBe(true);
+    expect(before(unit, finest)).toBe(true);
+    expect(before(finest, chip)).toBe(true);
+    expect(thumb("Coarsest resolution")).toBeTruthy();
     for (const label of ["30 arc-sec", "5 arc-min", "15 arc-min", "0.5°", "1°"]) {
-      const chip = screen.getByRole("button", { name: label });
-      expect(chip.className).toContain("font-mono");
-      expect(chip.className).toContain("rounded-full");
-      expect(chip.getAttribute("aria-pressed")).toBe("false");
+      const c = screen.getByRole("button", { name: label });
+      expect(c.className).toContain("font-mono");
+      expect(c.className).toContain("rounded-full");
+      expect(c.getAttribute("aria-pressed")).toBe("false");
     }
-    expect(screen.getByText("Finest")).toBeTruthy();
-    expect(screen.getByText("Coarsest")).toBeTruthy();
-    expect(screen.queryByRole("slider", { name: /resolution/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Arc-minutes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "0.25°" })).toBeNull();
+  });
+
+  it("shows finest and coarsest, with All ticked, while no range is set", () => {
+    setup();
+    expect((within(resGroup()).getByRole("checkbox", { name: "All" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText("finest")).toBeTruthy();
+    expect(screen.getByText("coarsest")).toBeTruthy();
+    expect(thumb("Finest resolution").getAttribute("aria-valuenow")).toBe("0");
+    expect(thumb("Coarsest resolution").getAttribute("aria-valuenow")).toBe("2");
+  });
+
+  it("clears the range when All is ticked, and does nothing when it is unticked with no range", () => {
+    const { onChange } = setup();
+    fireEvent.click(within(resGroup()).getByRole("checkbox", { name: "All" }));
+    expect(onChange).not.toHaveBeenCalled();
+    cleanup();
+
+    const again = setup(res(0.1, 0.5));
+    const all = within(resGroup()).getByRole("checkbox", { name: "All" }) as HTMLInputElement;
+    expect(all.checked).toBe(false);
+    fireEvent.click(all);
+    expect(again.onChange).toHaveBeenCalledWith({ spatialResMin: null, spatialResMax: null });
+  });
+
+  it("names the three units, marks the chosen one pressed and starts in degrees", () => {
+    setup();
+    const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    expect(pressed("Degrees")).toBe("true");
+    expect(pressed("Arc-minutes")).toBe("false");
+    expect(pressed("Arc-seconds")).toBe("false");
+    expect(screen.getByRole("button", { name: "Arc-minutes" }).textContent).toBe("′");
+    expect(screen.getByRole("button", { name: "Arc-seconds" }).textContent).toBe("″");
+    expect(screen.getByRole("button", { name: "Arc-minutes" }).className).toContain("font-mono");
+    expect(screen.getByRole("button", { name: "Arc-minutes" }).className).toContain("h-10");
+    fireEvent.click(screen.getByRole("button", { name: "Arc-minutes" }));
+    expect(pressed("Degrees")).toBe("false");
+    expect(pressed("Arc-minutes")).toBe("true");
+  });
+
+  it("writes the range in the chosen unit and reports nothing when the unit changes", () => {
+    const { onChange } = setup(res(FIVE_MIN, FIVE_MIN));
+    const g = resGroup();
+    // Min and max are the same value: both captions show it.
+    expect(within(g).getAllByText("0.0833°")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Arc-minutes" }));
+    expect(within(g).getAllByText("5.0′")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Arc-seconds" }));
+    expect(within(g).getAllByText("300″")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Degrees" }));
+    expect(within(g).getAllByText("0.0833°")).toHaveLength(2);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("formats the caption for a coarse range in each unit", () => {
+    setup(res(0.5, 1));
+    const g = resGroup();
+    expect(within(g).getByText("0.50°")).toBeTruthy();
+    expect(within(g).getByText("1.00°")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Arc-minutes" }));
+    expect(within(g).getByText("30.0′")).toBeTruthy();
+    expect(within(g).getByText("60.0′")).toBeTruthy();
+  });
+
+  it("moves a handle with the keyboard and reports the range in degrees", () => {
+    const { onChange } = setup();
+    fireEvent.keyDown(thumb("Finest resolution"), { key: "ArrowRight" });
+    expect(onChange).toHaveBeenLastCalledWith({ spatialResMin: 0.001, spatialResMax: 2 });
+  });
+
+  it("moves the coarsest handle with the keyboard too", () => {
+    const { onChange } = setup(res(0.25, 1));
+    // The slider moves the handle that has focus.
+    fireEvent.focus(thumb("Coarsest resolution"));
+    fireEvent.keyDown(thumb("Coarsest resolution"), { key: "ArrowLeft" });
+    expect(onChange).toHaveBeenLastCalledWith({ spatialResMin: 0.25, spatialResMax: 0.999 });
+  });
+
+  it("clears the filter when both handles are back at the ends", () => {
+    const { onChange } = setup(res(0.001, 2));
+    fireEvent.keyDown(thumb("Finest resolution"), { key: "ArrowLeft" });
+    expect(onChange).toHaveBeenLastCalledWith({ spatialResMin: null, spatialResMax: null });
+  });
+
+  it("puts a preset on both handles and lights only its chip", () => {
+    setup(res(FIVE_MIN, FIVE_MIN));
+    expect(Number(thumb("Finest resolution").getAttribute("aria-valuenow"))).toBeCloseTo(FIVE_MIN, 6);
+    expect(Number(thumb("Coarsest resolution").getAttribute("aria-valuenow"))).toBeCloseTo(FIVE_MIN, 6);
+    expect(screen.getByRole("button", { name: "5 arc-min" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "15 arc-min" }).getAttribute("aria-pressed")).toBe("false");
+    expect((within(resGroup()).getByRole("checkbox", { name: "All" }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("un-presses the chip as soon as a handle moves", () => {
+    setup(res(0.5, 0.5));
+    const chip = screen.getByRole("button", { name: "0.5°" });
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.focus(thumb("Coarsest resolution"));
+    fireEvent.keyDown(thumb("Coarsest resolution"), { key: "ArrowRight" });
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("drops a moved handle's draft once the filter changes, and does not bring it back", () => {
+    const ui = (state: CatalogueFilterState) => (
+      <CatalogueSidebar filters={state} facets={FACETS} onChange={vi.fn()} onClearAll={vi.fn()} />
+    );
+    const { rerender } = render(ui(res(0.5, 0.5)));
+    const chip = () => screen.getByRole("button", { name: "0.5°" });
+    fireEvent.focus(thumb("Coarsest resolution"));
+    fireEvent.keyDown(thumb("Coarsest resolution"), { key: "ArrowRight" });
+    expect(chip().getAttribute("aria-pressed")).toBe("false");
+    // The URL catches up with the keyboard step.
+    rerender(ui(res(0.5, 0.501)));
+    expect(Number(thumb("Coarsest resolution").getAttribute("aria-valuenow"))).toBeCloseTo(0.501, 6);
+    // Reset puts the filter back where the draft was made: the chip is lit, not the old draft.
+    rerender(ui(res(0.5, 0.5)));
+    expect(chip().getAttribute("aria-pressed")).toBe("true");
+    expect(Number(thumb("Coarsest resolution").getAttribute("aria-valuenow"))).toBeCloseTo(0.5, 6);
+  });
+
+  it("lights no chip for a range that is not a preset, and Reset clears it", () => {
+    const { onClearAll } = setup(res(0.1, 0.4));
+    const g = resGroup();
+    for (const chip of ["30 arc-sec", "5 arc-min", "15 arc-min", "0.5°", "1°"]) {
+      expect(within(g).getByRole("button", { name: chip }).getAttribute("aria-pressed")).toBe("false");
+    }
+    expect(within(g).getByText("0.10°")).toBeTruthy();
+    expect(within(g).getByText("0.40°")).toBeTruthy();
+    expect(group(/^Spatial resolution/).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(onClearAll).toHaveBeenCalledTimes(1);
   });
 
   it("applies a preset as an exact resolution", () => {
