@@ -132,6 +132,15 @@ class Settings(BaseSettings):
     # gives up on it (ADR 0026, rule 4). One lookup that finds nothing proves
     # nothing: slurmly answers "absent" when both commands fail, too.
     JOB_LOST_AFTER_SECONDS: int = 600
+    # A job whose verdict came from a squeue row has no end time (squeue's row
+    # has none). The sweep asks sacct for it, once a job has been over for
+    # JOB_END_BACKFILL_RETRY_SECONDS (so it is out of squeue) and then again
+    # that long after each try that found no end time, at most
+    # JOB_END_BACKFILL_MAX_TRIES times, and only for a job that ended within
+    # JOB_END_BACKFILL_WINDOW_SECONDS. It never changes the verdict.
+    JOB_END_BACKFILL_WINDOW_SECONDS: int = 86400
+    JOB_END_BACKFILL_RETRY_SECONDS: int = 300
+    JOB_END_BACKFILL_MAX_TRIES: int = 5
     # How often a finished job's work directory is checked for Anvil's purge.
     JOB_FILES_CHECK_INTERVAL_SECONDS: int = 86400
 

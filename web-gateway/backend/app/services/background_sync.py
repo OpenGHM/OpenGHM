@@ -18,6 +18,7 @@ async def _sync_once() -> None:
     # sweep must not also keep the orphan and purge checks from being tried.
     for name, step in (
         ("jobs", slurm.sync_active_jobs),
+        ("end times", slurm.backfill_slurm_end),
         ("orphans", slurm.clear_orphans),
         ("purged files", slurm.detect_purged_files),
     ):

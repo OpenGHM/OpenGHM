@@ -73,3 +73,24 @@ def test_the_loop_sleeps_the_interval_it_was_given(db, monkeypatch):
     monkeypatch.setattr(background_sync.asyncio, "sleep", sleep)
     asyncio.run(background_sync.run_background_sync())
     assert slept == [10]
+
+
+def test_a_tick_runs_every_step_even_when_one_fails(monkeypatch):
+    from app.services import slurm
+
+    ran: list[str] = []
+
+    def step(name, fail=False):
+        async def run():
+            ran.append(name)
+            if fail:
+                raise RuntimeError("cluster unreachable")
+
+        return run
+
+    monkeypatch.setattr(slurm, "sync_active_jobs", step("jobs", fail=True))
+    monkeypatch.setattr(slurm, "backfill_slurm_end", step("end times"))
+    monkeypatch.setattr(slurm, "clear_orphans", step("orphans"))
+    monkeypatch.setattr(slurm, "detect_purged_files", step("purged"))
+    asyncio.run(background_sync._sync_once())
+    assert ran == ["jobs", "end times", "orphans", "purged"]

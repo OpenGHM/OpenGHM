@@ -301,9 +301,9 @@ Status is pulled, never pushed
 asyncio task started in the lifespan handler runs a sweep every
 `JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL` seconds (10) while a job is active, and
 every `JOB_BACKGROUND_SYNC_INTERVAL` (60) when none is: one batched
-`get_jobs` for every non-terminal job, then the orphan `scancel` retries, then
-the daily purge check. A lookup that fails skips the tick. The status route
-settles one job the same way (`update_job_status()`).
+`get_jobs` for every non-terminal job, then the end-time backfill (below),
+then the orphan `scancel` retries, then the daily purge check. A lookup that
+fails skips the tick. The status route settles one job the same way (`update_job_status()`).
 
 **Watching a job.** `web-gateway/backend/app/services/job_live.py` shares SLURM's answers
 in process for `JOB_LIVE_TTL_SECONDS` (5): the sweep and every viewer's
@@ -329,6 +329,17 @@ names one cause: SLURM's `CANCELLED` first, then SLURM's kills (`TIMEOUT`,
 `slurm_end`. A job absent from every lookup for `JOB_LOST_AFTER_SECONDS`
 (600) is judged from its record, or is `lost`. Every status write is
 conditional on the status it read.
+
+A squeue row carries no start time, end time or exit code (slurmly's squeue
+parsing reads none), so a job whose verdict came from one has `completed_at`
+but no `slurm_end`. The sweep fills those from sacct: for a job with a verdict
+from SLURM's state, no `slurm_end`, and `completed_at` within
+`JOB_END_BACKFILL_WINDOW_SECONDS` (24 h), it asks in one batched `get_jobs`,
+once the job has been over for `JOB_END_BACKFILL_RETRY_SECONDS` (300) and again
+that long after each try, at most `JOB_END_BACKFILL_MAX_TRIES` (5) times. Only
+a sacct row counts; it sets `slurm_end`, and `slurm_start` and
+`slurm_exit_code` if they are empty, and nothing else: the verdict and
+`completed_at` stay as they were. A lookup that fails costs no try.
 
 **Cancel** records `cancel_requested_at` and runs `scancel`; the status stays
 until SLURM reports `CANCELLED`, and the UI shows *Cancelling*. A job with no

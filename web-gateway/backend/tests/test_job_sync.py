@@ -506,3 +506,150 @@ def test_jobs_without_orphans_cost_no_command(db, anvil, real_scancel, job):
     db.jobs.docs["job-2"] = make_job("job-2", "owner", "DRAFT")
     asyncio.run(slurm.clear_orphans())
     assert anvil.commands == []
+
+
+# ---- the end time only sacct has ---------------------------------------------
+
+
+def squeue_row(state: str = "COMPLETED", lifecycle: str = "succeeded") -> JobInfo:
+    """What a finished job looks like while squeue still lists it: no start,
+    end or exit code (slurmly's squeue parsing carries none)."""
+    return JobInfo(
+        slurm_job_id="12345", lifecycle=lifecycle, raw_state=state, source="squeue"
+    )
+
+
+def backfill():
+    asyncio.run(slurm.backfill_slurm_end())
+
+
+def over_for(db, delta: timedelta) -> None:
+    """Move a settled job's `completed_at` back, so it has been over for `delta`."""
+    db.jobs.docs["job-1"]["completed_at"] = now() - delta
+
+
+@pytest.fixture
+def settled_from_squeue(db, anvil, job):
+    anvil.found["12345"] = squeue_row()
+    anvil.files[OUTCOME] = json.dumps(SUCCESS_OUTCOME)
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "COMPLETED" and "slurm_end" not in stored
+    over_for(db, timedelta(seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS + 5))
+    return stored
+
+
+def test_a_verdict_from_a_squeue_row_has_no_end_time_yet(db, anvil, settled_from_squeue):
+    assert settled_from_squeue["slurm_state"] == "COMPLETED"
+    assert settled_from_squeue["completed_at"] is not None
+    assert settled_from_squeue.get("slurm_end") is None
+
+
+def test_the_sweep_fills_the_end_time_from_a_sacct_row(db, anvil, settled_from_squeue):
+    before = dict(settled_from_squeue)
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    anvil.lookups.clear()
+    backfill()
+    stored = db.jobs.docs["job-1"]
+    assert stored["slurm_end"].isoformat().startswith("2026-09-30T14:14:00")
+    assert stored["slurm_start"].isoformat().startswith("2026-09-30T14:00:00")
+    assert stored["slurm_exit_code"] == "0:0"
+    assert anvil.lookups == [["12345"]]
+    for key in ("status", "failure", "outcome", "slurm_state", "completed_at", "files"):
+        assert stored[key] == before[key]
+    assert "slurm_end_tries" not in stored
+    # The one status change is the verdict itself; the backfill adds none.
+    assert len([e for e in db.audit_events.docs.values() if e["action"] == "job_status_changed"]) == 1
+    anvil.lookups.clear()
+    backfill()
+    assert anvil.lookups == []  # nothing left to ask about
+
+
+def test_a_start_time_and_exit_code_already_stored_are_kept(db, anvil, settled_from_squeue):
+    stored = db.jobs.docs["job-1"]
+    stored["slurm_start"] = datetime(2026, 9, 30, 13, 0, tzinfo=timezone.utc)
+    stored["slurm_exit_code"] = "0:9"
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    backfill()
+    assert stored["slurm_end"].isoformat().startswith("2026-09-30T14:14:00")
+    assert stored["slurm_start"] == datetime(2026, 9, 30, 13, 0, tzinfo=timezone.utc)
+    assert stored["slurm_exit_code"] == "0:9"
+
+
+def test_a_job_that_only_just_ended_is_not_asked_about_yet(db, anvil, settled_from_squeue):
+    over_for(db, timedelta(seconds=10))
+    anvil.lookups.clear()
+    backfill()
+    assert anvil.lookups == []
+
+
+def test_a_job_that_ended_long_ago_is_not_asked_about(db, anvil, settled_from_squeue):
+    over_for(db, timedelta(seconds=settings.JOB_END_BACKFILL_WINDOW_SECONDS + 60))
+    anvil.lookups.clear()
+    backfill()
+    assert anvil.lookups == []
+
+
+def test_a_job_judged_without_slurm_is_not_asked_about(db, anvil, job):
+    job["missing_since"] = mongo_time(-timedelta(hours=1))
+    sweep()
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "lost"
+    over_for(db, timedelta(hours=1))
+    anvil.lookups.clear()
+    backfill()
+    assert anvil.lookups == []
+
+
+def test_a_sacct_that_never_answers_is_given_up_on(db, anvil, settled_from_squeue):
+    """Absent from sacct, or still a squeue row: each costs a try, and after
+    the last one the job is not asked about again."""
+    before = dict(settled_from_squeue)
+    anvil.lookups.clear()
+    for n in range(settings.JOB_END_BACKFILL_MAX_TRIES):
+        anvil.found.clear()
+        if n % 2:
+            anvil.found["12345"] = squeue_row()
+        backfill()
+        stored = db.jobs.docs["job-1"]
+        assert stored["slurm_end_tries"] == n + 1
+        stored["slurm_end_tried_at"] = now() - timedelta(
+            seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS + 5
+        )
+    assert len(anvil.lookups) == settings.JOB_END_BACKFILL_MAX_TRIES
+    backfill()
+    assert len(anvil.lookups) == settings.JOB_END_BACKFILL_MAX_TRIES
+    stored = db.jobs.docs["job-1"]
+    assert stored.get("slurm_end") is None
+    for key in ("status", "failure", "outcome", "slurm_state", "completed_at"):
+        assert stored[key] == before[key]
+
+
+def test_a_try_waits_for_the_retry_interval(db, anvil, settled_from_squeue):
+    anvil.lookups.clear()
+    backfill()
+    backfill()  # the first try was just now
+    assert len(anvil.lookups) == 1
+
+
+def test_a_failed_lookup_costs_no_try(db, anvil, settled_from_squeue):
+    anvil.lookup_error = SSHTransportError("connection reset")
+    backfill()
+    assert "slurm_end_tries" not in db.jobs.docs["job-1"]
+    anvil.lookup_error = None
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    backfill()
+    assert db.jobs.docs["job-1"]["slurm_end"] is not None
+
+
+def test_a_job_that_changed_status_meanwhile_is_not_written(db, anvil, settled_from_squeue, monkeypatch):
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    real = anvil.client.get_jobs
+
+    async def get_jobs_then_change(ids, **kw):
+        found = await real(ids, **kw)
+        db.jobs.docs["job-1"]["status"] = "FAILED"
+        return found
+
+    monkeypatch.setattr(anvil.client, "get_jobs", get_jobs_then_change)
+    backfill()
+    assert db.jobs.docs["job-1"].get("slurm_end") is None

@@ -94,7 +94,8 @@ export interface FeatureStatus {
 export interface RuntimeSettingsSummary {
   jwt_expire_minutes: number;
   refresh_token_expire_days: number;
-  job_background_sync_interval: number;
+  job_status_sweep: string;
+  job_live_ttl_seconds: number;
   anvil_host: string;
   anvil_partition: string;
   anvil_execution_profile: string;

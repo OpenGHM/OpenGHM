@@ -66,7 +66,11 @@ def _settings_summary() -> RuntimeSettingsSummary:
     return RuntimeSettingsSummary(
         jwt_expire_minutes=settings.JWT_EXPIRE_MINUTES,
         refresh_token_expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
-        job_background_sync_interval=settings.JOB_BACKGROUND_SYNC_INTERVAL,
+        job_status_sweep=(
+            f"every {settings.JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL} s while a job is active, "
+            f"every {settings.JOB_BACKGROUND_SYNC_INTERVAL} s otherwise"
+        ),
+        job_live_ttl_seconds=settings.JOB_LIVE_TTL_SECONDS,
         anvil_host=settings.ANVIL_SSH_HOST,
         anvil_partition=settings.ANVIL_PARTITION,
         anvil_execution_profile=settings.ANVIL_EXECUTION_PROFILE,

@@ -37,7 +37,11 @@ class RuntimeSettingsSummary(BaseModel):
 
     jwt_expire_minutes: int
     refresh_token_expire_days: int
-    job_background_sync_interval: int
+    #: How often the background sweep asks SLURM about jobs, as a sentence:
+    #: both intervals, the short one while a job is active (ADR 0027).
+    job_status_sweep: str
+    #: How long one SLURM answer is shared between callers (ADR 0027).
+    job_live_ttl_seconds: int
     anvil_host: str
     anvil_partition: str
     anvil_execution_profile: str

@@ -3,7 +3,7 @@ touch, plus document and token builders for route-level tests.
 
 The fake covers exactly what the routes call — `find_one`, `find`, `insert_one`,
 `update_one` (`$set`, `$unset`, `$addToSet`, `$pull`), `delete_one`,
-`count_documents` — with equality, `$in`, `$ne` and `$exists` matching. It is not a Mongo emulator: a route that starts using
+`count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
 
 Datetimes behave like a `tz_aware=True` Motor client (app/core/database.py):
@@ -49,6 +49,8 @@ def _matches(doc: dict, query: dict) -> bool:
                     ok = value != arg
                 elif op == "$exists":
                     ok = (key in doc) == arg
+                elif op == "$gte":
+                    ok = value is not None and value >= arg
                 else:
                     raise NotImplementedError(f"fake Mongo: unsupported operator {op}")
                 if not ok:
