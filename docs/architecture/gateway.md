@@ -163,7 +163,7 @@ list *publish a simulation as a snapshot*).
 A draft's start date is checked against where its snapshot's model may start a
 run. WBM writes a run's first step into band 1 of an output file, so a run can
 only start on the first day of one: with `File_Size 'year'` in the init, on
-January 1, with `'month'`, on the first of a month. `app/services/run_start.py`
+January 1, with `'month'`, on the first of a month. `web-gateway/backend/app/services/run_start.py`
 reads `File_Size` from the init that `simulation.init` names, over the public
 HTTPS read of §5, once per snapshot id, with the same pattern `openghm sim run`
 uses. `GET /api/v1/repository/datasets/{id}` carries the result as
@@ -225,7 +225,7 @@ that; the browser downloads from Anvil S3 directly, bypassing the API. The
 config file states this in a comment, and there is no S3 client in
 `requirements.txt` to contradict it. The one object it reads itself is a
 snapshot's init, with a plain `httpx` GET of the public URL
-(`app/services/run_start.py`), to learn where a run may start.
+(`web-gateway/backend/app/services/run_start.py`), to learn where a run may start.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
