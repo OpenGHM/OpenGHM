@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,29 +10,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-type Status = "confirming" | "success" | "error";
+import { useTokenRequest } from "@/lib/use-token-request";
 
 function ConfirmLinkBody() {
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const [status, setStatus] = useState<Status>("confirming");
+  const status = useTokenRequest(
+    searchParams.get("token"),
+    "/api/public-auth/confirm-link",
+  );
 
-  useEffect(() => {
-    if (!token) {
-      setStatus("error");
-      return;
-    }
-    fetch("/api/public-auth/confirm-link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    })
-      .then((res) => setStatus(res.ok ? "success" : "error"))
-      .catch(() => setStatus("error"));
-  }, [token]);
-
-  if (status === "confirming") {
+  if (status === "pending") {
     return <p className="text-sm text-muted-foreground">Confirming the link…</p>;
   }
 

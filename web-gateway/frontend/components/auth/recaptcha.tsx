@@ -42,6 +42,14 @@ export function Recaptcha({
   const widgetId = useRef<number | null>(null);
   const reactId = useId();
 
+  // The widget is rendered once per siteKey; it must not be torn down and
+  // rebuilt just because the parent passed a new callback identity. The widget
+  // calls through this ref, so it always reaches the latest onVerify.
+  const onVerifyRef = useRef(onVerify);
+  useEffect(() => {
+    onVerifyRef.current = onVerify;
+  }, [onVerify]);
+
   useEffect(() => {
     if (!siteKey) return;
 
@@ -60,8 +68,8 @@ export function Recaptcha({
       container.appendChild(target);
       widgetId.current = window.grecaptcha.render(target, {
         sitekey: siteKey,
-        callback: onVerify,
-        "expired-callback": () => onVerify(null),
+        callback: (token) => onVerifyRef.current(token),
+        "expired-callback": () => onVerifyRef.current(null),
       });
     }
 
@@ -70,9 +78,6 @@ export function Recaptcha({
     } else {
       window.__onRecaptchaLoad = render;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onVerify is
-    // expected to be a stable setState function; re-subscribing on every
-    // render would tear down and re-render the live widget.
   }, [siteKey]);
 
   if (!siteKey) return null;

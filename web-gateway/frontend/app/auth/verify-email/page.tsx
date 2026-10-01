@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,29 +10,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-type Status = "verifying" | "success" | "error";
+import { useTokenRequest } from "@/lib/use-token-request";
 
 function VerifyEmailBody() {
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const [status, setStatus] = useState<Status>("verifying");
+  const status = useTokenRequest(
+    searchParams.get("token"),
+    "/api/public-auth/verify-email",
+  );
 
-  useEffect(() => {
-    if (!token) {
-      setStatus("error");
-      return;
-    }
-    fetch("/api/public-auth/verify-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    })
-      .then((res) => setStatus(res.ok ? "success" : "error"))
-      .catch(() => setStatus("error"));
-  }, [token]);
-
-  if (status === "verifying") {
+  if (status === "pending") {
     return <p className="text-sm text-muted-foreground">Verifying your email…</p>;
   }
 
