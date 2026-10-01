@@ -11,7 +11,14 @@
  * not a second vocabulary to translate.
  */
 import { CATALOGUE_FACET_KEYS, EMPTY_CATALOGUE_FILTERS } from "./catalogue";
-import type { CatalogueFilterState, CatalogueKind, FilterState, SortOption } from "./types";
+import type {
+  CatalogueFilterState,
+  CatalogueKind,
+  CatalogueSortOption,
+  CatalogueView,
+  FilterState,
+  SortOption,
+} from "./types";
 
 const SORT_OPTIONS: readonly SortOption[] = ["relevance", "newest", "title-az", "title-za"];
 
@@ -75,6 +82,18 @@ export function datasetFiltersToParams(filters: FilterState): URLSearchParams {
 
 // ─── Catalogue ──────────────────────────────────────────────────────────────
 
+const CATALOGUE_SORT_OPTIONS: readonly CatalogueSortOption[] = [...SORT_OPTIONS, "coverage-start"];
+
+function parseCatalogueSort(v: string | null): CatalogueSortOption {
+  return v !== null && (CATALOGUE_SORT_OPTIONS as readonly string[]).includes(v)
+    ? (v as CatalogueSortOption)
+    : "relevance";
+}
+
+function parseView(v: string | null): CatalogueView {
+  return v === "grid" ? "grid" : "list";
+}
+
 const CATALOGUE_KINDS: readonly CatalogueKind[] = ["snapshot", "model-input"];
 
 /** Every non-empty value of a repeated key, once each, in URL order. */
@@ -90,7 +109,8 @@ export function parseCatalogueFilters(params: URLSearchParams): CatalogueFilterS
     yearEnd: parseNumberParam(params.get("year_end")),
     spatialResMin: parseNumberParam(params.get("spatial_res_min")),
     spatialResMax: parseNumberParam(params.get("spatial_res_max")),
-    sortBy: isSortOption(params.get("sort")) ? (params.get("sort") as SortOption) : "relevance",
+    sortBy: parseCatalogueSort(params.get("sort")),
+    view: parseView(params.get("view")),
     page: parsePageParam(params.get("page")),
   };
   for (const key of CATALOGUE_FACET_KEYS) state[key] = allValues(params, key);
@@ -111,6 +131,7 @@ export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSear
   if (filters.spatialResMin != null) params.set("spatial_res_min", String(filters.spatialResMin));
   if (filters.spatialResMax != null) params.set("spatial_res_max", String(filters.spatialResMax));
   if (filters.sortBy !== "relevance") params.set("sort", filters.sortBy);
+  if (filters.view !== "list") params.set("view", filters.view);
   if (filters.page !== 1) params.set("page", String(filters.page));
   return params;
 }

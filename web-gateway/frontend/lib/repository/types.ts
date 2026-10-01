@@ -11,6 +11,16 @@ import type { OpenGHMModelInputMetadata } from "./generated-model-input";
 
 export type SortOption = "relevance" | "newest" | "title-az" | "title-za";
 
+/**
+ * The catalogue route's sorts: the single-kind routes' four, and earliest
+ * temporal coverage start first. `/datasets` and `/model-inputs` do not take
+ * the last, so it is not in `SortOption`.
+ */
+export type CatalogueSortOption = SortOption | "coverage-start";
+
+/** How the catalogue lays its cards out. A view of the same results, so it is not sent to the backend. */
+export type CatalogueView = "list" | "grid";
+
 // ─── Dataset ──────────────────────────────────────────────────────────────────
 
 /**
@@ -134,7 +144,9 @@ export interface CatalogueFilterState extends Record<CatalogueFacetKey, string[]
   /** Degrees. */
   spatialResMin: number | null;
   spatialResMax: number | null;
-  sortBy: SortOption;
+  sortBy: CatalogueSortOption;
+  /** Kept in the URL as `view=grid`; `list` is the default and is omitted. */
+  view: CatalogueView;
   page: number;
 }
 

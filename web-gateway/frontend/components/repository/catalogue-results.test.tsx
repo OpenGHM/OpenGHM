@@ -33,31 +33,25 @@ function setup(
 }
 
 describe("CatalogueResults header", () => {
-  it("shows the title and the count in a polite live region", () => {
+  it("shows the count in a polite live region", () => {
     setup(response([snapshotItem(), modelInputItem()], { totalCount: 12 }));
-    expect(screen.getByRole("heading", { level: 1, name: "Data Repository" })).toBeTruthy();
-    const count = screen.getByText(/12 results found/);
+    const count = screen.getByText("12").closest("[aria-live]")!;
     expect(count.getAttribute("aria-live")).toBe("polite");
+    expect(count.textContent).toBe("12 results");
   });
 
   it("says result in the singular and names the search", () => {
     setup(response([snapshotItem()], { totalCount: 1 }), filters({ searchQuery: "storage" }));
-    const count = screen.getByText(/1 result found/);
-    expect(count.textContent).toBe("1 result found for ‘storage’");
+    const count = screen.getByText("1").closest("[aria-live]")!;
+    expect(count.textContent).toBe("1 result for ‘storage’");
   });
 
-  it("offers the four sorts and reports a change", () => {
-    const { onChange } = setup(response([snapshotItem()]), filters({ sortBy: "newest" }));
-    const sort = screen.getByLabelText("Sort by") as HTMLSelectElement;
-    expect(sort.value).toBe("newest");
-    expect([...sort.options].map((o) => o.value)).toEqual([
-      "relevance",
-      "newest",
-      "title-az",
-      "title-za",
-    ]);
-    fireEvent.change(sort, { target: { value: "title-az" } });
-    expect(onChange).toHaveBeenCalledWith({ sortBy: "title-az" });
+  it("holds the toolbar above the count, in the results column", () => {
+    const { container } = setup(response([snapshotItem()]));
+    const section = container.querySelector("section")!;
+    expect(section.querySelector("#catalogue-search")).not.toBeNull();
+    expect(section.querySelector("#catalogue-sort")).not.toBeNull();
+    expect(screen.getByRole("group", { name: "View" })).toBeTruthy();
   });
 
   it("shows the active-filter chips only when a filter is on", () => {
@@ -109,6 +103,32 @@ describe("CatalogueResults list", () => {
   });
 });
 
+describe("CatalogueResults views", () => {
+  it("lays the cards out as a list by default, one per row", () => {
+    const { container } = setup(response([snapshotItem(), modelInputItem()]));
+    const list = container.querySelector("ul")!;
+    expect(list.className).toContain("flex-col");
+    expect(list.className).not.toContain("grid-cols");
+    expect(screen.getAllByRole("link", { name: /^Cite/ })).toHaveLength(2);
+  });
+
+  it("lays them out as a grid, 1, 2 and 3 across, in the grid view", () => {
+    const { container } = setup(response([snapshotItem(), modelInputItem()]), filters({ view: "grid" }));
+    const list = container.querySelector("ul")!;
+    expect(list.className).toContain("grid");
+    expect(list.className).toContain("md:grid-cols-2");
+    expect(list.className).toContain("xl:grid-cols-3");
+    expect(screen.queryByRole("link", { name: /^Cite/ })).toBeNull();
+    expect(screen.getAllByRole("link", { name: /^View details for/ })).toHaveLength(2);
+  });
+
+  it("shows grid-shaped skeletons while loading the grid", () => {
+    const { container } = setup(response([snapshotItem()]), filters({ view: "grid" }), { isLoading: true });
+    expect(container.querySelectorAll('[data-slot="card"][aria-hidden="true"]')).toHaveLength(6);
+    expect(container.querySelector('[aria-busy="true"]')?.className).toContain("xl:grid-cols-3");
+  });
+});
+
 describe("CatalogueResults keyword chips", () => {
   it("passes the keyword filter to each card and reports a chip press, then keeps focus on the page", () => {
     const { onToggleKeyword } = setup(
@@ -124,7 +144,7 @@ describe("CatalogueResults keyword chips", () => {
     network.focus();
     fireEvent.click(network);
     expect(onToggleKeyword).toHaveBeenCalledWith("network");
-    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
+    expect(document.activeElement).toBe(document.getElementById("catalogue-results"));
   });
 });
 
@@ -152,7 +172,7 @@ describe("CatalogueResults states", () => {
     expect(container.querySelector(".border-dashed")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClearAll).toHaveBeenCalled();
-    expect(screen.getByText(/0 results found/)).toBeTruthy();
+    expect(screen.getByText("0").closest("[aria-live]")?.textContent).toBe("0 results");
   });
 
   it("says plainly when nothing has been published, without a Clear filters button", () => {

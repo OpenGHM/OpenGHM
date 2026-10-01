@@ -81,28 +81,58 @@ export function boxRects(box: CoverageBox): ThumbnailRect[] {
   });
 }
 
-/** A regional box is framed in a window this wide (of 360), or wider when the box needs it. */
-const MIN_WINDOW_WIDTH = 240;
+/** The shape of the panel a thumbnail fills: a wide strip (about 2.2:1) or a tall block (about 0.7:1: the list card panel is 260 wide and 295 to 430 high). */
+export type ThumbnailAspect = "wide" | "tall";
 
-/** Breathing room, in degrees of longitude, around a box that sets the window width. */
-const WINDOW_MARGIN = 20;
+/** Width : height of the window framed for each panel shape. */
+const ASPECT_RATIO: Record<ThumbnailAspect, number> = { wide: 2.2, tall: 0.7 };
+
+/** A regional box is framed with this much room around it: the window is 1.6 times the box. */
+const WINDOW_PADDING = 1.6;
+
+/** The narrowest window, in degrees, so a tiny box still shows the land around it. */
+const MIN_WINDOW_WIDTH = 40;
+
+export interface ViewWindow {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A window of `size` centred on `middle`: kept inside [0, limit] when it fits, centred on the axis when it does not. */
+function placeWindow(middle: number, size: number, limit: number): number {
+  if (size >= limit) return (limit - size) / 2;
+  return clamp(middle - size / 2, 0, limit - size);
+}
 
 /**
- * The part of the panel's 360 x 180 grid the SVG shows, as `x width`: the whole
- * grid for a global box or one that crosses the antimeridian, otherwise a window
- * centred on the box's longitude. With `preserveAspectRatio="slice"` a panel
- * that is taller than the window crops its sides rather than leaving empty
- * bands above and below. The whole grid is drawn with "meet" instead, so the
- * world is never cropped; a tall panel then shows plain ocean above and below it.
+ * The part of the panel's 360 x 180 grid the SVG shows: the whole grid for a
+ * global box or one that crosses the antimeridian, otherwise a window of the
+ * panel's shape (`aspect`) centred on the box and 1.6 times its size on the
+ * axis that needs more. The window slides to stay inside the world, so a box
+ * near a pole or the date line is framed off-centre rather than off the map.
+ * The SVG draws it with "slice", so a panel that differs a little from the
+ * window's shape crops the long axis slightly and the box stays in view. The
+ * whole grid is drawn with "meet" instead, so the world is never cropped.
  */
-export function viewWindow(box: CoverageBox): { x: number; width: number } {
+export function viewWindow(box: CoverageBox, aspect: ThumbnailAspect = "wide"): ViewWindow {
   if (coverageLabel(box) === "Global" || box.west > box.east) {
-    return { x: 0, width: THUMBNAIL_WIDTH };
+    return { x: 0, y: 0, width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT };
   }
-  const span = box.east - box.west;
-  const width = clamp(Math.max(MIN_WINDOW_WIDTH, span + 2 * WINDOW_MARGIN), 0, THUMBNAIL_WIDTH);
-  const middle = (box.west + box.east) / 2 + 180;
-  return { x: clamp(middle - width / 2, 0, THUMBNAIL_WIDTH - width), width };
+  const ratio = ASPECT_RATIO[aspect];
+  const boxWidth = box.east - box.west;
+  const boxHeight = Math.abs(box.north - box.south);
+  const width = Math.max(boxWidth * WINDOW_PADDING, boxHeight * WINDOW_PADDING * ratio, MIN_WINDOW_WIDTH);
+  const height = width / ratio;
+  const middleX = (box.west + box.east) / 2 + 180;
+  const middleY = 90 - (box.north + box.south) / 2;
+  return {
+    x: placeWindow(middleX, width, THUMBNAIL_WIDTH),
+    y: placeWindow(middleY, height, THUMBNAIL_HEIGHT),
+    width,
+    height,
+  };
 }
 
 function graticule(): { vertical: number[]; horizontal: number[] } {
@@ -124,14 +154,18 @@ const GRID = graticule();
  */
 export function CoverageThumbnail({
   box,
+  aspect,
   className,
 }: {
   box: CoverageBox;
+  /** The shape of the panel it fills, which sets how the map is framed around the box. */
+  aspect: ThumbnailAspect;
   className?: string;
 }) {
   const label = coverageLabel(box);
   const rects = boxRects(box);
-  const window = viewWindow(box);
+  const window = viewWindow(box, aspect);
+  const whole = window.width === THUMBNAIL_WIDTH && window.height === THUMBNAIL_HEIGHT;
 
   return (
     <div
@@ -141,8 +175,8 @@ export function CoverageThumbnail({
       )}
     >
       <svg
-        viewBox={`${window.x} 0 ${window.width} ${THUMBNAIL_HEIGHT}`}
-        preserveAspectRatio={window.width === THUMBNAIL_WIDTH ? "xMidYMid meet" : "xMidYMid slice"}
+        viewBox={`${window.x} ${window.y} ${window.width} ${window.height}`}
+        preserveAspectRatio={whole ? "xMidYMid meet" : "xMidYMid slice"}
         role="img"
         aria-label={`Coverage: north ${box.north}°, south ${box.south}°, east ${box.east}°, west ${box.west}° (${label})`}
         className="absolute inset-0 size-full"
@@ -191,7 +225,7 @@ export function CoverageThumbnail({
           />
         ))}
       </svg>
-      <span aria-hidden="true" className="absolute right-1.5 bottom-1.5 rounded bg-card/90 px-1.5 py-0.5 text-xs font-medium text-foreground shadow-sm">
+      <span aria-hidden="true" className="absolute right-3 bottom-3 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm">
         {label}
       </span>
     </div>

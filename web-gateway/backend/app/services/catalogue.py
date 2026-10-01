@@ -217,6 +217,13 @@ def relevance_score(item: Item, q: str | None) -> int:
     )
 
 
+def _coverage_start_key(item: Item) -> tuple[int, object]:
+    """(0, start) for an item with a temporal coverage, (1, None) for one without,
+    so the ones without sort last."""
+    coverage = _temporal(item)
+    return (1, 0) if coverage is None else (0, coverage.start)
+
+
 def sort_catalogue(items: list[Item], sort: str, q: str | None = None) -> list[Item]:
     """Pure, not in-place, and total: every order ends in the id."""
     out = sorted(items, key=lambda i: i.id)
@@ -225,6 +232,10 @@ def sort_catalogue(items: list[Item], sort: str, q: str | None = None) -> list[I
     elif sort == "title-za":
         out.sort(key=lambda i: i.about.name.casefold(), reverse=True)
         # reverse=True keeps equal elements in their (id-ascending) order.
+    elif sort == "coverage-start":
+        # Earliest temporal coverage start first; no coverage last; then name, id.
+        out.sort(key=lambda i: i.about.name.casefold())
+        out.sort(key=_coverage_start_key)
     else:
         # newest, and relevance's tie-break: datePublished desc, name asc, id.
         out.sort(key=lambda i: i.about.name.casefold())

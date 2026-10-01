@@ -57,14 +57,32 @@ is a clean instance.
 The Data Repository lists model snapshots and model inputs in one list, with
 the type as a filter. Its pieces are in [`components/repository/`](components/repository/).
 
-- A list item is a card with the recipe above, minus the header: it hovers to
-  `shadow-md`, the title is the card's stretched link, and the other links sit
-  above it (`relative z-10`) with their own focus ring. A coverage thumbnail
-  (an SVG, never a map) sits on the right edge and moves to the top below `sm`.
-- The sidebar is built from the facets the backend returns. A group with no
-  options is hidden, a long one shows six and a "Show all" toggle, and counts
-  ignore the group's own selection. Below `lg` it folds behind a "Filters"
-  button; from `lg` it is a sticky card.
+- The page opens with a mono eyebrow, the h1 and a one-line subtitle. The
+  toolbar sits above the results, not in the sidebar: search (`/` focuses it,
+  Escape leaves it), a Sort select, and a List / Grid switch. The count
+  ("12 results", in an `aria-live` region) and the active-filter chips follow.
+- The view is `view=grid` in the URL (the list is the default and is omitted).
+  It is a layout of the same results, so changing it neither goes back to page 1
+  nor asks the backend again (`inertKeys` in
+  [`use-url-filters.ts`](lib/repository/use-url-filters.ts)).
+- A list card is a white `rounded-xl` card with a 1px border and no shadow
+  (`shadow-md` on hover). From `md` it has the content on the left and a
+  260 px coverage map panel the full height of the card on the right; below `md`
+  the panel sits under the content, 144 px tall. Metadata is mono: the version
+  and licence line, and the Coverage and Resolution values. The title is the
+  card's stretched link in the foreground colour; View details is a solid
+  `bg-foreground` button, and Download, Cite and the keyword chips sit above
+  the stretched link (`relative z-10`) with their own focus ring. A grid card is
+  the map on top, then the badge, the title, one mono line and View / Download.
+  The map is a real SVG land outline with the bounding box, not a map tile.
+- The sidebar is built from the facets the backend returns, in one "Filters"
+  card with a Reset link (shown only while something is on; it keeps the sort
+  and the view). Groups are separated by rules and open and close with a + / –
+  button. A group with no options is hidden, a long one shows six and a "Show
+  all" toggle, and counts, shown as plain mono numbers, ignore the group's own
+  selection. Spatial resolution is single-select preset chips. Below `lg` the
+  card folds behind a "Filters" button; from `lg` it is a column beside the
+  results.
 - Every filter lives in the URL, a facet as a repeated key
   (`?category=a&category=b`), and a change goes back to page 1.
 

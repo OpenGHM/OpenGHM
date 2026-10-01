@@ -1,15 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { CatalogueItem } from "@/lib/repository/types";
+import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CatalogueCard, CatalogueCardSkeleton } from "./catalogue-card";
 import { modelInputItem, snapshotItem } from "./catalogue.fixtures";
 
 afterEach(cleanup);
 
-function renderCard(item: CatalogueItem, selectedKeywords: string[] = []) {
+function renderCard(item: CatalogueItem, selectedKeywords: string[] = [], layout: CatalogueView = "list") {
   const onToggleKeyword = vi.fn();
   const view = render(
-    <CatalogueCard item={item} selectedKeywords={selectedKeywords} onToggleKeyword={onToggleKeyword} />
+    <CatalogueCard
+      item={item}
+      view={layout}
+      selectedKeywords={selectedKeywords}
+      onToggleKeyword={onToggleKeyword}
+    />
   );
   return { ...view, onToggleKeyword };
 }
@@ -27,15 +32,45 @@ describe("CatalogueCard for a model snapshot", () => {
     expect(hrefOf(/^Cite/)).toBe("/repository/snap-1#cite");
   });
 
-  it("shows the Model Snapshot badge, the meta row and the category", () => {
+  it("names every action link for the item", () => {
     renderCard(snapshotItem());
-    expect(screen.getByText("Model Snapshot")).toBeTruthy();
-    expect(screen.getByText("Ada Hydro +1")).toBeTruthy();
-    expect(screen.getByText("2000 – 2009")).toBeTruthy();
-    expect(screen.getByText("5 arc-minute")).toBeTruthy();
-    expect(screen.getByText("WBM 1.0.0")).toBeTruthy();
-    expect(screen.getByText("GPL-3.0-only")).toBeTruthy();
+    for (const name of ["View details for Global Storage Run", "Download Global Storage Run", "Cite Global Storage Run"]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
+  });
+
+  it("shows the Model Snapshot badge in the brand tint, the mono version and licence line, and the category", () => {
+    renderCard(snapshotItem());
+    expect(screen.getByText("Model Snapshot").className).toContain("bg-primary/10");
+    const line = screen.getByText("WBM 1.0.0 · GPL-3.0-only");
+    expect(line.className).toContain("font-mono");
     expect(screen.getByText("hydrology")).toBeTruthy();
+  });
+
+  it("shows Authors, Coverage and Resolution with the values in mono", () => {
+    renderCard(snapshotItem());
+    for (const label of ["Authors", "Coverage", "Resolution"]) {
+      expect(screen.getByText(label).className).toContain("uppercase");
+    }
+    expect(screen.getByText("Ada Hydro +1").title).toBe("Ada Hydro, Bo Flow");
+    expect(screen.getByText("2000–2009").className).toContain("font-mono");
+    expect(screen.getByText("5 arc-min").className).toContain("font-mono");
+  });
+
+  it("makes the title a foreground link that underlines on hover, not a blue one", () => {
+    renderCard(snapshotItem());
+    const title = screen.getByRole("link", { name: /^Global Storage Run$/ });
+    expect(title.className).toContain("hover:underline");
+    expect(title.className).not.toContain("text-primary");
+    expect(title.closest("h3")?.className).toContain("text-foreground");
+  });
+
+  it("has a dark View details button and plain Download and Cite", () => {
+    renderCard(snapshotItem());
+    const view = screen.getByRole("link", { name: /^View details/ });
+    expect(view.className).toContain("bg-foreground");
+    expect(view.className).toContain("text-background");
+    expect(screen.getByRole("link", { name: /^Download/ }).className).not.toContain("bg-foreground");
   });
 
   it("shows the category and four keywords, not the output variables", () => {
@@ -64,7 +99,19 @@ describe("CatalogueCard for a model snapshot", () => {
 
   it("draws the coverage thumbnail with its label", () => {
     renderCard(snapshotItem());
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("(Global)");
+    expect(screen.getAllByRole("img")[0].getAttribute("aria-label")).toContain("(Global)");
+  });
+
+  it("draws a wide thumbnail below the content and a tall one beside it, one per breakpoint", () => {
+    const { container } = renderCard(modelInputItem());
+    const svgs = [...container.querySelectorAll("svg[role='img']")];
+    expect(svgs).toHaveLength(2);
+    const [wide, tall] = svgs.map((svg) => svg.getAttribute("viewBox")!.split(" ").map(Number));
+    expect(wide[2] / wide[3]).toBeCloseTo(2.2);
+    expect(tall[2] / tall[3]).toBeCloseTo(0.7);
+    expect(svgs[0].parentElement?.classList.contains("md:hidden")).toBe(true);
+    expect(svgs[1].parentElement?.classList.contains("hidden")).toBe(true);
+    expect(svgs[1].parentElement?.classList.contains("md:block")).toBe(true);
   });
 });
 
@@ -78,9 +125,9 @@ describe("CatalogueCard for a model input", () => {
 
   it("shows the Model Input badge in the info tint, datasets and networks, and distinct resolutions", () => {
     renderCard(modelInputItem());
-    expect(screen.getByText("Model Input").className).toContain("bg-info/10");
-    expect(screen.getByText("3 datasets · 3 networks")).toBeTruthy();
-    expect(screen.getByText("5 arc-minute, 30 arc-second")).toBeTruthy();
+    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
+    expect(screen.getByText("3 datasets · 3 networks · CC-BY-4.0")).toBeTruthy();
+    expect(screen.getByText("5 arc-min, 30 arc-sec")).toBeTruthy();
     expect(screen.getByText("Climatological")).toBeTruthy();
   });
 
@@ -91,7 +138,7 @@ describe("CatalogueCard for a model input", () => {
     expect(screen.getByText("elevation")).toBeTruthy();
     expect(screen.queryByText("lakes")).toBeNull();
     expect(screen.getByText("+1 more").title).toBe("lakes");
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("(Regional)");
+    expect(screen.getAllByRole("img")[0].getAttribute("aria-label")).toContain("(Regional)");
   });
 
   it("shows no +N more when the keywords fit", () => {
@@ -104,7 +151,8 @@ describe("CatalogueCard for a model input", () => {
   it("leaves the resolution out when no network has one", () => {
     renderCard(modelInputItem({ networks: [{ file: "a.nc" }] }));
     expect(screen.queryByText(/arc-/)).toBeNull();
-    expect(screen.getByText("3 datasets · 1 network")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getByText("3 datasets · 1 network · CC-BY-4.0")).toBeTruthy();
   });
 });
 
@@ -169,14 +217,22 @@ describe("CatalogueCard layout", () => {
     }
   });
 
-  it("lets long text wrap or truncate instead of overflowing", () => {
-    const { container } = renderCard(snapshotItem());
+  it("lets long text wrap instead of overflowing", () => {
+    renderCard(snapshotItem());
     expect(screen.getByRole("heading", { level: 3 }).className).toContain("break-words");
-    const meta = within(container).getByText("Ada Hydro +1");
-    expect(meta.className).toContain("truncate");
-    // The card is a row from sm and a column below it, with the thumbnail first.
-    expect(container.firstElementChild?.className).toContain("sm:flex-row");
-    expect(container.querySelector(".order-first")).not.toBeNull();
+    expect(screen.getByText("Ada Hydro +1").className).toContain("break-words");
+  });
+
+  it("puts the map panel beside the content from md and below it on a phone", () => {
+    const { container } = renderCard(snapshotItem());
+    const card = container.firstElementChild!;
+    expect(card.className).toContain("md:flex-row");
+    // The panel comes last in the document, so it sits below the content on a phone.
+    const panel = card.lastElementChild!;
+    expect(panel.querySelector("svg")).not.toBeNull();
+    expect(panel.className).toContain("h-36");
+    expect(panel.className).toContain("md:w-[260px]");
+    expect(card.firstElementChild?.querySelector("svg[role='img']")).toBeNull();
   });
 
   it("uses no raw colour", () => {
@@ -186,10 +242,49 @@ describe("CatalogueCard layout", () => {
 });
 
 describe("CatalogueCardSkeleton", () => {
-  it("is hidden from assistive technology and has no links", () => {
-    const { container } = render(<CatalogueCardSkeleton />);
-    expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
-    expect(container.querySelectorAll("a")).toHaveLength(0);
-    expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
+  it.each<CatalogueView>(["list", "grid"])(
+    "is hidden from assistive technology and has no links in the %s view",
+    (view) => {
+      const { container } = render(<CatalogueCardSkeleton view={view} />);
+      expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+      expect(container.querySelectorAll("a")).toHaveLength(0);
+      expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
+    }
+  );
+});
+
+describe("CatalogueCard in the grid view", () => {
+  it("shows the map first, then the badge, the title and the compact coverage line", () => {
+    const { container } = renderCard(snapshotItem(), [], "grid");
+    const card = container.firstElementChild!;
+    expect(card.firstElementChild?.className).toContain("h-[150px]");
+    expect(card.firstElementChild?.querySelector("svg[role='img']")).not.toBeNull();
+    expect(screen.getByText("Model Snapshot").className).toContain("bg-primary/10");
+    expect(screen.getByRole("heading", { level: 3 }).className).toContain("line-clamp-4");
+    expect(screen.getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
+  });
+
+  it("links the title, View and Download to the detail page and leaves out Cite and the keywords", () => {
+    renderCard(snapshotItem(), [], "grid");
+    expect(hrefOf(/^Global Storage Run$/)).toBe("/repository/snap-1");
+    expect(hrefOf(/^View details for Global Storage Run$/)).toBe("/repository/snap-1");
+    expect(hrefOf(/^Download Global Storage Run$/)).toBe("/repository/snap-1#download");
+    expect(screen.queryByRole("link", { name: /Cite/ })).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("hydrology")).toBeNull();
+    expect(screen.getByText("View").closest("a")?.className).toContain("bg-foreground");
+  });
+
+  it("shows the date alone, with the machine value in the time element", () => {
+    const { container } = renderCard(snapshotItem(), [], "grid");
+    expect(container.querySelector("time")?.getAttribute("datetime")).toBe("2026-03-14T10:00:00Z");
+    expect(screen.queryByText(/^Published/)).toBeNull();
+  });
+
+  it("describes a model input the same way", () => {
+    renderCard(modelInputItem(), [], "grid");
+    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
+    expect(screen.getByText("Climatological · 5 arc-min, 30 arc-sec")).toBeTruthy();
+    expect(hrefOf(/^Download/)).toBe("/repository/model-inputs/mi-1#download");
   });
 });

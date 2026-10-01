@@ -2,15 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
 const search = new URLSearchParams();
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => "/repository",
   useSearchParams: () => search,
 }));
 
 import { useUrlSyncedFilters } from "./use-url-filters";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  push.mockClear();
+});
 
 type F = { q: string; page: number };
 type R = { items: string[] };
@@ -57,5 +61,56 @@ describe("useUrlSyncedFilters error flag", () => {
     await waitFor(() => expect(result.current.error).toBe(false));
     expect(result.current.result.items).toEqual(["b"]);
     expect(fetcher).toHaveBeenLastCalledWith({ q: "x", page: 1 });
+  });
+});
+
+describe("useUrlSyncedFilters inert keys", () => {
+  type V = { q: string; view: string; page: number };
+  const INERT = ["view"] as const;
+
+  function setupView(fetcher: (f: V) => Promise<R>) {
+    return renderHook(() =>
+      useUrlSyncedFilters<V, R>({
+        initialFilters: { q: "", view: "list", page: 1 },
+        initialResult: { items: ["a"] },
+        emptyResult: { items: [] },
+        parse: (p) => ({ q: p.get("q") ?? "", view: p.get("view") ?? "list", page: 1 }),
+        serialize: (f) => {
+          const params = new URLSearchParams();
+          if (f.q) params.set("q", f.q);
+          if (f.view !== "list") params.set("view", f.view);
+          if (f.page !== 1) params.set("page", String(f.page));
+          return params;
+        },
+        fetcher,
+        debounceMs: 0,
+        inertKeys: INERT,
+      })
+    );
+  }
+
+  it("changes the URL but neither resets the page nor fetches again", async () => {
+    const fetcher = vi.fn<(f: V) => Promise<R>>().mockResolvedValue({ items: ["b"] });
+    const { result } = setupView(fetcher);
+
+    act(() => result.current.setFilters({ page: 3 }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+
+    act(() => result.current.setFilters({ view: "grid" }));
+    await waitFor(() => expect(push).toHaveBeenLastCalledWith("/repository?view=grid&page=3", { scroll: false }));
+    expect(result.current.filters.page).toBe(3);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("still resets the page and fetches for any other key", async () => {
+    const fetcher = vi.fn<(f: V) => Promise<R>>().mockResolvedValue({ items: ["b"] });
+    const { result } = setupView(fetcher);
+
+    act(() => result.current.setFilters({ page: 3 }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    act(() => result.current.setFilters({ q: "x", view: "grid" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(result.current.filters.page).toBe(1);
+    expect(fetcher).toHaveBeenLastCalledWith({ q: "x", view: "grid", page: 1 });
   });
 });

@@ -1,62 +1,55 @@
 import Link from "next/link";
-import { Calendar, Check, Database, Download, Eye, Grid3X3, Quote, Scale, Tag, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { cn } from "@/lib/utils";
 import {
   cardKeywords,
-  contentsLabel,
+  contentsLine,
+  coverageLine,
   creatorLabel,
   detailHref,
   kindLabel,
   periodLabel,
-  resolutionLabels,
+  resolutionSummary,
   spatialBox,
 } from "@/lib/repository/catalogue-format";
-import type { CatalogueItem } from "@/lib/repository/types";
+import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CoverageThumbnail } from "./coverage-thumbnail";
 
-/** A link in the card that sits above the title's stretched link and keeps its own focus ring. */
-const ACTION_LINK =
-  "relative z-10 inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8";
+/** The dark button, and the plain ones beside it. All sit above the title's stretched link and keep their own focus ring. */
+const ACTION_BASE =
+  "relative z-10 inline-flex min-h-10 items-center rounded-lg px-3 text-[13.5px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-9";
+const ACTION_PRIMARY = `${ACTION_BASE} bg-foreground px-3.5 text-background hover:bg-foreground/85 focus-visible:ring-offset-2`;
+const ACTION_PLAIN = `${ACTION_BASE} text-foreground/80 hover:bg-muted hover:text-foreground`;
 
-function MetaItem({
-  icon: Icon,
-  children,
-  title,
-}: {
-  icon: typeof Users;
-  children: React.ReactNode;
-  title?: string;
-}) {
+/** "Model Snapshot" in the brand tint, "Model Input" in the compute tint. */
+function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
   return (
-    <li className="inline-flex min-w-0 max-w-full items-center gap-1.5" title={title}>
-      <Icon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="truncate">{children}</span>
+    <span
+      className={cn(
+        "inline-flex w-fit shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium",
+        kind === "snapshot" ? "bg-primary/10 text-primary" : "bg-compute/10 text-compute"
+      )}
+    >
+      {kindLabel(kind)}
+    </span>
+  );
+}
+
+function CategoryChip({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="max-w-full truncate rounded-md bg-primary/10 px-2 py-0.5 text-[11.5px] font-medium text-primary">
+      {children}
     </li>
   );
 }
 
-function Chip({
-  children,
-  strong = false,
-  title,
-}: {
-  children: React.ReactNode;
-  strong?: boolean;
-  title?: string;
-}) {
+function MoreChip({ count, hidden }: { count: number; hidden: string[] }) {
   return (
-    <li
-      title={title}
-      className={cn(
-        "max-w-full truncate rounded-full px-2.5 py-0.5 text-xs font-medium",
-        strong ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-      )}
-    >
-      {children}
+    <li title={hidden.join(", ")} className="px-1 text-[11.5px] text-muted-foreground">
+      +{count} more
     </li>
   );
 }
@@ -86,10 +79,10 @@ function KeywordChip({
       >
         <span
           className={cn(
-            "inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50",
+            "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11.5px] transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50 motion-reduce:transition-none",
             selected
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground group-hover/keyword:bg-primary/10 group-hover/keyword:text-primary"
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-muted/60 text-foreground/80 group-hover/keyword:border-primary/40 group-hover/keyword:text-primary"
           )}
         >
           {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
@@ -100,123 +93,14 @@ function KeywordChip({
   );
 }
 
-/**
- * One catalogue row: a snapshot or a model input as a card. The title is a
- * stretched link, so the whole card opens the detail page, and View details,
- * Download and Cite sit above it as their own links. The keyword chips are
- * buttons that add (or, when already on, remove) that keyword as a filter.
- */
-export function CatalogueCard({
-  item,
-  selectedKeywords = [],
-  onToggleKeyword,
-}: {
-  item: CatalogueItem;
-  /** The keyword filter in effect: those chips show as selected. */
-  selectedKeywords?: readonly string[];
-  /** Add the keyword to the filter, or take it off when it is already on. */
-  onToggleKeyword: (keyword: string) => void;
-}) {
-  const { about } = item;
-  const href = detailHref(item);
-  const creator = creatorLabel(item);
-  const period = periodLabel(item);
-  const resolutions = resolutionLabels(item);
-  const keywords = cardKeywords(item);
-  const snapshot = item.kind === "snapshot";
-
+function MetaCell({ label, title, mono = false, children }: { label: string; title?: string; mono?: boolean; children: React.ReactNode }) {
   return (
-    <Card className="group relative gap-0 overflow-hidden rounded-xl border-0 py-0 shadow-sm transition-shadow hover:shadow-md motion-reduce:transition-none sm:flex-row">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 text-base leading-snug font-semibold break-words">
-            <Link
-              href={href}
-              className="rounded-sm text-primary outline-none group-hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 after:absolute after:inset-0 after:content-['']"
-            >
-              {about.name}
-            </Link>
-          </h3>
-          <Badge
-            className={cn(
-              "border-transparent",
-              snapshot ? "bg-primary/10 text-primary" : "bg-info/10 text-info"
-            )}
-          >
-            {kindLabel(item.kind)}
-          </Badge>
-        </div>
-
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {creator && (
-            <MetaItem icon={Users} title={about.creator.map((c) => c.name).join(", ")}>
-              {creator.first}
-              {creator.more > 0 && ` +${creator.more}`}
-            </MetaItem>
-          )}
-          <MetaItem icon={Calendar}>{period ?? "Climatological"}</MetaItem>
-          {resolutions.length > 0 && (
-            <MetaItem icon={Grid3X3} title={resolutions.join(", ")}>
-              {resolutions.slice(0, 2).join(", ")}
-              {resolutions.length > 2 && ` +${resolutions.length - 2}`}
-            </MetaItem>
-          )}
-          <MetaItem icon={snapshot ? Tag : Database}>{contentsLabel(item)}</MetaItem>
-          <MetaItem icon={Scale}>{about.license}</MetaItem>
-        </ul>
-
-        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-          {about.description}
-        </p>
-
-        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Category and keywords">
-          <Chip strong>{about.category}</Chip>
-          {keywords.shown.map((keyword) => (
-            <KeywordChip
-              key={keyword}
-              keyword={keyword}
-              selected={selectedKeywords.includes(keyword)}
-              onToggle={onToggleKeyword}
-            />
-          ))}
-          {keywords.more > 0 && <Chip title={keywords.hidden.join(", ")}>+{keywords.more} more</Chip>}
-        </ul>
-
-        <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1 border-t pt-2">
-          <Link href={href} className={cn(ACTION_LINK, "text-primary hover:bg-primary/5")}>
-            <Eye aria-hidden="true" className="size-4" />
-            View details
-            <span className="sr-only"> for {about.name}</span>
-          </Link>
-          <Link
-            href={`${href}#download`}
-            className={cn(ACTION_LINK, "text-muted-foreground hover:bg-muted hover:text-foreground")}
-          >
-            <Download aria-hidden="true" className="size-4" />
-            Download
-            <span className="sr-only"> {about.name}</span>
-          </Link>
-          <Link
-            href={`${href}#cite`}
-            className={cn(ACTION_LINK, "text-muted-foreground hover:bg-muted hover:text-foreground")}
-          >
-            <Quote aria-hidden="true" className="size-4" />
-            Cite
-            <span className="sr-only"> {about.name}</span>
-          </Link>
-          <span className="ml-auto pl-2 text-xs text-muted-foreground">
-            Published <TimeStamp value={about.datePublished} format="date" />
-          </span>
-        </div>
-      </div>
-
-      <div className="relative order-first flex shrink-0 items-center justify-center bg-muted/40 p-3 sm:order-none sm:min-h-32 sm:w-60 sm:border-l sm:p-0">
-        <CoverageThumbnail
-          box={toBox(item)}
-          className="w-56 max-w-full sm:absolute sm:inset-0 sm:aspect-auto sm:size-full sm:max-w-none sm:rounded-none sm:border-0"
-        />
-      </div>
-    </Card>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="text-[11px] tracking-wider text-muted-foreground uppercase">{label}</dt>
+      <dd title={title} className={cn("text-[13px] break-words text-foreground", mono && "font-mono")}>
+        {children}
+      </dd>
+    </div>
   );
 }
 
@@ -225,40 +109,198 @@ function toBox(item: CatalogueItem) {
   return { north: s.northlimit, south: s.southlimit, east: s.eastlimit, west: s.westlimit };
 }
 
-/** The card's shape while the list loads. */
-export function CatalogueCardSkeleton() {
+/** The title as the card's stretched link: the whole card opens the detail page. */
+function TitleLink({ href, name, className }: { href: string; name: string; className?: string }) {
   return (
-    <Card
-      aria-hidden="true"
-      className="gap-0 overflow-hidden rounded-xl border-0 py-0 shadow-sm sm:flex-row"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <Skeleton className="h-5 w-2/3" />
-          <Skeleton className="h-5 w-24 rounded-full" />
+    <h3 className={cn("min-w-0 leading-snug font-semibold break-words text-foreground", className)}>
+      <Link
+        href={href}
+        className="rounded-sm outline-none after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {name}
+      </Link>
+    </h3>
+  );
+}
+
+/**
+ * One catalogue entry: a snapshot or a model input as a card, in a list or a
+ * grid. The title is a stretched link, so the whole card opens the detail
+ * page, and the View, Download and Cite links sit above it. The keyword chips
+ * of the list card are buttons that add (or, when already on, remove) that
+ * keyword as a filter.
+ */
+export function CatalogueCard({
+  item,
+  view = "list",
+  selectedKeywords = [],
+  onToggleKeyword,
+}: {
+  item: CatalogueItem;
+  view?: CatalogueView;
+  /** The keyword filter in effect: those chips show as selected. */
+  selectedKeywords?: readonly string[];
+  /** Add the keyword to the filter, or take it off when it is already on. */
+  onToggleKeyword: (keyword: string) => void;
+}) {
+  const { about } = item;
+  const href = detailHref(item);
+  const grid = view === "grid";
+
+  const links = (
+    <>
+      <Link href={href} className={ACTION_PRIMARY}>
+        {grid ? "View" : "View details"}{" "}
+        <span className="sr-only">
+          {grid && "details "}for {about.name}
+        </span>
+      </Link>
+      <Link href={`${href}#download`} className={ACTION_PLAIN}>
+        Download{" "}
+        <span className="sr-only">{about.name}</span>
+      </Link>
+      {!grid && (
+        <Link href={`${href}#cite`} className={ACTION_PLAIN}>
+          Cite{" "}
+          <span className="sr-only">{about.name}</span>
+        </Link>
+      )}
+    </>
+  );
+
+  if (grid) {
+    return (
+      <Card className="group relative h-full gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md motion-reduce:transition-none">
+        <div className="relative h-[150px] shrink-0 border-b bg-primary/10">
+          <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
         </div>
-        <div className="flex gap-4">
-          <Skeleton className="h-3.5 w-24" />
-          <Skeleton className="h-3.5 w-20" />
-          <Skeleton className="h-3.5 w-16" />
+        <div className="flex flex-1 flex-col gap-2.5 p-4">
+          <KindBadge kind={item.kind} />
+          <TitleLink href={href} name={about.name} className="line-clamp-4 text-base" />
+          <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
+          <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1 border-t pt-3">
+            {links}
+            <span className="ml-auto pl-2 text-xs text-muted-foreground">
+              <TimeStamp value={about.datePublished} format="date" />
+            </span>
+          </div>
         </div>
+      </Card>
+    );
+  }
+
+  const creator = creatorLabel(item);
+  const keywords = cardKeywords(item);
+
+  return (
+    <Card className="group relative gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md motion-reduce:transition-none md:flex-row">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:px-6 md:pt-[22px] md:pb-[18px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <KindBadge kind={item.kind} />
+          <span className="font-mono text-[11.5px] text-muted-foreground">{contentsLine(item)}</span>
+        </div>
+
+        <TitleLink href={href} name={about.name} className="text-lg" />
+
+        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{about.description}</p>
+
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 border-y py-3">
+          <MetaCell label="Authors" title={about.creator.map((c) => c.name).join(", ")}>
+            {creator ? `${creator.first}${creator.more > 0 ? ` +${creator.more}` : ""}` : "—"}
+          </MetaCell>
+          <MetaCell label="Coverage" mono>
+            {periodLabel(item) ?? "Climatological"}
+          </MetaCell>
+          <MetaCell label="Resolution" mono>
+            {resolutionSummary(item)}
+          </MetaCell>
+        </dl>
+
+        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Category and keywords">
+          <CategoryChip>{about.category}</CategoryChip>
+          {keywords.shown.map((keyword) => (
+            <KeywordChip
+              key={keyword}
+              keyword={keyword}
+              selected={selectedKeywords.includes(keyword)}
+              onToggle={onToggleKeyword}
+            />
+          ))}
+          {keywords.more > 0 && <MoreChip count={keywords.more} hidden={keywords.hidden} />}
+        </ul>
+
+        <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1">
+          {links}
+          <span className="basis-full text-[12.5px] text-muted-foreground sm:ml-auto sm:basis-auto sm:pl-2">
+            Published <TimeStamp value={about.datePublished} format="date" />
+          </span>
+        </div>
+      </div>
+
+      <div className="relative h-36 shrink-0 border-t bg-primary/10 md:h-auto md:w-[260px] md:border-t-0 md:border-l">
+        <CoverageThumbnail
+          box={toBox(item)}
+          aspect="wide"
+          className="absolute inset-0 aspect-auto rounded-none border-0 md:hidden"
+        />
+        <CoverageThumbnail
+          box={toBox(item)}
+          aspect="tall"
+          className="absolute inset-0 hidden aspect-auto rounded-none border-0 md:block"
+        />
+      </div>
+    </Card>
+  );
+}
+
+/** The card's shape while the list or grid loads. */
+export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView }) {
+  if (view === "grid") {
+    return (
+      <Card aria-hidden="true" className="h-full gap-0 overflow-hidden rounded-xl border py-0 shadow-none">
+        <Skeleton className="h-[150px] shrink-0 rounded-none" />
+        <div className="flex flex-1 flex-col gap-2.5 p-4">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3.5 w-32" />
+          <div className="mt-auto flex gap-3 border-t pt-3">
+            <Skeleton className="h-8 w-14" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card aria-hidden="true" className="gap-0 overflow-hidden rounded-xl border py-0 shadow-none md:flex-row">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:px-6">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-3.5 w-36" />
+        </div>
+        <Skeleton className="h-5 w-2/3" />
         <div className="space-y-2">
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-4/5" />
         </div>
+        <div className="grid grid-cols-3 gap-3 border-y py-3">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
         <div className="flex gap-1.5">
-          <Skeleton className="h-5 w-16 rounded-full" />
-          <Skeleton className="h-5 w-14 rounded-full" />
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-5 w-14" />
+          <Skeleton className="h-5 w-16" />
         </div>
-        <div className="mt-auto flex gap-3 border-t pt-3">
-          <Skeleton className="h-5 w-24" />
-          <Skeleton className="h-5 w-20" />
-          <Skeleton className="h-5 w-12" />
+        <div className="flex gap-3">
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-9 w-20" />
+          <Skeleton className="h-9 w-12" />
         </div>
       </div>
-      <div className="order-first flex shrink-0 items-center justify-center bg-muted/40 p-3 sm:order-none sm:w-60 sm:border-l">
-        <Skeleton className="aspect-[2/1] w-56 max-w-full sm:w-full" />
-      </div>
+      <Skeleton className="h-36 shrink-0 rounded-none md:h-auto md:w-[260px]" />
     </Card>
   );
 }

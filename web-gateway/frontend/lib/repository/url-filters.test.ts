@@ -24,7 +24,8 @@ const FULL: CatalogueFilterState = {
   yearEnd: 2009,
   spatialResMin: 0.0833,
   spatialResMax: 0.25,
-  sortBy: "newest",
+  sortBy: "coverage-start",
+  view: "grid",
   page: 3,
 };
 
@@ -79,14 +80,31 @@ describe("catalogue filters in the URL", () => {
     expect(parsed.type).toEqual(["snapshot"]);
   });
 
-  it("omits the default sort and page 1, and falls back on a bad sort or page", () => {
-    expect(catalogueFiltersToParams({ ...FULL, sortBy: "relevance", page: 1 }).toString()).not.toMatch(
-      /sort=|page=/
+  it("omits the default sort, the list view and page 1, and falls back on a bad sort, view or page", () => {
+    expect(
+      catalogueFiltersToParams({ ...FULL, sortBy: "relevance", view: "list", page: 1 }).toString()
+    ).not.toMatch(/sort=|view=|page=/);
+    const parsed = parseCatalogueFilters(
+      new URLSearchParams("sort=bogus&view=carousel&page=-4&year_start=abc")
     );
-    const parsed = parseCatalogueFilters(new URLSearchParams("sort=bogus&page=-4&year_start=abc"));
     expect(parsed.sortBy).toBe("relevance");
+    expect(parsed.view).toBe("list");
     expect(parsed.page).toBe(1);
     expect(parsed.yearStart).toBeNull();
+  });
+});
+
+describe("catalogue sort and view in the URL", () => {
+  it("reads and writes coverage-start and view=grid", () => {
+    const parsed = parseCatalogueFilters(new URLSearchParams("sort=coverage-start&view=grid"));
+    expect(parsed.sortBy).toBe("coverage-start");
+    expect(parsed.view).toBe("grid");
+    const qs = catalogueFiltersToParams(parsed).toString();
+    expect(qs).toBe("sort=coverage-start&view=grid");
+  });
+
+  it("keeps coverage-start out of the snapshot picker, whose route does not take it", () => {
+    expect(parseDatasetFilters(new URLSearchParams("sort=coverage-start")).sortBy).toBe("relevance");
   });
 });
 

@@ -26,6 +26,7 @@ export function useUrlSyncedFilters<F extends object, R>({
   fetcher,
   debounceMs = 300,
   initialError = false,
+  inertKeys,
 }: {
   initialFilters: F;
   initialResult: R;
@@ -36,6 +37,12 @@ export function useUrlSyncedFilters<F extends object, R>({
   debounceMs?: number;
   /** The server render could not fetch `initialResult`: start in the error state. */
   initialError?: boolean;
+  /**
+   * Filter keys that live in the URL but do not change the result, such as a
+   * list/grid view. Changing only these keys neither goes back to page 1 nor
+   * fetches again.
+   */
+  inertKeys?: readonly (keyof F)[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -54,8 +61,16 @@ export function useUrlSyncedFilters<F extends object, R>({
   const isFirstRender = useRef(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // What the last fetch was asked: the filters without the inert keys.
+  const fetchKey = useCallback(
+    (f: F) => JSON.stringify(f, (k, v) => (inertKeys?.includes(k as keyof F) ? undefined : v)),
+    [inertKeys]
+  );
+  const lastFetchKey = useRef(fetchKey(initialFilters));
+
   const doFetch = useCallback(
     (f: F) => {
+      lastFetchKey.current = fetchKey(f);
       startTransition(async () => {
         try {
           setResult(await fetcher(f));
@@ -66,7 +81,7 @@ export function useUrlSyncedFilters<F extends object, R>({
         }
       });
     },
-    [fetcher, emptyResult]
+    [fetcher, emptyResult, fetchKey]
   );
 
   // Local edit → debounce → push to the URL → fetch.
@@ -80,7 +95,7 @@ export function useUrlSyncedFilters<F extends object, R>({
       const qs = serialize(filters).toString();
       lastPushedQuery.current = qs;
       router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-      doFetch(filters);
+      if (fetchKey(filters) !== lastFetchKey.current) doFetch(filters);
     }, debounceMs);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -96,20 +111,22 @@ export function useUrlSyncedFilters<F extends object, R>({
     lastPushedQuery.current = current;
     const next = parse(searchParams);
     setFiltersState(next);
-    doFetch(next);
+    if (fetchKey(next) !== lastFetchKey.current) doFetch(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const setFilters = useCallback((updates: Partial<F>) => {
     setFiltersState((prev) => {
       const next = { ...prev, ...updates };
-      // Reset to page 1 on any filter change except an explicit page change.
-      if (!("page" in updates)) {
+      // Reset to page 1 on any filter change except an explicit page change
+      // or a change to inert keys only.
+      const onlyInert = Object.keys(updates).every((k) => inertKeys?.includes(k as keyof F));
+      if (!("page" in updates) && !onlyInert) {
         (next as Record<string, unknown>).page = 1;
       }
       return next;
     });
-  }, []);
+  }, [inertKeys]);
 
   /** Fetch the current filters again, e.g. from a Retry button. */
   const retry = useCallback(() => doFetch(filters), [doFetch, filters]);

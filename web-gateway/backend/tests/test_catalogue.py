@@ -279,6 +279,14 @@ def test_sort_newest(items):
     assert got[5:] == sorted([MI1_ID, MI2_ID])
 
 
+def test_sort_coverage_start(items):
+    got = _ids(_run(items, sort="coverage-start"))
+    # 1980 x2 (same name -> id), 2000 x3 (name asc: Global, Wyoming, v2.0.0), 2010 zeta, no coverage last
+    assert got[:2] == sorted([MI1_ID, MI2_ID])
+    assert got[2:5] == [GLOBAL_ID, WYOMING_ID, V2_ID]
+    assert got[5:] == [ZETA_ID, SOIL_ID]
+
+
 def test_sort_title(items):
     az = [i.about.name for i in _run(items, sort="title-az").items]
     assert az == sorted(az, key=str.casefold)
@@ -418,6 +426,7 @@ def test_route_repeated_params_and_comma_values(http):
 def test_route_validation(http):
     assert http.get("/api/v1/repository/catalogue", params={"type": "dataset"}).status_code == 422
     assert http.get("/api/v1/repository/catalogue", params={"sort": "random"}).status_code == 422
+    assert http.get("/api/v1/repository/catalogue", params={"sort": "coverage-start"}).status_code == 200
     assert http.get("/api/v1/repository/catalogue", params={"page": 0}).status_code == 422
     assert http.get("/api/v1/repository/catalogue", params={"page_size": 101}).status_code == 422
     assert http.get("/api/v1/repository/catalogue", params={"page": 9}).json()["items"] == []

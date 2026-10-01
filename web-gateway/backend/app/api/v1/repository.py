@@ -144,7 +144,7 @@ async def list_catalogue(
     year_end: int | None = Query(default=None),
     spatial_res_min: float | None = Query(default=None, description="Min spatial resolution in degrees"),
     spatial_res_max: float | None = Query(default=None, description="Max spatial resolution in degrees"),
-    sort: str = Query(default="relevance", pattern="^(relevance|newest|title-az|title-za)$"),
+    sort: str = Query(default="relevance", pattern="^(relevance|newest|title-az|title-za|coverage-start)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
 ) -> CatalogueResponse:

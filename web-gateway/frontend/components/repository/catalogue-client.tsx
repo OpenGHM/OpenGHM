@@ -6,8 +6,15 @@ import { fetchCatalogue } from "@/lib/repository/actions";
 import { catalogueFiltersToParams, parseCatalogueFilters } from "@/lib/repository/url-filters";
 import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
 import type { CatalogueFilterState, CatalogueResponse } from "@/lib/repository/types";
+import { CatalogueHeader } from "./catalogue-header";
 import { CatalogueResults } from "./catalogue-results";
 import { CatalogueSidebar } from "./catalogue-sidebar";
+
+/**
+ * Filter keys that are in the URL but do not change the results: switching the
+ * view neither goes back to page 1 nor asks the backend again.
+ */
+const INERT_KEYS = ["view"] as const;
 
 /**
  * The Data Repository: the filter sidebar and the card list over one
@@ -34,6 +41,7 @@ export function CatalogueClient({
     serialize: catalogueFiltersToParams,
     fetcher: fetchCatalogue,
     initialError,
+    inertKeys: INERT_KEYS,
   });
 
   // A failed fetch comes back empty. The sidebar keeps the last facets it was
@@ -54,24 +62,27 @@ export function CatalogueClient({
     });
 
   return (
-    <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
-      <CatalogueSidebar
-        filters={filters}
-        facets={facets}
-        onChange={setFilters}
-        onClearAll={handleClearAll}
-      />
-      <CatalogueResults
-        result={result}
-        filters={filters}
-        facets={facets}
-        isLoading={isPending}
-        error={error}
-        onChange={setFilters}
-        onClearAll={handleClearAll}
-        onRetry={retry}
-        onToggleKeyword={handleToggleKeyword}
-      />
+    <div className="mx-auto max-w-[1360px] px-4 py-6 sm:px-7 lg:py-9">
+      <CatalogueHeader />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-7">
+        <CatalogueSidebar
+          filters={filters}
+          facets={facets}
+          onChange={setFilters}
+          onClearAll={handleClearAll}
+        />
+        <CatalogueResults
+          result={result}
+          filters={filters}
+          facets={facets}
+          isLoading={isPending}
+          error={error}
+          onChange={setFilters}
+          onClearAll={handleClearAll}
+          onRetry={retry}
+          onToggleKeyword={handleToggleKeyword}
+        />
+      </div>
     </div>
   );
 }

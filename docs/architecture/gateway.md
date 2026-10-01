@@ -236,7 +236,7 @@ plus a computed `kind`, `"snapshot"` or `"model-input"`. The response is
 **Query parameters**, all optional: `q`; `type` (`snapshot` or `model-input`,
 anything else is `422`); the facet parameters below; `year_start`, `year_end`;
 `spatial_res_min`, `spatial_res_max` (degrees); `sort`
-(`relevance` default, `newest`, `title-az`, `title-za`); `page` (>= 1);
+(`relevance` default, `newest`, `title-az`, `title-za`, `coverage-start`); `page` (>= 1);
 `page_size` (default 10, 1 to 100). Facet and `type` parameters **repeat**
 (`?category=a&category=b`); they are not comma lists, because a value can
 contain a comma.
@@ -283,6 +283,11 @@ when nothing has a temporal coverage.
 sort by `about.name` case-insensitively. `relevance` with a `q` scores a name
 hit 3, a keyword hit 2 and a description hit 1, summed, highest first, and
 breaks ties as `newest`; with no `q` it is `newest`.
+`coverage-start` puts the earliest temporal coverage start first
+(`simulation.temporalCoverage.start`; a model input's
+`coverage.temporalCoverage.start`), items with no coverage last, and breaks
+ties by name, then id. The single-kind `/datasets` and `/model-inputs` routes
+do not take it.
 
 `GET /repository/datasets` and `GET /repository/model-inputs` stay as the
 separate, single-kind lists; the new-simulation snapshot picker still reads

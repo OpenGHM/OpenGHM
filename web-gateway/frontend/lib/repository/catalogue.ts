@@ -59,6 +59,7 @@ export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
   spatialResMin: null,
   spatialResMax: null,
   sortBy: "relevance",
+  view: "list",
   page: 1,
 };
 
@@ -83,9 +84,9 @@ export const EMPTY_CATALOGUE: CatalogueResponse = {
   facets: EMPTY_CATALOGUE_FACETS,
 };
 
-/** What "Clear all" sets: every filter and the search off, the sort kept, page 1. */
+/** What "Reset" and "Clear all" set: every filter and the search off, the sort and the view kept, page 1. */
 export function clearedFilters(filters: CatalogueFilterState): CatalogueFilterState {
-  return { ...EMPTY_CATALOGUE_FILTERS, sortBy: filters.sortBy };
+  return { ...EMPTY_CATALOGUE_FILTERS, sortBy: filters.sortBy, view: filters.view };
 }
 
 /** Filters in effect, not counting the search box: what the Filters badge shows. */

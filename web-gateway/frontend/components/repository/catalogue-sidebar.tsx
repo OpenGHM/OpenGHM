@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,16 +31,6 @@ const TYPE_FALLBACK: CatalogueFacetOption[] = [
   { value: "snapshot", label: "Model Snapshot", count: NaN },
   { value: "model-input", label: "Model Input", count: NaN },
 ];
-
-type SpatialUnit = "deg" | "arcmin" | "arcsec";
-
-const UNIT_OPTIONS: { value: SpatialUnit; label: string; symbol: string; multiplier: number }[] = [
-  { value: "deg", label: "Degrees", symbol: "°", multiplier: 1 },
-  { value: "arcmin", label: "Arc-minutes", symbol: "′", multiplier: 60 },
-  { value: "arcsec", label: "Arc-seconds", symbol: "″", multiplier: 3600 },
-];
-
-const RES_SLIDER = { min: 0, max: 2, step: 0.001 };
 
 /** A control row is 40 px tall on a phone and tighter beside the results. */
 const ROW = "min-h-10 lg:min-h-8";
@@ -81,14 +71,14 @@ function FacetCheckboxList({
 
   return (
     <div>
-      <ul className="space-y-0.5">
+      <ul className="space-y-px">
         {visible.map((o) => {
           const checked = selected.includes(o.value);
           return (
             <li key={o.value}>
               <label
                 className={cn(
-                  "flex cursor-pointer items-center gap-2.5 rounded-md px-1 text-sm text-foreground hover:bg-muted/60",
+                  "-mx-2 flex cursor-pointer items-center gap-2.5 rounded-lg px-2 text-sm text-foreground hover:bg-muted/60",
                   ROW
                 )}
               >
@@ -105,13 +95,13 @@ function FacetCheckboxList({
                 {!Number.isNaN(o.count) && (
                   <span
                     className={cn(
-                      "shrink-0 text-xs tabular-nums",
+                      "shrink-0 font-mono text-xs tabular-nums",
                       o.count === 0 && !checked
                         ? "text-muted-foreground/70"
                         : "text-muted-foreground"
                     )}
                   >
-                    ({o.count})
+                    {o.count}
                   </span>
                 )}
               </label>
@@ -180,7 +170,7 @@ function YearInput({
 
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="mb-1 block text-xs font-medium text-muted-foreground">
+      <label htmlFor={id} className="mb-1 block text-xs text-muted-foreground">
         {label}
       </label>
       <Input
@@ -197,7 +187,7 @@ function YearInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit();
         }}
-        className="h-10 lg:h-9"
+        className="h-10 rounded-lg border-border bg-input px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
       />
     </div>
   );
@@ -229,7 +219,7 @@ function YearRangeFilter({
     });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <Slider
         min={bounds.min}
         max={bounds.max}
@@ -244,7 +234,7 @@ function YearRangeFilter({
         }}
         className="h-10"
       />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
         <YearInput
           id="catalogue-year-from"
           label="From"
@@ -254,6 +244,9 @@ function YearRangeFilter({
           disabled={disabled}
           onCommit={(year) => commit(year, Math.max(year, shown[1]))}
         />
+        <span aria-hidden="true" className="pb-2 text-muted-foreground/70 lg:pb-1.5">
+          –
+        </span>
         <YearInput
           id="catalogue-year-to"
           label="To"
@@ -268,7 +261,7 @@ function YearRangeFilter({
   );
 }
 
-// ─── Spatial resolution: slider, unit toggle and preset chips ────────────────
+// ─── Spatial resolution: preset chips, one at a time ─────────────────────────
 
 function ResolutionFilter({
   min,
@@ -279,77 +272,8 @@ function ResolutionFilter({
   max: number | null;
   onChange: (updates: Pick<CatalogueFilterState, "spatialResMin" | "spatialResMax">) => void;
 }) {
-  const [unitValue, setUnitValue] = useState<SpatialUnit>("deg");
-  const [draft, setDraft] = useState<[number, number] | null>(null);
-  const unit = UNIT_OPTIONS.find((u) => u.value === unitValue)!;
-  const unset = min === null && max === null;
-
-  const lo = clamp(min ?? RES_SLIDER.min, RES_SLIDER.min, RES_SLIDER.max);
-  const hi = clamp(max ?? RES_SLIDER.max, RES_SLIDER.min, RES_SLIDER.max);
-  const shown = draft ?? [lo, hi];
-  const showingAll = draft === null && unset;
-
-  const fmt = (v: number) => {
-    const converted = v * unit.multiplier;
-    if (unit.value === "deg") return `${converted.toFixed(converted < 0.1 ? 4 : 2)}${unit.symbol}`;
-    if (unit.value === "arcmin") return `${converted.toFixed(1)}${unit.symbol}`;
-    return `${Math.round(converted)}${unit.symbol}`;
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground" id="catalogue-res-unit-label">
-          Unit
-        </span>
-        <div className="flex gap-1" role="group" aria-labelledby="catalogue-res-unit-label">
-          {UNIT_OPTIONS.map((u) => (
-            <button
-              key={u.value}
-              type="button"
-              aria-pressed={unitValue === u.value}
-              aria-label={u.label}
-              title={u.label}
-              onClick={() => setUnitValue(u.value)}
-              className={cn(
-                "inline-flex h-10 min-w-10 items-center justify-center rounded-md px-2 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:h-8 lg:min-w-8",
-                unitValue === u.value
-                  ? "bg-primary font-medium text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {u.symbol}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Slider
-        min={RES_SLIDER.min}
-        max={RES_SLIDER.max}
-        step={RES_SLIDER.step}
-        value={shown}
-        thumbLabels={["Finest resolution", "Coarsest resolution"]}
-        onValueChange={([a, b]) => setDraft([a, b])}
-        onValueCommit={([a, b]) => {
-          setDraft(null);
-          const atMin = a <= RES_SLIDER.min;
-          const atMax = b >= RES_SLIDER.max;
-          onChange({
-            spatialResMin: atMin && atMax ? null : a,
-            spatialResMax: atMin && atMax ? null : b,
-          });
-        }}
-        className="h-10"
-      />
-      <div className="flex justify-between gap-2 text-xs text-muted-foreground">
-        <span>{showingAll ? "finest" : fmt(shown[0])}</span>
-        <span aria-hidden="true" className="text-muted-foreground/70">
-          Fine ← → Coarse
-        </span>
-        <span>{showingAll ? "coarsest" : fmt(shown[1])}</span>
-      </div>
-
+    <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         {SPATIAL_RES_PRESETS.map((p) => {
           const active = min === p.degrees && max === p.degrees;
@@ -366,16 +290,20 @@ function ResolutionFilter({
                 )
               }
               className={cn(
-                "inline-flex h-10 items-center rounded-full border px-3 text-xs transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:h-8",
+                "inline-flex h-10 items-center rounded-full border px-3 font-mono text-xs transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none lg:h-8",
                 active
-                  ? "border-primary bg-primary/10 font-medium text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/50"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-foreground/80 hover:border-primary/50"
               )}
             >
               {p.label}
             </button>
           );
         })}
+      </div>
+      <div aria-hidden="true" className="flex justify-between text-xs text-muted-foreground">
+        <span>Finest</span>
+        <span>Coarsest</span>
       </div>
     </div>
   );
@@ -394,10 +322,10 @@ const GROUPS: GroupSpec[] = [
   { kind: "facet", key: "category", defaultOpen: true },
   // Open only when the whole list fits without "Show all".
   { kind: "facet", key: "keyword", defaultOpen: "when-short" },
-  { kind: "facet", key: "output", defaultOpen: false },
-  { kind: "facet", key: "forcing", defaultOpen: false },
   { kind: "temporal", defaultOpen: true },
   { kind: "resolution", defaultOpen: true },
+  { kind: "facet", key: "output", defaultOpen: false },
+  { kind: "facet", key: "forcing", defaultOpen: false },
   { kind: "facet", key: "wbm", defaultOpen: false },
   { kind: "facet", key: "process", defaultOpen: false },
   { kind: "facet", key: "creator", defaultOpen: false },
@@ -422,37 +350,15 @@ export function CatalogueSidebar({
   const yearBounds = facets.yearBounds ?? TEMPORAL_RANGE_BOUNDS;
 
   return (
-    <aside aria-label="Filters" className="w-full lg:w-72 lg:shrink-0 xl:w-80">
-      <div className="flex flex-col gap-4">
-        <Card className="shrink-0 gap-0 rounded-xl border-0 py-0 shadow-sm">
-          <div className="p-4">
-            <label htmlFor="catalogue-search" className="mb-2 block text-sm font-semibold">
-              Search
-            </label>
-            <div className="relative">
-              <Search
-                aria-hidden="true"
-                className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                id="catalogue-search"
-                type="search"
-                placeholder="Search the repository"
-                value={filters.searchQuery}
-                onChange={(e) => onChange({ searchQuery: e.target.value })}
-                className="h-10 pl-9 lg:h-9"
-              />
-            </div>
-          </div>
-        </Card>
-
+    <aside aria-label="Filters" className="w-full lg:w-[260px] lg:shrink-0">
+      <div className="flex flex-col gap-3">
         <Button
           type="button"
           variant="outline"
           aria-expanded={panelOpen}
           aria-controls="catalogue-filters-panel"
           onClick={() => setPanelOpen((o) => !o)}
-          className="h-10 w-full justify-between lg:hidden"
+          className="h-11 w-full justify-between rounded-xl bg-card hover:bg-muted hover:text-foreground lg:hidden"
         >
           <span className="flex items-center gap-2">
             <SlidersHorizontal aria-hidden="true" />
@@ -473,24 +379,24 @@ export function CatalogueSidebar({
         <Card
           id="catalogue-filters-panel"
           className={cn(
-            "gap-0 rounded-xl border-0 py-0 shadow-sm lg:flex",
+            "gap-0 overflow-hidden rounded-2xl border py-0 shadow-none lg:flex",
             panelOpen ? "flex" : "hidden"
           )}
         >
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
-            <h2 className="text-base font-semibold text-foreground">Filters</h2>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 sm:px-[18px]">
+            <h2 className="text-[15px] font-semibold text-foreground">Filters</h2>
             {anyActive && (
               <button
                 type="button"
                 onClick={onClearAll}
-                className="inline-flex min-h-10 items-center rounded-md px-1 text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-h-8"
+                className="inline-flex min-h-10 items-center rounded-md px-1 text-[13px] text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-h-8"
               >
-                Clear all
+                Reset
               </button>
             )}
           </div>
 
-          <div className="px-4 py-2">
+          <div>
             {GROUPS.map((group) => {
               if (group.kind === "temporal") {
                 return (

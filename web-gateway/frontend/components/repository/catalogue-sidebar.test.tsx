@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CatalogueSidebar } from "./catalogue-sidebar";
-import { EMPTY_CATALOGUE_FACETS } from "@/lib/repository/catalogue";
+import { clearedFilters, EMPTY_CATALOGUE_FACETS } from "@/lib/repository/catalogue";
 import { TEMPORAL_RANGE_BOUNDS } from "@/lib/repository/data";
 import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/types";
 import { FACETS, filters } from "./catalogue.fixtures";
@@ -37,15 +37,15 @@ describe("CatalogueSidebar groups", () => {
       .getAllByRole("button", { expanded: undefined })
       .map((b) => b.textContent ?? "")
       .filter((t) => /^(Type|Category|Keyword|Output variable|Forcing data|Temporal coverage|Spatial resolution|Model version|Active processes|Creator|License)/.test(t))
-      .map((t) => t.replace(/\d+ selected.*$/, ""));
+      ;
     expect(titles).toEqual([
       "Type",
       "Category",
       "Keyword",
-      "Output variable",
-      "Forcing data",
       "Temporal coverage",
       "Spatial resolution",
+      "Output variable",
+      "Forcing data",
       "Model version",
       "Creator",
       "License",
@@ -82,22 +82,39 @@ describe("CatalogueSidebar groups", () => {
     expect(screen.getByRole("checkbox", { name: "Model Input" })).toBeTruthy();
   });
 
-  it("shows the label with its count in parentheses", () => {
+  it("names a group's button by its title and shows + when closed, – when open", () => {
     setup();
-    expect(screen.getByRole("checkbox", { name: "Model Snapshot (2)" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "hydrology (2)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Type" }).textContent).toBe("Type");
+    expect(screen.getByRole("button", { name: "Output variable" })).toBeTruthy();
+    const closed = group(/^Output variable/);
+    expect(closed.querySelector("svg.lucide-plus")).not.toBeNull();
+    fireEvent.click(closed);
+    expect(closed.querySelector("svg.lucide-minus")).not.toBeNull();
+    expect(group(/^Type/).querySelector("svg.lucide-minus")).not.toBeNull();
+  });
+
+  it("shows each count as a plain number, right-aligned, without parentheses", () => {
+    setup();
+    const box = screen.getByRole("checkbox", { name: "Model Snapshot 2" });
+    const count = box.closest("label")!.lastElementChild as HTMLElement;
+    expect(count.textContent).toBe("2");
+    expect(count.className).toContain("font-mono");
+    expect(box.closest("label")!.textContent).not.toContain("(");
+    expect(screen.getByRole("checkbox", { name: "hydrology 2" })).toBeTruthy();
   });
 
   it("humanises forcing roles", () => {
     setup();
     fireEvent.click(group(/^Forcing data/));
-    expect(screen.getByRole("checkbox", { name: "Wind (u) (2)" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Precipitation (3)" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Wind (u) 2" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Precipitation 3" })).toBeTruthy();
   });
 
-  it("shows how many values are selected on a group", () => {
-    setup(filters({ category: ["hydrology", "ancillary"] }));
-    expect(group(/^Category/).textContent).toContain("2 selected");
+  it("opens a closed group that already holds a selection", () => {
+    setup(filters({ output: ["discharge"] }));
+    expect(group(/^Output variable/).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "Discharge 9" }).getAttribute("checked") ?? "").toBe("");
+    expect((screen.getByRole("checkbox", { name: "Discharge 9" }) as HTMLInputElement).checked).toBe(true);
   });
 });
 
@@ -107,17 +124,17 @@ describe("CatalogueSidebar keyword group", () => {
     const keyword = group(/^Keyword/);
     expect(keyword.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(keyword);
-    expect(screen.getByRole("checkbox", { name: "water balance (3)" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "water balance 3" })).toBeTruthy();
     // Seven options: six, then "Show all".
     expect(screen.queryByRole("checkbox", { name: /^soils/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show all (7)" }));
-    expect(screen.getByRole("checkbox", { name: "soils (1)" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "soils 1" })).toBeTruthy();
   });
 
   it("is open from the start when it has six options or fewer", () => {
     setup(filters(), { ...FACETS, keyword: FACETS.keyword.slice(0, 6) });
     expect(group(/^Keyword/).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("checkbox", { name: "streamflow (1)" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "streamflow 1" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
   });
 
@@ -128,9 +145,9 @@ describe("CatalogueSidebar keyword group", () => {
 
   it("reports a ticked keyword as the facet's new selection and counts the selected ones", () => {
     const { onChange } = setup(filters({ keyword: ["storage"] }));
-    expect(group(/^Keyword/).textContent).toContain("1 selected");
-    fireEvent.click(group(/^Keyword/));
-    fireEvent.click(screen.getByRole("checkbox", { name: "global (2)" }));
+    // A group holding a selection opens by itself.
+    expect(group(/^Keyword/).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "global 2" }));
     expect(onChange).toHaveBeenCalledWith({ keyword: ["storage", "global"] });
   });
 });
@@ -138,19 +155,19 @@ describe("CatalogueSidebar keyword group", () => {
 describe("CatalogueSidebar checkboxes", () => {
   it("reports a ticked box as the facet's new selection", () => {
     const { onChange } = setup(filters({ category: ["ancillary"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "hydrology (2)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "hydrology 2" }));
     expect(onChange).toHaveBeenCalledWith({ category: ["ancillary", "hydrology"] });
   });
 
   it("reports an unticked box without the value", () => {
     const { onChange } = setup(filters({ type: ["snapshot", "model-input"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Model Snapshot (2)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Model Snapshot 2" }));
     expect(onChange).toHaveBeenCalledWith({ type: ["model-input"] });
   });
 
   it("keeps a selected value the facets no longer list, so it can be unticked", () => {
     const { onChange } = setup(filters({ category: ["gone"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "gone (0)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "gone 0" }));
     expect(onChange).toHaveBeenCalledWith({ category: [] });
   });
 });
@@ -184,10 +201,10 @@ describe("CatalogueSidebar Show all", () => {
   });
 });
 
-describe("CatalogueSidebar Clear all", () => {
-  it("is absent when nothing is selected", () => {
-    setup();
-    expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
+describe("CatalogueSidebar Reset", () => {
+  it("is absent when nothing is selected, even with a sort and a view chosen", () => {
+    setup(filters({ sortBy: "title-az", view: "grid" }));
+    expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
   });
 
   it.each([
@@ -197,18 +214,20 @@ describe("CatalogueSidebar Clear all", () => {
     ["a search", filters({ searchQuery: "storage" })],
   ])("appears for %s and clears when pressed", (_name, state) => {
     const { onClearAll } = setup(state);
-    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(onClearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("is what clearedFilters answers: the filters off, the sort and the view kept", () => {
+    const state = filters({ license: ["CC-BY-4.0"], sortBy: "coverage-start", view: "grid", page: 3 });
+    expect(clearedFilters(state)).toEqual(filters({ sortBy: "coverage-start", view: "grid" }));
   });
 });
 
-describe("CatalogueSidebar search", () => {
-  it("reports typing", () => {
-    const { onChange } = setup();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search" }), {
-      target: { value: "gpcc" },
-    });
-    expect(onChange).toHaveBeenCalledWith({ searchQuery: "gpcc" });
+describe("CatalogueSidebar has no search box", () => {
+  it("leaves the search to the toolbar above the results", () => {
+    setup();
+    expect(screen.queryByRole("searchbox")).toBeNull();
   });
 });
 
@@ -257,26 +276,39 @@ describe("CatalogueSidebar temporal coverage", () => {
 });
 
 describe("CatalogueSidebar spatial resolution", () => {
-  it("applies a preset as an exact resolution and lifts it when pressed again", () => {
+  it("offers the presets as mono chips with Finest and Coarsest under them, and no slider or unit toggle", () => {
+    setup();
+    for (const label of ["30 arc-sec", "5 arc-min", "15 arc-min", "0.5°", "1°"]) {
+      const chip = screen.getByRole("button", { name: label });
+      expect(chip.className).toContain("font-mono");
+      expect(chip.className).toContain("rounded-full");
+      expect(chip.getAttribute("aria-pressed")).toBe("false");
+    }
+    expect(screen.getByText("Finest")).toBeTruthy();
+    expect(screen.getByText("Coarsest")).toBeTruthy();
+    expect(screen.queryByRole("slider", { name: /resolution/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Arc-minutes" })).toBeNull();
+  });
+
+  it("applies a preset as an exact resolution", () => {
     const { onChange } = setup();
     fireEvent.click(screen.getByRole("button", { name: "0.5°" }));
     expect(onChange).toHaveBeenCalledWith({ spatialResMin: 0.5, spatialResMax: 0.5 });
   });
 
-  it("marks the active preset as pressed and removes it on a second press", () => {
+  it("marks only the active preset as pressed and removes it on a second press", () => {
     const { onChange } = setup(filters({ spatialResMin: 0.5, spatialResMax: 0.5 }));
     const preset = screen.getByRole("button", { name: "0.5°" });
     expect(preset.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "1°" }).getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(preset);
     expect(onChange).toHaveBeenCalledWith({ spatialResMin: null, spatialResMax: null });
   });
 
-  it("switches the unit", () => {
-    setup();
-    const arcmin = screen.getByRole("button", { name: "Arc-minutes" });
-    expect(arcmin.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(arcmin);
-    expect(arcmin.getAttribute("aria-pressed")).toBe("true");
+  it("replaces the active preset when another is pressed", () => {
+    const { onChange } = setup(filters({ spatialResMin: 0.5, spatialResMax: 0.5 }));
+    fireEvent.click(screen.getByRole("button", { name: "1°" }));
+    expect(onChange).toHaveBeenCalledWith({ spatialResMin: 1, spatialResMax: 1 });
   });
 });
 
@@ -287,7 +319,7 @@ describe("CatalogueSidebar on a phone", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.textContent).toContain("2");
     expect(toggle.className).toContain("lg:hidden");
-    expect(toggle.className).toContain("h-10");
+    expect(toggle.className).toContain("h-11");
 
     const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
     expect(panel?.className).toContain("hidden");
@@ -308,7 +340,7 @@ describe("CatalogueSidebar on a phone", () => {
 
   it("gives every checkbox row a 40 px touch target", () => {
     setup();
-    const label = screen.getByRole("checkbox", { name: "hydrology (2)" }).closest("label");
+    const label = screen.getByRole("checkbox", { name: "hydrology 2" }).closest("label");
     expect(label?.className).toContain("min-h-10");
   });
 });

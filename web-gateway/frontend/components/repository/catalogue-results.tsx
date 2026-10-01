@@ -7,20 +7,17 @@ import type {
   CatalogueFacets,
   CatalogueFilterState,
   CatalogueResponse,
-  SortOption,
 } from "@/lib/repository/types";
 import { ActiveFilterChips } from "./active-filter-chips";
 import { CatalogueCard, CatalogueCardSkeleton } from "./catalogue-card";
+import { CatalogueToolbar } from "./catalogue-toolbar";
 import { Pagination } from "./pagination";
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "relevance", label: "Relevance" },
-  { value: "newest", label: "Newest first" },
-  { value: "title-az", label: "Title A–Z" },
-  { value: "title-za", label: "Title Z–A" },
-];
-
 const SKELETON_COUNT = 3;
+const GRID_SKELETON_COUNT = 6;
+
+const LIST_CLASS = "flex flex-col gap-3.5";
+const GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
 
 function ResultCount({
   totalCount,
@@ -35,17 +32,18 @@ function ResultCount({
 }) {
   const q = searchQuery.trim();
   return (
-    <div aria-live="polite" aria-atomic="true" className="mt-1 text-sm text-muted-foreground">
+    <div aria-live="polite" aria-atomic="true" className="text-[13.5px] text-muted-foreground">
       {isLoading ? (
         <>
           <span className="sr-only">Loading results</span>
-          <Skeleton aria-hidden="true" className="inline-block h-4 w-28 align-middle" />
+          <Skeleton aria-hidden="true" className="inline-block h-4 w-24 align-middle" />
         </>
       ) : error ? (
         "Results unavailable"
       ) : (
         <>
-          {totalCount} {totalCount === 1 ? "result" : "results"} found
+          <strong className="font-semibold text-foreground">{totalCount}</strong>{" "}
+          {totalCount === 1 ? "result" : "results"}
           {q && (
             <>
               {" "}
@@ -59,9 +57,9 @@ function ResultCount({
 }
 
 /**
- * The right-hand side of the Data Repository: the title and result count, the
- * sort, the active-filter chips, the cards (or the loading, empty or error
- * state) and the pagination.
+ * The right-hand side of the Data Repository: the toolbar (search, sort,
+ * view), the result count with the active-filter chips, the cards as a list or
+ * a grid (or the loading, empty or error state) and the pagination.
  */
 export function CatalogueResults({
   result,
@@ -86,57 +84,38 @@ export function CatalogueResults({
   /** A card's keyword chip: add the keyword to the filter, or take it off. */
   onToggleKeyword: (keyword: string) => void;
 }) {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const countRef = useRef<HTMLDivElement>(null);
   const filtered = hasActiveFilters(filters);
+  const grid = filters.view === "grid";
 
   return (
-    <section aria-label="Results" className="min-w-0 flex-1">
-      <div id="catalogue-results" className="mb-4 flex scroll-mt-24 flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1
-            ref={headingRef}
-            tabIndex={-1}
-            className="text-2xl font-bold text-foreground outline-none"
-          >
-            Data Repository
-          </h1>
-          <ResultCount
-            totalCount={result.totalCount}
-            searchQuery={filters.searchQuery}
-            isLoading={isLoading}
-            error={error}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <label htmlFor="catalogue-sort" className="text-sm text-muted-foreground">
-            Sort by
-          </label>
-          <select
-            id="catalogue-sort"
-            value={filters.sortBy}
-            onChange={(e) => onChange({ sortBy: e.target.value as SortOption })}
-            className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9"
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+    <section aria-label="Results" className="flex min-w-0 flex-1 flex-col gap-4">
+      <CatalogueToolbar filters={filters} onChange={onChange} />
+
+      <div
+        id="catalogue-results"
+        ref={countRef}
+        tabIndex={-1}
+        className="flex min-h-7 scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-2 outline-none"
+      >
+        <ResultCount
+          totalCount={result.totalCount}
+          searchQuery={filters.searchQuery}
+          isLoading={isLoading}
+          error={error}
+        />
+        <ActiveFilterChips
+          filters={filters}
+          facets={facets}
+          onChange={onChange}
+          onClearAll={onClearAll}
+        />
       </div>
 
-      <ActiveFilterChips
-        filters={filters}
-        facets={facets}
-        onChange={onChange}
-        onClearAll={onClearAll}
-      />
-
       {isLoading ? (
-        <div aria-busy="true" className="space-y-4">
-          {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-            <CatalogueCardSkeleton key={i} />
+        <div aria-busy="true" className={grid ? GRID_CLASS : LIST_CLASS}>
+          {Array.from({ length: grid ? GRID_SKELETON_COUNT : SKELETON_COUNT }).map((_, i) => (
+            <CatalogueCardSkeleton key={i} view={filters.view} />
           ))}
         </div>
       ) : error ? (
@@ -151,12 +130,12 @@ export function CatalogueResults({
               Check your connection and try again. Your filters are kept.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={onRetry} className="h-10 sm:h-9">
+          <Button type="button" variant="outline" onClick={onRetry} className="h-10 rounded-lg sm:h-9">
             Retry
           </Button>
         </div>
       ) : result.items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-card/50 px-6 py-14 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card/50 px-6 py-14 text-center">
           <SearchX aria-hidden="true" className="size-10 text-muted-foreground/60" />
           <h2 className="text-lg font-semibold text-foreground">
             {filtered ? "No results match these filters" : "Nothing has been published yet"}
@@ -167,23 +146,24 @@ export function CatalogueResults({
               : "Published model snapshots and model inputs will appear here."}
           </p>
           {filtered && (
-            <Button type="button" variant="outline" onClick={onClearAll} className="mt-2 h-10 sm:h-9">
+            <Button type="button" variant="outline" onClick={onClearAll} className="mt-2 h-10 rounded-lg sm:h-9">
               Clear filters
             </Button>
           )}
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul className={grid ? GRID_CLASS : LIST_CLASS}>
           {result.items.map((item) => (
-            <li key={`${item.kind}:${item.id}`}>
+            <li key={`${item.kind}:${item.id}`} className="min-w-0">
               <CatalogueCard
                 item={item}
+                view={filters.view}
                 selectedKeywords={filters.keyword}
                 onToggleKeyword={(keyword) => {
                   onToggleKeyword(keyword);
                   // The list is replaced while it reloads, which would drop the
-                  // focus of the chip that was pressed; keep it on the page.
-                  headingRef.current?.focus({ preventScroll: true });
+                  // focus of the chip that was pressed; keep it on the result count.
+                  countRef.current?.focus({ preventScroll: true });
                 }}
               />
             </li>

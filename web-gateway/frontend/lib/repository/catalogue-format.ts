@@ -29,18 +29,20 @@ function yearOf(date: string): string {
   return date.slice(0, 4);
 }
 
-/** "2000 – 2009", "2001" for one year, `null` when the item has no calendar period. */
+/** "2000–2009", "2001" for one year, `null` when the item has no calendar period. */
 export function periodLabel(item: CatalogueItem): string | null {
   const period =
     item.kind === "snapshot" ? item.simulation.temporalCoverage : item.coverage.temporalCoverage;
   if (!period) return null;
   const start = yearOf(period.start);
   const end = yearOf(period.end);
-  return start === end ? start : `${start} – ${end}`;
+  return start === end ? start : `${start}–${end}`;
 }
 
+/** "5 arc-min", "30 arc-sec", "0.5°": the unit as the filter chips write it. */
 export function resolutionText(r: Resolution): string {
-  return `${r.value} ${r.unit}`;
+  if (r.unit === "degree") return `${r.value}°`;
+  return `${r.value} ${r.unit === "arc-minute" ? "arc-min" : r.unit === "arc-second" ? "arc-sec" : r.unit}`;
 }
 
 /**
@@ -56,11 +58,33 @@ export function resolutionLabels(item: CatalogueItem): string[] {
   return [...seen];
 }
 
+/** The resolutions joined as the card prints them, or "—" when there are none. */
+export function resolutionSummary(item: CatalogueItem): string {
+  const labels = resolutionLabels(item);
+  return labels.length > 0 ? labels.join(", ") : "—";
+}
+
 /** "Jane Doe", or "Jane Doe +2" when there are more creators. */
 export function creatorLabel(item: CatalogueItem): { first: string; more: number } | null {
   const creators = item.about.creator;
   if (creators.length === 0) return null;
   return { first: creators[0].name, more: creators.length - 1 };
+}
+
+/**
+ * The mono line under the badge: "WBM 1.0.0 · GPL-3.0-only" for a snapshot,
+ * "3 datasets · 2 networks · CC-BY-4.0" for a model input.
+ */
+export function contentsLine(item: CatalogueItem): string {
+  return `${contentsLabel(item)} · ${item.about.license}`;
+}
+
+/** "2000–2009 · 5 arc-min": what a grid card says under its title. */
+export function coverageLine(item: CatalogueItem): string {
+  const resolution = resolutionLabels(item);
+  return [periodLabel(item) ?? "Climatological", ...(resolution.length > 0 ? [resolution.join(", ")] : [])].join(
+    " · "
+  );
 }
 
 /** The version for a snapshot ("WBM 1.0.0"), the size for a model input. */
