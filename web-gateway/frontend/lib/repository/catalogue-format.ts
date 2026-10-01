@@ -72,11 +72,16 @@ export function contentsLabel(item: CatalogueItem): string {
   return networks > 0 ? `${d} · ${networks} network${networks === 1 ? "" : "s"}` : d;
 }
 
-/** Up to `limit` names to show as chips, and how many are left over. */
-export function chipNames(item: CatalogueItem, limit = 3): { shown: string[]; more: number } {
-  const names =
-    item.kind === "snapshot"
-      ? item.simulation.outputVariables.map((v) => v.name)
-      : item.about.keywords;
-  return { shown: names.slice(0, limit), more: Math.max(0, names.length - limit) };
+/**
+ * The keywords a card shows as chips (the first `limit`), how many are left,
+ * and the hidden ones' names for the "+N more" tooltip. Both kinds carry
+ * `about.keywords`; the list is the author's, in the author's order.
+ */
+export function cardKeywords(
+  item: CatalogueItem,
+  limit = 4
+): { shown: string[]; more: number; hidden: string[] } {
+  const keywords = item.about.keywords;
+  const hidden = keywords.slice(limit);
+  return { shown: keywords.slice(0, limit), more: hidden.length, hidden };
 }

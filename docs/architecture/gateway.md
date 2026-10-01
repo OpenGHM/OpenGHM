@@ -245,6 +245,7 @@ contain a comma.
 |---|---|---|---|
 | `type` | the item's kind | "Model Snapshot", "Model Input" (fixed order, always both) | both |
 | `category` | `about.category` | the value | both |
+| `keyword` | `about.keywords[]` (exact string match, case-sensitive) | the value | both |
 | `creator` | `about.creator[].name` | the value | both |
 | `license` | `about.license` | the value | both |
 | `output` | `simulation.outputVariables[].name` | `fullName` | snapshots |

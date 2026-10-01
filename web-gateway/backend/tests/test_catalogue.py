@@ -107,7 +107,7 @@ def _ids(resp) -> list[str]:
 
 def _run(items, *, sort="newest", page=1, page_size=100, **kw):
     selected = {k: tuple(kw.pop(k)) for k in list(kw) if k in
-                ("type", "category", "creator", "license", "output", "forcing", "process", "wbm")}
+                ("type", "category", "keyword", "creator", "license", "output", "forcing", "process", "wbm")}
     return build_catalogue(items, CatalogueQuery(selected=selected, **kw), sort=sort, page=page, page_size=page_size)
 
 
@@ -144,6 +144,44 @@ def test_category_creator_license_apply_to_both_kinds(items):
     assert set(_ids(_run(items, creator=["Alex Doe"]))) == {ZETA_ID, SOIL_ID}
     assert set(_ids(_run(items, license=["MIT"]))) == {ZETA_ID, SOIL_ID}
     assert set(_ids(_run(items, category=["ancillary-data"]))) == {MI1_ID, MI2_ID}
+
+
+def test_keyword_facet_matches_exactly_on_both_kinds(items):
+    assert set(_ids(_run(items, keyword=["hydrology"]))) == {GLOBAL_ID, WYOMING_ID, V2_ID, MI1_ID, MI2_ID}
+    assert set(_ids(_run(items, keyword=["MIRCA2000"]))) == {MI1_ID, MI2_ID}
+    assert set(_ids(_run(items, keyword=["WBM tutorial"]))) == {V2_ID}
+    # exact, not substring and not case-folded (q is the substring search)
+    assert _run(items, keyword=["hydro"]).items == []
+    assert _run(items, keyword=["Hydrology"]).items == []
+    # OR within the facet, AND with another facet
+    assert set(_ids(_run(items, keyword=["flooding", "soil"]))) == {ZETA_ID, SOIL_ID}
+    assert set(_ids(_run(items, keyword=["flooding", "soil"], type=["snapshot"]))) == {ZETA_ID}
+    assert set(_ids(_run(items, keyword=["hydrology"], category=["ancillary-data"]))) == {MI1_ID, MI2_ID}
+
+
+def test_keyword_facet_options_sort_and_disjunctive_counts(items):
+    resp = _run(items)
+    assert [(o.value, o.label, o.count) for o in resp.facets.keyword] == [
+        ("hydrology", "hydrology", 5), ("Water Balance Model", "Water Balance Model", 5),
+        ("ancillary data", "ancillary data", 2), ("MIRCA2000", "MIRCA2000", 2),
+        ("RGI-6 glaciers", "RGI-6 glaciers", 2),
+        ("flooding", "flooding", 1), ("Global_tracking", "Global_tracking", 1), ("soil", "soil", 1),
+        ("WBM tutorial", "WBM tutorial", 1), ("Wyoming_tracking", "Wyoming_tracking", 1),
+    ]
+    # ticking one keyword leaves its siblings' counts intact ...
+    resp = _run(items, keyword=["MIRCA2000"])
+    assert _facet(resp, "keyword") == _facet(_run(items), "keyword")
+    # ... and narrows every other group
+    assert _facet(resp, "category") == {"ancillary-data": 2}
+    assert _facet(resp, "type") == {"snapshot": 0, "model-input": 2}
+    # another group's selection narrows the keyword group
+    assert _facet(_run(items, type=["model-input"]), "keyword") == {
+        "hydrology": 2, "Water Balance Model": 2, "ancillary data": 2, "MIRCA2000": 2,
+        "RGI-6 glaciers": 2, "soil": 1,
+    }
+    # a selected keyword with no match is listed with count 0
+    resp = _run(items, keyword=["nonesuch"])
+    assert resp.items == [] and _facet(resp, "keyword")["nonesuch"] == 0
 
 
 def test_snapshot_only_facets_exclude_model_inputs(items):
@@ -357,8 +395,9 @@ def test_route_response_shape_and_defaults(http):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"items", "totalCount", "totalPages", "page", "facets"}
-    assert set(body["facets"]) == {"type", "category", "creator", "license", "output", "forcing",
-                                   "process", "wbm", "yearBounds"}
+    assert set(body["facets"]) == {"type", "category", "keyword", "creator", "license", "output",
+                                   "forcing", "process", "wbm", "yearBounds"}
+    assert list(body["facets"])[:3] == ["type", "category", "keyword"]
     assert body["totalCount"] == 7 and len(body["items"]) == 7  # default page_size 10
     assert {i["kind"] for i in body["items"]} == {"snapshot", "model-input"}
 
@@ -371,6 +410,9 @@ def test_route_repeated_params_and_comma_values(http):
     # a value containing a comma is one value, not a list
     r = http.get("/api/v1/repository/catalogue", params={"creator": "Doe, Alex"})
     assert r.json()["totalCount"] == 0
+    # keyword repeats like the other facets
+    r = http.get("/api/v1/repository/catalogue", params=[("keyword", "WBM tutorial"), ("keyword", "soil")])
+    assert {i["id"] for i in r.json()["items"]} == {V2_ID, SOIL_ID}
 
 
 def test_route_validation(http):

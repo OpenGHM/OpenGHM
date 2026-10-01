@@ -40,7 +40,7 @@ export function snapshotItem(overrides: Partial<CatalogueItem & { kind: "snapsho
       category: "hydrology",
       creator: [{ name: "Ada Hydro" }, { name: "Bo Flow" }],
       license: "GPL-3.0-only",
-      keywords: ["storage"],
+      keywords: ["storage", "water balance", "global", "monthly", "reservoirs", "streamflow"],
       url: "https://openghm.org/repository/snap-1",
     },
     simulation: {
@@ -108,6 +108,15 @@ const opt = (value: string, label: string, count: number) => ({ value, label, co
 export const FACETS: CatalogueFacets = {
   type: [opt("snapshot", "Model Snapshot", 2), opt("model-input", "Model Input", 1)],
   category: [opt("hydrology", "hydrology", 2), opt("ancillary", "ancillary", 1)],
+  keyword: [
+    opt("water balance", "water balance", 3),
+    opt("storage", "storage", 2),
+    opt("global", "global", 2),
+    opt("monthly", "monthly", 1),
+    opt("reservoirs", "reservoirs", 1),
+    opt("streamflow", "streamflow", 1),
+    opt("soils", "soils", 1),
+  ],
   output: [
     opt("discharge", "Discharge", 9),
     opt("runoff", "Runoff", 8),

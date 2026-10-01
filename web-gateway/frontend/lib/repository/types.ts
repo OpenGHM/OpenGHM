@@ -101,6 +101,7 @@ export interface CatalogueFacetOption {
 export type CatalogueFacetKey =
   | "type"
   | "category"
+  | "keyword"
   | "creator"
   | "license"
   | "output"

@@ -75,6 +75,7 @@ def _snapshot_only(extract: Callable[[SnapshotCatalogueItem], list[Option]]) -> 
 FACETS: dict[str, Callable[[Item], list[Option]]] = {
     "type": lambda i: [(_kind(i), KIND_LABELS[_kind(i)])],
     "category": lambda i: [(i.about.category, i.about.category)],
+    "keyword": lambda i: [(k.root, k.root) for k in i.about.keywords],
     "creator": lambda i: [(c.name, c.name) for c in i.about.creator],
     "license": lambda i: [(i.about.license, i.about.license)],
     "output": _snapshot_only(lambda i: [(v.name, v.fullName) for v in i.simulation.outputVariables]),

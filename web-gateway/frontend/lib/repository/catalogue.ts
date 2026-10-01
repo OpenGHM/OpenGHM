@@ -15,6 +15,7 @@ import type {
 export const CATALOGUE_FACET_KEYS: readonly CatalogueFacetKey[] = [
   "type",
   "category",
+  "keyword",
   "output",
   "forcing",
   "wbm",
@@ -33,6 +34,7 @@ export const CATALOGUE_PAGE_SIZE = 10;
 export const CATALOGUE_FACET_NAMES: Record<CatalogueFacetKey, { title: string; chip: string }> = {
   type: { title: "Type", chip: "Type" },
   category: { title: "Category", chip: "Category" },
+  keyword: { title: "Keyword", chip: "Keyword" },
   output: { title: "Output variable", chip: "Output" },
   forcing: { title: "Forcing data", chip: "Forcing" },
   wbm: { title: "Model version", chip: "Model version" },
@@ -45,6 +47,7 @@ export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
   searchQuery: "",
   type: [],
   category: [],
+  keyword: [],
   output: [],
   forcing: [],
   wbm: [],
@@ -62,6 +65,7 @@ export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
 export const EMPTY_CATALOGUE_FACETS: CatalogueFacets = {
   type: [],
   category: [],
+  keyword: [],
   output: [],
   forcing: [],
   wbm: [],

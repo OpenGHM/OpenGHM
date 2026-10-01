@@ -9,7 +9,7 @@ import {
 } from "./catalogue";
 import { FACETS, filters } from "@/components/repository/catalogue.fixtures";
 import {
-  chipNames,
+  cardKeywords,
   contentsLabel,
   creatorLabel,
   detailHref,
@@ -56,6 +56,12 @@ describe("active filters", () => {
     expect(chips[3].remove).toEqual({ yearStart: null, yearEnd: null });
   });
 
+  it("labels a keyword chip \"Keyword: X\" and takes just that one off", () => {
+    const chips = activeFilterChips(filters({ keyword: ["water balance", "soils"] }), FACETS);
+    expect(chips.map((c) => c.label)).toEqual(["Keyword: water balance", "Keyword: soils"]);
+    expect(chips[0].remove).toEqual({ keyword: ["soils"] });
+  });
+
   it("names a preset resolution by its preset", () => {
     expect(formatResolutionRange(5 / 60, 5 / 60)).toBe("5 arc-min");
     expect(formatResolutionRange(0.1, 0.3)).toBe("0.1° – 0.3°");
@@ -76,7 +82,11 @@ describe("card text", () => {
     expect(resolutionLabels(s)).toEqual(["5 arc-minute"]);
     expect(contentsLabel(s)).toBe("WBM 1.0.0");
     expect(creatorLabel(s)).toEqual({ first: "Ada Hydro", more: 1 });
-    expect(chipNames(s)).toEqual({ shown: ["discharge", "runoff", "soilMoisture"], more: 2 });
+    expect(cardKeywords(s)).toEqual({
+      shown: ["storage", "water balance", "global", "monthly"],
+      more: 2,
+      hidden: ["reservoirs", "streamflow"],
+    });
   });
 
   it("describes a model input", () => {
@@ -85,7 +95,8 @@ describe("card text", () => {
     expect(periodLabel(m)).toBeNull();
     expect(resolutionLabels(m)).toEqual(["5 arc-minute", "30 arc-second"]);
     expect(contentsLabel(m)).toBe("3 datasets · 3 networks");
-    expect(chipNames(m).more).toBe(2);
+    expect(cardKeywords(m)).toMatchObject({ more: 1, hidden: ["lakes"] });
+    expect(cardKeywords(m, 5)).toMatchObject({ more: 0, hidden: [] });
   });
 
   it("gives a model input with no network resolution none", () => {

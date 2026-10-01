@@ -232,6 +232,7 @@ class CatalogueFacets(BaseModel):
 
     type: list[FacetOption]
     category: list[FacetOption]
+    keyword: list[FacetOption]
     creator: list[FacetOption]
     license: list[FacetOption]
     output: list[FacetOption]

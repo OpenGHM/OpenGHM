@@ -42,6 +42,13 @@ describe("ActiveFilterChips", () => {
     expect(onChange).toHaveBeenLastCalledWith({ searchQuery: "" });
   });
 
+  it("labels a keyword chip Keyword: X and removes just that keyword", () => {
+    const { onChange } = setup(filters({ keyword: ["storage", "soils"] }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Keyword: storage" }));
+    expect(onChange).toHaveBeenCalledWith({ keyword: ["soils"] });
+    expect(screen.getByRole("button", { name: "Remove filter: Keyword: soils" })).toBeTruthy();
+  });
+
   it("clears everything from Clear all", () => {
     const { onClearAll } = setup(filters({ category: ["hydrology"] }));
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));

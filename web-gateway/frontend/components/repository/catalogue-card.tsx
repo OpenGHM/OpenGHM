@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { Calendar, Database, Download, Eye, Grid3X3, Quote, Scale, Tag, Users } from "lucide-react";
+import { Calendar, Check, Database, Download, Eye, Grid3X3, Quote, Scale, Tag, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { cn } from "@/lib/utils";
 import {
-  chipNames,
+  cardKeywords,
   contentsLabel,
   creatorLabel,
   detailHref,
@@ -39,9 +39,18 @@ function MetaItem({
   );
 }
 
-function Chip({ children, strong = false }: { children: React.ReactNode; strong?: boolean }) {
+function Chip({
+  children,
+  strong = false,
+  title,
+}: {
+  children: React.ReactNode;
+  strong?: boolean;
+  title?: string;
+}) {
   return (
     <li
+      title={title}
       className={cn(
         "max-w-full truncate rounded-full px-2.5 py-0.5 text-xs font-medium",
         strong ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
@@ -53,17 +62,67 @@ function Chip({ children, strong = false }: { children: React.ReactNode; strong?
 }
 
 /**
+ * A keyword as a filter control. It looks like a chip; on a phone the button
+ * itself is 40 px tall (the chip is drawn inside it), so the hit area is big
+ * enough without a big chip. It sits above the title's stretched link.
+ */
+function KeywordChip({
+  keyword,
+  selected,
+  onToggle,
+}: {
+  keyword: string;
+  selected: boolean;
+  onToggle: (keyword: string) => void;
+}) {
+  return (
+    <li className="max-w-full min-w-0">
+      <button
+        type="button"
+        aria-label={`Filter by keyword ${keyword}`}
+        aria-pressed={selected}
+        onClick={() => onToggle(keyword)}
+        className="group/keyword relative z-10 inline-flex min-h-10 max-w-full min-w-0 cursor-pointer items-center outline-none sm:min-h-0"
+      >
+        <span
+          className={cn(
+            "inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50",
+            selected
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground group-hover/keyword:bg-primary/10 group-hover/keyword:text-primary"
+          )}
+        >
+          {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
+          <span className="truncate">{keyword}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
  * One catalogue row: a snapshot or a model input as a card. The title is a
  * stretched link, so the whole card opens the detail page, and View details,
- * Download and Cite sit above it as their own links.
+ * Download and Cite sit above it as their own links. The keyword chips are
+ * buttons that add (or, when already on, remove) that keyword as a filter.
  */
-export function CatalogueCard({ item }: { item: CatalogueItem }) {
+export function CatalogueCard({
+  item,
+  selectedKeywords = [],
+  onToggleKeyword,
+}: {
+  item: CatalogueItem;
+  /** The keyword filter in effect: those chips show as selected. */
+  selectedKeywords?: readonly string[];
+  /** Add the keyword to the filter, or take it off when it is already on. */
+  onToggleKeyword: (keyword: string) => void;
+}) {
   const { about } = item;
   const href = detailHref(item);
   const creator = creatorLabel(item);
   const period = periodLabel(item);
   const resolutions = resolutionLabels(item);
-  const names = chipNames(item);
+  const keywords = cardKeywords(item);
   const snapshot = item.kind === "snapshot";
 
   return (
@@ -110,12 +169,17 @@ export function CatalogueCard({ item }: { item: CatalogueItem }) {
           {about.description}
         </p>
 
-        <ul className="flex flex-wrap gap-1.5" aria-label="Category and variables">
+        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Category and keywords">
           <Chip strong>{about.category}</Chip>
-          {names.shown.map((name) => (
-            <Chip key={name}>{name}</Chip>
+          {keywords.shown.map((keyword) => (
+            <KeywordChip
+              key={keyword}
+              keyword={keyword}
+              selected={selectedKeywords.includes(keyword)}
+              onToggle={onToggleKeyword}
+            />
           ))}
-          {names.more > 0 && <Chip>+{names.more} more</Chip>}
+          {keywords.more > 0 && <Chip title={keywords.hidden.join(", ")}>+{keywords.more} more</Chip>}
         </ul>
 
         <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1 border-t pt-2">

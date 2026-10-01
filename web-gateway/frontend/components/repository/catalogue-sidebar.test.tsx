@@ -36,11 +36,12 @@ describe("CatalogueSidebar groups", () => {
     const titles = screen
       .getAllByRole("button", { expanded: undefined })
       .map((b) => b.textContent ?? "")
-      .filter((t) => /^(Type|Category|Output variable|Forcing data|Temporal coverage|Spatial resolution|Model version|Active processes|Creator|License)/.test(t))
+      .filter((t) => /^(Type|Category|Keyword|Output variable|Forcing data|Temporal coverage|Spatial resolution|Model version|Active processes|Creator|License)/.test(t))
       .map((t) => t.replace(/\d+ selected.*$/, ""));
     expect(titles).toEqual([
       "Type",
       "Category",
+      "Keyword",
       "Output variable",
       "Forcing data",
       "Temporal coverage",
@@ -97,6 +98,40 @@ describe("CatalogueSidebar groups", () => {
   it("shows how many values are selected on a group", () => {
     setup(filters({ category: ["hydrology", "ancillary"] }));
     expect(group(/^Category/).textContent).toContain("2 selected");
+  });
+});
+
+describe("CatalogueSidebar keyword group", () => {
+  it("sits right after Category, folded when it has more than six options", () => {
+    setup();
+    const keyword = group(/^Keyword/);
+    expect(keyword.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(keyword);
+    expect(screen.getByRole("checkbox", { name: "water balance (3)" })).toBeTruthy();
+    // Seven options: six, then "Show all".
+    expect(screen.queryByRole("checkbox", { name: /^soils/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show all (7)" }));
+    expect(screen.getByRole("checkbox", { name: "soils (1)" })).toBeTruthy();
+  });
+
+  it("is open from the start when it has six options or fewer", () => {
+    setup(filters(), { ...FACETS, keyword: FACETS.keyword.slice(0, 6) });
+    expect(group(/^Keyword/).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "streamflow (1)" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+  });
+
+  it("is hidden when the catalogue has no keywords and nothing is selected", () => {
+    setup(filters(), { ...FACETS, keyword: [] });
+    expect(screen.queryByRole("button", { name: /^Keyword/ })).toBeNull();
+  });
+
+  it("reports a ticked keyword as the facet's new selection and counts the selected ones", () => {
+    const { onChange } = setup(filters({ keyword: ["storage"] }));
+    expect(group(/^Keyword/).textContent).toContain("1 selected");
+    fireEvent.click(group(/^Keyword/));
+    fireEvent.click(screen.getByRole("checkbox", { name: "global (2)" }));
+    expect(onChange).toHaveBeenCalledWith({ keyword: ["storage", "global"] });
   });
 });
 

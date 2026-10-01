@@ -384,7 +384,7 @@ function ResolutionFilter({
 // ─── The sidebar ─────────────────────────────────────────────────────────────
 
 type GroupSpec =
-  | { kind: "facet"; key: CatalogueFacetKey; defaultOpen: boolean }
+  | { kind: "facet"; key: CatalogueFacetKey; defaultOpen: boolean | "when-short" }
   | { kind: "temporal"; defaultOpen: boolean }
   | { kind: "resolution"; defaultOpen: boolean };
 
@@ -392,6 +392,8 @@ type GroupSpec =
 const GROUPS: GroupSpec[] = [
   { kind: "facet", key: "type", defaultOpen: true },
   { kind: "facet", key: "category", defaultOpen: true },
+  // Open only when the whole list fits without "Show all".
+  { kind: "facet", key: "keyword", defaultOpen: "when-short" },
   { kind: "facet", key: "output", defaultOpen: false },
   { kind: "facet", key: "forcing", defaultOpen: false },
   { kind: "temporal", defaultOpen: true },
@@ -534,7 +536,11 @@ export function CatalogueSidebar({
                 <FilterGroup
                   key={key}
                   title={CATALOGUE_FACET_NAMES[key].title}
-                  defaultOpen={group.defaultOpen}
+                  defaultOpen={
+                    group.defaultOpen === "when-short"
+                      ? options.length <= COLLAPSED_OPTION_COUNT
+                      : group.defaultOpen
+                  }
                   activeCount={selected.length}
                 >
                   <FacetCheckboxList

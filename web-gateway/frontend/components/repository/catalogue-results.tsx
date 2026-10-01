@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { CircleAlert, SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,6 +72,7 @@ export function CatalogueResults({
   onChange,
   onClearAll,
   onRetry,
+  onToggleKeyword,
 }: {
   result: CatalogueResponse;
   filters: CatalogueFilterState;
@@ -81,14 +83,23 @@ export function CatalogueResults({
   onChange: (updates: Partial<CatalogueFilterState>) => void;
   onClearAll: () => void;
   onRetry: () => void;
+  /** A card's keyword chip: add the keyword to the filter, or take it off. */
+  onToggleKeyword: (keyword: string) => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const filtered = hasActiveFilters(filters);
 
   return (
     <section aria-label="Results" className="min-w-0 flex-1">
       <div id="catalogue-results" className="mb-4 flex scroll-mt-24 flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Data Repository</h1>
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-2xl font-bold text-foreground outline-none"
+          >
+            Data Repository
+          </h1>
           <ResultCount
             totalCount={result.totalCount}
             searchQuery={filters.searchQuery}
@@ -165,7 +176,16 @@ export function CatalogueResults({
         <ul className="space-y-4">
           {result.items.map((item) => (
             <li key={`${item.kind}:${item.id}`}>
-              <CatalogueCard item={item} />
+              <CatalogueCard
+                item={item}
+                selectedKeywords={filters.keyword}
+                onToggleKeyword={(keyword) => {
+                  onToggleKeyword(keyword);
+                  // The list is replaced while it reloads, which would drop the
+                  // focus of the chip that was pressed; keep it on the page.
+                  headingRef.current?.focus({ preventScroll: true });
+                }}
+              />
             </li>
           ))}
         </ul>

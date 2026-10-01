@@ -46,6 +46,12 @@ export function CatalogueClient({
   }
 
   const handleClearAll = () => setFilters(clearedFilters(filters));
+  const handleToggleKeyword = (keyword: string) =>
+    setFilters({
+      keyword: filters.keyword.includes(keyword)
+        ? filters.keyword.filter((k) => k !== keyword)
+        : [...filters.keyword, keyword],
+    });
 
   return (
     <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
@@ -64,6 +70,7 @@ export function CatalogueClient({
         onChange={setFilters}
         onClearAll={handleClearAll}
         onRetry={retry}
+        onToggleKeyword={handleToggleKeyword}
       />
     </div>
   );

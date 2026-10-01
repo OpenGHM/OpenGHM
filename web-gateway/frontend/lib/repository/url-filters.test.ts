@@ -13,6 +13,7 @@ const FULL: CatalogueFilterState = {
   searchQuery: "storage",
   type: ["snapshot", "model-input"],
   category: ["hydrology", "ancillary"],
+  keyword: ["water balance", "Hydrology"],
   output: ["discharge", "runoff", "soilMoisture"],
   forcing: ["windU"],
   wbm: ["1.0.0"],
@@ -46,6 +47,7 @@ describe("catalogue filters in the URL", () => {
   it("writes each selected value as its own repeated key, never a comma list", () => {
     const qs = catalogueFiltersToParams(FULL).toString();
     expect(qs).toContain("category=hydrology&category=ancillary");
+    expect(qs).toContain("keyword=water+balance&keyword=Hydrology");
     expect(qs).toContain("output=discharge&output=runoff&output=soilMoisture");
     expect(qs).not.toContain(",");
     expect(qs).not.toContain("%2C");

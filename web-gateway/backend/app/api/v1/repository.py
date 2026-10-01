@@ -133,6 +133,7 @@ async def list_catalogue(
     q: str | None = Query(default=None, description="Substring over about.name, about.description, about.keywords"),
     type: list[Literal["snapshot", "model-input"]] | None = Query(default=None),
     category: list[str] | None = Query(default=None),
+    keyword: list[str] | None = Query(default=None, description="An about.keywords entry, exact match"),
     creator: list[str] | None = Query(default=None),
     license: list[str] | None = Query(default=None),
     output: list[str] | None = Query(default=None, description="Output variable name (snapshots only)"),
@@ -156,8 +157,8 @@ async def list_catalogue(
         selected={
             name: tuple(values)
             for name, values in {
-                "type": type, "category": category, "creator": creator, "license": license,
-                "output": output, "forcing": forcing, "process": process, "wbm": wbm,
+                "type": type, "category": category, "keyword": keyword, "creator": creator,
+                "license": license, "output": output, "forcing": forcing, "process": process, "wbm": wbm,
             }.items()
             if values
         },

@@ -15,6 +15,7 @@ function setup(
   const onChange = vi.fn();
   const onClearAll = vi.fn();
   const onRetry = vi.fn();
+  const onToggleKeyword = vi.fn();
   const view = render(
     <CatalogueResults
       result={result}
@@ -25,9 +26,10 @@ function setup(
       onChange={onChange}
       onClearAll={onClearAll}
       onRetry={onRetry}
+      onToggleKeyword={onToggleKeyword}
     />
   );
-  return { ...view, onChange, onClearAll, onRetry };
+  return { ...view, onChange, onClearAll, onRetry, onToggleKeyword };
 }
 
 describe("CatalogueResults header", () => {
@@ -71,6 +73,7 @@ describe("CatalogueResults header", () => {
         onChange={vi.fn()}
         onClearAll={vi.fn()}
         onRetry={vi.fn()}
+        onToggleKeyword={vi.fn()}
       />
     );
     expect(screen.getByRole("list", { name: "Active filters" })).toBeTruthy();
@@ -103,6 +106,25 @@ describe("CatalogueResults list", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(onChange).toHaveBeenCalledWith({ page: 3 });
     expect(scroll).toHaveBeenCalled();
+  });
+});
+
+describe("CatalogueResults keyword chips", () => {
+  it("passes the keyword filter to each card and reports a chip press, then keeps focus on the page", () => {
+    const { onToggleKeyword } = setup(
+      response([snapshotItem(), modelInputItem()]),
+      filters({ keyword: ["storage"] })
+    );
+    // "storage" is a snapshot keyword, "network" a model input's.
+    expect(
+      screen.getByRole("button", { name: "Filter by keyword storage" }).getAttribute("aria-pressed")
+    ).toBe("true");
+    const network = screen.getByRole("button", { name: "Filter by keyword network" });
+    expect(network.getAttribute("aria-pressed")).toBe("false");
+    network.focus();
+    fireEvent.click(network);
+    expect(onToggleKeyword).toHaveBeenCalledWith("network");
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1 }));
   });
 });
 
