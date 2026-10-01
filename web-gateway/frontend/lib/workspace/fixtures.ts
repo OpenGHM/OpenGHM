@@ -118,7 +118,7 @@ const WBM_LOG_TAIL = [
 ].join("\n");
 
 const STDERR_TAIL = [
-  "openghm: cannot reach the snapshot store: connection timed out",
+  "openghm: cannot reach the model snapshot store: connection timed out",
   "openghm: 3 of 412 files failed",
 ].join("\n");
 
@@ -133,7 +133,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "1:0",
     failure: {
       phase: "fetch",
-      message: "Could not download 3 of 412 snapshot files: inputs/precip_2001.nc, inputs/precip_2002.nc, inputs/tair_2001.nc",
+      message: "Could not download 3 of 412 model snapshot files: inputs/precip_2001.nc, inputs/precip_2002.nc, inputs/tair_2001.nc",
       excerpt: STDERR_TAIL,
     },
   },
@@ -142,8 +142,8 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "2:0",
     failure: {
       phase: "run",
-      message: "openghm: the snapshot's init names a variable that is not in its output list",
-      excerpt: "openghm: the snapshot's init names a variable that is not in its output list\nopenghm: nothing was staged",
+      message: "openghm: the model snapshot's init names a variable that is not in its output list",
+      excerpt: "openghm: the model snapshot's init names a variable that is not in its output list\nopenghm: nothing was staged",
     },
   },
   wbm_error: {
@@ -416,7 +416,7 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
     slug: "fake-dataset",
     about: {
       name: "Fake Snapshot",
-      description: "A snapshot used only in tests.",
+      description: "A model snapshot used only in tests.",
       datePublished: "2026-01-01T00:00:00Z",
       category: "hydrology",
       creator: [{ name: "Test Author" }],

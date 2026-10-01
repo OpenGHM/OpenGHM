@@ -4,12 +4,12 @@ import { WIZARD_STEPS, STEP_LABELS, type WizardStep } from "@/lib/workspace/wiza
 
 const STEP_TITLES: Record<WizardStep, { title: string; subtitle: string }> = {
   snapshot: {
-    title: "Select a Base Snapshot",
+    title: "Select a Base Model Snapshot",
     subtitle: "Choose a published model snapshot to use as the basis for your simulation",
   },
   "model-input": {
     title: "Model Input",
-    subtitle: "Runs use the base snapshot's own model input",
+    subtitle: "Runs use the base model snapshot's own model input",
   },
   parameters: {
     title: "Parameters",

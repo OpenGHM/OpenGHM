@@ -1,17 +1,17 @@
 /**
- * URL ⇄ filter-state conversion for the two repository lists (datasets,
- * model inputs) and the new-simulation snapshot picker, which shares the
- * dataset list. This is the fix for open item 16: a search result is only
+ * URL ⇄ filter-state conversion for the repository catalogue and the
+ * new-simulation snapshot picker, which shares the dataset list. This is the fix for open item 16: a search result is only
  * linkable/bookmarkable if the URL is the source of truth for the filters,
  * not a `useState` seeded once from it.
  *
  * Every param name here matches what the backend route actually accepts
- * (`app/api/v1/repository.py`'s `list_datasets` / `list_model_inputs`) —
+ * (`app/api/v1/repository.py`'s `list_datasets` / the catalogue route) —
  * `q`, `year_start`, `year_end`, `spatial_res_min`, `spatial_res_max`,
- * `sort`, `page` — so a shared link is also a valid direct API call shape,
+ * `sort`, `page`, and for the catalogue the repeatable facet keys — so a shared link is also a valid direct API call shape,
  * not a second vocabulary to translate.
  */
-import type { FilterState, ModelInputFilterState, SortOption } from "./types";
+import { CATALOGUE_FACET_KEYS, EMPTY_CATALOGUE_FILTERS } from "./catalogue";
+import type { CatalogueFilterState, CatalogueKind, FilterState, SortOption } from "./types";
 
 const SORT_OPTIONS: readonly SortOption[] = ["relevance", "newest", "title-az", "title-za"];
 
@@ -41,8 +41,8 @@ export function toURLSearchParams(
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {
     if (value === undefined) continue;
-    const single = Array.isArray(value) ? value[0] : value;
-    if (single !== undefined) params.set(key, single);
+    // A repeated key (`?category=a&category=b`) arrives as an array: keep every value.
+    for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
   }
   return params;
 }
@@ -73,19 +73,43 @@ export function datasetFiltersToParams(filters: FilterState): URLSearchParams {
   return params;
 }
 
-// ─── Model inputs ───────────────────────────────────────────────────────────
+// ─── Catalogue ──────────────────────────────────────────────────────────────
 
-export function parseModelInputFilters(params: URLSearchParams): ModelInputFilterState {
-  return {
+const CATALOGUE_KINDS: readonly CatalogueKind[] = ["snapshot", "model-input"];
+
+/** Every non-empty value of a repeated key, once each, in URL order. */
+function allValues(params: URLSearchParams, key: string): string[] {
+  return [...new Set(params.getAll(key).filter((v) => v !== ""))];
+}
+
+export function parseCatalogueFilters(params: URLSearchParams): CatalogueFilterState {
+  const state: CatalogueFilterState = {
+    ...EMPTY_CATALOGUE_FILTERS,
     searchQuery: params.get("q") ?? "",
+    yearStart: parseNumberParam(params.get("year_start")),
+    yearEnd: parseNumberParam(params.get("year_end")),
+    spatialResMin: parseNumberParam(params.get("spatial_res_min")),
+    spatialResMax: parseNumberParam(params.get("spatial_res_max")),
     sortBy: isSortOption(params.get("sort")) ? (params.get("sort") as SortOption) : "relevance",
     page: parsePageParam(params.get("page")),
   };
+  for (const key of CATALOGUE_FACET_KEYS) state[key] = allValues(params, key);
+  // An unknown `type` would make the backend answer 422 for the whole page.
+  state.type = state.type.filter((v) => (CATALOGUE_KINDS as readonly string[]).includes(v));
+  return state;
 }
 
-export function modelInputFiltersToParams(filters: ModelInputFilterState): URLSearchParams {
+/** Repeated keys, one per value: `?category=a&category=b`, never a comma list. */
+export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.searchQuery.trim()) params.set("q", filters.searchQuery.trim());
+  for (const key of CATALOGUE_FACET_KEYS) {
+    for (const value of filters[key]) params.append(key, value);
+  }
+  if (filters.yearStart != null) params.set("year_start", String(filters.yearStart));
+  if (filters.yearEnd != null) params.set("year_end", String(filters.yearEnd));
+  if (filters.spatialResMin != null) params.set("spatial_res_min", String(filters.spatialResMin));
+  if (filters.spatialResMax != null) params.set("spatial_res_max", String(filters.spatialResMax));
   if (filters.sortBy !== "relevance") params.set("sort", filters.sortBy);
   if (filters.page !== 1) params.set("page", String(filters.page));
   return params;

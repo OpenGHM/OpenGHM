@@ -225,13 +225,13 @@ export function JobDetail({
                       {[
                         {
                           label: "Cores",
-                          value: job.slurm_config.cores ?? "Snapshot's recommendation",
+                          value: job.slurm_config.cores ?? "Model snapshot's recommendation",
                         },
                         {
                           label: "Walltime",
                           value: job.slurm_config.walltime
                             ? describeSlurmTime(job.slurm_config.walltime)
-                            : "Snapshot's recommendation + 50%",
+                            : "Model snapshot's recommendation + 50%",
                         },
                         {
                           label: "Toolkit commit",

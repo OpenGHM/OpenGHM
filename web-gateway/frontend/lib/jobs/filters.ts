@@ -28,7 +28,7 @@ export const STATUS_TABS: StatusTab[] = [
     count: "draft",
     empty: {
       title: "No drafts",
-      hint: "A draft is a simulation you have set up but not submitted. Start one from a snapshot.",
+      hint: "A draft is a simulation you have set up but not submitted. Start one from a model snapshot.",
     },
   },
   {

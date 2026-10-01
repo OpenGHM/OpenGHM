@@ -16,7 +16,7 @@ export function describeSubmitFailure(
     case "unsupported_fields":
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
-        .join(", ")}. Put them back to the snapshot's own values, save, and submit again.`;
+        .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
     case "not_a_draft":
       return "This simulation was already submitted or was changed in the meantime. Reload the page to see where it stands.";
     default:
@@ -71,7 +71,7 @@ export function SubmitSummary({
   return (
     <>
       <dl className="space-y-1.5 text-sm">
-        <SummaryRow label="Snapshot">{snapshotTitle}</SummaryRow>
+        <SummaryRow label="Model Snapshot">{snapshotTitle}</SummaryRow>
         <SummaryRow label="Run period">
           {start} to {end}
         </SummaryRow>
@@ -81,13 +81,13 @@ export function SubmitSummary({
         <SummaryRow label="Cores">
           {cores ?? "Not known"}
           <Recommendation show={cores !== null && coresFromSnapshot}>
-            snapshot&apos;s recommendation
+            model snapshot&apos;s recommendation
           </Recommendation>
         </SummaryRow>
         <SummaryRow label="Walltime">
           {walltime ? describeSlurmTime(walltime) : "Not known"}
           <Recommendation show={walltime !== null && walltimeFromSnapshot}>
-            snapshot&apos;s recommendation + 50%
+            model snapshot&apos;s recommendation + 50%
           </Recommendation>
         </SummaryRow>
       </dl>

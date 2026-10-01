@@ -25,7 +25,7 @@ function formatAuthorBibTeX(name: string): string {
   return `${last}, ${first}`;
 }
 
-function buildAPA(dataset: Dataset): string {
+function buildAPA(dataset: Citable): string {
   const year = new Date(dataset.about.datePublished).getUTCFullYear();
   const authors = dataset.about.creator.map((c) => formatAuthorAPA(c.name)).join(", ");
   const title = dataset.about.name;
@@ -35,7 +35,7 @@ function buildAPA(dataset: Dataset): string {
   return `${authors} (${year}). ${title} [Dataset]. ${publisher}.${doi ? ` ${doi}` : ""}`;
 }
 
-function buildBibTeX(dataset: Dataset): string {
+function buildBibTeX(dataset: Citable): string {
   const year = new Date(dataset.about.datePublished).getUTCFullYear();
   const authors = dataset.about.creator.map((c) => formatAuthorBibTeX(c.name)).join(" and ");
   const key = dataset.id.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -49,7 +49,10 @@ function buildBibTeX(dataset: Dataset): string {
 }`;
 }
 
-export function CitationCard({ dataset }: { dataset: Dataset }) {
+/** Anything with an id and a citation block: a snapshot or a model input. */
+type Citable = Pick<Dataset, "id" | "about">;
+
+export function CitationCard({ dataset }: { dataset: Citable }) {
   const [tab, setTab] = useState<"apa" | "bibtex">("apa");
   const [copied, setCopied] = useState(false);
 

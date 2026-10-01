@@ -62,7 +62,7 @@ export function logEmptyMessage(input: {
   const noun = LOG_STREAMS.find((s) => s.stream === stream)?.noun ?? "output";
   if (isTerminalStatus(status)) return `This job wrote no ${noun}.`;
   if (!exists && stream === "wbm") {
-    return "WBM hasn't started writing its log yet. It starts after the snapshot is fetched.";
+    return "WBM hasn't started writing its log yet. It starts after the model snapshot is fetched.";
   }
   return "Nothing written yet.";
 }

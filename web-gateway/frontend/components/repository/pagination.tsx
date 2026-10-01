@@ -22,18 +22,23 @@ export function Pagination({
   }
 
   return (
-    <div className="flex items-center justify-center gap-1 pt-6">
+    <nav
+      aria-label="Pagination"
+      className="flex flex-wrap items-center justify-center gap-1 pt-6"
+    >
       <Button
         variant="outline"
         size="icon-sm"
+        aria-label="Previous page"
         disabled={page === 1}
         onClick={() => onPageChange(page - 1)}
+        className="size-10 sm:size-8"
       >
         <ChevronLeft className="size-4" />
       </Button>
       {pages.map((p, i) =>
         p === "ellipsis" ? (
-          <span key={`e-${i}`} className="px-2 text-sm text-muted-foreground">
+          <span key={`e-${i}`} aria-hidden="true" className="px-2 text-sm text-muted-foreground">
             ...
           </span>
         ) : (
@@ -41,8 +46,10 @@ export function Pagination({
             key={p}
             variant={p === page ? "default" : "outline"}
             size="sm"
+            aria-label={`Page ${p}`}
+            aria-current={p === page ? "page" : undefined}
             onClick={() => onPageChange(p)}
-            className="min-w-8"
+            className="h-10 min-w-10 sm:h-8 sm:min-w-8"
           >
             {p}
           </Button>
@@ -51,11 +58,13 @@ export function Pagination({
       <Button
         variant="outline"
         size="icon-sm"
+        aria-label="Next page"
         disabled={page === totalPages}
         onClick={() => onPageChange(page + 1)}
+        className="size-10 sm:size-8"
       >
         <ChevronRight className="size-4" />
       </Button>
-    </div>
+    </nav>
   );
 }

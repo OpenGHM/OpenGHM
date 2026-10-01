@@ -1,7 +1,10 @@
 "use server";
 
 import { getApiClient } from "@/lib/api-client";
+import { CATALOGUE_FACET_KEYS, CATALOGUE_PAGE_SIZE } from "@/lib/repository/catalogue";
 import {
+  CatalogueFilterState,
+  CatalogueResponse,
   RepositoryListResponse,
   Dataset,
   FilterState,
@@ -13,8 +16,45 @@ import {
 } from "@/lib/repository/types";
 
 /**
- * Fetch a paginated, filtered list of datasets from FastAPI.
- * Called via useTransition in repository-client.tsx (BFF layer — browser never
+ * Fetch one page of the catalogue — snapshots and model inputs together, with
+ * the facet options and counts for the sidebar — from FastAPI. Called from the
+ * Data Repository page and, through `useUrlSyncedFilters`, from the browser
+ * (BFF layer — the browser never calls FastAPI directly).
+ *
+ * A facet goes out as a repeated key (`category=a&category=b`): the client from
+ * `getApiClient` serialises arrays that way (`paramsSerializer.indexes: null`).
+ */
+export async function fetchCatalogue(
+  filters: CatalogueFilterState
+): Promise<CatalogueResponse> {
+  const client = await getApiClient();
+
+  const params: Record<string, string | number | string[]> = {
+    sort: filters.sortBy,
+    page: filters.page,
+    page_size: CATALOGUE_PAGE_SIZE,
+  };
+
+  if (filters.searchQuery.trim()) {
+    params.q = filters.searchQuery.trim();
+  }
+  for (const key of CATALOGUE_FACET_KEYS) {
+    if (filters[key].length > 0) params[key] = filters[key];
+  }
+  if (filters.yearStart !== null) params.year_start = filters.yearStart;
+  if (filters.yearEnd !== null) params.year_end = filters.yearEnd;
+  if (filters.spatialResMin !== null) params.spatial_res_min = filters.spatialResMin;
+  if (filters.spatialResMax !== null) params.spatial_res_max = filters.spatialResMax;
+
+  const response = await client.get<CatalogueResponse>("/api/v1/repository/catalogue", {
+    params,
+  });
+  return response.data;
+}
+
+/**
+ * Fetch a paginated, filtered list of datasets from FastAPI. The snapshot
+ * picker in the new-simulation wizard uses it (BFF layer — the browser never
  * calls FastAPI directly).
  */
 export async function fetchDatasets(

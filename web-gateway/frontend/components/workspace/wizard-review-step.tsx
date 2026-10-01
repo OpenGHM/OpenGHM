@@ -78,7 +78,7 @@ function ModelInputSummary({
         <div>
           <p className="text-sm font-semibold text-foreground">Inherited: {inherited.about.name}</p>
           <p className="text-xs text-muted-foreground">
-            From the base snapshot ({id}), found in the catalogue.
+            From the base model snapshot ({id}), found in the catalogue.
           </p>
         </div>
       </div>
@@ -97,10 +97,10 @@ function ModelInputSummary({
         <p className="text-sm font-semibold text-foreground">Inherited</p>
         <p className="text-xs text-muted-foreground">
           {inherited === undefined ? (
-            <>From the base snapshot ({id}). Checking the catalogue…</>
+            <>From the base model snapshot ({id}). Checking the catalogue…</>
           ) : (
             <>
-              From the base snapshot ({id}). The catalogue does not list it. The run
+              From the base model snapshot ({id}). The catalogue does not list it. The run
               fetches it by id, so this changes nothing about the run.
             </>
           )}
@@ -246,7 +246,7 @@ export function WizardReviewStep({
                 <div className="flex items-start gap-2">
                   <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Snapshot Coverage</p>
+                    <p className="text-xs font-medium text-muted-foreground">Model Snapshot Coverage</p>
                     <p className="font-medium">
                       {start} → {end}
                     </p>
@@ -349,7 +349,7 @@ export function WizardReviewStep({
                   {compute.cores ?? "—"}
                   {compute.coresSource === "snapshot" && compute.cores !== null && (
                     <span className="block text-xs font-normal text-muted-foreground">
-                      snapshot&apos;s recommendation
+                      model snapshot&apos;s recommendation
                     </span>
                   )}
                 </span>
@@ -360,7 +360,7 @@ export function WizardReviewStep({
                   {compute.walltime ? describeSlurmTime(compute.walltime) : "—"}
                   {compute.walltimeSource === "snapshot" && compute.walltime !== null && (
                     <span className="block text-xs font-normal text-muted-foreground">
-                      snapshot&apos;s recommendation + 50%
+                      model snapshot&apos;s recommendation + 50%
                     </span>
                   )}
                 </span>

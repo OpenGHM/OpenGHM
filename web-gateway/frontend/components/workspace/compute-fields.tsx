@@ -92,7 +92,7 @@ export function ComputeFields({
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Leave a field empty to use the snapshot&apos;s recommendation
+        Leave a field empty to use the model snapshot&apos;s recommendation
         {recommended && defaultWalltime
           ? ` (${recommended.cores} cores, and ${describeSlurmTime(recommended.walltime)} plus 50%, which is ${describeSlurmTime(defaultWalltime)})`
           : ""}

@@ -48,7 +48,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Base snapshot</TableHead>
+              <TableHead>Base model snapshot</TableHead>
               <TableHead>Updated</TableHead>
               <TableHead className="w-14">
                 <span className="sr-only">Actions</span>

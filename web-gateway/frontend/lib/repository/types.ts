@@ -77,6 +77,66 @@ export interface ModelInputListResponse {
   page: number;
 }
 
+// ─── Catalogue (snapshots and model inputs in one list) ─────────────────────
+
+/** What a catalogue row is: a snapshot or a model input. */
+export type CatalogueKind = "snapshot" | "model-input";
+
+/**
+ * One row of `GET /repository/catalogue`: the same JSON the single-kind
+ * routes return, plus `kind` so the list can tell them apart.
+ */
+export type CatalogueItem =
+  | (Dataset & { kind: "snapshot" })
+  | (ModelInput & { kind: "model-input" });
+
+/** One checkbox in a facet group. `count` ignores that group's own selection. */
+export interface CatalogueFacetOption {
+  value: string;
+  label: string;
+  count: number;
+}
+
+/** The facet keys that are repeatable query parameters with option lists. */
+export type CatalogueFacetKey =
+  | "type"
+  | "category"
+  | "creator"
+  | "license"
+  | "output"
+  | "forcing"
+  | "process"
+  | "wbm";
+
+export interface CatalogueFacets extends Record<CatalogueFacetKey, CatalogueFacetOption[]> {
+  /** The earliest and latest year any item covers, or `null` when none has a period. */
+  yearBounds: { min: number; max: number } | null;
+}
+
+export interface CatalogueResponse {
+  items: CatalogueItem[];
+  totalCount: number;
+  totalPages: number;
+  page: number;
+  facets: CatalogueFacets;
+}
+
+/**
+ * The catalogue's filters. Each facet key holds the selected option `value`s
+ * and is also the query-parameter name (repeated, one per value): within one
+ * facet the values are OR, across facets AND.
+ */
+export interface CatalogueFilterState extends Record<CatalogueFacetKey, string[]> {
+  searchQuery: string;
+  yearStart: number | null;
+  yearEnd: number | null;
+  /** Degrees. */
+  spatialResMin: number | null;
+  spatialResMax: number | null;
+  sortBy: SortOption;
+  page: number;
+}
+
 // ─── Download links ───────────────────────────────────────────────────────────
 
 /**

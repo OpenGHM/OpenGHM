@@ -91,7 +91,7 @@ export function CompletedResultsCard({ job }: { job: Job }) {
                     &mdash; around <TimeStamp value={around} format="date" className="font-medium" />
                   </>
                 )}
-                . Publishing a run as a snapshot is not available yet, so copy
+                . Publishing a run as a model snapshot is not available yet, so copy
                 what you need from the path above before then.
               </p>
             </div>

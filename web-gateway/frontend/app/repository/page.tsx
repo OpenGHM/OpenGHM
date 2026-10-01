@@ -1,29 +1,16 @@
 import { Metadata } from "next";
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
-import { RepositoryTabs } from "@/components/repository/repository-tabs";
-import { fetchDatasets, fetchModelInputs } from "@/lib/repository/actions";
-import { parseDatasetFilters, parseModelInputFilters, toURLSearchParams } from "@/lib/repository/url-filters";
-import { RepositoryListResponse, ModelInputListResponse } from "@/lib/repository/types";
+import { CatalogueClient } from "@/components/repository/catalogue-client";
+import { EMPTY_CATALOGUE } from "@/lib/repository/catalogue";
+import { fetchCatalogue } from "@/lib/repository/actions";
+import { parseCatalogueFilters, toURLSearchParams } from "@/lib/repository/url-filters";
+import type { CatalogueResponse } from "@/lib/repository/types";
 
 export const metadata: Metadata = {
   title: "Data Repository | OpenGHM",
   description:
-    "Browse and discover global hydrologic datasets, model outputs, and climate forcing data.",
-};
-
-const EMPTY_RESULT: RepositoryListResponse = {
-  items: [],
-  totalCount: 0,
-  totalPages: 1,
-  page: 1,
-};
-
-const EMPTY_MODEL_INPUT_RESULT: ModelInputListResponse = {
-  items: [],
-  totalCount: 0,
-  totalPages: 1,
-  page: 1,
+    "Browse and discover published model snapshots and model inputs for global hydrologic modelling.",
 };
 
 export default async function RepositoryPage({
@@ -32,37 +19,27 @@ export default async function RepositoryPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const rawParams = await searchParams;
-  const params = toURLSearchParams(rawParams);
-  const initialTab = params.get("tab") === "model-inputs" ? "model-inputs" : "snapshots";
-  const datasetFilters = parseDatasetFilters(params);
-  const modelInputFilters = parseModelInputFilters(params);
+  const filters = parseCatalogueFilters(toURLSearchParams(rawParams));
 
-  // Server-side pre-fetch for initial render (SSR), hydrated from the URL
-  // rather than fixed defaults — see open item 16 / url-filters.ts.
-  let initialData: RepositoryListResponse = EMPTY_RESULT;
+  // Server-side pre-fetch for the first render, taken from the URL so a shared
+  // link shows the same list (open item 16 / url-filters.ts).
+  let initialData: CatalogueResponse = EMPTY_CATALOGUE;
+  let initialError = false;
   try {
-    initialData = await fetchDatasets(datasetFilters);
+    initialData = await fetchCatalogue(filters);
   } catch {
-    // Backend unavailable — client will retry via useEffect
-  }
-
-  let initialModelInputs: ModelInputListResponse = EMPTY_MODEL_INPUT_RESULT;
-  try {
-    initialModelInputs = await fetchModelInputs(modelInputFilters);
-  } catch {
-    // Backend unavailable — client will retry via useEffect
+    // Backend unavailable: the list opens with its error box and a Retry button.
+    initialError = true;
   }
 
   return (
     <>
       <Header />
       <main className="min-h-screen bg-muted/30">
-        <RepositoryTabs
-          initialTab={initialTab}
-          initialDatasetFilters={datasetFilters}
-          initialModelInputFilters={modelInputFilters}
-          initialDatasets={initialData}
-          initialModelInputs={initialModelInputs}
+        <CatalogueClient
+          initialFilters={filters}
+          initialData={initialData}
+          initialError={initialError}
         />
       </main>
       <Footer />

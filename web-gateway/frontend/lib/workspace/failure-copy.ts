@@ -31,14 +31,14 @@ export interface FailureCopy {
  */
 export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   fetch_failed: {
-    title: "The snapshot couldn't be downloaded",
-    body: "The job could not fetch the snapshot's files onto Anvil, so WBM never started.",
+    title: "The model snapshot couldn't be downloaded",
+    body: "The job could not fetch the model snapshot's files onto Anvil, so WBM never started.",
     nextStep: "resubmit",
     tone: "danger",
   },
   run_refused: {
     title: "The run was refused before it started",
-    body: "The toolkit checked the snapshot and this simulation's settings and refused to start WBM.",
+    body: "The toolkit checked the model snapshot and this simulation's settings and refused to start WBM.",
     nextStep: "new_draft",
     tone: "danger",
   },
@@ -100,7 +100,7 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
 
 /** The sentence under the body that says what to do. */
 export const NEXT_STEP_COPY: Record<NextStep, string> = {
-  resubmit: "Start a new draft from the same snapshot and submit it again.",
+  resubmit: "Start a new draft from the same model snapshot and submit it again.",
   resubmit_longer_walltime:
     "Start a new draft and pick a longer walltime before you submit it.",
   new_draft:

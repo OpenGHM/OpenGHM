@@ -32,11 +32,12 @@ either — nothing reads them yet (spec.md, out of scope: no behaviour change).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from .generated.model_input import OpenGHMModelInputMetadata
+from .generated.model_input import Resolution as ModelInputResolution
 from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
 
 
@@ -72,9 +73,10 @@ def build_envelope(
 _DEGREES_PER_UNIT = {"arc-minute": 1 / 60, "arc-second": 1 / 3600, "degree": 1.0}
 
 
-def resolution_to_degrees(resolution: Resolution) -> float:
-    """``simulation.resolution`` as a single comparable number, for the
-    resolution range filter. Computed, never stored."""
+def resolution_to_degrees(resolution: Resolution | ModelInputResolution) -> float:
+    """``simulation.resolution`` (or a model input's ``networks[].resolution``,
+    the same shape with its own generated class) as a single comparable number,
+    for the resolution range filter. Computed, never stored."""
     return resolution.value * _DEGREES_PER_UNIT[resolution.unit.value]
 
 
@@ -185,6 +187,69 @@ class ModelInputListResponse(BaseModel):
     totalCount: int
     totalPages: int
     page: int
+
+
+# ---- the mixed catalogue (GET /repository/catalogue) ----------------------
+#
+# One list for both kinds. An item is the existing response of its kind plus
+# a ``kind`` discriminator, so every field the two list routes return is
+# unchanged. ``kind`` has a default so the ``from_metadata_json`` inherited
+# from the base response builds the right class without being overridden.
+
+
+class SnapshotCatalogueItem(DatasetResponse):
+    kind: Literal["snapshot"] = "snapshot"
+
+
+class ModelInputCatalogueItem(ModelInputResponse):
+    kind: Literal["model-input"] = "model-input"
+
+
+CatalogueItem = Annotated[
+    SnapshotCatalogueItem | ModelInputCatalogueItem, Field(discriminator="kind")
+]
+
+
+class FacetOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: what the client sends back as the facet's query parameter.
+    value: str
+    #: what to show; equal to ``value`` unless the facet says otherwise.
+    label: str
+    count: int
+
+
+class YearBounds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min: int
+    max: int
+
+
+class CatalogueFacets(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: list[FacetOption]
+    category: list[FacetOption]
+    creator: list[FacetOption]
+    license: list[FacetOption]
+    output: list[FacetOption]
+    forcing: list[FacetOption]
+    process: list[FacetOption]
+    wbm: list[FacetOption]
+    #: over the whole unfiltered catalogue; ``null`` when it is empty.
+    yearBounds: YearBounds | None
+
+
+class CatalogueResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CatalogueItem]
+    totalCount: int
+    totalPages: int
+    page: int
+    facets: CatalogueFacets
 
 
 # ---- download links ------------------------------------------------------

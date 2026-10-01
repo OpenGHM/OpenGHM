@@ -52,6 +52,22 @@ Detail-page content is a card with this recipe:
 [`completed-results-card.tsx`](components/workspace/completed-results-card.tsx)
 is a clean instance.
 
+### Catalogue list
+
+The Data Repository lists model snapshots and model inputs in one list, with
+the type as a filter. Its pieces are in [`components/repository/`](components/repository/).
+
+- A list item is a card with the recipe above, minus the header: it hovers to
+  `shadow-md`, the title is the card's stretched link, and the other links sit
+  above it (`relative z-10`) with their own focus ring. A coverage thumbnail
+  (an SVG, never a map) sits on the right edge and moves to the top below `sm`.
+- The sidebar is built from the facets the backend returns. A group with no
+  options is hidden, a long one shows six and a "Show all" toggle, and counts
+  ignore the group's own selection. Below `lg` it folds behind a "Filters"
+  button; from `lg` it is a sticky card.
+- Every filter lives in the URL, a facet as a repeated key
+  (`?category=a&category=b`), and a change goes back to page 1.
+
 ### Every state is designed
 
 - **Loading:** a skeleton shaped like the content
@@ -70,7 +86,7 @@ is a clean instance.
 
 - On the detail page each action has one home, in the hero, and follows the
   live status: Submit for a draft, Cancel for an active job, New from this
-  snapshot for an ended one, Delete in the More menu.
+  model snapshot for an ended one, Delete in the More menu.
 - A disabled action says why, both in a tooltip and in visible text.
 - Submit spends allocation, and Cancel and Delete cannot be undone, so each
   one confirms in an AlertDialog that says what will happen. The dialogs are

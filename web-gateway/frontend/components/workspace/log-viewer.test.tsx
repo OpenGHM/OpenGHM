@@ -124,7 +124,7 @@ describe("LogViewer empty states", () => {
     render(viewer("RUNNING"));
     await tick(0);
     expect(
-      screen.getByText("WBM hasn't started writing its log yet. It starts after the snapshot is fetched.")
+      screen.getByText("WBM hasn't started writing its log yet. It starts after the model snapshot is fetched.")
     ).toBeTruthy();
   });
 

@@ -52,7 +52,7 @@ describe("the wizard's parameters step", () => {
   it("states the rule next to the Start date", () => {
     wizardAtParameters(yearly);
     expect(
-      screen.getByText("This snapshot's model writes one file per year, so a run must start on January 1.")
+      screen.getByText("This model snapshot's model writes one file per year, so a run must start on January 1.")
     ).toBeTruthy();
     expect(startField().getAttribute("aria-invalid")).toBeNull();
     expect(nextButton().disabled).toBe(false);

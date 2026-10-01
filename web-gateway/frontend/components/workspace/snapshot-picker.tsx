@@ -106,7 +106,7 @@ export function SnapshotPicker({
               <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted" />
             ) : (
               <>
-                {result.totalCount} snapshot{result.totalCount !== 1 ? "s" : ""} available
+                {result.totalCount} model snapshot{result.totalCount !== 1 ? "s" : ""} available
               </>
             )}
           </p>

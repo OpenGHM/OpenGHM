@@ -42,7 +42,7 @@ export default async function WorkspacePage({
                 <h1 className="text-3xl font-bold text-white">My Simulations</h1>
                 <p className="mt-2 text-sm text-white/70">
                   Working configurations only you can see. Nothing here is a
-                  published snapshot.
+                  published model snapshot.
                 </p>
               </div>
               <Button

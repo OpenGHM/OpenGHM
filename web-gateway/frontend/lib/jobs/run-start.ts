@@ -19,8 +19,8 @@ export type RunStartAlignment = "year" | "month" | "none" | null;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const RULE_TEXT = {
-  year: "This snapshot's model writes one file per year, so a run must start on January 1.",
-  month: "This snapshot's model writes one file per month, so a run must start on the first day of a month.",
+  year: "This model snapshot's model writes one file per year, so a run must start on January 1.",
+  month: "This model snapshot's model writes one file per month, so a run must start on the first day of a month.",
 } as const;
 
 /** What the rule is, in plain words; null when there is none to state. */

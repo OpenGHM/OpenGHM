@@ -73,7 +73,7 @@ function HeroFrame({
               href={`/repository/${job.dataset_id}`}
               className="rounded text-white/90 underline underline-offset-2 outline-none transition-colors hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/70"
             >
-              Base snapshot: {job.dataset_title}
+              Base model snapshot: {job.dataset_title}
             </Link>
           </p>
         </div>
@@ -189,7 +189,7 @@ function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
               <div className="flex-1 sm:flex-none">
                 <DeriveSimulationButton
                   datasetId={job.dataset_id}
-                  label="New from this snapshot"
+                  label="New from this model snapshot"
                   tone="hero"
                 />
               </div>

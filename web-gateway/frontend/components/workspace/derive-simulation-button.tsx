@@ -17,7 +17,7 @@ import { deriveSimulation } from "@/lib/jobs/actions";
  */
 export function DeriveSimulationButton({
   datasetId,
-  label = "New simulation from this snapshot",
+  label = "New simulation from this model snapshot",
   fullWidth = false,
   tone = "default",
 }: {
@@ -64,7 +64,7 @@ export function DeriveSimulationButton({
 
   return (
     <div
-      className={`flex flex-col gap-1.5 ${
+      className={`flex max-w-full flex-col gap-1.5 ${
         hero ? "items-stretch sm:items-end" : fullWidth ? "items-stretch" : "items-end"
       }`}
     >
@@ -76,7 +76,7 @@ export function DeriveSimulationButton({
         className={
           hero
             ? `min-h-10 gap-2 px-4 font-semibold ${HERO_BUTTON.primary}`
-            : "min-h-10 gap-2 border-primary px-6 text-base font-semibold text-primary hover:bg-primary/5"
+            : "h-auto min-h-10 gap-2 whitespace-normal border-primary px-6 text-left text-base font-semibold text-primary hover:bg-primary/5"
         }
       >
         {pending ? (

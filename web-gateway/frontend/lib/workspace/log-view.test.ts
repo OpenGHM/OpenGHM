@@ -62,7 +62,7 @@ describe("logEmptyMessage", () => {
 
   it("explains a WBM log that is not written yet", () => {
     expect(logEmptyMessage({ ...base, status: "RUNNING" })).toBe(
-      "WBM hasn't started writing its log yet. It starts after the snapshot is fetched."
+      "WBM hasn't started writing its log yet. It starts after the model snapshot is fetched."
     );
   });
 

@@ -100,10 +100,10 @@ describe("the completed card", () => {
     expect(html).toContain(job.work_dir!);
     expect(html).toContain(String(job.output!.file_count));
     expect(html).toMatch(
-      /Anvil deletes files that are not used for 30 days — around <time[^>]*>\d+ \w+ \d{4}<\/time>\. Publishing a run as a snapshot is not available yet, so copy what you need from the path above before then\./
+      /Anvil deletes files that are not used for 30 days — around <time[^>]*>\d+ \w+ \d{4}<\/time>\. Publishing a run as a model snapshot is not available yet, so copy what you need from the path above before then\./
     );
     // No publish control and no link to a publish page: nothing publishes a run.
-    expect(html).not.toContain("Publish as a Snapshot");
+    expect(html).not.toContain("Publish as a Model Snapshot");
     expect(html).not.toContain("/publish");
     expect(html).not.toMatch(/illustrative|not wired/i);
   });
@@ -113,7 +113,7 @@ describe("the completed card", () => {
     const html = renderToString(<CompletedResultsCard job={job} />);
     expect(html).toContain("purge removed this run");
     expect(html).not.toContain("Scratch path");
-    expect(html).not.toContain("Publish as a Snapshot");
+    expect(html).not.toContain("Publish as a Model Snapshot");
   });
 
   it("is honest about an old job with no record of its output", () => {

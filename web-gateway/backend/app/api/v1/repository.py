@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo.errors import DuplicateKeyError
@@ -14,16 +15,20 @@ from app.models.generated.snapshot import OpenGHMSnapshotMetadata
 from app.models.repository import (
     DatasetDetailResponse,
     DatasetResponse,
+    CatalogueResponse,
+    ModelInputCatalogueItem,
     ModelInputLinks,
     ModelInputListResponse,
     ModelInputResponse,
     RepositoryListResponse,
+    SnapshotCatalogueItem,
     SnapshotLinks,
     build_envelope,
     model_input_links,
     snapshot_links,
 )
 from app.services import run_start
+from app.services.catalogue import CatalogueQuery, build_catalogue
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -112,6 +117,52 @@ async def list_datasets(
     )
     datasets = sort_datasets(datasets, sort)
     return paginate(datasets, page=page, page_size=page_size)
+
+
+async def _load_catalogue() -> list[SnapshotCatalogueItem | ModelInputCatalogueItem]:
+    db = get_db()
+    datasets = await db["datasets"].find({}).to_list(length=None)
+    model_inputs = await db["model_inputs"].find({}).to_list(length=None)
+    return [SnapshotCatalogueItem.from_metadata_json(d) for d in datasets] + [
+        ModelInputCatalogueItem.from_metadata_json(m) for m in model_inputs
+    ]
+
+
+@router.get("/catalogue", response_model=CatalogueResponse)
+async def list_catalogue(
+    q: str | None = Query(default=None, description="Substring over about.name, about.description, about.keywords"),
+    type: list[Literal["snapshot", "model-input"]] | None = Query(default=None),
+    category: list[str] | None = Query(default=None),
+    creator: list[str] | None = Query(default=None),
+    license: list[str] | None = Query(default=None),
+    output: list[str] | None = Query(default=None, description="Output variable name (snapshots only)"),
+    forcing: list[str] | None = Query(default=None, description="Input variable role (snapshots only)"),
+    process: list[str] | None = Query(default=None, description="Active process (snapshots only)"),
+    wbm: list[str] | None = Query(default=None, description="WBM container version (snapshots only)"),
+    year_start: int | None = Query(default=None),
+    year_end: int | None = Query(default=None),
+    spatial_res_min: float | None = Query(default=None, description="Min spatial resolution in degrees"),
+    spatial_res_max: float | None = Query(default=None, description="Max spatial resolution in degrees"),
+    sort: str = Query(default="relevance", pattern="^(relevance|newest|title-az|title-za)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+) -> CatalogueResponse:
+    """Snapshots and model inputs in one list, with facet counts
+    (gateway.md, Data Repository). The facet parameters repeat
+    (``?category=a&category=b``), they are not comma lists."""
+    query = CatalogueQuery(
+        q=q, year_start=year_start, year_end=year_end,
+        spatial_res_min=spatial_res_min, spatial_res_max=spatial_res_max,
+        selected={
+            name: tuple(values)
+            for name, values in {
+                "type": type, "category": category, "creator": creator, "license": license,
+                "output": output, "forcing": forcing, "process": process, "wbm": wbm,
+            }.items()
+            if values
+        },
+    )
+    return build_catalogue(await _load_catalogue(), query, sort=sort, page=page, page_size=page_size)
 
 
 @router.get("/datasets/{dataset_id}")

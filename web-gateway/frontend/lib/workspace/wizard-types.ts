@@ -12,7 +12,7 @@ export const WIZARD_STEPS = ["snapshot", "model-input", "parameters", "review"] 
 export type WizardStep = (typeof WIZARD_STEPS)[number];
 
 export const STEP_LABELS: Record<WizardStep, string> = {
-  snapshot: "Base Snapshot",
+  snapshot: "Base Model Snapshot",
   "model-input": "Model Input",
   parameters: "Parameters",
   review: "Review & Submit",

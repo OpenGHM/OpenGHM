@@ -74,6 +74,9 @@ export default async function DatasetDetailPage({
             <span className="rounded-full bg-emerald-500/80 px-3 py-0.5 text-xs font-semibold text-white">
               {about.category}
             </span>
+            <span className="rounded-full bg-white/15 px-3 py-0.5 text-xs font-semibold text-white">
+              Model Snapshot
+            </span>
           </div>
           <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
             {about.name}
@@ -107,10 +110,10 @@ export default async function DatasetDetailPage({
             </Button>
             <div className="flex flex-wrap items-center gap-3">
               <DeriveSimulationButton datasetId={dataset.id} />
-              <Button asChild size="lg" className="gap-2 px-6 text-base font-semibold">
+              <Button asChild size="lg" className="h-auto min-h-10 gap-2 whitespace-normal px-6 text-left text-base font-semibold">
                 <Link href={`/workspace/new/configure?snapshotId=${encodeURIComponent(dataset.id)}`}>
                   <Play className="size-5" aria-hidden="true" />
-                  Run this snapshot
+                  Run this model snapshot
                 </Link>
               </Button>
             </div>
@@ -255,21 +258,25 @@ export default async function DatasetDetailPage({
                 </Card>
               )}
 
-              {/* Citation */}
-              <CitationCard dataset={dataset} />
+              {/* Citation — the catalogue card's Cite link lands here */}
+              <div id="cite" className="scroll-mt-24">
+                <CitationCard dataset={dataset} />
+              </div>
 
               {/* Download — links from the backend, bytes from Anvil S3 */}
               {links && (
-                <DownloadCard
-                  command={links.fetchCommand}
-                  items={[
-                    { label: "Snapshot tree", url: links.treeUrl, isFile: false },
-                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
-                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
-                    { label: "Container image", url: links.containerUrl, isFile: true },
-                    { label: "Model input tree", url: links.modelInputTreeUrl, isFile: false },
-                  ]}
-                />
+                <div id="download" className="scroll-mt-24">
+                  <DownloadCard
+                    command={links.fetchCommand}
+                    items={[
+                      { label: "Model snapshot tree", url: links.treeUrl, isFile: false },
+                      { label: "metadata.json", url: links.metadataUrl, isFile: true },
+                      { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
+                      { label: "Container image", url: links.containerUrl, isFile: true },
+                      { label: "Model input tree", url: links.modelInputTreeUrl, isFile: false },
+                    ]}
+                  />
+                </div>
               )}
 
               {/* Container & Execution — uses/runtime, not shown by the legacy UI at all */}

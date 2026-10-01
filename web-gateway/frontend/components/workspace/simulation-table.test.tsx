@@ -37,7 +37,7 @@ describe("the simulation table", () => {
     render(<SimulationTable jobs={[job("a", "RUNNING")]} />);
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      "Name", "Status", "Base snapshot", "Updated", "Actions",
+      "Name", "Status", "Base model snapshot", "Updated", "Actions",
     ]);
   });
 

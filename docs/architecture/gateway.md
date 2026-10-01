@@ -219,6 +219,74 @@ MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 it predates the rule against it in [`../../AGENTS.md`](../../AGENTS.md) — which
 governs what the *snapshot* pipeline deploys, not the gateway's database.
 
+### The Data Repository
+
+`/repository` is **one mixed list** of snapshots and model inputs, filtered by
+facets and sorted and paged by the server. It reads
+`GET /api/v1/repository/catalogue`
+(`web-gateway/backend/app/api/v1/repository.py`; the logic is pure and lives in
+`web-gateway/backend/app/services/catalogue.py`). Both collections are read whole and filtered in
+memory, as the older list routes do; there is no text index.
+
+Each item is the response of its kind (`DatasetResponse` or
+`ModelInputResponse`, [metadata-format.md](../reference/metadata-format.md#the-gateways-catalogue))
+plus a computed `kind`, `"snapshot"` or `"model-input"`. The response is
+`{ items, totalCount, totalPages, page, facets }`.
+
+**Query parameters**, all optional: `q`; `type` (`snapshot` or `model-input`,
+anything else is `422`); the facet parameters below; `year_start`, `year_end`;
+`spatial_res_min`, `spatial_res_max` (degrees); `sort`
+(`relevance` default, `newest`, `title-az`, `title-za`); `page` (>= 1);
+`page_size` (default 10, 1 to 100). Facet and `type` parameters **repeat**
+(`?category=a&category=b`); they are not comma lists, because a value can
+contain a comma.
+
+| Facet parameter | Spec field | Label | Applies to |
+|---|---|---|---|
+| `type` | the item's kind | "Model Snapshot", "Model Input" (fixed order, always both) | both |
+| `category` | `about.category` | the value | both |
+| `creator` | `about.creator[].name` | the value | both |
+| `license` | `about.license` | the value | both |
+| `output` | `simulation.outputVariables[].name` | `fullName` | snapshots |
+| `forcing` | `simulation.inputVariables[].role` | the raw role (the UI humanises it) | snapshots |
+| `process` | `simulation.activeProcesses[]` | the value | snapshots |
+| `wbm` | `uses.container.version` | the value | snapshots |
+
+**Semantics.** Values within one facet are OR, different facets are AND. A
+filter a kind cannot satisfy excludes that kind: a model input has no output
+variables, forcing, processes or container, so any selection in those four
+facets leaves only snapshots.
+
+- `q` is a case-insensitive substring over `about.name`, `about.description`
+  and `about.keywords`.
+- `year_start`/`year_end` select by overlap with the temporal coverage
+  (`simulation.temporalCoverage`; a model input's `coverage.temporalCoverage`).
+  An artifact with no temporal coverage, which a climatological model input
+  may not have, never matches an active year filter.
+- `spatial_res_min`/`spatial_res_max` compare a snapshot's
+  `spatialResolutionDegrees`. A model input matches when **any** of its
+  `networks[].resolution` is in range; networks without one are ignored, and
+  a model input with none never matches an active resolution filter.
+
+**Facet counts** are disjunctive. For each group, the count is the items that
+match `q`, the ranges and every *other* group's selection, ignoring the group's
+own, so choosing one option leaves its siblings' counts visible. A selected
+value with no match is still listed, with count 0; other zero-count options
+are not. Groups sort by count descending, then label case-insensitively;
+`type` keeps its fixed order. `facets.yearBounds` is `{min, max}` over the
+whole unfiltered catalogue (earliest start year, latest end year), or `null`
+when nothing has a temporal coverage.
+
+**Order** is deterministic and ends in the id. `newest` is
+`about.datePublished` descending, then name, then id. `title-az` and `title-za`
+sort by `about.name` case-insensitively. `relevance` with a `q` scores a name
+hit 3, a keyword hit 2 and a description hit 1, summed, highest first, and
+breaks ties as `newest`; with no `q` it is `newest`.
+
+`GET /repository/datasets` and `GET /repository/model-inputs` stay as the
+separate, single-kind lists; the new-simulation snapshot picker still reads
+`/datasets`.
+
 ## 5. The two paths that leave the cluster
 
 ### Data — links, not bytes
@@ -395,7 +463,7 @@ assume. None of them is here:
 | MinIO | removed; see `ops/docs/reference/anvil-environment.md` (private) |
 | MongoDB Atlas | self-hosted, in-cluster |
 | Deck.gl / Plotly | not installed; Leaflet and two SVG components (§3) |
-| A `/catalog/search` endpoint | the routes are `/repository/datasets` |
+| A `/catalog/search` endpoint | the routes are `/repository/catalogue` and, per kind, `/repository/datasets`, `/repository/model-inputs` |
 
 ## 7. Audit log
 

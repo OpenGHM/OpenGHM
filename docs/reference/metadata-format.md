@@ -421,7 +421,7 @@ snapshot mirrored to a second gateway would carry the same
 | `isBasedOn`, `datasetVersion` | No traceable source; legacy leftovers |
 | `processesOn` | Duplicated `activeProcesses` |
 | `variablesMeasured[].standardName` | A CF standard name is a controlled-vocabulary term; nothing populates it |
-| `datasetType` | The catalogue is snapshot-only for this mission — model input is out of scope. A discriminator with one possible value describes nothing; a later mission adds it against a real second case, not an imagined one |
+| `datasetType` | The catalogue is snapshot-only for this mission — model input is out of scope. A discriminator with one possible value describes nothing; a later mission adds it against a real second case, not an imagined one. That case has since arrived: the mixed list `GET /repository/catalogue` tags each item with a computed `kind` ([gateway.md](../architecture/gateway.md#the-data-repository)), still not stored |
 | `adminMetadata` (`conformsTo`, `metadataStandard`, …) | Replaced outright by the schema.org JSON-LD projection this file already describes ([Notes](#notes)), computed at render time rather than stored |
 
 ## Model input's `metadata.json`

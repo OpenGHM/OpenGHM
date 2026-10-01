@@ -63,7 +63,7 @@ export default async function NewSimulationEntryPage() {
             </p>
             <h1 className="text-3xl font-bold text-white">New Simulation</h1>
             <p className="mt-2 text-sm text-white/70">
-              Start from a snapshot you&apos;ve used before, or browse the full catalogue.
+              Start from a model snapshot you&apos;ve used before, or browse the full catalogue.
             </p>
           </div>
         </div>
@@ -80,13 +80,13 @@ export default async function NewSimulationEntryPage() {
                     You haven&apos;t run anything yet
                   </p>
                   <p className="mb-6 text-sm text-muted-foreground">
-                    Browse the Data Repository&apos;s published snapshots to start your first
+                    Browse the Data Repository&apos;s published model snapshots to start your first
                     simulation.
                   </p>
                   <Button asChild className="font-semibold">
                     <Link href="/workspace/new/pick">
                       <Compass className="mr-1.5 size-4" />
-                      Browse Snapshots
+                      Browse Model Snapshots
                     </Link>
                   </Button>
                 </CardContent>
@@ -97,7 +97,7 @@ export default async function NewSimulationEntryPage() {
                   <section>
                     <div className="mb-4 flex items-center justify-between">
                       <h2 className="text-lg font-semibold text-foreground">
-                        Snapshots you&apos;ve used
+                        Model Snapshots you&apos;ve used
                       </h2>
                       <Button asChild variant="ghost" size="sm">
                         <Link href="/workspace/new/pick">
@@ -143,7 +143,7 @@ export default async function NewSimulationEntryPage() {
               <Button asChild size="lg" className="font-semibold">
                 <Link href="/workspace/new/pick">
                   <Play className="mr-1.5 size-4" />
-                  Browse all snapshots
+                  Browse all model snapshots
                 </Link>
               </Button>
             </section>

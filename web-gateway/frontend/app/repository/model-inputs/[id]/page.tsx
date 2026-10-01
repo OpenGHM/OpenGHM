@@ -23,6 +23,7 @@ import {
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { ModelInputDatasetsTable } from "@/components/repository/model-input-datasets-table";
 import { DownloadCard } from "@/components/repository/download-card";
+import { CitationCard } from "@/components/repository/citation-card";
 
 export default async function ModelInputDetailPage({
   params,
@@ -244,14 +245,21 @@ export default async function ModelInputDetailPage({
 
               {/* Download — links from the backend, bytes from Anvil S3 */}
               {links && (
-                <DownloadCard
-                  items={[
-                    { label: "Model input tree", url: links.treeUrl, isFile: false },
-                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
-                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
-                  ]}
-                />
+                <div id="download" className="scroll-mt-24">
+                  <DownloadCard
+                    items={[
+                      { label: "Model input tree", url: links.treeUrl, isFile: false },
+                      { label: "metadata.json", url: links.metadataUrl, isFile: true },
+                      { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
+                    ]}
+                  />
+                </div>
               )}
+
+              {/* Citation — the catalogue card's Cite link lands here */}
+              <div id="cite" className="scroll-mt-24">
+                <CitationCard dataset={modelInput} />
+              </div>
             </div>
 
             {/* Right Column (Sidebar) */}

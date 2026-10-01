@@ -139,7 +139,7 @@ export function WizardModelInputStep({
       <Card className="mb-6 overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
         <CardContent className="space-y-3 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            The base snapshot cites
+            The base model snapshot cites
           </p>
 
           {choice.mode === "chosen" ? (
@@ -151,7 +151,7 @@ export function WizardModelInputStep({
                     Chosen: {choice.modelInput.about.name}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Overrides the base snapshot&apos;s own model input.
+                    Overrides the base model snapshot&apos;s own model input.
                   </p>
                 </div>
               </div>
@@ -197,7 +197,7 @@ export function WizardModelInputStep({
                   Inherited — but not in the catalogue
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  The snapshot cites model input{" "}
+                  The model snapshot cites model input{" "}
                   <code className="font-mono">{inheritedId.slice(0, 12)}…</code>, which the
                   model-inputs catalogue does not hold. This is common, not an error: the run
                   fetches it by id.

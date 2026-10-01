@@ -4,7 +4,7 @@ import { checkRunStart, nearestValidStart, runStartRuleText } from "@/lib/jobs/r
 describe("the run-start rule", () => {
   it("says the rule in plain words, and nothing when there is none", () => {
     expect(runStartRuleText("year")).toBe(
-      "This snapshot's model writes one file per year, so a run must start on January 1."
+      "This model snapshot's model writes one file per year, so a run must start on January 1."
     );
     expect(runStartRuleText("month")).toContain("one file per month");
     expect(runStartRuleText("none")).toBeNull();

@@ -25,6 +25,7 @@ export function useUrlSyncedFilters<F extends object, R>({
   serialize,
   fetcher,
   debounceMs = 300,
+  initialError = false,
 }: {
   initialFilters: F;
   initialResult: R;
@@ -33,6 +34,8 @@ export function useUrlSyncedFilters<F extends object, R>({
   serialize: (filters: F) => URLSearchParams;
   fetcher: (filters: F) => Promise<R>;
   debounceMs?: number;
+  /** The server render could not fetch `initialResult`: start in the error state. */
+  initialError?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -40,6 +43,9 @@ export function useUrlSyncedFilters<F extends object, R>({
 
   const [filters, setFiltersState] = useState<F>(initialFilters);
   const [result, setResult] = useState<R>(initialResult);
+  // True when the last fetch failed; `result` is then `emptyResult`. A caller
+  // that only wants "no results" can ignore it, as the snapshot picker does.
+  const [error, setError] = useState(initialError);
   const [isPending, startTransition] = useTransition();
 
   // The query string of the last URL *we* pushed — lets the external-change
@@ -53,8 +59,10 @@ export function useUrlSyncedFilters<F extends object, R>({
       startTransition(async () => {
         try {
           setResult(await fetcher(f));
+          setError(false);
         } catch {
           setResult(emptyResult);
+          setError(true);
         }
       });
     },
@@ -103,5 +111,8 @@ export function useUrlSyncedFilters<F extends object, R>({
     });
   }, []);
 
-  return { filters, setFilters, result, isPending };
+  /** Fetch the current filters again, e.g. from a Retry button. */
+  const retry = useCallback(() => doFetch(filters), [doFetch, filters]);
+
+  return { filters, setFilters, result, isPending, error, retry };
 }

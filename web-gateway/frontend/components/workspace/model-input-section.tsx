@@ -178,7 +178,7 @@ export function ModelInputSection({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {choice.modelInput
-                    ? "Overrides the base snapshot's own model input."
+                    ? "Overrides the base model snapshot's own model input."
                     : `Model input ${choice.id.slice(0, 12)}… no longer resolves against the catalogue.`}
                 </p>
               </div>
@@ -203,7 +203,7 @@ export function ModelInputSection({
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
             <div>
               <p className="text-sm font-semibold text-foreground">Inherited: {inherited.about.name}</p>
-              <p className="text-xs text-muted-foreground">From the base snapshot — found in the catalogue.</p>
+              <p className="text-xs text-muted-foreground">From the base model snapshot — found in the catalogue.</p>
             </div>
           </div>
         ) : (
@@ -211,18 +211,18 @@ export function ModelInputSection({
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {inheritedId ? "Inherited — but not in the catalogue" : "Base snapshot unavailable"}
+                {inheritedId ? "Inherited — but not in the catalogue" : "Base model snapshot unavailable"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {inheritedId ? (
                   <>
-                    The snapshot cites model input{" "}
+                    The model snapshot cites model input{" "}
                     <code className="font-mono">{inheritedId.slice(0, 12)}…</code>, which the
                     model-inputs catalogue does not hold. This is common, not an error: the run
                     fetches it by id.
                   </>
                 ) : (
-                  "Could not resolve the base snapshot to check what it cites."
+                  "Could not resolve the base model snapshot to check what it cites."
                 )}
               </p>
             </div>

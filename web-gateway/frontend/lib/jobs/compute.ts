@@ -176,9 +176,9 @@ export function submitBlockedReason(
  *  the control's own explanation. */
 export const UNSUPPORTED_REASON = {
   modelInput:
-    "Not available yet: the toolkit has no option for it, so every run uses the snapshot's own model input.",
+    "Not available yet: the toolkit has no option for it, so every run uses the model snapshot's own model input.",
   spatialSubset:
-    "Not available yet: the toolkit has no option for a subset, so every run covers the snapshot's whole domain.",
+    "Not available yet: the toolkit has no option for a subset, so every run covers the model snapshot's whole domain.",
   customParams:
     "Not available yet: the toolkit has no option for custom parameters.",
 } as const;

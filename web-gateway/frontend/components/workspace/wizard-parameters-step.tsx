@@ -85,7 +85,7 @@ export function WizardParametersStep({
             }
           />
           <p className="text-xs text-muted-foreground">
-            The base snapshot covers{" "}
+            The base model snapshot covers{" "}
             <span className="font-medium text-foreground">
               {snapshot.simulation.temporalCoverage.start} → {snapshot.simulation.temporalCoverage.end}
             </span>

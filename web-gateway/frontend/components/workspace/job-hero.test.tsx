@@ -71,7 +71,7 @@ describe("the header actions by status", () => {
     expect((button("Submit to Anvil") as HTMLButtonElement).disabled).toBe(false);
     expect(button("More actions")).not.toBeNull();
     expect(button("Cancel")).toBeNull();
-    expect(button("New from this snapshot")).toBeNull();
+    expect(button("New from this model snapshot")).toBeNull();
   });
 
   it("disables Submit for a blocked user and says why, in text and in a tooltip", async () => {
@@ -89,7 +89,7 @@ describe("the header actions by status", () => {
     renderHero(key);
     expect(button("Cancel")).not.toBeNull();
     expect(button("More actions")).toBeNull();
-    expect(button("New from this snapshot")).toBeNull();
+    expect(button("New from this model snapshot")).toBeNull();
     expect(button("Submit to Anvil")).toBeNull();
   });
 
@@ -97,7 +97,7 @@ describe("the header actions by status", () => {
     renderHero("completing");
     expect(button("Cancel")).toBeNull();
     expect(button("More actions")).toBeNull();
-    expect(button("New from this snapshot")).toBeNull();
+    expect(button("New from this model snapshot")).toBeNull();
   });
 
   it("offers nothing once a cancel is waiting on SLURM", () => {
@@ -111,18 +111,18 @@ describe("the header actions by status", () => {
     "offers a new simulation and the More menu when %s",
     (key) => {
       renderHero(key);
-      expect(button("New from this snapshot")).not.toBeNull();
+      expect(button("New from this model snapshot")).not.toBeNull();
       expect(button("More actions")).not.toBeNull();
       expect(button("Cancel")).toBeNull();
     }
   );
 
-  it("shows the status next to the title, and a link to the base snapshot", () => {
+  it("shows the status next to the title, and a link to the base model snapshot", () => {
     renderHero("running");
     const job = previewSimulation("running");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.dataset_title);
     expect(screen.getByText("Running")).toBeTruthy();
-    const link = screen.getByRole("link", { name: `Base snapshot: ${job.dataset_title}` });
+    const link = screen.getByRole("link", { name: `Base model snapshot: ${job.dataset_title}` });
     expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
   });
 });
@@ -161,7 +161,7 @@ describe("when the status moves on", () => {
     expect(button("Cancel")).not.toBeNull();
     expect(screen.getByRole("status").textContent).toBe("");
 
-    await waitFor(() => expect(button("New from this snapshot")).not.toBeNull());
+    await waitFor(() => expect(button("New from this model snapshot")).not.toBeNull());
     expect(button("Cancel")).toBeNull();
     expect(button("More actions")).not.toBeNull();
     expect(screen.getByRole("status").textContent).toBe("Status: Cancelled");
