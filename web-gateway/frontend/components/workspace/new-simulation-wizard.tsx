@@ -11,6 +11,7 @@ import { WizardReviewStep } from "@/components/workspace/wizard-review-step";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import { validateSlurmConfig } from "@/lib/jobs/compute";
+import { checkRunStartFor, runStartBlockedReason } from "@/lib/jobs/run-start";
 import { useInheritedModelInput } from "@/lib/workspace/use-inherited-model-input";
 import {
   type WizardStep,
@@ -57,9 +58,16 @@ export function NewSimulationWizard({
 
   const stepIndex = OWNED_STEPS.indexOf(step);
 
+  // Why Next is off for the start date; the field says the rest.
+  const startBlocked =
+    step === "parameters"
+      ? runStartBlockedReason(checkRunStartFor(snapshot, parameters.temporal_range_start))
+      : null;
+
   const canGoNext =
     step === "model-input" ||
     (step === "parameters" &&
+      startBlocked === null &&
       parameters.temporal_range_start <= parameters.temporal_range_end &&
       parameters.variables.length > 0 &&
       Object.keys(validateSlurmConfig(slurmConfig)).length === 0);
@@ -120,19 +128,30 @@ export function NewSimulationWizard({
             Back is never disabled: from the first step here it leaves for
             the picker instead of stopping. */}
         {step !== "review" && (
-          <div className="mx-auto flex max-w-[1024px] items-center justify-between px-10 pb-10">
+          <div className="mx-auto flex max-w-[1024px] flex-wrap items-center justify-between gap-y-2 px-10 pb-10">
             <Button variant="ghost" onClick={goBack}>
               <ArrowLeft className="mr-1.5 size-4" />
               Back
             </Button>
-            <Button
-              onClick={goNext}
-              disabled={!canGoNext}
-              className="min-h-10 font-semibold sm:min-h-9"
-            >
-              Next
-              <ArrowRight className="ml-1.5 size-4" />
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              {/* A disabled button gets no hover or focus, so the reason is
+                  text beside it and in the title as well. */}
+              <Button
+                onClick={goNext}
+                disabled={!canGoNext}
+                title={startBlocked ?? undefined}
+                aria-describedby={startBlocked ? "next-blocked-reason" : undefined}
+                className="min-h-10 font-semibold sm:min-h-9"
+              >
+                Next
+                <ArrowRight className="ml-1.5 size-4" />
+              </Button>
+              {startBlocked && (
+                <p id="next-blocked-reason" className="max-w-[16rem] text-right text-xs text-muted-foreground">
+                  {startBlocked}
+                </p>
+              )}
+            </div>
           </div>
         )}
         {step === "review" && (

@@ -12,6 +12,7 @@ import { CompletedResultsCard } from "@/components/workspace/completed-results-c
 import { FailedNextStepsCard } from "@/components/workspace/failed-next-steps-card";
 import { CancelledNoticeCard } from "@/components/workspace/cancelled-notice-card";
 import { describeSlurmTime } from "@/lib/jobs/compute";
+import { checkRunStartFor } from "@/lib/jobs/run-start";
 import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 import {
@@ -62,6 +63,13 @@ export function JobDetail({
   // Gives the parameter editor the snapshot's own output variables to choose
   // from, in addition to whatever the simulation already carries.
   const availableVariables = dataset?.simulation.outputVariables.map((v) => v.name) ?? [];
+  // Submitting runs the saved draft, so its saved start is what counts.
+  const startRefused = isDraft && checkRunStartFor(dataset, job.parameters.temporal_range_start) !== null;
+  const submitBlockedReason =
+    blockedReason ??
+    (startRefused
+      ? "This draft's start date doesn't suit the model. Change it under Simulation Parameters and save."
+      : null);
   const name = job.sim_id || job.slurm_job_name || job.id.slice(0, 8);
 
   const page = (
@@ -83,7 +91,7 @@ export function JobDetail({
       <JobHero
         job={job}
         recommended={dataset?.simulation.recommendedCompute ?? null}
-        blockedReason={blockedReason}
+        blockedReason={submitBlockedReason}
         preview={preview}
       />
 

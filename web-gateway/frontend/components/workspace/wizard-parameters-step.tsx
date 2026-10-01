@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ComputeFields } from "@/components/workspace/compute-fields";
+import { RunStartNote } from "@/components/workspace/run-start-note";
 import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
+import { checkRunStartFor } from "@/lib/jobs/run-start";
 import { recommendedComputeFor } from "@/lib/workspace/wizard-types";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
@@ -33,6 +35,8 @@ export function WizardParametersStep({
     });
   };
 
+  const startProblem = checkRunStartFor(snapshot, parameters.temporal_range_start);
+
   return (
     <div className="mx-auto max-w-[1024px] space-y-6 px-10 py-8">
       {/* Temporal range + variables */}
@@ -45,9 +49,12 @@ export function WizardParametersStep({
         <CardContent className="space-y-5 pt-5 pb-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Start</Label>
+              <Label htmlFor="run-start" className="text-xs text-muted-foreground">Start</Label>
               <Input
+                id="run-start"
                 type="date"
+                aria-invalid={startProblem ? true : undefined}
+                aria-describedby="run-start-note"
                 min={snapshot.simulation.temporalCoverage.start}
                 max={snapshot.simulation.temporalCoverage.end}
                 value={parameters.temporal_range_start}
@@ -69,6 +76,14 @@ export function WizardParametersStep({
               />
             </div>
           </div>
+          <RunStartNote
+            id="run-start-note"
+            alignment={snapshot.runStartAlignment ?? null}
+            problem={startProblem}
+            onUseSuggestion={(start) =>
+              onParametersChange({ ...parameters, temporal_range_start: start })
+            }
+          />
           <p className="text-xs text-muted-foreground">
             The base snapshot covers{" "}
             <span className="font-medium text-foreground">

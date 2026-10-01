@@ -12,6 +12,7 @@ from app.core.roles import Permission
 from app.models.generated.model_input import OpenGHMModelInputMetadata
 from app.models.generated.snapshot import OpenGHMSnapshotMetadata
 from app.models.repository import (
+    DatasetDetailResponse,
     DatasetResponse,
     ModelInputLinks,
     ModelInputListResponse,
@@ -22,6 +23,7 @@ from app.models.repository import (
     model_input_links,
     snapshot_links,
 )
+from app.services import run_start
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -113,12 +115,15 @@ async def list_datasets(
 
 
 @router.get("/datasets/{dataset_id}")
-async def get_dataset(dataset_id: str) -> DatasetResponse:
+async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
     db = get_db()
     doc = await db["datasets"].find_one({"_id": dataset_id})
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
-    return DatasetResponse.from_metadata_json(doc)
+    detail = DatasetDetailResponse.from_metadata_json(doc)
+    # Read once per snapshot (immutable by id) and kept; None if it cannot be read.
+    detail.runStartAlignment = await run_start.run_start_alignment(doc["document"], dataset_id)
+    return detail
 
 
 @router.get("/datasets/{dataset_id}/links")

@@ -43,7 +43,7 @@ from app.models.job import (
     verdict_fields,
 )
 from app.models.user import TokenPayload
-from app.services import job_live, job_script, slurm
+from app.services import job_live, job_script, run_start, slurm
 
 logger = logging.getLogger(__name__)
 
@@ -386,6 +386,15 @@ async def update_simulation(
         effective = await _resolve_effective_model_input(doc)
         return _doc_to_response(doc, effective=effective)
 
+    if "parameters" in changes:
+        envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+        if envelope is not None:
+            await _refuse_unaligned_start(
+                doc["dataset_id"],
+                envelope["document"],
+                changes["parameters"]["temporal_range_start"],
+            )
+
     if "slurm_config" in changes:
         # Only the fields the client sent change; `null` goes back to the
         # snapshot's recommended compute.
@@ -420,6 +429,29 @@ def _error(http_status: int, code: str, message: str, **extra) -> HTTPException:
     return HTTPException(
         status_code=http_status, detail={"code": code, "message": message, **extra}
     )
+
+
+async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -> None:
+    """422 when the snapshot's model cannot start a run on `start` (WBM writes a
+    run's first step into band 1 of an output file, so a start must be the first
+    day of one). Answered here, before the queue, instead of by the toolkit once
+    the job runs; the toolkit's own check stays as the last line. A rule that
+    cannot be read blocks nothing."""
+    alignment = await run_start.run_start_alignment(snapshot, dataset_id)
+    temporal = (snapshot.get("simulation") or {}).get("temporalCoverage") or {}
+    violation = run_start.check_run_start(
+        alignment,
+        start,
+        snapshot_start=temporal.get("start"),
+        snapshot_end=temporal.get("end"),
+    )
+    if violation is not None:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "run_start_not_aligned",
+            violation.message,
+            suggested_start=violation.suggested_start,
+        )
 
 
 _ANVIL_NOT_CONFIGURED = (
@@ -486,6 +518,10 @@ async def submit_simulation(
             "and submit again.",
             fields=fields,
         )
+
+    await _refuse_unaligned_start(
+        job.dataset_id, snapshot, job.parameters.temporal_range_start
+    )
 
     now = datetime.now(timezone.utc)
     sim_id = _generate_sim_id(now)

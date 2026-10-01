@@ -160,6 +160,20 @@ a step that does not exist yet ([open items
 9](../reference/open-items.md) and [10](../reference/open-items.md); **Next**
 list *publish a simulation as a snapshot*).
 
+A draft's start date is checked against where its snapshot's model may start a
+run. WBM writes a run's first step into band 1 of an output file, so a run can
+only start on the first day of one: with `File_Size 'year'` in the init, on
+January 1, with `'month'`, on the first of a month. `app/services/run_start.py`
+reads `File_Size` from the init that `simulation.init` names, over the public
+HTTPS read of §5, once per snapshot id, with the same pattern `openghm sim run`
+uses. `GET /api/v1/repository/datasets/{id}` carries the result as
+`runStartAlignment` (`year`, `month`, `none` for an init that sets no rule, or
+`null` when the init could not be read). The wizard's parameters step and the
+draft editor say the rule beside the Start date, flag a start that breaks it and
+offer the nearest valid one; `PATCH /jobs/{id}` and the submit answer `422
+run_start_not_aligned` for the same start. A rule that cannot be read blocks
+nothing, and the toolkit's own check stays as the last line.
+
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
 inherits whichever model input its base snapshot's own `uses.modelInput.id`
@@ -197,7 +211,7 @@ write paths are the receiving end of a chain whose earlier links are still
 to be built.
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
-(`ops/k8s/<env>/mongo.yml`). That is the one place cluster state exists, and
+(`ops/k8s/base/mongo.yml`). That is the one place cluster state exists, and
 it predates the rule against it in [`../../AGENTS.md`](../../AGENTS.md) — which
 governs what the *snapshot* pipeline deploys, not the gateway's database.
 
@@ -209,7 +223,9 @@ The backend holds no S3 credentials and makes no S3 API calls. It concatenates
 `S3_PUBLIC_BASE_URL`, a bucket and a key into a public HTTPS string and returns
 that; the browser downloads from Anvil S3 directly, bypassing the API. The
 config file states this in a comment, and there is no S3 client in
-`requirements.txt` to contradict it.
+`requirements.txt` to contradict it. The one object it reads itself is a
+snapshot's init, with a plain `httpx` GET of the public URL
+(`app/services/run_start.py`), to learn where a run may start.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
@@ -284,6 +300,9 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
+- A start date the snapshot's model cannot start a run on: 422
+  `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
+  the snapshot's period.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name

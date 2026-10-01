@@ -20,7 +20,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
 from app.core import audit, authz
 from app.core.config import settings
-from app.services import job_live, slurm
+from app.services import job_live, run_start, slurm
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +30,22 @@ def _fresh_job_live():
     job_live.reset()
     yield
     job_live.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_s3_read(monkeypatch):
+    """No test reaches Anvil S3: reading a snapshot's init (run_start) fails, which
+    the code takes as "could not check" and blocks nothing. A test that wants an
+    init replaces `run_start._fetch_init`. The rules it read stay process-wide,
+    so each test starts without another's."""
+
+    async def no_network(url: str) -> str:
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(run_start, "_fetch_init", no_network)
+    run_start.reset()
+    yield
+    run_start.reset()
 
 
 @pytest.fixture

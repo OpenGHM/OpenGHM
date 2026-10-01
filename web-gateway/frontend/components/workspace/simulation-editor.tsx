@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ComputeFields } from "@/components/workspace/compute-fields";
+import { RunStartNote } from "@/components/workspace/run-start-note";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { updateSimulation } from "@/lib/jobs/actions";
 import { UNSUPPORTED_REASON, validateSlurmConfig } from "@/lib/jobs/compute";
+import { checkRunStartFor, runStartBlockedReason } from "@/lib/jobs/run-start";
 import { fetchModelInputById } from "@/lib/repository/actions";
 import type { Job, JobParameters, PartialAbout, SlurmConfig } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
@@ -144,6 +146,11 @@ export function SimulationEditor({
     walltime: job.slurm_config.walltime ?? null,
   });
   const computeInvalid = Object.keys(validateSlurmConfig(compute)).length > 0;
+
+  // The start date against where this snapshot's model may start a run. The
+  // backend refuses the same start on save and submit.
+  const startProblem = checkRunStartFor(dataset, start);
+  const saveBlocked = runStartBlockedReason(startProblem);
 
   const variableOptions = useMemo(() => {
     const set = new Set(availableVariables);
@@ -351,14 +358,27 @@ export function SimulationEditor({
         <CardContent className="space-y-5 pt-5 pb-6">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Start</Label>
-              <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+              <Label htmlFor="run-start" className="text-xs text-muted-foreground">Start</Label>
+              <Input
+                id="run-start"
+                type="date"
+                value={start}
+                aria-invalid={startProblem ? true : undefined}
+                aria-describedby="run-start-note"
+                onChange={(e) => setStart(e.target.value)}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">End</Label>
               <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
             </div>
           </div>
+          <RunStartNote
+            id="run-start-note"
+            alignment={dataset?.runStartAlignment ?? null}
+            problem={startProblem}
+            onUseSuggestion={setStart}
+          />
 
           {variableOptions.length > 0 && (
             <div className="space-y-2">
@@ -474,15 +494,24 @@ export function SimulationEditor({
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
+        {/* A disabled button gets no hover or focus, so the reason is text
+            beside it and in the title as well. */}
         <Button
           onClick={handleSave}
-          disabled={saving || computeInvalid}
+          disabled={saving || computeInvalid || saveBlocked !== null}
+          title={saveBlocked ?? undefined}
+          aria-describedby={saveBlocked ? "save-blocked-reason" : undefined}
           className="min-h-10 sm:min-h-9"
         >
           {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
           Save
         </Button>
+        {saveBlocked && (
+          <p id="save-blocked-reason" className="text-xs text-muted-foreground">
+            {saveBlocked}
+          </p>
+        )}
       </div>
     </div>
   );

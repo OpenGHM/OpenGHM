@@ -23,6 +23,11 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
   licenseUrl: string;
   /** `runtime.generatedAt`, exposed at the top level too — the default sort key. */
   generatedAt: string;
+  /** Where a run of this snapshot may start, read from its init by the single
+   *  snapshot route only (`DatasetDetailResponse`): `year` January 1, `month`
+   *  the first of a month, `none` no rule, `null` the init could not be read.
+   *  Absent on a list row. */
+  runStartAlignment?: "year" | "month" | "none" | null;
 }
 
 // ─── Filter state ─────────────────────────────────────────────────────────────
