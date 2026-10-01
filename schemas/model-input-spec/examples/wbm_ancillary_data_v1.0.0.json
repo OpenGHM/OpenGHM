@@ -3,7 +3,7 @@
   "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d",
   "slug": "wbm_ancillary_data_v1.0.0",
   "about": {
-    "name": "University of New Hampshire Water Balance Model Ancillary Data",
+    "name": "WBM Inputs [Global]",
     "description": "The University of New Hampshire Water Balance Model Ancillary Data for use with the WBM Open Source Release Version 1.0: the same global ancillary dataset the WBM model draws its non-forcing inputs from as v2.0.0's data_init records (crop calendars and coefficients (MIRCA2000), glacier area and discharge (RGI-6, ERA-Interim hindcast), irrigation efficiency, dam capacity, and harmonized soil available water capacity), carried in the tree staged for the Wyoming_tracking and Global_tracking v1.0.0 snapshots.",
     "datePublished": "2022-02-23",
     "tags": ["ancillary-data", "climate-forcing", "river-network"],

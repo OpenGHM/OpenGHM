@@ -88,6 +88,14 @@ def _soil_doc() -> dict:
     return d
 
 
+def _same_name_as_v1(doc: dict) -> dict:
+    """The two shipped model inputs have different names; the sort tests need a
+    tie on name (broken by id), so the v2.0.0 copy takes the v1.0.0 name."""
+    doc = copy.deepcopy(doc)
+    doc["about"]["name"] = _example("model-input-spec", "wbm_ancillary_data_v1.0.0.json")["about"]["name"]
+    return doc
+
+
 @pytest.fixture
 def items():
     return [
@@ -96,7 +104,7 @@ def items():
         _snap(_example("snapshot-spec", "wbm_storage_v2.0.0.json")),
         _snap(_zeta_doc()),
         _mi(_example("model-input-spec", "wbm_ancillary_data_v1.0.0.json")),
-        _mi(_example("model-input-spec", "wbm_ancillary_data_v2.0.0.json")),
+        _mi(_same_name_as_v1(_example("model-input-spec", "wbm_ancillary_data_v2.0.0.json"))),
         _mi(_soil_doc()),
     ]
 
