@@ -148,3 +148,81 @@ export function StatusControl({
     </>
   );
 }
+
+/** The "Can run simulations" switch. Flipping it does not apply it: it opens a
+ *  dialog that says what the change does, and the switch stays where it was
+ *  unless the change is confirmed. What each side says is what the backend
+ *  does: the flag is read when a job is submitted, so revoking it stops new
+ *  submissions and leaves jobs already submitted alone. */
+export function RunPermissionControl({
+  user,
+  checked,
+  disabled,
+  labelledBy,
+  describedBy,
+}: {
+  user: { id: string; name: string };
+  /** Whether the user may run now (true for admin and staff whatever the flag). */
+  checked: boolean;
+  disabled: boolean;
+  labelledBy: string;
+  describedBy?: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [applied, setApplied] = useState<{ from: boolean; to: boolean } | null>(null);
+  const grant = !checked;
+
+  // Show the confirmed value until the refreshed page brings it, so the switch
+  // does not flicker back. A dialog that is open or cancelled changes nothing.
+  const shown = applied && applied.from === checked ? applied.to : checked;
+
+  return (
+    <>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={shown}
+        aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className={`relative inline-flex h-6 w-11 shrink-0 after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] items-center rounded-full outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+          shown ? "bg-primary" : "bg-slate-300"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+            shown ? "translate-x-5" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+      <ConfirmActionDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={grant ? `Let ${user.name} run simulations?` : `Stop ${user.name} from running simulations?`}
+        description={
+          grant
+            ? "They can submit simulations, and each run they submit spends the shared compute allocation. They also need a verified email address."
+            : "They can't submit new simulations, but can still create and edit drafts. Jobs already submitted keep running."
+        }
+        confirmLabel={grant ? "Allow running" : "Stop running"}
+        pendingLabel={grant ? "Allowing…" : "Stopping…"}
+        cancelLabel={grant ? "Don't allow" : "Keep allowed"}
+        destructive={!grant}
+        successMessage={
+          grant ? `${user.name} can now run simulations.` : `${user.name} can no longer run simulations.`
+        }
+        failureMessage="Couldn't change the run permission. Try again. If it keeps failing, the service may be unavailable."
+        onConfirm={async () => {
+          const result = await updateUser(user.id, { can_run_simulations: grant });
+          if (!result.ok) return { ok: false, message: result.message };
+          setApplied({ from: checked, to: grant });
+          return { ok: true };
+        }}
+        onDone={() => router.refresh()}
+      />
+    </>
+  );
+}

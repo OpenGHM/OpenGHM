@@ -10,7 +10,7 @@ vi.mock("@/lib/admin/actions", () => ({ updateUser }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
 
-import { RoleControl, StatusControl } from "@/components/admin/user-admin-controls";
+import { RoleControl, RunPermissionControl, StatusControl } from "@/components/admin/user-admin-controls";
 
 afterEach(() => {
   cleanup();
@@ -148,5 +148,89 @@ describe("deactivating and reactivating", () => {
   it("is disabled where the caller says so", () => {
     render(<StatusControl user={ada} disabled />);
     expect((screen.getByRole("button", { name: "Active" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("the run-permission switch", () => {
+  function renderSwitch(checked: boolean, disabled = false) {
+    render(
+      <>
+        <span id="run-label">Can run simulations</span>
+        <RunPermissionControl user={ada} checked={checked} disabled={disabled} labelledBy="run-label" />
+      </>
+    );
+    return screen.getByRole("switch", { name: "Can run simulations" }) as HTMLButtonElement;
+  }
+
+  it("says what granting does, and applies nothing until confirmed", async () => {
+    const sw = renderSwitch(false);
+    fireEvent.click(sw);
+    expect(await screen.findByText("Let Ada Lovelace run simulations?")).toBeTruthy();
+    expect(screen.getByText(/each run they submit spends the shared compute allocation/)).toBeTruthy();
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("grants on confirm, then refreshes", async () => {
+    updateUser.mockResolvedValue({ ok: true });
+    const sw = renderSwitch(false);
+    fireEvent.click(sw);
+    fireEvent.click(await screen.findByRole("button", { name: "Allow running" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(updateUser).toHaveBeenCalledWith("u1", { can_run_simulations: true });
+    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can now run simulations.");
+    // Until the refreshed page brings the new value, the switch keeps it.
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("says what revoking does to jobs already submitted", async () => {
+    const sw = renderSwitch(true);
+    fireEvent.click(sw);
+    expect(await screen.findByText("Stop Ada Lovelace from running simulations?")).toBeTruthy();
+    expect(screen.getByText(/can't submit new simulations/)).toBeTruthy();
+    expect(screen.getByText(/Jobs already submitted keep running\./)).toBeTruthy();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("revokes on confirm", async () => {
+    updateUser.mockResolvedValue({ ok: true });
+    const sw = renderSwitch(true);
+    fireEvent.click(sw);
+    fireEvent.click(await screen.findByRole("button", { name: "Stop running" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(updateUser).toHaveBeenCalledWith("u1", { can_run_simulations: false });
+    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can no longer run simulations.");
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("leaves the switch where it was on cancel", async () => {
+    const sw = renderSwitch(true);
+    fireEvent.click(sw);
+    fireEvent.click(await screen.findByRole("button", { name: "Keep allowed" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("stays open while pending, and shows a failure inline and as a toast", async () => {
+    let answer: (value: unknown) => void = () => {};
+    updateUser.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const sw = renderSwitch(false);
+    fireEvent.click(sw);
+    fireEvent.click(await screen.findByRole("button", { name: "Allow running" }));
+    await screen.findByRole("button", { name: "Allowing…" });
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    answer({ ok: false, message: "User not found" });
+    expect((await screen.findByRole("alert")).textContent).toBe("User not found");
+    expect(toast.error).toHaveBeenCalledWith("User not found");
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("is disabled where the caller says so", () => {
+    expect(renderSwitch(true, true).disabled).toBe(true);
   });
 });

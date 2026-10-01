@@ -1,15 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AdminUserDetail } from "@/lib/admin/types";
-import { updateUser } from "@/lib/admin/actions";
-import { RoleControl, StatusControl } from "@/components/admin/user-admin-controls";
+import { RoleControl, RunPermissionControl, StatusControl } from "@/components/admin/user-admin-controls";
 
 export function UserRoleStatusCard({
   user,
@@ -20,10 +16,6 @@ export function UserRoleStatusCard({
   isSelf: boolean;
   canManage: boolean;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-
   // Same guard as UsersTable: role/status edits are blocked server-side too
   // (self-target and last-active-admin, see PATCH /users/{user_id}).
   const disabled = !canManage || isSelf;
@@ -33,23 +25,7 @@ export function UserRoleStatusCard({
   const runImplicit = user.role === "admin" || user.role === "staff";
   const runNever = user.role === "guest";
   const canRun = runImplicit || (!runNever && user.can_run_simulations);
-  const runDisabled = disabled || pending || runImplicit || runNever;
-
-  function handleToggleRun() {
-    setError("");
-    const next = !user.can_run_simulations;
-    startTransition(async () => {
-      const result = await updateUser(user.id, { can_run_simulations: next });
-      if (!result.ok) {
-        const message = result.message ?? "Failed to update run permission.";
-        setError(message);
-        toast.error(message);
-      } else {
-        toast.success(next ? "Can now run simulations." : "Can no longer run simulations.");
-        router.refresh();
-      }
-    });
-  }
+  const runDisabled = disabled || runImplicit || runNever;
 
   return (
     <Card className="min-w-0">
@@ -121,25 +97,13 @@ export function UserRoleStatusCard({
               <span id="run-permission-label" className="text-sm text-slate-500">
                 Can run simulations
               </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={canRun}
-                aria-labelledby="run-permission-label"
-                aria-describedby="run-permission-help"
-                onClick={handleToggleRun}
+              <RunPermissionControl
+                user={user}
+                checked={canRun}
                 disabled={runDisabled}
-                className={`relative inline-flex h-6 w-11 shrink-0 after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] items-center rounded-full outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  canRun ? "bg-primary" : "bg-slate-300"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
-                    canRun ? "translate-x-5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+                labelledBy="run-permission-label"
+                describedBy="run-permission-help"
+              />
             </div>
             <p id="run-permission-help" className="text-xs text-slate-500">
               Admin and staff can always run simulations. A user needs this switch on. Each
@@ -151,11 +115,6 @@ export function UserRoleStatusCard({
           {isSelf && (
             <p className="text-xs text-slate-500">
               You can&apos;t change your own role, status or run permission.
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
             </p>
           )}
         </div>
