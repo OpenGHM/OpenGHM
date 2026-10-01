@@ -34,6 +34,17 @@ The `Alien::gdal` shim (`extras/Alien_gdal_stub.pm`) avoids the upstream
 `Alien::gdal → Alien::patchelf → Alien::Build::Git → git/cmake` source-build chain;
 it just points `Geo::GDAL::FFI` at the apt `libgdal`.
 
+## Pinned inputs
+
+Every input of the Dockerfile is pinned (see the README one level up for the
+rule): the base by digest (`debian:bookworm-slim@sha256:0104b334…`, the index
+of the dated tag `bookworm-20260518-slim`), apt from the
+`snapshot.debian.org` mirror at `20260531T000000Z` with every named package as
+`package=version`, and `PkgConfig`, `Sort::Versions` and `Geo::GDAL::FFI` as
+`Module@version`. The versions come from `lock/2026-05-31.dpkg.txt` and
+`lock/2026-05-31.lock.json`, so the image `docker build` produces carries the
+same package list as the published SIF.
+
 ## Build (on a machine with Docker)
 
 > Apple Silicon: the `--platform linux/amd64` flag is **mandatory** — Anvil is x86_64.

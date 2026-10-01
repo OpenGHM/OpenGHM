@@ -17,7 +17,14 @@
 #   * WBM source (model + utilities + RIMS) is EMBEDDED, so no code bind mounts.
 # =============================================================================
 
-FROM debian:bookworm-slim AS base
+# Base pinned by digest: the index of `debian:bookworm-slim` as `bookworm-20260518-slim`
+# (resolved 2026-10-01). The published SIF's own base digest is unrecoverable
+# (lock/2026-05-31.lock.json); this is the dated tag whose five base packages
+# that differ between tags (base-files, libgcrypt20, libgnutls30, liblzma5,
+# libpcre2-8-0) match the published SIF's dpkg list, so it is the closest match
+# that can be named, not a proven identity. `docker buildx imagetools inspect
+# debian:bookworm-20260518-slim` prints this digest.
+FROM debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS base
 
 LABEL maintainer="openghm"
 LABEL description="Lightweight WBM utilities (networkTools, spatial/temporal aggregation)"
@@ -26,30 +33,52 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 # --- System + scientific Perl stack (apt only) -------------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      perl cpanminus \
-      build-essential pkg-config ca-certificates \
-      pdl \
-      libinline-c-perl \
-      libpdl-netcdf-perl \
-      gdal-bin libgdal-dev \
-      netcdf-bin libnetcdf-dev \
-      proj-bin proj-data \
-      libgsl-dev \
-      libcgi-pm-perl \
-      libtime-parsedate-perl \
-      libparallel-forkmanager-perl \
-      libmath-vecstat-perl \
-      libclone-perl \
-      libdevel-checklib-perl \
-      libffi-platypus-perl \
+# apt reads a dated snapshot of the Debian archive, not deb.debian.org, so the
+# versions below stay installable after the live archive moves on. 20260531T000000Z
+# is the lock date (lock/2026-05-31.dpkg.txt). Every package this recipe names
+# is pinned to the version in that file; their dependencies resolve to whatever
+# that snapshot holds, which reproduces the rest of the list. The snapshot's
+# Release files are long expired by design, hence Check-Valid-Until.
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+ && printf '%s\n' \
+      'deb http://snapshot.debian.org/archive/debian/20260531T000000Z/ bookworm main' \
+      'deb http://snapshot.debian.org/archive/debian/20260531T000000Z/ bookworm-updates main' \
+      'deb http://snapshot.debian.org/archive/debian-security/20260531T000000Z/ bookworm-security main' \
+      > /etc/apt/sources.list \
+ && printf '%s\n' 'Acquire::Check-Valid-Until "false";' 'Acquire::Retries "5";' \
+      > /etc/apt/apt.conf.d/99snapshot \
+ && apt-get update && apt-get install -y --no-install-recommends \
+      perl=5.36.0-7+deb12u3 \
+      cpanminus=1.7046-1 \
+      build-essential=12.9 \
+      pkg-config=1.8.1-1 \
+      ca-certificates=20230311+deb12u1 \
+      pdl=1:2.081-2 \
+      libinline-c-perl=0.82-1 \
+      libpdl-netcdf-perl=4.24-1+b1 \
+      gdal-bin=3.6.2+dfsg-1+b2 \
+      libgdal-dev=3.6.2+dfsg-1+b2 \
+      netcdf-bin=1:4.9.0-3+b1 \
+      libnetcdf-dev=1:4.9.0-3+b1 \
+      proj-bin=9.1.1-1+b1 \
+      proj-data=9.1.1-1 \
+      libgsl-dev=2.7.1+dfsg-5+deb12u1 \
+      libcgi-pm-perl=4.55-1 \
+      libtime-parsedate-perl=2015.103-4 \
+      libparallel-forkmanager-perl=2.02-1 \
+      libmath-vecstat-perl=0.08-3 \
+      libclone-perl=0.46-1 \
+      libdevel-checklib-perl=1.16-1 \
+      libffi-platypus-perl=2.05-1 \
  && rm -rf /var/lib/apt/lists/*
 
 # --- Alien::gdal shim + Geo::GDAL::FFI ---------------------------------------
 # The shim points Geo::GDAL::FFI at the system libgdal (apt). It pulls only
 # pure-perl PkgConfig + the apt FFI::Platypus — no compilers/git/cmake.
 COPY extras/Alien_gdal_stub.pm /usr/local/share/perl/5.36.0/Alien/gdal.pm
-RUN cpanm --notest Geo::GDAL::FFI || (cat ~/.cpanm/build.log; false)
+# Pinned to the versions in the lock's cpanPins. PkgConfig and Sort::Versions are
+# the dependencies of Geo::GDAL::FFI that apt does not provide.
+RUN cpanm --notest PkgConfig@0.26026 Sort::Versions@1.62 Geo::GDAL::FFI@0.16 || (cat ~/.cpanm/build.log; false)
 
 # --- Embed WBM source --------------------------------------------------------
 COPY wbm/model     /wbm/model

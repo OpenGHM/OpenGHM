@@ -62,6 +62,43 @@ cd ../wbm-v1-lite-s3                      # stage 2: apptainer build from the .d
 The built SIF is self-contained — the base is squashed in — but keep the base
 directory: it is the only recipe for rebuilding it.
 
+## What the Dockerfiles pin
+
+The three Dockerfile images pin every input they can
+([ADR 0004](../docs/decisions/0004-store-images-not-rebuild.md)); each recipe is
+written from the committed lock record
+(`<name>/lock/<version>.dpkg.txt` and `.lock.json`), not from memory:
+
+- **Base** by digest: `FROM image:tag@sha256:…`, with the date it was resolved
+  in a comment. The published SIFs' own base digest is unrecoverable, so for
+  `ubuntu:20.04` it is today's digest for the tag, and for `wbm-tools-lite` it
+  is the dated tag `debian:bookworm-20260518-slim`, the one whose base packages
+  match the published SIF's dpkg list. Neither is a proven identity.
+- **apt** from a dated snapshot mirror (`snapshot.ubuntu.com` or
+  `snapshot.debian.org`), not the live archive, with every package the recipe
+  names written as `package=version`. Their dependencies resolve to whatever
+  the snapshot holds. The timestamp is in each Dockerfile.
+- **CPAN** as `Module@version`, or an exact tarball URL checked against a
+  sha256, for every distribution the build installs, including the ones
+  `cpanm` would otherwise pull in as dependencies.
+
+Pinning does not make a rebuild the published image (ADR 0004): `apptainer
+build` stamps its own times into the squashfs, so the SIF digest differs
+between builds. What it does is make the *contents* repeatable, and that is
+checked: build, then compare the package list with the lock.
+
+```bash
+docker build --platform linux/amd64 -t wbm-v2-lite-pinned:check wbm-v2-lite
+docker run --rm --platform linux/amd64 wbm-v2-lite-pinned:check \
+  dpkg-query -W -f '${binary:Package}\t${Version}\n' | sort \
+  | diff - <(sort wbm-v2-lite/lock/2.0.0.dpkg.txt)      # empty = the lock
+```
+
+The lock lists `${binary:Package}` (`libc6:amd64`), not `${Package}`. The same
+comparison through SLURM, on the SIF `apptainer` builds from that image, is
+`verification/check_pinned_recipe.slurm`; it writes only under scratch and never
+touches a deployed SIF.
+
 ## Publishing a built SIF
 
 `deploy_to_anvil.sh` (or an `apptainer build` for the `-s3` recipes) only gets
