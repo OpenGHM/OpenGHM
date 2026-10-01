@@ -11,6 +11,7 @@ import { WizardReviewStep } from "@/components/workspace/wizard-review-step";
 import type { Dataset } from "@/lib/repository/types";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import { validateSlurmConfig } from "@/lib/jobs/compute";
+import { useInheritedModelInput } from "@/lib/workspace/use-inherited-model-input";
 import {
   type WizardStep,
   type ModelInputChoice,
@@ -51,6 +52,8 @@ export function NewSimulationWizard({
   const [modelInputChoice, setModelInputChoice] = useState<ModelInputChoice>({ mode: "inherit" });
   const [parameters, setParameters] = useState<JobParameters>(() => defaultParametersFor(snapshot));
   const [slurmConfig, setSlurmConfig] = useState<SlurmConfig>(() => defaultSlurmConfigFor());
+  // Looked up here, not in step 2, so the review step knows what step 2 found.
+  const inheritedModelInput = useInheritedModelInput(snapshot.uses.modelInput.id);
 
   const stepIndex = OWNED_STEPS.indexOf(step);
 
@@ -86,6 +89,7 @@ export function NewSimulationWizard({
           <WizardModelInputStep
             snapshot={snapshot}
             choice={modelInputChoice}
+            inherited={inheritedModelInput}
             onChoiceChange={setModelInputChoice}
           />
         )}
@@ -104,6 +108,7 @@ export function NewSimulationWizard({
           <WizardReviewStep
             snapshot={snapshot}
             modelInputChoice={modelInputChoice}
+            inheritedModelInput={inheritedModelInput}
             parameters={parameters}
             slurmConfig={slurmConfig}
             recommended={recommendedComputeFor(snapshot)}

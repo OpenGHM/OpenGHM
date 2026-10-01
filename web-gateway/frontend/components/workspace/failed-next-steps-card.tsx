@@ -1,6 +1,5 @@
 import { AlertOctagon, AlertTriangle, CloudOff } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DeleteSimulationButton } from "@/components/workspace/delete-simulation-button";
 import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { RunMetadata } from "@/components/workspace/run-metadata";
@@ -29,13 +28,7 @@ const TONE_ICON = {
  * edited in place (PATCH /jobs/{id} is refused past DRAFT), so the next step is
  * a *new* draft from the same snapshot.
  */
-export function FailedNextStepsCard({
-  job,
-  preview = false,
-}: {
-  job: Job;
-  preview?: boolean;
-}) {
+export function FailedNextStepsCard({ job }: { job: Job }) {
   const failure = job.failure;
   const copy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
   const hue = HUE[TONE_HUE[copy.tone]];
@@ -69,19 +62,9 @@ export function FailedNextStepsCard({
           <p className="text-sm text-muted-foreground">{NEXT_STEP_COPY[copy.nextStep]}</p>
         )}
 
-        <div className="flex flex-col gap-2">
-          {offersNewDraft(copy.nextStep) && (
-            <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
-          )}
-          <DeleteSimulationButton
-            jobId={job.id}
-            isDraft={false}
-            workDir={job.work_dir}
-            remoteJobDir={job.remote_job_dir}
-            files={job.files}
-            preview={preview}
-          />
-        </div>
+        {offersNewDraft(copy.nextStep) && (
+          <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
+        )}
       </CardContent>
     </Card>
   );

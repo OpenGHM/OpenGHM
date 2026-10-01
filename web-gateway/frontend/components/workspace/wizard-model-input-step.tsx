@@ -6,7 +6,7 @@ import { Search, Loader2, Database, Waves, CheckCircle2, AlertTriangle, RotateCc
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { fetchModelInputById, fetchModelInputs } from "@/lib/repository/actions";
+import { fetchModelInputs } from "@/lib/repository/actions";
 import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
 import type { Dataset, ModelInput, ModelInputListResponse } from "@/lib/repository/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
@@ -84,34 +84,17 @@ function ModelInputMiniCard({
 export function WizardModelInputStep({
   snapshot,
   choice,
+  inherited,
   onChoiceChange,
 }: {
   snapshot: Dataset;
   choice: ModelInputChoice;
+  /** The base snapshot's own model input, looked up in the catalogue:
+   *  `undefined` while looking, `null` when the catalogue does not hold it. */
+  inherited: ModelInput | null | undefined;
   onChoiceChange: (choice: ModelInputChoice) => void;
 }) {
   const inheritedId = snapshot.uses.modelInput.id;
-
-  // The base snapshot's own model input, resolved against the catalogue —
-  // real lookup, same rule the backend's _resolve_effective_model_input
-  // (app/api/v1/jobs.py) applies once a draft exists. `undefined` = still
-  // loading, `null` = the catalogue does not hold it (inherited-missing).
-  const [inherited, setInherited] = useState<ModelInput | null | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    setInherited(undefined);
-    fetchModelInputById(inheritedId)
-      .then((mi) => {
-        if (!cancelled) setInherited(mi);
-      })
-      .catch(() => {
-        if (!cancelled) setInherited(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inheritedId]);
 
   // Catalogue browser, for choosing a different model input.
   const [searchQuery, setSearchQuery] = useState("");

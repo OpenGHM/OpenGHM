@@ -1,16 +1,13 @@
 /**
- * Dev-only escape hatch for looking at every state a simulation can be in.
- * `?preview=<key>` on `/workspace/[id]` renders the page from a fixture
- * (`previewSimulation` in lib/workspace/fixtures.ts) instead of a real fetch,
- * so each status and each verdict cause can be reviewed without making Anvil
- * produce it. Real jobs are only the ones the backend has; nothing here is
- * pretended to be one.
- *
- * Refused outside development so it is never a production code path. A later
- * mission removes this mechanism; do not widen it.
+ * The states the design preview can show. `/dev/workspace/<key>`
+ * (`app/dev/workspace/[state]`) renders the job detail page from a fixture
+ * (`previewSimulation` in lib/workspace/fixtures.ts) instead of a fetch, so each
+ * status and each verdict cause can be reviewed without making Anvil produce
+ * it. The fixtures are the preview's and the tests' data: only that route
+ * uses them, and it answers 404 in production. No real page imports them.
  *
  * Keys are lower case, `<status>` or `<status>:<variant>`. A bare upper-case
- * status (`?preview=FAILED`) still works.
+ * status (`/dev/workspace/FAILED`) still works.
  */
 import type { FailureCause, JobStatus } from "@/lib/jobs/types";
 
@@ -90,7 +87,7 @@ const ALIASES: Record<string, string> = {
 
 const BY_KEY = new Map(PREVIEW_GROUPS.flatMap((g) => g.options).map((o) => [o.key, o]));
 
-/** The preview a `?preview=` value names, or null: unknown, or production. */
+/** The preview a state key names, or null: unknown, or production. */
 export function resolvePreview(raw: string | undefined): PreviewOption | null {
   if (!raw) return null;
   if (process.env.NODE_ENV === "production") return null;

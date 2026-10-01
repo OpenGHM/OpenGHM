@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Clock,
   Send,
@@ -8,7 +7,6 @@ import {
   CheckCircle2,
   XCircle,
   Ban,
-  Loader2,
   RefreshCw,
   Radio,
   WifiOff,
@@ -16,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-import { CancelJobDialog } from "@/components/workspace/cancel-job-dialog";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { TimeStamp } from "@/components/workspace/time-stamp";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
@@ -26,10 +23,9 @@ import { displayStatus } from "@/lib/jobs/display-status";
 import { isTerminalStatus } from "@/lib/jobs/types";
 
 interface Props {
-  /** Rendering fixture data (see lib/workspace/preview.ts) — no real job
-   *  behind the page, so cancelling would only hit the backend with an id it
-   *  has never heard of. Turns Cancel into a no-op explanation. (Polling is
-   *  stopped by the provider.) */
+  /** Rendering fixture data (see lib/workspace/preview.ts): there is no real
+   *  job to ask about, so Refresh is not offered. (Polling is stopped by the
+   *  provider.) */
   preview?: boolean;
 }
 
@@ -113,9 +109,12 @@ function TimelineRow({
   );
 }
 
+/**
+ * The job's status, timeline and freshness. It only shows: cancelling and
+ * deleting are in the page header (`JobHero`), one home for each action.
+ */
 export function JobStatusPanel({ preview = false }: Props) {
   const {
-    jobId,
     view,
     status,
     slurmJobId,
@@ -123,21 +122,11 @@ export function JobStatusPanel({ preview = false }: Props) {
     startedAt,
     completedAt,
     statusReason,
-    cancelling,
     lastError,
-    sessionExpired: pollExpired,
+    sessionExpired,
     refresh,
-    apply,
   } = useLiveJobContext();
 
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [cancelPending, setCancelPending] = useState(false);
-  const [actionExpired, setActionExpired] = useState(false);
-  const sessionExpired = pollExpired || actionExpired;
-
-  const cancellable =
-    !isTerminalStatus(status) && status !== "DRAFT" && status !== "COMPLETING";
-  const showCancelling = cancelling || cancelPending;
   const shown = displayStatus({ status, cancel_requested_at: view.cancel_requested_at });
   // A FAILED job with a recorded cause is explained by its card; this is the
   // fallback for one without.
@@ -155,14 +144,11 @@ export function JobStatusPanel({ preview = false }: Props) {
       </CardHeader>
 
       <CardContent className="space-y-5 pt-5 pb-6">
-        {/* Status badge + Slurm ID. A live region, so a change to Cancelled,
-            Failed or Completed is announced without moving focus. */}
+        {/* Status badge + Slurm ID. A change of status is announced by the
+            header's live region, not here. */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <div role="status" aria-live="polite" aria-atomic="true">
-              <span className="sr-only">Simulation status: </span>
-              <JobStatusBadge status={shown} />
-            </div>
+            <JobStatusBadge status={shown} />
             {slurmJobId && (
               <span className="text-xs text-muted-foreground">
                 Slurm #{slurmJobId}
@@ -221,46 +207,14 @@ export function JobStatusPanel({ preview = false }: Props) {
 
         <FreshnessLine />
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2">
-          {cancellable && (
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={showCancelling}
-              onClick={() => setConfirmOpen(true)}
-              className="min-h-10 sm:min-h-8"
-            >
-              {showCancelling ? (
-                <Loader2 className="mr-1.5 size-4 motion-safe:animate-spin" aria-hidden="true" />
-              ) : (
-                <Ban className="mr-1.5 size-4" aria-hidden="true" />
-              )}
-              {showCancelling ? "Cancelling…" : "Cancel Job"}
-            </Button>
-          )}
-          {!preview && !isTerminalStatus(status) && lastError === null && (
+        {!preview && !isTerminalStatus(status) && lastError === null && (
+          <div>
             <Button variant="ghost" size="sm" onClick={refresh} className="min-h-10 sm:min-h-8">
               <RefreshCw className="mr-1.5 size-4" aria-hidden="true" />
               Refresh
             </Button>
-          )}
-        </div>
-
-        <CancelJobDialog
-          open={confirmOpen}
-          onOpenChange={setConfirmOpen}
-          jobId={jobId}
-          preview={preview}
-          onCancelled={(data) => {
-            setActionExpired(false);
-            apply(data);
-          }}
-          onConflict={refresh}
-          onSessionExpired={() => setActionExpired(true)}
-          onPendingChange={setCancelPending}
-        />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

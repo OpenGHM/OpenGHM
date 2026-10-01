@@ -1,7 +1,8 @@
 import type { DisplayStatus } from "@/lib/jobs/display-status";
 import { HUE } from "@/lib/jobs/status-hue";
 
-const LABEL_MAP: Record<DisplayStatus, string> = {
+/** The words for each status, for the badge and for announcements. */
+export const STATUS_LABEL: Record<DisplayStatus, string> = {
   DRAFT: "Draft",
   PENDING: "Pending",
   SUBMITTED: "Submitted",
@@ -29,7 +30,7 @@ export function JobStatusBadge({ status }: { status: DisplayStatus }) {
           className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current"
         />
       )}
-      {LABEL_MAP[status]}
+      {STATUS_LABEL[status]}
     </span>
   );
 }

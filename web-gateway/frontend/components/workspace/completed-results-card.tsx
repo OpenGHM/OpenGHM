@@ -1,9 +1,6 @@
-import Link from "next/link";
-import { FileArchive, Upload, Info, HardDriveDownload } from "lucide-react";
+import { FileArchive, Info, HardDriveDownload } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/workspace/copy-button";
-import { DeleteSimulationButton } from "@/components/workspace/delete-simulation-button";
 import { OutputFileList } from "@/components/workspace/output-file-list";
 import { TimeStamp } from "@/components/workspace/time-stamp";
 import { HUE } from "@/lib/jobs/status-hue";
@@ -24,16 +21,9 @@ function Stat({ label, value }: { label: string; value: string }) {
  * (`job.output`, ADR 0026), and how long Anvil keeps it. Output stays on Anvil
  * scratch (ADR 0023): the gateway serves no download, so the path is the
  * result. A run whose files Anvil's purge has removed shows that instead.
+ * Deleting the simulation is in the page header, not here.
  */
-export function CompletedResultsCard({
-  job,
-  publishHref,
-  preview = false,
-}: {
-  job: Job;
-  publishHref: string;
-  preview?: boolean;
-}) {
+export function CompletedResultsCard({ job }: { job: Job }) {
   const hue = HUE.COMPLETED;
   const purged = job.files === "purged";
   const output = job.output;
@@ -101,27 +91,12 @@ export function CompletedResultsCard({
                     &mdash; around <TimeStamp value={around} format="date" className="font-medium" />
                   </>
                 )}
-                . Publish the result to keep it.
+                . Publishing a run as a snapshot is not available yet, so copy
+                what you need from the path above before then.
               </p>
             </div>
-
-            <Button asChild className="min-h-10 w-full gap-1.5 hover:bg-accent">
-              <Link href={publishHref} data-job-id={job.id}>
-                <Upload className="size-4" aria-hidden="true" />
-                Publish as a Snapshot
-              </Link>
-            </Button>
           </>
         )}
-
-        <DeleteSimulationButton
-          jobId={job.id}
-          isDraft={false}
-          workDir={job.work_dir}
-          remoteJobDir={job.remote_job_dir}
-          files={job.files}
-          preview={preview}
-        />
       </CardContent>
     </Card>
   );

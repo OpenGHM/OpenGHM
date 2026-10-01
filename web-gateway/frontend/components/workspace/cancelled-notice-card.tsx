@@ -1,6 +1,5 @@
 import { Ban } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DeleteSimulationButton } from "@/components/workspace/delete-simulation-button";
 import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { RunMetadata } from "@/components/workspace/run-metadata";
@@ -14,15 +13,7 @@ import { cancelledBy } from "@/lib/workspace/cancelled-by";
  * stopped it and when. `viewerEmail` is the signed-in user's, to tell "you"
  * from someone else.
  */
-export function CancelledNoticeCard({
-  job,
-  viewerEmail,
-  preview = false,
-}: {
-  job: Job;
-  viewerEmail: string | null;
-  preview?: boolean;
-}) {
+export function CancelledNoticeCard({ job, viewerEmail }: { job: Job; viewerEmail: string | null }) {
   const hue = HUE.CANCELLED;
   const when = job.cancel_requested_at ?? job.slurm_end ?? job.completed_at;
   const failure = job.failure;
@@ -62,17 +53,7 @@ export function CancelledNoticeCard({
           </p>
         )}
 
-        <div className="flex flex-col gap-2">
-          <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
-          <DeleteSimulationButton
-            jobId={job.id}
-            isDraft={false}
-            workDir={job.work_dir}
-            remoteJobDir={job.remote_job_dir}
-            files={job.files}
-            preview={preview}
-          />
-        </div>
+        <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
       </CardContent>
     </Card>
   );

@@ -72,7 +72,7 @@ export function SnapshotDetailPanel({
               ? "checking…"
               : modelInputPresent
                 ? "present in the catalogue"
-                : "not found (inherited-missing)"}
+                : "not listed in the catalogue"}
           </p>
         </div>
 

@@ -42,6 +42,7 @@ export function DeleteSimulationDialog({
   onDeleted,
   onSessionExpired,
   onError,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,10 @@ export function DeleteSimulationDialog({
   /** The delete failed and the simulation still exists; `message` is the
    *  backend's reason, for a caller that shows it beside the control. */
   onError?: (message: string) => void;
+  /** Where focus goes when the dialog closes. Radix returns it to the element
+   *  focused when it opened, which is gone when a menu item opened it: the
+   *  caller calls `event.preventDefault()` and focuses the menu's trigger. */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -117,7 +122,7 @@ export function DeleteSimulationDialog({
         if (!pending) onOpenChange(next);
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {isDraft ? "Delete this draft?" : "Delete this simulation?"}

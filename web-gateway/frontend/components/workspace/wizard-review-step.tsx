@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertCircle,
-  AlertTriangle,
   Calendar,
   CheckCircle2,
   Cpu,
   Globe,
+  Info,
   Layers,
   Loader2,
   Lock,
@@ -45,11 +45,20 @@ import {
   slurmConfigPatch,
   type Recommended,
 } from "@/lib/jobs/compute";
-import type { Dataset } from "@/lib/repository/types";
+import type { Dataset, ModelInput } from "@/lib/repository/types";
 import type { ActionFailure, JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
 
-function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; inheritedId: string }) {
+function ModelInputSummary({
+  choice,
+  inherited,
+  inheritedId,
+}: {
+  choice: ModelInputChoice;
+  /** What step 2 found in the catalogue: `undefined` still looking, `null` not held. */
+  inherited: ModelInput | null | undefined;
+  inheritedId: string;
+}) {
   if (choice.mode === "chosen") {
     return (
       <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -61,15 +70,40 @@ function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; 
       </div>
     );
   }
+  const id = <code className="font-mono">{inheritedId.slice(0, 12)}…</code>;
+  if (inherited) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/5 p-3">
+        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Inherited: {inherited.about.name}</p>
+          <p className="text-xs text-muted-foreground">
+            From the base snapshot ({id}), found in the catalogue.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  // Not held is not a problem for the run, which fetches the snapshot's model
+  // input by its id (see step 2), so it is said plainly and not as a warning.
   return (
     <div className="flex items-start gap-2 rounded-lg border p-3">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+      {inherited === undefined ? (
+        <Loader2 className="mt-0.5 size-4 shrink-0 text-muted-foreground motion-safe:animate-spin" />
+      ) : (
+        <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      )}
       <div>
         <p className="text-sm font-semibold text-foreground">Inherited</p>
         <p className="text-xs text-muted-foreground">
-          From the base snapshot (<code className="font-mono">{inheritedId.slice(0, 12)}…</code>).
-          Resolved when the simulation is created — may turn out to be{" "}
-          <span className="font-medium">inherited-missing</span> if the catalogue does not hold it.
+          {inherited === undefined ? (
+            <>From the base snapshot ({id}). Checking the catalogue…</>
+          ) : (
+            <>
+              From the base snapshot ({id}). The catalogue does not list it. The run
+              fetches it by id, so this changes nothing about the run.
+            </>
+          )}
         </p>
       </div>
     </div>
@@ -79,6 +113,7 @@ function ModelInputSummary({ choice, inheritedId }: { choice: ModelInputChoice; 
 export function WizardReviewStep({
   snapshot,
   modelInputChoice,
+  inheritedModelInput,
   parameters,
   slurmConfig,
   recommended,
@@ -86,6 +121,9 @@ export function WizardReviewStep({
 }: {
   snapshot: Dataset;
   modelInputChoice: ModelInputChoice;
+  /** What step 2 found in the catalogue for the snapshot's own model input:
+   *  `undefined` while looking, `null` when it is not held. */
+  inheritedModelInput: ModelInput | null | undefined;
   parameters: JobParameters;
   slurmConfig: SlurmConfig;
   recommended: Recommended;
@@ -239,7 +277,11 @@ export function WizardReviewStep({
               <CardTitle className="text-base">Model Input</CardTitle>
             </CardHeader>
             <CardContent>
-              <ModelInputSummary choice={modelInputChoice} inheritedId={snapshot.uses.modelInput.id} />
+              <ModelInputSummary
+                choice={modelInputChoice}
+                inherited={inheritedModelInput}
+                inheritedId={snapshot.uses.modelInput.id}
+              />
             </CardContent>
           </Card>
 

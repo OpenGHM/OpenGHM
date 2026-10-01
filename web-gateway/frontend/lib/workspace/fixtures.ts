@@ -1,20 +1,17 @@
 /**
- * Fake data for the simulation lifecycle UI.
+ * Fake data for the design preview and the tests.
  *
  * Everything a real run would produce is invented here: SLURM ids, timings,
- * stdout/stderr, output files, progress. None of it is fetched, because none
- * of it exists — nothing runs real WBM ([open item 9]), nothing writes output
- * to S3 (Next 8), and no route returns a result listing.
+ * stdout/stderr, output files, progress. The dev-only route
+ * (`app/dev/workspace/[state]`, lib/workspace/preview.ts) renders it so every
+ * status and every verdict cause can be looked at without making Anvil
+ * produce it, and component tests build their inputs from it. No real page
+ * imports this module, and none may: a real page shows what the backend says.
  *
  * What is *not* invented is shape. Simulations are `Job`, logs are
  * one string per stream, and any snapshot or model-input metadata comes from the
  * generated spec types. A field name that does not exist in the spec does not
- * exist here either: the point of building this UI ahead of the plumbing is
- * that the plumbing can be built to fit it, which only works if the shapes are
- * already right.
- *
- * Delete this module when the routes behind it are real. Anything importing it
- * is, by definition, not yet connected.
+ * exist here either, so the preview cannot drift from the real page.
  */
 import type {
   FailureCause,
@@ -26,15 +23,6 @@ import type {
   OutputManifest,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
-
-/** A file a finished run would have written. No route returns these yet. */
-export interface FakeOutputFile {
-  /** Path relative to the run's output root, e.g. `wbm_output/discharge_2001.nc`. */
-  path: string;
-  sizeBytes: number;
-  /** What a download link would point at once job output reaches S3 (Next 8). */
-  href: string | null;
-}
 
 const HOUR = 3_600_000;
 
@@ -248,7 +236,7 @@ function fakeOutput(): OutputManifest {
 }
 
 /**
- * The fixture behind a `?preview=<key>` (lib/workspace/preview.ts): a job with
+ * The fixture behind a preview state key (lib/workspace/preview.ts): a job with
  * the fields that state would really have — a failed one its verdict, a
  * finished one its directories on Anvil. `viewerEmail` is who is looking, so
  * "cancelled by you" can be shown as such.
@@ -410,17 +398,6 @@ export function fakeLive(job: Job): JobLive | null {
     };
   }
   return null;
-}
-
-/** What a finished run would have written. Nothing serves these files. */
-export function fakeOutputFiles(): FakeOutputFile[] {
-  return [
-    { path: "wbm_output/discharge_2001_monthly.nc", sizeBytes: 184_320_000, href: null },
-    { path: "wbm_output/runoff_2001_monthly.nc", sizeBytes: 176_128_000, href: null },
-    { path: "wbm_output/streamAge_2001_monthly.nc", sizeBytes: 168_960_000, href: null },
-    { path: "wbm_output/discharge_2001_yearly.nc", sizeBytes: 15_360_000, href: null },
-    { path: "slurm-12345680.out", sizeBytes: 4_096, href: null },
-  ];
 }
 
 /**

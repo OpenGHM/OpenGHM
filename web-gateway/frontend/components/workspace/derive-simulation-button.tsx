@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HERO_BUTTON, HeroError } from "@/components/workspace/hero-button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { deriveSimulation } from "@/lib/jobs/actions";
 
@@ -18,11 +19,14 @@ export function DeriveSimulationButton({
   datasetId,
   label = "New simulation from this snapshot",
   fullWidth = false,
+  tone = "default",
 }: {
   datasetId: string;
   label?: string;
   /** Fill the card it sits in (the detail page's cards). */
   fullWidth?: boolean;
+  /** `hero`: the page header's white button, full width on a phone. */
+  tone?: "default" | "hero";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -56,24 +60,41 @@ export function DeriveSimulationButton({
     });
   };
 
+  const hero = tone === "hero";
+
   return (
-    <div className={`flex flex-col gap-1.5 ${fullWidth ? "items-stretch" : "items-end"}`}>
+    <div
+      className={`flex flex-col gap-1.5 ${
+        hero ? "items-stretch sm:items-end" : fullWidth ? "items-stretch" : "items-end"
+      }`}
+    >
       <Button
-        size="lg"
-        variant="outline"
+        size={hero ? "default" : "lg"}
+        variant={hero ? "default" : "outline"}
         onClick={handleClick}
         disabled={pending}
-        className="min-h-10 gap-2 border-primary px-6 text-base font-semibold text-primary hover:bg-primary/5"
+        className={
+          hero
+            ? `min-h-10 gap-2 px-4 font-semibold ${HERO_BUTTON.primary}`
+            : "min-h-10 gap-2 border-primary px-6 text-base font-semibold text-primary hover:bg-primary/5"
+        }
       >
         {pending ? (
-          <Loader2 className="size-5 motion-safe:animate-spin" />
+          <Loader2 className={hero ? "motion-safe:animate-spin" : "size-5 motion-safe:animate-spin"} />
         ) : (
-          <FlaskConical className="size-5" />
+          <FlaskConical className={hero ? undefined : "size-5"} />
         )}
         {label}
       </Button>
       {sessionExpired && <SessionExpiredBanner className="w-full max-w-md" />}
-      {error && <p role="alert" className="text-xs text-status-failed">{error}</p>}
+      {error &&
+        (hero ? (
+          <HeroError>{error}</HeroError>
+        ) : (
+          <p role="alert" className="text-xs text-status-failed">
+            {error}
+          </p>
+        ))}
     </div>
   );
 }
