@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { ArrowUpRight, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
@@ -21,11 +21,31 @@ import { CoverageThumbnail } from "./coverage-thumbnail";
 
 /**
  * A card the whole surface of which is one link (see TitleLink). It is
- * `relative` for the link's overlay; it lifts on hover and, when the title link
- * has keyboard focus, wears the focus ring itself.
+ * `relative` for the link's overlay and the `group/card` the hover effects
+ * hang from: on hover it lifts 2px, its shadow deepens and its border takes a
+ * tint of the brand (the lift is `motion-safe:`; colour and shadow still
+ * change under reduced motion). When the title link has keyboard focus the
+ * card wears the focus ring itself, and the same effects apply.
  */
 const CARD =
-  "relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none";
+  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-primary/30 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50";
+
+/**
+ * The corner mark of a map panel: a round chip with an arrow that fades in
+ * (and slides into place, under `motion-safe:`) when the card is hovered or its
+ * link has keyboard focus. It is decorative (the card is the link), so it is
+ * `aria-hidden` and takes no pointer events.
+ */
+function ArrowChip() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-card text-foreground opacity-0 shadow-sm transition-[opacity,translate] delay-75 duration-200 ease-out group-hover/card:opacity-100 group-has-[a:focus-visible]/card:opacity-100 motion-safe:translate-y-1 motion-safe:group-hover/card:translate-y-0 motion-safe:group-has-[a:focus-visible]/card:translate-y-0"
+    >
+      <ArrowUpRight className="size-4" />
+    </span>
+  );
+}
 
 /** "Model Snapshot" in the brand tint, "Model Input" in the compute tint. */
 function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
@@ -151,7 +171,12 @@ function toBox(item: CatalogueItem) {
  */
 function TitleLink({ href, name, className }: { href: string; name: string; className?: string }) {
   return (
-    <h3 className={cn("min-w-0 leading-snug font-semibold break-words text-foreground", className)}>
+    <h3
+      className={cn(
+        "min-w-0 leading-snug font-semibold break-words text-foreground transition-colors group-hover/card:text-primary group-has-[a:focus-visible]/card:text-primary motion-reduce:transition-none",
+        className
+      )}
+    >
       <Link
         href={href}
         className="outline-none after:absolute after:inset-0 after:content-['']"
@@ -197,6 +222,7 @@ export function CatalogueCard({
       <Card className={cn(CARD, "h-full")}>
         <div className="relative h-[150px] shrink-0 border-b bg-primary/10">
           <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
+          <ArrowChip />
         </div>
         <div className="flex flex-1 flex-col gap-2.5 p-4">
           <KindBadge kind={item.kind} />
@@ -267,6 +293,7 @@ export function CatalogueCard({
           aspect="tall"
           className="absolute inset-0 hidden aspect-auto rounded-none border-0 md:block"
         />
+        <ArrowChip />
       </div>
     </Card>
   );

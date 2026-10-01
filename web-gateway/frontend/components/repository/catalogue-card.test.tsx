@@ -301,9 +301,51 @@ describe("CatalogueCard layout", () => {
     expect(title.className).not.toContain("focus-visible:ring");
   });
 
-  it("lifts on hover", () => {
-    const { container } = renderCard(snapshotItem());
-    expect(container.firstElementChild?.className).toContain("hover:shadow-md");
+  it.each(["list", "grid"] as const)("lifts, deepens its shadow and tints its border on hover in the %s view, the lift only with motion allowed", (view) => {
+    const { container } = renderCard(snapshotItem(), [], view);
+    const card = container.firstElementChild!;
+    expect(card.className).toContain("group/card");
+    expect(card.className).toContain("motion-safe:hover:-translate-y-0.5");
+    expect(card.className).toContain("hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)]");
+    expect(card.className).toContain("hover:border-primary/30");
+    expect(card.className).toContain("transition-[translate,box-shadow,border-color]");
+    expect(card.className).not.toContain("motion-reduce:transition-none");
+    expect(card.className).not.toMatch(/(^|\s)hover:-translate-y/);
+  });
+
+  it.each(["list", "grid"] as const)("turns the title to the brand colour on card hover in the %s view", (view) => {
+    renderCard(snapshotItem(), [], view);
+    const heading = screen.getByRole("heading", { level: 3 });
+    expect(heading.className).toContain("transition-colors");
+    expect(heading.className).toContain("group-hover/card:text-primary");
+    expect(heading.className).not.toContain("underline");
+  });
+
+  it.each(["list", "grid"] as const)("shows a decorative arrow in the map panel's corner on hover or focus in the %s view", (view) => {
+    const { container } = renderCard(snapshotItem(), [], view);
+    const arrow = container.querySelector("span[aria-hidden='true'].size-8")!;
+    expect(arrow).not.toBeNull();
+    expect(arrow.className).toContain("pointer-events-none");
+    expect(arrow.className).toContain("opacity-0");
+    expect(arrow.className).toContain("group-hover/card:opacity-100");
+    expect(arrow.className).toContain("group-has-[a:focus-visible]/card:opacity-100");
+    expect(arrow.className).toContain("motion-safe:translate-y-1");
+    expect(arrow.className).toContain("motion-safe:group-hover/card:translate-y-0");
+    expect(arrow.className).toContain("top-3");
+    expect(arrow.className).toContain("right-3");
+    expect(arrow.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(arrow.closest("a, button")).toBeNull();
+    expect(arrow.querySelector("a, button")).toBeNull();
+    expect(container.querySelectorAll("a")).toHaveLength(1);
+  });
+
+  it("scales the map only, the corner label and the panel frame staying put", () => {
+    const { container } = renderCard(snapshotItem(), [], "grid");
+    const svg = container.querySelector("svg[role='img']")!;
+    expect(svg.getAttribute("class")).toContain("motion-safe:group-hover/card:scale-[1.06]");
+    expect(svg.getAttribute("class")).toContain("duration-700");
+    expect(svg.parentElement!.className).toContain("overflow-hidden");
+    expect(screen.getByText("Global").className).not.toContain("scale");
   });
 
   it("puts the published date at the top of the list card, beside the mono contents line", () => {
@@ -373,7 +415,7 @@ describe("CatalogueCard in the grid view", () => {
     const card = container.firstElementChild!;
     expect(card.className).toContain("relative");
     expect(card.className).toContain("cursor-pointer");
-    expect(card.className).toContain("hover:shadow-md");
+    expect(card.className).toContain("hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)]");
     expect(card.className).toContain("has-[a:focus-visible]:ring-[3px]");
     const title = screen.getByRole("link");
     expect(title.className).toContain("after:absolute");

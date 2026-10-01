@@ -179,7 +179,7 @@ export function CoverageThumbnail({
         preserveAspectRatio={whole ? "xMidYMid meet" : "xMidYMid slice"}
         role="img"
         aria-label={`Coverage: north ${box.north}°, south ${box.south}°, east ${box.east}°, west ${box.west}° (${label})`}
-        className="absolute inset-0 size-full"
+        className="absolute inset-0 size-full origin-center transition-transform duration-700 ease-out motion-safe:group-hover/card:scale-[1.06] motion-safe:group-has-[a:focus-visible]/card:scale-[1.06]"
       >
         <path
           data-testid="coverage-land"

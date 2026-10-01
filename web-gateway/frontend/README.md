@@ -65,15 +65,18 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   It is a layout of the same results, so changing it neither goes back to page 1
   nor asks the backend again (`inertKeys` in
   [`use-url-filters.ts`](lib/repository/use-url-filters.ts)).
-- A list card is a white `rounded-xl` card with a 1px border and no shadow
-  (`shadow-md` on hover). From `md` it has the content on the left and a
+- A list card is a white `rounded-xl` card with a 1px border and no shadow. From `md` it has the content on the left and a
   260 px coverage map panel the full height of the card on the right; below `md`
   the panel sits under the content, 144 px tall. Metadata is mono: the version
   and licence line, and the Coverage and Resolution values. There are no action
   buttons: the title is the card's one link, stretched over the whole card
   (`after:absolute after:inset-0`), so clicking anywhere on it opens the detail
-  page. The card lifts a little on hover; when the link has
-  keyboard focus the whole card wears the focus ring. The tag chips and the
+  page. On hover (or keyboard focus of the link) the card rises 2px with
+  a wider, softer shadow and a brand-tinted border, the map slowly zooms inside
+  its frame, the title turns primary and a round arrow chip fades into the
+  map's top-right corner; the rise and the zoom are `motion-safe:`, so under
+  reduced motion only the colour, shadow and arrow opacity change. When the link has
+  keyboard focus the whole card also wears the focus ring. The tag chips and the
   keyword chips sit above the stretched link (`relative z-10`) with their own
   focus ring, and the date it was published is at the top right. All of an item's tags come first as primary-tint chips, then the
   mono keyword chips; both are toggle buttons (`aria-pressed`, a check when on,
