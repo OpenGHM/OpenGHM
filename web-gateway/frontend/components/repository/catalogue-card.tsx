@@ -19,11 +19,13 @@ import {
 import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CoverageThumbnail } from "./coverage-thumbnail";
 
-/** The dark button, and the plain ones beside it. All sit above the title's stretched link and keep their own focus ring. */
-const ACTION_BASE =
-  "relative z-10 inline-flex min-h-10 items-center rounded-lg px-3 text-[13.5px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none sm:min-h-9";
-const ACTION_PRIMARY = `${ACTION_BASE} bg-foreground px-3.5 text-background hover:bg-foreground/85 focus-visible:ring-offset-2`;
-const ACTION_PLAIN = `${ACTION_BASE} text-foreground/80 hover:bg-muted hover:text-foreground`;
+/**
+ * A card the whole surface of which is one link (see TitleLink). It is
+ * `relative` for the link's overlay; it lifts on hover and, when the title link
+ * has keyboard focus, wears the focus ring itself.
+ */
+const CARD =
+  "relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none";
 
 /** "Model Snapshot" in the brand tint, "Model Input" in the compute tint. */
 function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
@@ -142,13 +144,17 @@ function toBox(item: CatalogueItem) {
   return { north: s.northlimit, south: s.southlimit, east: s.eastlimit, west: s.westlimit };
 }
 
-/** The title as the card's stretched link: the whole card opens the detail page. */
+/**
+ * The title as the card's stretched link: its `after` layer covers the card
+ * (which is `relative`), so the whole card opens the detail page and the title
+ * is the only link. The card shows the focus ring, not the title text.
+ */
 function TitleLink({ href, name, className }: { href: string; name: string; className?: string }) {
   return (
     <h3 className={cn("min-w-0 leading-snug font-semibold break-words text-foreground", className)}>
       <Link
         href={href}
-        className="rounded-sm outline-none after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="outline-none after:absolute after:inset-0 after:content-['']"
       >
         {name}
       </Link>
@@ -159,9 +165,9 @@ function TitleLink({ href, name, className }: { href: string; name: string; clas
 /**
  * One catalogue entry: a snapshot or a model input as a card, in a list or a
  * grid. The title is a stretched link, so the whole card opens the detail
- * page, and the View, Download and Cite links sit above it. The tag and
- * keyword chips of the list card are buttons that add (or, when already on,
- * remove) that tag or keyword as a filter.
+ * page and there is no other link. The tag and keyword chips of the list card
+ * are buttons, above the link, that add (or, when already on, remove) that tag
+ * or keyword as a filter.
  */
 export function CatalogueCard({
   item,
@@ -186,30 +192,9 @@ export function CatalogueCard({
   const href = detailHref(item);
   const grid = view === "grid";
 
-  const links = (
-    <>
-      <Link href={href} className={ACTION_PRIMARY}>
-        {grid ? "View" : "View details"}{" "}
-        <span className="sr-only">
-          {grid && "details "}for {about.name}
-        </span>
-      </Link>
-      <Link href={`${href}#download`} className={ACTION_PLAIN}>
-        Download{" "}
-        <span className="sr-only">{about.name}</span>
-      </Link>
-      {!grid && (
-        <Link href={`${href}#cite`} className={ACTION_PLAIN}>
-          Cite{" "}
-          <span className="sr-only">{about.name}</span>
-        </Link>
-      )}
-    </>
-  );
-
   if (grid) {
     return (
-      <Card className="group relative h-full gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md motion-reduce:transition-none">
+      <Card className={cn(CARD, "h-full")}>
         <div className="relative h-[150px] shrink-0 border-b bg-primary/10">
           <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
         </div>
@@ -217,12 +202,9 @@ export function CatalogueCard({
           <KindBadge kind={item.kind} />
           <TitleLink href={href} name={about.name} className="line-clamp-4 text-base" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
-          <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1 border-t pt-3">
-            {links}
-            <span className="ml-auto pl-2 text-xs text-muted-foreground">
-              <TimeStamp value={about.datePublished} format="date" />
-            </span>
-          </div>
+          <p className="mt-auto border-t pt-3 text-right text-xs text-muted-foreground">
+            <TimeStamp value={about.datePublished} format="date" />
+          </p>
         </div>
       </Card>
     );
@@ -232,11 +214,14 @@ export function CatalogueCard({
   const keywords = cardKeywords(item);
 
   return (
-    <Card className="group relative gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-shadow hover:shadow-md motion-reduce:transition-none md:flex-row">
+    <Card className={cn(CARD, "md:flex-row")}>
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:px-6 md:pt-[22px] md:pb-[18px]">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <KindBadge kind={item.kind} />
           <span className="font-mono text-[11.5px] text-muted-foreground">{contentsLine(item)}</span>
+          <span className="text-[12.5px] text-muted-foreground sm:ml-auto">
+            Published <TimeStamp value={about.datePublished} format="date" />
+          </span>
         </div>
 
         <TitleLink href={href} name={about.name} className="text-lg" />
@@ -269,13 +254,6 @@ export function CatalogueCard({
           ))}
           {keywords.more > 0 && <MoreChip count={keywords.more} hidden={keywords.hidden} />}
         </ul>
-
-        <div className="mt-auto flex flex-wrap items-center gap-x-1 gap-y-1">
-          {links}
-          <span className="basis-full text-[12.5px] text-muted-foreground sm:ml-auto sm:basis-auto sm:pl-2">
-            Published <TimeStamp value={about.datePublished} format="date" />
-          </span>
-        </div>
       </div>
 
       <div className="relative h-36 shrink-0 border-t bg-primary/10 md:h-auto md:w-[260px] md:border-t-0 md:border-l">
@@ -305,9 +283,8 @@ export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView 
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-3.5 w-32" />
-          <div className="mt-auto flex gap-3 border-t pt-3">
-            <Skeleton className="h-8 w-14" />
-            <Skeleton className="h-8 w-20" />
+          <div className="mt-auto flex justify-end border-t pt-3">
+            <Skeleton className="h-3.5 w-20" />
           </div>
         </div>
       </Card>
@@ -319,6 +296,7 @@ export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView 
         <div className="flex items-center gap-2">
           <Skeleton className="h-5 w-24" />
           <Skeleton className="h-3.5 w-36" />
+          <Skeleton className="h-3.5 w-28 sm:ml-auto" />
         </div>
         <Skeleton className="h-5 w-2/3" />
         <div className="space-y-2">
@@ -334,11 +312,6 @@ export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView 
           <Skeleton className="h-5 w-16" />
           <Skeleton className="h-5 w-14" />
           <Skeleton className="h-5 w-16" />
-        </div>
-        <div className="flex gap-3">
-          <Skeleton className="h-9 w-24" />
-          <Skeleton className="h-9 w-20" />
-          <Skeleton className="h-9 w-12" />
         </div>
       </div>
       <Skeleton className="h-36 shrink-0 rounded-none md:h-auto md:w-[260px]" />

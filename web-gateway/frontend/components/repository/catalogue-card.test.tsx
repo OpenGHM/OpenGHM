@@ -27,24 +27,26 @@ function renderCard(
   return { ...view, onToggleKeyword, onToggleTag };
 }
 
-function hrefOf(name: RegExp): string | null {
-  return screen.getByRole("link", { name }).getAttribute("href");
+/** The card's one link: its name is the item's name and it holds nothing else. */
+function onlyLink(name: string, href: string) {
+  const links = screen.getAllByRole("link");
+  expect(links).toHaveLength(1);
+  expect(links[0].getAttribute("href")).toBe(href);
+  expect(screen.getByRole("link", { name })).toBe(links[0]);
+  expect(links[0].children).toHaveLength(0);
+  return links[0];
 }
 
 describe("CatalogueCard for a model snapshot", () => {
-  it("links the title, View details, Download and Cite to the snapshot's page", () => {
+  it("has exactly one link, the title, named for the item and pointing at the snapshot's page", () => {
     renderCard(snapshotItem());
-    expect(hrefOf(/^Global Storage Run$/)).toBe("/repository/snap-1");
-    expect(hrefOf(/^View details/)).toBe("/repository/snap-1");
-    expect(hrefOf(/^Download/)).toBe("/repository/snap-1#download");
-    expect(hrefOf(/^Cite/)).toBe("/repository/snap-1#cite");
+    onlyLink("Global Storage Run", "/repository/snap-1");
   });
 
-  it("names every action link for the item", () => {
+  it("has no View details, Download or Cite action", () => {
     renderCard(snapshotItem());
-    for (const name of ["View details for Global Storage Run", "Download Global Storage Run", "Cite Global Storage Run"]) {
-      expect(screen.getByRole("link", { name })).toBeTruthy();
-    }
+    expect(screen.queryByText(/View details|Download|Cite/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /View details|Download|Cite/ })).toBeNull();
   });
 
   it("shows the Model Snapshot badge in the brand tint, the mono version and licence line, and the tags", () => {
@@ -66,20 +68,12 @@ describe("CatalogueCard for a model snapshot", () => {
     expect(screen.getByText("5 arc-min").className).toContain("font-mono");
   });
 
-  it("makes the title a foreground link that underlines on hover, not a blue one", () => {
+  it("makes the title a foreground link that does not underline on hover, not a blue one", () => {
     renderCard(snapshotItem());
     const title = screen.getByRole("link", { name: /^Global Storage Run$/ });
-    expect(title.className).toContain("hover:underline");
+    expect(title.className).not.toContain("underline");
     expect(title.className).not.toContain("text-primary");
     expect(title.closest("h3")?.className).toContain("text-foreground");
-  });
-
-  it("has a dark View details button and plain Download and Cite", () => {
-    renderCard(snapshotItem());
-    const view = screen.getByRole("link", { name: /^View details/ });
-    expect(view.className).toContain("bg-foreground");
-    expect(view.className).toContain("text-background");
-    expect(screen.getByRole("link", { name: /^Download/ }).className).not.toContain("bg-foreground");
   });
 
   it("shows every tag and four keywords, not the output variables", () => {
@@ -126,11 +120,9 @@ describe("CatalogueCard for a model snapshot", () => {
 });
 
 describe("CatalogueCard for a model input", () => {
-  it("links to the model input's page", () => {
+  it("has one link, to the model input's page", () => {
     renderCard(modelInputItem());
-    expect(hrefOf(/^Ancillary Data v1$/)).toBe("/repository/model-inputs/mi-1");
-    expect(hrefOf(/^Download/)).toBe("/repository/model-inputs/mi-1#download");
-    expect(hrefOf(/^Cite/)).toBe("/repository/model-inputs/mi-1#cite");
+    onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });
 
   it("shows the Model Input badge in the info tint, datasets and networks, and distinct resolutions", () => {
@@ -200,11 +192,16 @@ describe("CatalogueCard keyword chips", () => {
     expect(chip.firstElementChild?.className).toContain("group-focus-visible/keyword:ring");
   });
 
-  it("do not follow the card's link when pressed", () => {
-    // The chip is a button next to the title link, not inside it.
-    renderCard(snapshotItem());
+  it("do not open the card when pressed: the chip is not inside the link, and the press only reports the toggle", () => {
+    const { onToggleKeyword } = renderCard(snapshotItem());
+    const link = screen.getByRole("link", { name: /^Global Storage Run$/ });
+    const onLinkClick = vi.fn();
+    link.addEventListener("click", onLinkClick);
     const chip = screen.getByRole("button", { name: "Filter by keyword storage" });
     expect(chip.closest("a")).toBeNull();
+    fireEvent.click(chip);
+    expect(onToggleKeyword).toHaveBeenCalledWith("storage");
+    expect(onLinkClick).not.toHaveBeenCalled();
   });
 });
 
@@ -258,6 +255,15 @@ describe("CatalogueCard tag chips", () => {
     expect(chip.closest("a")).toBeNull();
   });
 
+  it("do not open the card when pressed", () => {
+    const { onToggleTag } = renderCard(snapshotItem());
+    const onLinkClick = vi.fn();
+    screen.getByRole("link").addEventListener("click", onLinkClick);
+    fireEvent.click(screen.getByRole("button", { name: "Filter by tag Publication" }));
+    expect(onToggleTag).toHaveBeenCalledWith("publication");
+    expect(onLinkClick).not.toHaveBeenCalled();
+  });
+
   it("keep a tag toggle and a same-named keyword toggle apart", () => {
     const base = snapshotItem();
     const { onToggleTag, onToggleKeyword } = renderCard({
@@ -273,17 +279,38 @@ describe("CatalogueCard tag chips", () => {
 });
 
 describe("CatalogueCard layout", () => {
-  it("keeps the action links above the title's stretched link, each with a focus ring", () => {
-    renderCard(snapshotItem());
+  it("makes the whole card the title link's target, with the title as the only link", () => {
+    const { container } = renderCard(snapshotItem());
+    const card = container.firstElementChild!;
     const title = screen.getByRole("link", { name: /^Global Storage Run$/ });
     expect(title.className).toContain("after:absolute");
-    expect(title.className).toContain("focus-visible:ring");
-    for (const name of [/^View details/, /^Download/, /^Cite/]) {
-      const link = screen.getByRole("link", { name });
-      expect(link.className).toContain("z-10");
-      expect(link.className).toContain("focus-visible:ring");
-      expect(link.className).toContain("min-h-10");
-    }
+    expect(title.className).toContain("after:inset-0");
+    expect(card.className).toContain("relative");
+    expect(card.className).toContain("cursor-pointer");
+    expect(card.querySelectorAll("a")).toHaveLength(1);
+    expect(card.querySelector("a a")).toBeNull();
+  });
+
+  it("shows the focus ring on the whole card when the title link has keyboard focus, not on the text", () => {
+    const { container } = renderCard(snapshotItem());
+    const card = container.firstElementChild!;
+    expect(card.className).toContain("has-[a:focus-visible]:ring-[3px]");
+    expect(card.className).toContain("has-[a:focus-visible]:ring-ring/50");
+    const title = screen.getByRole("link", { name: /^Global Storage Run$/ });
+    expect(title.className).toContain("outline-none");
+    expect(title.className).not.toContain("focus-visible:ring");
+  });
+
+  it("lifts on hover", () => {
+    const { container } = renderCard(snapshotItem());
+    expect(container.firstElementChild?.className).toContain("hover:shadow-md");
+  });
+
+  it("puts the published date at the top of the list card, beside the mono contents line", () => {
+    renderCard(snapshotItem());
+    const published = screen.getByText(/^Published/);
+    expect(published.className).toContain("text-muted-foreground");
+    expect(published.parentElement).toBe(screen.getByText("WBM 1.0.0 · GPL-3.0-only").parentElement);
   });
 
   it("lets long text wrap instead of overflowing", () => {
@@ -312,11 +339,11 @@ describe("CatalogueCard layout", () => {
 
 describe("CatalogueCardSkeleton", () => {
   it.each<CatalogueView>(["list", "grid"])(
-    "is hidden from assistive technology and has no links in the %s view",
+    "is hidden from assistive technology and has no links or buttons in the %s view",
     (view) => {
       const { container } = render(<CatalogueCardSkeleton view={view} />);
       expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
-      expect(container.querySelectorAll("a")).toHaveLength(0);
+      expect(container.querySelectorAll("a, button")).toHaveLength(0);
       expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
     }
   );
@@ -333,15 +360,24 @@ describe("CatalogueCard in the grid view", () => {
     expect(screen.getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
   });
 
-  it("links the title, View and Download to the detail page and leaves out Cite and the keywords", () => {
+  it("has exactly one link, the title, and no action buttons, keywords or Cite", () => {
     renderCard(snapshotItem(), [], "grid");
-    expect(hrefOf(/^Global Storage Run$/)).toBe("/repository/snap-1");
-    expect(hrefOf(/^View details for Global Storage Run$/)).toBe("/repository/snap-1");
-    expect(hrefOf(/^Download Global Storage Run$/)).toBe("/repository/snap-1#download");
-    expect(screen.queryByRole("link", { name: /Cite/ })).toBeNull();
+    onlyLink("Global Storage Run", "/repository/snap-1");
+    expect(screen.queryByText(/View|Download|Cite/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByText("Publication")).toBeNull();
-    expect(screen.getByText("View").closest("a")?.className).toContain("bg-foreground");
+  });
+
+  it("is a whole-card link with the card focus ring and hover lift", () => {
+    const { container } = renderCard(snapshotItem(), [], "grid");
+    const card = container.firstElementChild!;
+    expect(card.className).toContain("relative");
+    expect(card.className).toContain("cursor-pointer");
+    expect(card.className).toContain("hover:shadow-md");
+    expect(card.className).toContain("has-[a:focus-visible]:ring-[3px]");
+    const title = screen.getByRole("link");
+    expect(title.className).toContain("after:absolute");
+    expect(title.className).not.toContain("underline");
   });
 
   it("shows the date alone, with the machine value in the time element", () => {
@@ -354,6 +390,6 @@ describe("CatalogueCard in the grid view", () => {
     renderCard(modelInputItem(), [], "grid");
     expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
     expect(screen.getByText("Climatological · 5 arc-min, 30 arc-sec")).toBeTruthy();
-    expect(hrefOf(/^Download/)).toBe("/repository/model-inputs/mi-1#download");
+    onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });
 });

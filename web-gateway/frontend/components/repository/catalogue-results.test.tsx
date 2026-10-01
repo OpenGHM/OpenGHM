@@ -112,7 +112,8 @@ describe("CatalogueResults views", () => {
     const list = container.querySelector("ul")!;
     expect(list.className).toContain("flex-col");
     expect(list.className).not.toContain("grid-cols");
-    expect(screen.getAllByRole("link", { name: /^Cite/ })).toHaveLength(2);
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+    expect(screen.getAllByText("Authors")).toHaveLength(2);
   });
 
   it("lays them out as a grid, 1, 2 and 3 across, in the grid view", () => {
@@ -121,8 +122,8 @@ describe("CatalogueResults views", () => {
     expect(list.className).toContain("grid");
     expect(list.className).toContain("md:grid-cols-2");
     expect(list.className).toContain("xl:grid-cols-3");
-    expect(screen.queryByRole("link", { name: /^Cite/ })).toBeNull();
-    expect(screen.getAllByRole("link", { name: /^View details for/ })).toHaveLength(2);
+    expect(screen.queryByText("Authors")).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 
   it("shows grid-shaped skeletons while loading the grid", () => {

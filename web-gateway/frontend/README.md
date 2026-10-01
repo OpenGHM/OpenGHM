@@ -69,17 +69,19 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   (`shadow-md` on hover). From `md` it has the content on the left and a
   260 px coverage map panel the full height of the card on the right; below `md`
   the panel sits under the content, 144 px tall. Metadata is mono: the version
-  and licence line, and the Coverage and Resolution values. The title is the
-  card's stretched link in the foreground colour; View details is a solid
-  `bg-foreground` button, and Download, Cite, the tag chips and the keyword
-  chips sit above the stretched link (`relative z-10`) with their own focus
-  ring. All of an item's tags come first as primary-tint chips, then the
+  and licence line, and the Coverage and Resolution values. There are no action
+  buttons: the title is the card's one link, stretched over the whole card
+  (`after:absolute after:inset-0`), so clicking anywhere on it opens the detail
+  page. The card lifts a little on hover; when the link has
+  keyboard focus the whole card wears the focus ring. The tag chips and the
+  keyword chips sit above the stretched link (`relative z-10`) with their own
+  focus ring, and the date it was published is at the top right. All of an item's tags come first as primary-tint chips, then the
   mono keyword chips; both are toggle buttons (`aria-pressed`, a check when on,
   40 px tall below `sm`) that add or remove that tag or keyword as a filter.
   A tag shows its readable name ("Ancillary data"); the URL and the API keep
   the raw value (`ancillary-data`). Anywhere else the tags only show, use
   [`TagChips`](components/repository/tag-chips.tsx). A grid card is
-  the map on top, then the badge, the title, one mono line and View / Download.
+  the map on top, then the badge, the title, one mono line and the date.
   The map is a real SVG land outline with the bounding box, not a map tile.
 - The sidebar is built from the facets the backend returns, in one "Filters"
   card with a Reset link (shown only while something is on; it keeps the sort
