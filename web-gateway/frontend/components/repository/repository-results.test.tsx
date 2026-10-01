@@ -37,7 +37,7 @@ describe("RepositoryResults", () => {
       />
     );
 
-    expect(screen.getByText("Fake Snapshot")).toBeTruthy();
+    expect(screen.getAllByText("Fake Snapshot").length).toBeGreaterThan(0);
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });

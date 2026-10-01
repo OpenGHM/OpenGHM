@@ -15,11 +15,14 @@ import type { Dataset } from "@/lib/repository/types";
  * row are never visually interchangeable.
  */
 
-/** Below `sm` a row is a stack, not a table row: the cells flow as inline items
- *  and the name and the action take a line each. From `sm` the usual table. */
-const CELL = "whitespace-nowrap sm:px-4 sm:py-3";
-/** Phone only: a middle dot between the period, the resolution and the version. */
-const DOT = "max-sm:after:ml-3 max-sm:after:content-['·']";
+/** The category chip, the same in the table row and the phone card. */
+function CategoryChip({ category }: { category: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+      {category}
+    </span>
+  );
+}
 
 function ModelInputBadge({
   modelInputId,
@@ -78,10 +81,34 @@ export function DatasetTable({
     );
   }
 
+  /** The name: a button in picker mode, a link to the detail page otherwise. */
+  const nameControl = (dataset: Dataset, className: string) =>
+    onNameClick ? (
+      <button
+        type="button"
+        onClick={() => onNameClick(dataset)}
+        className={`text-left font-medium text-primary hover:underline ${className}`}
+      >
+        {dataset.about.name}
+      </button>
+    ) : (
+      <Link
+        href={`/repository/${dataset.id}`}
+        className={`font-medium text-foreground hover:text-primary hover:underline ${className}`}
+      >
+        {dataset.about.name}
+      </Link>
+    );
+
+  // Two layouts, and CSS shows one: the real table from `sm` up, a list of
+  // cards below it. The hidden one is `display: none`, so it is out of the
+  // accessibility tree and the tab order, and a screen reader meets a table
+  // or a list, never both. (A table forced to `display: block` loses its
+  // table semantics, which is why it is not one layout.)
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="block w-full text-sm sm:table">
-        <thead className="hidden sm:table-header-group">
+      <table aria-label="Datasets" className="hidden w-full text-sm sm:table">
+        <thead>
           <tr className="border-b bg-muted/40 text-left text-xs font-semibold text-muted-foreground">
             <th className="px-4 py-3">Name</th>
             <th className="px-4 py-3">Period</th>
@@ -89,10 +116,14 @@ export function DatasetTable({
             <th className="px-4 py-3">WBM Version</th>
             <th className="px-4 py-3">Model Input</th>
             <th className="px-4 py-3">Published</th>
-            {renderAction && <th className="px-4 py-3" />}
+            {renderAction && (
+              <th className="px-4 py-3">
+                <span className="sr-only">Action</span>
+              </th>
+            )}
           </tr>
         </thead>
-        <tbody className="block sm:table-row-group">
+        <tbody>
           {datasets.map((dataset) => {
             const { start, end } = dataset.simulation.temporalCoverage;
             const { value, unit } = dataset.simulation.resolution;
@@ -100,52 +131,34 @@ export function DatasetTable({
             return (
               <tr
                 key={dataset.id}
-                className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-4 last:border-0 sm:table-row sm:p-0 ${isSelected ? "bg-primary/5" : "hover:bg-muted/20"}`}
+                className={`border-b last:border-0 ${isSelected ? "bg-primary/5" : "hover:bg-muted/20"}`}
               >
-                <td className="basis-full sm:max-w-[280px] sm:px-4 sm:py-3">
-                  <div className="flex items-start gap-2">
-                    {onNameClick ? (
-                      <button
-                        type="button"
-                        onClick={() => onNameClick(dataset)}
-                        className="text-left font-medium text-primary hover:underline"
-                      >
-                        {dataset.about.name}
-                      </button>
-                    ) : (
-                      <Link
-                        href={`/repository/${dataset.id}`}
-                        className="font-medium text-foreground hover:text-primary hover:underline"
-                      >
-                        {dataset.about.name}
-                      </Link>
-                    )}
+                <td className="max-w-[280px] px-4 py-3">
+                  <div className="flex items-start gap-2">{nameControl(dataset, "")}</div>
+                  <div className="mt-1">
+                    <CategoryChip category={dataset.about.category} />
                   </div>
-                  <span className="mt-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-                    {dataset.about.category}
-                  </span>
                 </td>
-                <td className={`${CELL} ${DOT} text-muted-foreground`}>
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                   {start} – {end}
                 </td>
-                <td className={`${CELL} ${DOT} text-muted-foreground`}>
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                   {value} {unit}
                 </td>
-                <td className={`${CELL} font-mono text-xs text-muted-foreground`}>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
                   {dataset.uses.container.version}
                 </td>
-                <td className="whitespace-nowrap sm:px-4 sm:py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   <ModelInputBadge
                     modelInputId={dataset.uses.modelInput.id}
                     modelInputIds={modelInputIds}
                   />
                 </td>
-                <td className={`${CELL} text-muted-foreground`}>
-                  <span className="sm:hidden">Published </span>
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                   <TimeStamp value={dataset.generatedAt} format="date" />
                 </td>
                 {renderAction && (
-                  <td className="basis-full sm:basis-auto sm:whitespace-nowrap sm:px-4 sm:py-3 sm:text-right">
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
                     {renderAction(dataset)}
                   </td>
                 )}
@@ -154,6 +167,46 @@ export function DatasetTable({
           })}
         </tbody>
       </table>
+
+      <ul aria-label="Datasets" role="list" className="sm:hidden">
+        {datasets.map((dataset) => {
+          const { start, end } = dataset.simulation.temporalCoverage;
+          const { value, unit } = dataset.simulation.resolution;
+          const isSelected = dataset.id === selectedId;
+          return (
+            <li
+              key={dataset.id}
+              className={`border-b px-4 py-4 last:border-0 ${isSelected ? "bg-primary/5" : ""}`}
+            >
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {nameControl(dataset, "min-w-0 py-2 break-words")}
+                <CategoryChip category={dataset.about.category} />
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {start} – {end}
+                <span aria-hidden="true" className="mx-2">
+                  ·
+                </span>
+                {value} {unit}
+                <span aria-hidden="true" className="mx-2">
+                  ·
+                </span>
+                <span className="font-mono text-xs">{dataset.uses.container.version}</span>
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                <ModelInputBadge
+                  modelInputId={dataset.uses.modelInput.id}
+                  modelInputIds={modelInputIds}
+                />
+                <span>
+                  Published <TimeStamp value={dataset.generatedAt} format="date" />
+                </span>
+              </div>
+              {renderAction && <div className="mt-3">{renderAction(dataset)}</div>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

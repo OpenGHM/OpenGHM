@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { DatasetTable } from "./dataset-table";
 import { fakeDataset } from "@/lib/workspace/fixtures";
 
@@ -15,7 +15,7 @@ describe("DatasetTable", () => {
   it("renders no commit control when renderAction is absent", () => {
     render(<DatasetTable datasets={[fakeDataset()]} modelInputIds={null} />);
 
-    expect(screen.getByText("Fake Snapshot")).toBeTruthy();
+    expect(screen.getAllByText("Fake Snapshot").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /select/i })).toBeNull();
   });
 
@@ -28,39 +28,105 @@ describe("DatasetTable", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /select/i })).toBeTruthy();
+    // One per layout: the phone card and the table row (CSS hides one).
+    expect(screen.getAllByRole("button", { name: /select/i })).toHaveLength(2);
   });
 
   it("prints the published date as a <time> element that carries the ISO value", () => {
     const dataset = fakeDataset();
     const { container } = render(<DatasetTable datasets={[dataset]} modelInputIds={null} />);
 
-    const time = container.querySelector("time");
-    expect(time).not.toBeNull();
-    expect(time?.getAttribute("dateTime")).toBe(dataset.generatedAt);
+    const times = container.querySelectorAll("time");
+    expect(times.length).toBeGreaterThan(0);
+    for (const time of times) expect(time.getAttribute("dateTime")).toBe(dataset.generatedAt);
   });
 
-  it("stacks each row below sm: the table parts are blocks, the name and action take a line", () => {
+  it("is a real table from sm up: a table with a header row and one row per dataset", () => {
+    const datasets = [fakeDataset(), fakeDataset({ id: "other" })];
     const { container } = render(
       <DatasetTable
-        datasets={[fakeDataset()]}
+        datasets={datasets}
         modelInputIds={null}
         renderAction={() => <button type="button">Select</button>}
       />
     );
 
-    expect(container.querySelector("table")?.className).toContain("block");
-    expect(container.querySelector("table")?.className).toContain("sm:table");
-    expect(container.querySelector("thead")?.className).toContain("hidden");
-    const row = container.querySelector("tbody tr");
-    expect(row?.className).toContain("flex-wrap");
-    expect(row?.className).toContain("sm:table-row");
-    const cells = Array.from(row?.querySelectorAll("td") ?? []);
-    // Name first, action last, each on a line of its own on a phone.
-    expect(cells[0].className).toContain("basis-full");
-    expect(cells[cells.length - 1].className).toContain("basis-full");
-    // The date carries its label on a phone, where the column header is hidden.
-    expect(row?.textContent).toContain("Published");
+    const table = screen.getByRole("table", { name: "Datasets" });
+    // Shown from sm up only; never `display: block`, which would drop its roles.
+    expect(table.className).toContain("hidden");
+    expect(table.className).toContain("sm:table");
+    expect(table.className).not.toMatch(/(^|\s)block(\s|$)/);
+    expect(container.querySelector("tbody tr")?.className).not.toContain("flex");
+
+    const rows = within(table).getAllByRole("row");
+    expect(rows).toHaveLength(1 + datasets.length);
+    expect(within(rows[0]).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Name",
+      "Period",
+      "Resolution",
+      "WBM Version",
+      "Model Input",
+      "Published",
+      "Action",
+    ]);
+    const cells = within(rows[1]).getAllByRole("cell");
+    expect(cells[0].textContent).toContain("Fake Snapshot");
+    expect(within(cells[cells.length - 1]).getByRole("button", { name: /select/i })).toBeTruthy();
+  });
+
+  it("is a list of cards below sm: one listitem per dataset with its name, period and action", () => {
+    const dataset = fakeDataset();
+    const { start, end } = dataset.simulation.temporalCoverage;
+    const datasets = [dataset, fakeDataset({ id: "other" })];
+    render(
+      <DatasetTable
+        datasets={datasets}
+        modelInputIds={null}
+        renderAction={() => <button type="button">Select</button>}
+      />
+    );
+
+    const list = screen.getByRole("list", { name: "Datasets" });
+    // Hidden from sm up with display:none, so exactly one copy is exposed.
+    expect(list.className).toContain("sm:hidden");
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(datasets.length);
+    expect(within(items[0]).getByText("Fake Snapshot")).toBeTruthy();
+    expect(items[0].textContent).toContain(`${start} – ${end}`);
+    expect(items[0].textContent).toContain(dataset.uses.container.version);
+    expect(items[0].textContent).toContain("Published");
+    expect(items[0].textContent).toContain("Checking…");
+    expect(within(items[0]).getByRole("button", { name: /select/i })).toBeTruthy();
+    // The phone layout is not a table: no table roles inside the list.
+    expect(within(list).queryByRole("row")).toBeNull();
+  });
+
+  it("keeps the link and the model-input states in both layouts", () => {
+    const dataset = fakeDataset();
+    const { rerender } = render(
+      <DatasetTable datasets={[dataset]} modelInputIds={new Set([dataset.uses.modelInput.id])} />
+    );
+    const links = screen.getAllByRole("link", { name: "Fake Snapshot" });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
+    expect(screen.getAllByText("Present")).toHaveLength(2);
+
+    rerender(<DatasetTable datasets={[dataset]} modelInputIds={new Set()} />);
+    expect(screen.getAllByText("Missing")).toHaveLength(2);
+
+    rerender(<DatasetTable datasets={[dataset]} modelInputIds={null} />);
+    expect(screen.getAllByText("Checking…")).toHaveLength(2);
+  });
+
+  it("calls onNameClick from the name button in either layout", () => {
+    const dataset = fakeDataset();
+    const onNameClick = vi.fn();
+    render(<DatasetTable datasets={[dataset]} modelInputIds={null} onNameClick={onNameClick} />);
+    const buttons = screen.getAllByRole("button", { name: "Fake Snapshot" });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) fireEvent.click(button);
+    expect(onNameClick).toHaveBeenCalledTimes(2);
+    expect(onNameClick).toHaveBeenCalledWith(dataset);
   });
 
   it("colours the chips with tokens, not raw palette classes", () => {

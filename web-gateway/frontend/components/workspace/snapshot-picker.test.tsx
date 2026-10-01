@@ -56,9 +56,13 @@ describe("the snapshot picker on a phone", () => {
 
   it("makes Select a full-width, 40 px button below sm", () => {
     renderPicker();
-    const select = screen.getByRole("button", { name: /select/i });
-    expect(select.className).toContain("w-full");
-    expect(select.className).toContain("h-10");
-    expect(select.className).toContain("sm:w-auto");
+    // The phone card and the table row each carry one; CSS shows one of them.
+    const selects = screen.getAllByRole("button", { name: /select/i });
+    expect(selects).toHaveLength(2);
+    for (const select of selects) {
+      expect(select.className).toContain("w-full");
+      expect(select.className).toContain("h-10");
+      expect(select.className).toContain("sm:w-auto");
+    }
   });
 });
