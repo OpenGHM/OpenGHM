@@ -80,7 +80,7 @@ expired" as data. A job page then shows a sign-in banner instead of an error.
 The two flags are separate on purpose. `ENVIRONMENT=development` also selects
 logging and debug behaviour, so a dev-flavoured deployment that is reachable
 from the internet keeps it and sets `ALLOW_MOCK_AUTH=false`. That is exactly
-what `ops/k8s/dev/` does. Production ignores `X-Mock-Role` regardless of any
+what `ops/k8s/overlays/dev/` does. Production ignores `X-Mock-Role` regardless of any
 flag.
 
 **With mock auth on, a request carrying no header at all is authenticated as
@@ -115,7 +115,7 @@ provider:
 - `POST /auth/sso-login` accepts an identity NextAuth has already verified.
 
 **No CILogon client has been registered**, so `CILOGON_CLIENT_ID` is `""` in
-both `ops/k8s/dev/` and `ops/k8s/prod/`, and the sign-in page's CILogon
+`ops/k8s/base/frontend.yml` (so in both environments), and the sign-in page's CILogon
 button stays hidden. The button is gated on `getProviders()` at runtime, not on
 a build-time flag, so it appears by itself once the variables are set and the
 pod restarts. Registering the client is

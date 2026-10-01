@@ -85,7 +85,7 @@ placing them next to `web-gateway/` would read as though they were products of
 ours. The plan when this was written was a Helm values file and an
 `nginx.conf` here; what actually shipped for both
 (`2026-09-19-serve-the-spec`, `2026-09-25-zot-deploy`, private) is plain k8s
-manifests in the private `ops/` repository's `ops/k8s/prod/` — `schemas.yml`
+manifests in the private `ops/` repository's `ops/k8s/overlays/prod/` — `schemas.yml`
 and `zot.yml` — the same place every other cluster manifest already lives, so
 a second, public-repo deployment tree for just these two never had anything
 to hold. `deploy/services/` remains the placeholder for a *build artifact*
@@ -141,5 +141,6 @@ repositories that check cannot run at all.
   non-image proposed for `images/` argues against that precedent, not a rule.
 - A directory that would contain exactly one child forever does not get created.
 - Anything generated carries a header saying so and names the source file.
-- `ops/k8s/<env>/` stays **flat** — `kubectl apply -f` is not recursive.
-  Converting to kustomize `base/` + `overlays/` is mission 0008.
+- `ops/k8s/` is kustomize: `base/` holds the manifests both environments
+  share and `overlays/{dev,prod}/` what differs, applied with `kubectl apply -k`
+  on an overlay. `base/` is never applied on its own.

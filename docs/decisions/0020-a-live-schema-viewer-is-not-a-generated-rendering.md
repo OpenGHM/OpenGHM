@@ -74,7 +74,7 @@ made by this ADR.
 `docs/reference/s3-layout.md` gains a row for the `schema-docs/` prefix.
 Also a separate task.
 
-`ops/k8s/prod/schemas.yml` gains a new `location /docs/` block proxying to
+`ops/k8s/overlays/prod/schemas.yml` gains a new `location /docs/` block proxying to
 that prefix. Also a separate task, in the private `ops/` repository, and its
 application to the cluster is the user's to run, not this mission's.
 

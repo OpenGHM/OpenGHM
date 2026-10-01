@@ -53,10 +53,10 @@ fetching a published schema is doing exactly what a laptop does.
 
 ## Consequences
 
-`ops/k8s/prod/` is a superset of `ops/k8s/dev/` rather than its mirror. That is
-deliberate, and it matters for the kustomize work on the **Next** list: the
-absence of `schemas.yml` from dev is the design, not drift to be reconciled in
-`base/`.
+`ops/k8s/overlays/prod/` is a superset of `ops/k8s/overlays/dev/` rather than
+its mirror. That is deliberate: `schemas.yml` and `zot.yml` live in the prod
+overlay and not in `ops/k8s/base/`, because their absence from dev is the
+design, not drift to be reconciled.
 
 Config changes to these workloads are verified locally instead of in a dev
 namespace — a container run against the real S3 endpoint exercises the same

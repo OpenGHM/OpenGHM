@@ -76,12 +76,11 @@ precedent instead of a general rule.
 
 ## Consequences
 
-`deploy/k8s/<env>/` stays flat, because `kubectl apply -f` is not recursive.
-Four of the seven manifests are near-duplicates across the two environments —
-`backend.yml`, `frontend.yml`, `mongo.yml` and `configmap.yml` differ by an
-eighth of their lines or less — which kustomize would fix in a later, separate
-mission. The other three, `cert-issuer.yml`, `ingress.yml` and
-`secrets.yml.template`, are genuinely per-environment and would gain little.
+`deploy/k8s/<env>/` stayed flat when this was written, because
+`kubectl apply -f` is not recursive, and four of its seven manifests were
+near-duplicates across the two environments. It has since moved to `ops/k8s/` and become
+kustomize — `base/` plus `overlays/{dev,prod}/` — which is what removed the
+duplication.
 
 The four superseded Dockerfiles that were in `container/old/` are not carried
 over; they are committed in the `toolkits` repository this tree was copied
