@@ -70,6 +70,7 @@ export function CatalogueResults({
   onChange,
   onClearAll,
   onRetry,
+  onToggleTag,
   onToggleKeyword,
 }: {
   result: CatalogueResponse;
@@ -81,6 +82,8 @@ export function CatalogueResults({
   onChange: (updates: Partial<CatalogueFilterState>) => void;
   onClearAll: () => void;
   onRetry: () => void;
+  /** A card's tag chip: add the tag to the filter, or take it off. */
+  onToggleTag: (tag: string) => void;
   /** A card's keyword chip: add the keyword to the filter, or take it off. */
   onToggleKeyword: (keyword: string) => void;
 }) {
@@ -158,7 +161,13 @@ export function CatalogueResults({
               <CatalogueCard
                 item={item}
                 view={filters.view}
+                selectedTags={filters.tag}
                 selectedKeywords={filters.keyword}
+                onToggleTag={(tag) => {
+                  onToggleTag(tag);
+                  // Same as a keyword chip: keep the focus on the result count.
+                  countRef.current?.focus({ preventScroll: true });
+                }}
                 onToggleKeyword={(keyword) => {
                   onToggleKeyword(keyword);
                   // The list is replaced while it reloads, which would drop the

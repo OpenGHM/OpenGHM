@@ -97,7 +97,7 @@ describe("CatalogueToolbar view switch", () => {
   });
 
   it("reports only the view when switched, so the page and the filters stay", () => {
-    const { onChange } = setup(filters({ page: 3, category: ["hydrology"] }));
+    const { onChange } = setup(filters({ page: 3, tag: ["publication"] }));
     fireEvent.click(screen.getByRole("button", { name: "Grid" }));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith({ view: "grid" });

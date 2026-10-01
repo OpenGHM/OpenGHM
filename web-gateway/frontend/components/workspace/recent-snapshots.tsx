@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Calendar, Grid3X3 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Dataset } from "@/lib/repository/types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 /**
  * Up to five distinct snapshots the user has already based a simulation on,
@@ -25,9 +26,7 @@ export function RecentSnapshots({ snapshots }: { snapshots: Dataset[] }) {
                   <h3 className="text-sm font-semibold leading-snug text-foreground">
                     {dataset.about.name}
                   </h3>
-                  <span className="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
-                    {dataset.about.category}
-                  </span>
+                  <TagChips tags={dataset.about.tags} size="sm" className="shrink-0 justify-end" />
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">

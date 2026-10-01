@@ -32,6 +32,7 @@ import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 import { DownloadCard } from "@/components/repository/download-card";
+import { TagChips } from "@/components/repository/tag-chips";
 
 export default async function DatasetDetailPage({
   params,
@@ -71,9 +72,7 @@ export default async function DatasetDetailPage({
       <div className="bg-gradient-to-r from-[#0a192f] to-[#006994] py-12">
         <div className="mx-auto max-w-[1280px] px-10">
           <div className="mb-3 flex items-center gap-3">
-            <span className="rounded-full bg-emerald-500/80 px-3 py-0.5 text-xs font-semibold text-white">
-              {about.category}
-            </span>
+            <TagChips tags={about.tags} tone="hero" />
             <span className="rounded-full bg-white/15 px-3 py-0.5 text-xs font-semibold text-white">
               Model Snapshot
             </span>

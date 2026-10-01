@@ -6,7 +6,7 @@
     "name": "University of New Hampshire Water Balance Model Ancillary Data",
     "description": "The global ancillary dataset the University of New Hampshire's WBM model draws its non-forcing inputs from: crop calendars and coefficients (MIRCA2000), glacier area and discharge (RGI-6, ERA-Interim hindcast), irrigation efficiency, dam capacity, and harmonized soil available water capacity.",
     "datePublished": "2022-02-23",
-    "category": "ancillary-data",
+    "tags": ["ancillary-data", "climate-forcing", "river-network"],
     "creator": [
       {
         "name": "Morgan Ellison",

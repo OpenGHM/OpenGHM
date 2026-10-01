@@ -37,7 +37,7 @@ export function snapshotItem(overrides: Partial<CatalogueItem & { kind: "snapsho
       name: "Global Storage Run",
       description: "Monthly storage terms from a global water balance run.",
       datePublished: "2026-03-14T10:00:00Z",
-      category: "hydrology",
+      tags: ["publication", "climate-forcing"],
       creator: [{ name: "Ada Hydro" }, { name: "Bo Flow" }],
       license: "GPL-3.0-only",
       keywords: ["storage", "water balance", "global", "monthly", "reservoirs", "streamflow"],
@@ -76,7 +76,7 @@ export function modelInputItem(overrides: Partial<ModelInput> = {}): CatalogueIt
       name: "Ancillary Data v1",
       description: "Network, soils and land cover for the water balance model.",
       datePublished: "2025-11-02T08:00:00Z",
-      category: "ancillary",
+      tags: ["ancillary-data", "river-network"],
       creator: [{ name: "Cy Soil" }],
       license: "CC-BY-4.0",
       keywords: ["network", "soils", "land cover", "elevation", "lakes"],
@@ -107,7 +107,12 @@ const opt = (value: string, label: string, count: number) => ({ value, label, co
 
 export const FACETS: CatalogueFacets = {
   type: [opt("snapshot", "Model Snapshot", 2), opt("model-input", "Model Input", 1)],
-  category: [opt("hydrology", "hydrology", 2), opt("ancillary", "ancillary", 1)],
+  tag: [
+    opt("publication", "publication", 2),
+    opt("climate-forcing", "climate-forcing", 1),
+    opt("ancillary-data", "ancillary-data", 1),
+    opt("river-network", "river-network", 1),
+  ],
   keyword: [
     opt("water balance", "water balance", 3),
     opt("storage", "storage", 2),

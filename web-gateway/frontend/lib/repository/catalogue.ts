@@ -4,6 +4,7 @@
  * chip row both read. No React and no I/O, so tests call it directly.
  */
 import { SPATIAL_RES_PRESETS } from "./data";
+import type { OpenGHMCitationBlock } from "./generated";
 import type {
   CatalogueFacetKey,
   CatalogueFacets,
@@ -14,7 +15,7 @@ import type {
 /** Every facet key, in the order the sidebar lists the groups that use one. */
 export const CATALOGUE_FACET_KEYS: readonly CatalogueFacetKey[] = [
   "type",
-  "category",
+  "tag",
   "keyword",
   "output",
   "forcing",
@@ -33,7 +34,7 @@ export const CATALOGUE_PAGE_SIZE = 10;
  */
 export const CATALOGUE_FACET_NAMES: Record<CatalogueFacetKey, { title: string; chip: string }> = {
   type: { title: "Type", chip: "Type" },
-  category: { title: "Category", chip: "Category" },
+  tag: { title: "Tags", chip: "Tag" },
   keyword: { title: "Keyword", chip: "Keyword" },
   output: { title: "Output variable", chip: "Output" },
   forcing: { title: "Forcing data", chip: "Forcing" },
@@ -46,7 +47,7 @@ export const CATALOGUE_FACET_NAMES: Record<CatalogueFacetKey, { title: string; c
 export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
   searchQuery: "",
   type: [],
-  category: [],
+  tag: [],
   keyword: [],
   output: [],
   forcing: [],
@@ -65,7 +66,7 @@ export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
 
 export const EMPTY_CATALOGUE_FACETS: CatalogueFacets = {
   type: [],
-  category: [],
+  tag: [],
   keyword: [],
   output: [],
   forcing: [],
@@ -127,9 +128,42 @@ export function humanizeForcing(role: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
-/** The text of one option: forcing roles are humanised here, the rest come labelled. */
+/** One value of `about.tags`, from the snapshot spec's closed list. */
+export type AboutTag = OpenGHMCitationBlock["tags"][number];
+
+/** The label of each tag. Typed as a full record, so a tag added to the spec
+ *  does not compile until it is named here. */
+const TAG_LABELS: Record<AboutTag, string> = {
+  publication: "Publication",
+  tutorial: "Tutorial",
+  test: "Test",
+  "ancillary-data": "Ancillary data",
+  "climate-forcing": "Climate forcing",
+  "river-network": "River network",
+};
+
+/** Every tag the spec allows, in the order the list reads. */
+export const ABOUT_TAGS = Object.keys(TAG_LABELS) as AboutTag[];
+
+/** A tag as people read it: "ancillary-data" is "Ancillary data". The URL and the
+ *  API keep the raw value; an unknown tag is capitalised with its hyphens spaced. */
+export function humanizeTag(tag: string): string {
+  const known = (TAG_LABELS as Record<string, string | undefined>)[tag];
+  if (known) return known;
+  const spaced = tag.replace(/[_-]+/g, " ").trim();
+  if (!spaced) return tag;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** A list of tags as one line of text: "Publication, Climate forcing". */
+export function formatTags(tags: readonly string[]): string {
+  return tags.map(humanizeTag).join(", ");
+}
+
+/** The text of one option: forcing roles and tags are humanised here, the rest come labelled. */
 export function facetOptionLabel(key: CatalogueFacetKey, value: string, label?: string): string {
   if (key === "forcing") return humanizeForcing(value);
+  if (key === "tag") return humanizeTag(value);
   return label ?? value;
 }
 

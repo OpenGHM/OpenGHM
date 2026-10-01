@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import type { Dataset } from "@/lib/repository/types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 /**
  * The picker's "clicking the name" surface — a subset of the full detail
@@ -39,9 +40,7 @@ export function SnapshotDetailPanel({
             <h3 className="text-base font-semibold leading-snug text-foreground">
               {dataset.about.name}
             </h3>
-            <span className="mt-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-              {dataset.about.category}
-            </span>
+            <TagChips tags={dataset.about.tags} className="mt-1" />
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
             <X className="size-4" />

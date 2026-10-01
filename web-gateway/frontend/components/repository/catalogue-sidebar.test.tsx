@@ -36,11 +36,11 @@ describe("CatalogueSidebar groups", () => {
     const titles = screen
       .getAllByRole("button", { expanded: undefined })
       .map((b) => b.textContent ?? "")
-      .filter((t) => /^(Type|Category|Keyword|Output variable|Forcing data|Temporal coverage|Spatial resolution|Model version|Active processes|Creator|License)/.test(t))
+      .filter((t) => /^(Type|Tags|Keyword|Output variable|Forcing data|Temporal coverage|Spatial resolution|Model version|Active processes|Creator|License)/.test(t))
       ;
     expect(titles).toEqual([
       "Type",
-      "Category",
+      "Tags",
       "Keyword",
       "Temporal coverage",
       "Spatial resolution",
@@ -52,9 +52,9 @@ describe("CatalogueSidebar groups", () => {
     ]);
   });
 
-  it("opens Type, Category, Temporal coverage and Spatial resolution and folds the rest", () => {
+  it("opens Type, Tags, Temporal coverage and Spatial resolution and folds the rest", () => {
     setup();
-    for (const name of [/^Type/, /^Category/, /^Temporal coverage/, /^Spatial resolution/]) {
+    for (const name of [/^Type/, /^Tags/, /^Temporal coverage/, /^Spatial resolution/]) {
       expect(group(name).getAttribute("aria-expanded")).toBe("true");
     }
     for (const name of [/^Output variable/, /^Forcing data/, /^Model version/, /^Creator/, /^License/]) {
@@ -76,7 +76,7 @@ describe("CatalogueSidebar groups", () => {
   it("hides a group with no options but always shows Type", () => {
     setup(filters(), EMPTY_CATALOGUE_FACETS);
     expect(screen.queryByRole("button", { name: /^Active processes/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Category/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Tags/ })).toBeNull();
     expect(group(/^Type/)).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Model Snapshot" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Model Input" })).toBeTruthy();
@@ -100,7 +100,7 @@ describe("CatalogueSidebar groups", () => {
     expect(count.textContent).toBe("2");
     expect(count.className).toContain("font-mono");
     expect(box.closest("label")!.textContent).not.toContain("(");
-    expect(screen.getByRole("checkbox", { name: "hydrology 2" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Publication 2" })).toBeTruthy();
   });
 
   it("humanises forcing roles", () => {
@@ -118,8 +118,41 @@ describe("CatalogueSidebar groups", () => {
   });
 });
 
+describe("CatalogueSidebar tags group", () => {
+  it("sits right after Type, open, with a readable name and a count on each tag", () => {
+    setup();
+    const tags = group(/^Tags/);
+    expect(tags.getAttribute("aria-expanded")).toBe("true");
+    expect(tags.compareDocumentPosition(group(/^Type/)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    for (const name of ["Publication 2", "Climate forcing 1", "Ancillary data 1", "River network 1"]) {
+      expect(screen.getByRole("checkbox", { name })).toBeTruthy();
+    }
+    expect(screen.queryByRole("checkbox", { name: /^publication/ })).toBeNull();
+  });
+
+  it("reports the raw tag value, not its readable name", () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole("checkbox", { name: "River network 1" }));
+    expect(onChange).toHaveBeenCalledWith({ tag: ["river-network"] });
+  });
+
+  it("stays open with eight options and folds with nine", () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ value: `t-${i}`, label: `t-${i}`, count: 1 }));
+    const { unmount } = render(
+      <CatalogueSidebar filters={filters()} facets={{ ...FACETS, tag: many(8) }} onChange={vi.fn()} onClearAll={vi.fn()} />
+    );
+    expect(group(/^Tags/).getAttribute("aria-expanded")).toBe("true");
+    unmount();
+    render(
+      <CatalogueSidebar filters={filters()} facets={{ ...FACETS, tag: many(9) }} onChange={vi.fn()} onClearAll={vi.fn()} />
+    );
+    expect(group(/^Tags/).getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
 describe("CatalogueSidebar keyword group", () => {
-  it("sits right after Category, folded when it has more than six options", () => {
+  it("sits right after Tags, folded when it has more than six options", () => {
     setup();
     const keyword = group(/^Keyword/);
     expect(keyword.getAttribute("aria-expanded")).toBe("false");
@@ -154,9 +187,9 @@ describe("CatalogueSidebar keyword group", () => {
 
 describe("CatalogueSidebar checkboxes", () => {
   it("reports a ticked box as the facet's new selection", () => {
-    const { onChange } = setup(filters({ category: ["ancillary"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "hydrology 2" }));
-    expect(onChange).toHaveBeenCalledWith({ category: ["ancillary", "hydrology"] });
+    const { onChange } = setup(filters({ tag: ["ancillary-data"] }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publication 2" }));
+    expect(onChange).toHaveBeenCalledWith({ tag: ["ancillary-data", "publication"] });
   });
 
   it("reports an unticked box without the value", () => {
@@ -166,9 +199,9 @@ describe("CatalogueSidebar checkboxes", () => {
   });
 
   it("keeps a selected value the facets no longer list, so it can be unticked", () => {
-    const { onChange } = setup(filters({ category: ["gone"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "gone 0" }));
-    expect(onChange).toHaveBeenCalledWith({ category: [] });
+    const { onChange } = setup(filters({ tag: ["gone-tag"] }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Gone tag 0" }));
+    expect(onChange).toHaveBeenCalledWith({ tag: [] });
   });
 });
 
@@ -314,7 +347,7 @@ describe("CatalogueSidebar spatial resolution", () => {
 
 describe("CatalogueSidebar on a phone", () => {
   it("folds the filters behind a Filters button that says how many are active", () => {
-    setup(filters({ category: ["hydrology"], yearStart: 2000 }));
+    setup(filters({ tag: ["publication"], yearStart: 2000 }));
     const toggle = screen.getByRole("button", { name: /^Filters/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.textContent).toContain("2");
@@ -340,7 +373,7 @@ describe("CatalogueSidebar on a phone", () => {
 
   it("gives every checkbox row a 40 px touch target", () => {
     setup();
-    const label = screen.getByRole("checkbox", { name: "hydrology 2" }).closest("label");
+    const label = screen.getByRole("checkbox", { name: "Publication 2" }).closest("label");
     expect(label?.className).toContain("min-h-10");
   });
 });

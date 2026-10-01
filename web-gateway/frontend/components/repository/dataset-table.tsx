@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { SearchX } from "lucide-react";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { Dataset } from "@/lib/repository/types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 /**
  * The one snapshot-list presentation, shared by `/repository` (browse) and
@@ -14,15 +15,6 @@ import type { Dataset } from "@/lib/repository/types";
  * all — not a disabled button, an absent one, so a picker row and a browse
  * row are never visually interchangeable.
  */
-
-/** The category chip, the same in the table row and the phone card. */
-function CategoryChip({ category }: { category: string }) {
-  return (
-    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
-      {category}
-    </span>
-  );
-}
 
 function ModelInputBadge({
   modelInputId,
@@ -136,7 +128,7 @@ export function DatasetTable({
                 <td className="max-w-[280px] px-4 py-3">
                   <div className="flex items-start gap-2">{nameControl(dataset, "")}</div>
                   <div className="mt-1">
-                    <CategoryChip category={dataset.about.category} />
+                    <TagChips tags={dataset.about.tags} size="sm" />
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
@@ -180,7 +172,7 @@ export function DatasetTable({
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 {nameControl(dataset, "min-w-0 py-2 break-words")}
-                <CategoryChip category={dataset.about.category} />
+                <TagChips tags={dataset.about.tags} size="sm" />
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
                 {start} – {end}

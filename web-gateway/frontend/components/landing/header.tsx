@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { ChevronDown, LogOut, Menu, UserCircle, ShieldCheck } from "lucide-react";
 import { useState, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
@@ -42,6 +43,23 @@ const RESOURCES_ITEMS = [
 ];
 
 /**
+ * Whether `href` is the page the visitor is on. A section keeps its tab lit on
+ * the pages below it (`/repository/abc` is still Data Repository); Home is
+ * only the exact root, and a `#` placeholder is never current.
+ */
+function isActive(pathname: string | null, href: string): boolean {
+  if (!pathname || href.startsWith("#")) return false;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+const NAV_LINK =
+  "rounded-md px-3 py-1.5 text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const NAV_LINK_IDLE = "font-medium text-slate-700 hover:bg-muted hover:text-foreground";
+// Same weight as idle: font-semibold is a few px wider and would shift the row.
+const NAV_LINK_ACTIVE = "bg-primary/10 font-medium text-primary";
+
+/**
  * The site header. From `lg` up the links and the account menu sit in the row;
  * below it they fold into one menu button, because the row needs about 875 px
  * (estimated from the link widths, not measured) and a phone has 375.
@@ -52,6 +70,7 @@ export function Header() {
   const resourcesTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: session } = useSession();
+  const pathname = usePathname();
 
   const handleResourcesEnter = () => {
     if (resourcesTimeoutRef.current) clearTimeout(resourcesTimeoutRef.current);
@@ -82,12 +101,13 @@ export function Header() {
         />
       </Link>
 
-      <nav aria-label="Main" className="hidden gap-8 items-center lg:flex">
+      <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
         {NAV_ITEMS_BEFORE.map((item) => (
           <Link
             key={item.label}
             href={item.href}
-            className="text-[15px] font-medium text-slate-700 transition-colors hover:text-primary"
+            aria-current={isActive(pathname, item.href) ? "page" : undefined}
+            className={`${NAV_LINK} ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : NAV_LINK_IDLE}`}
           >
             {item.label}
           </Link>
@@ -99,7 +119,7 @@ export function Header() {
           onMouseEnter={handleResourcesEnter}
           onMouseLeave={handleResourcesLeave}
         >
-          <button className="flex items-center gap-1 text-[15px] font-medium text-slate-700 transition-colors hover:text-primary">
+          <button className={`flex items-center gap-1 ${NAV_LINK} ${NAV_LINK_IDLE}`}>
             Resources
             <ChevronDown
               size={15}
@@ -126,7 +146,8 @@ export function Header() {
           <Link
             key={item.label}
             href={item.href}
-            className="text-[15px] font-medium text-slate-700 transition-colors hover:text-primary"
+            aria-current={isActive(pathname, item.href) ? "page" : undefined}
+            className={`${NAV_LINK} ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : NAV_LINK_IDLE}`}
           >
             {item.label}
           </Link>
@@ -209,8 +230,14 @@ export function Header() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
           {NAV_ITEMS_BEFORE.map((item) => (
-            <DropdownMenuItem key={item.label} asChild className="min-h-10 text-[15px] font-medium">
-              <Link href={item.href}>{item.label}</Link>
+            <DropdownMenuItem
+              key={item.label}
+              asChild
+              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? "bg-primary/10 font-medium text-primary" : "font-medium"}`}
+            >
+              <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
+                {item.label}
+              </Link>
             </DropdownMenuItem>
           ))}
           <DropdownMenuLabel className="pt-3 text-xs font-medium text-muted-foreground">
@@ -223,8 +250,14 @@ export function Header() {
           ))}
           <DropdownMenuSeparator />
           {NAV_ITEMS_AFTER.map((item) => (
-            <DropdownMenuItem key={item.label} asChild className="min-h-10 text-[15px] font-medium">
-              <Link href={item.href}>{item.label}</Link>
+            <DropdownMenuItem
+              key={item.label}
+              asChild
+              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? "bg-primary/10 font-medium text-primary" : "font-medium"}`}
+            >
+              <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
+                {item.label}
+              </Link>
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />

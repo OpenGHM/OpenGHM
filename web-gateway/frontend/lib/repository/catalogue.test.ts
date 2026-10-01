@@ -6,6 +6,10 @@ import {
   formatResolutionRange,
   hasActiveFilters,
   humanizeForcing,
+  humanizeTag,
+  formatTags,
+  facetOptionLabel,
+  ABOUT_TAGS,
 } from "./catalogue";
 import { FACETS, filters } from "@/components/repository/catalogue.fixtures";
 import {
@@ -33,6 +37,29 @@ describe("humanizeForcing", () => {
 
   it("spaces out a role it does not know", () => {
     expect(humanizeForcing("soilHeatFlux")).toBe("Soil heat flux");
+  });
+});
+
+describe("humanizeTag", () => {
+  it("names every tag in the spec's closed list", () => {
+    expect(ABOUT_TAGS.map(humanizeTag)).toEqual([
+      "Publication",
+      "Tutorial",
+      "Test",
+      "Ancillary data",
+      "Climate forcing",
+      "River network",
+    ]);
+  });
+
+  it("capitalises a tag it does not know and spaces its hyphens", () => {
+    expect(humanizeTag("sea-ice-extent")).toBe("Sea ice extent");
+    expect(humanizeTag("lakes")).toBe("Lakes");
+  });
+
+  it("joins a list for plain text, and a tag facet option shows the readable name", () => {
+    expect(formatTags(["publication", "river-network"])).toBe("Publication, River network");
+    expect(facetOptionLabel("tag", "ancillary-data", "ancillary-data")).toBe("Ancillary data");
   });
 });
 
@@ -64,6 +91,13 @@ describe("active filters", () => {
     const chips = activeFilterChips(filters({ keyword: ["water balance", "soils"] }), FACETS);
     expect(chips.map((c) => c.label)).toEqual(["Keyword: water balance", "Keyword: soils"]);
     expect(chips[0].remove).toEqual({ keyword: ["soils"] });
+  });
+
+  it("labels a tag chip \"Tag: Name\" with the readable name and takes just that one off", () => {
+    const chips = activeFilterChips(filters({ tag: ["ancillary-data", "test"] }), FACETS);
+    expect(chips.map((c) => c.label)).toEqual(["Tag: Ancillary data", "Tag: Test"]);
+    expect(chips[0].remove).toEqual({ tag: ["test"] });
+    expect(countActiveFilters(filters({ tag: ["a", "b"] }))).toBe(2);
   });
 
   it("names a preset resolution by its preset", () => {

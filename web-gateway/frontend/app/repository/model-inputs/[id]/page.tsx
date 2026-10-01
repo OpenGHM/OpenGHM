@@ -24,6 +24,7 @@ import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic
 import { ModelInputDatasetsTable } from "@/components/repository/model-input-datasets-table";
 import { DownloadCard } from "@/components/repository/download-card";
 import { CitationCard } from "@/components/repository/citation-card";
+import { TagChips } from "@/components/repository/tag-chips";
 
 export default async function ModelInputDetailPage({
   params,
@@ -58,9 +59,7 @@ export default async function ModelInputDetailPage({
       <div className="bg-gradient-to-r from-[#0a192f] to-[#00695c] py-12">
         <div className="mx-auto max-w-[1280px] px-10">
           <div className="mb-3 flex items-center gap-3">
-            <span className="rounded-full bg-teal-500/80 px-3 py-0.5 text-xs font-semibold text-white">
-              {about.category}
-            </span>
+            <TagChips tags={about.tags} tone="hero" />
             <span className="rounded-full bg-white/15 px-3 py-0.5 text-xs font-semibold text-white">
               Model Input
             </span>

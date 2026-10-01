@@ -95,6 +95,7 @@ describe("DatasetTable", () => {
     expect(items[0].textContent).toContain(`${start} – ${end}`);
     expect(items[0].textContent).toContain(dataset.uses.container.version);
     expect(items[0].textContent).toContain("Published");
+    expect(within(items[0]).getByText("Test")).toBeTruthy(); // the tag chip
     expect(items[0].textContent).toContain("Checking…");
     expect(within(items[0]).getByRole("button", { name: /select/i })).toBeTruthy();
     // The phone layout is not a table: no table roles inside the list.

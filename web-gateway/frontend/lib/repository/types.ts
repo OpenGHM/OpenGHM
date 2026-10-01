@@ -110,7 +110,7 @@ export interface CatalogueFacetOption {
 /** The facet keys that are repeatable query parameters with option lists. */
 export type CatalogueFacetKey =
   | "type"
-  | "category"
+  | "tag"
   | "keyword"
   | "creator"
   | "license"

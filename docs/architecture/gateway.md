@@ -238,13 +238,13 @@ anything else is `422`); the facet parameters below; `year_start`, `year_end`;
 `spatial_res_min`, `spatial_res_max` (degrees); `sort`
 (`relevance` default, `newest`, `title-az`, `title-za`, `coverage-start`); `page` (>= 1);
 `page_size` (default 10, 1 to 100). Facet and `type` parameters **repeat**
-(`?category=a&category=b`); they are not comma lists, because a value can
+(`?tag=a&tag=b`); they are not comma lists, because a value can
 contain a comma.
 
 | Facet parameter | Spec field | Label | Applies to |
 |---|---|---|---|
 | `type` | the item's kind | "Model Snapshot", "Model Input" (fixed order, always both) | both |
-| `category` | `about.category` | the value | both |
+| `tag` | `about.tags[]` (an item with three tags counts in three options; vocabulary in [metadata-format.md](../reference/metadata-format.md#abouttags)) | the value | both |
 | `keyword` | `about.keywords[]` (exact string match, case-sensitive) | the value | both |
 | `creator` | `about.creator[].name` | the value | both |
 | `license` | `about.license` | the value | both |
@@ -258,8 +258,8 @@ filter a kind cannot satisfy excludes that kind: a model input has no output
 variables, forcing, processes or container, so any selection in those four
 facets leaves only snapshots.
 
-- `q` is a case-insensitive substring over `about.name`, `about.description`
-  and `about.keywords`.
+- `q` is a case-insensitive substring over `about.name`, `about.description`,
+  `about.keywords` and `about.tags`.
 - `year_start`/`year_end` select by overlap with the temporal coverage
   (`simulation.temporalCoverage`; a model input's `coverage.temporalCoverage`).
   An artifact with no temporal coverage, which a climatological model input
@@ -281,7 +281,7 @@ when nothing has a temporal coverage.
 **Order** is deterministic and ends in the id. `newest` is
 `about.datePublished` descending, then name, then id. `title-az` and `title-za`
 sort by `about.name` case-insensitively. `relevance` with a `q` scores a name
-hit 3, a keyword hit 2 and a description hit 1, summed, highest first, and
+hit 3, a keyword or tag hit 2 and a description hit 1, summed, highest first, and
 breaks ties as `newest`; with no `q` it is `newest`.
 `coverage-start` puts the earliest temporal coverage start first
 (`simulation.temporalCoverage.start`; a model input's

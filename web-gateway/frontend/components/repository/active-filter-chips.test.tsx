@@ -49,14 +49,21 @@ describe("ActiveFilterChips", () => {
     expect(screen.getByRole("button", { name: "Remove filter: Keyword: soils" })).toBeTruthy();
   });
 
+  it("labels a tag chip Tag: Name with the readable name and removes just that tag", () => {
+    const { onChange } = setup(filters({ tag: ["ancillary-data", "river-network"] }));
+    expect(screen.getByRole("button", { name: "Remove filter: Tag: River network" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Tag: Ancillary data" }));
+    expect(onChange).toHaveBeenCalledWith({ tag: ["river-network"] });
+  });
+
   it("clears everything from Clear all", () => {
-    const { onClearAll } = setup(filters({ category: ["hydrology"] }));
+    const { onClearAll } = setup(filters({ tag: ["publication"] }));
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(onClearAll).toHaveBeenCalledTimes(1);
   });
 
   it("makes every chip a 40 px target on a phone", () => {
-    setup(filters({ category: ["hydrology"] }));
+    setup(filters({ tag: ["publication"] }));
     expect(screen.getByRole("button", { name: /Remove filter/ }).className).toContain("h-10");
   });
 });

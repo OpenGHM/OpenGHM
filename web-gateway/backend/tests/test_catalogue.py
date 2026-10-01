@@ -3,8 +3,8 @@ snapshot + model-input list with facets.
 
 The logic is pure, so it is tested directly against the real shipped spec
 examples (``schemas/*/examples``), plus two small variants built by deep-copying
-an example and editing it (the shipped ones share a creator, a licence and a
-category, which would leave most facets with one option). The route itself is
+an example and editing it (the shipped ones share a creator, a licence and
+most tags, which would leave most facets with one option). The route itself is
 exercised once through a ``TestClient`` with ``_load_catalogue`` replaced, for
 the query-parameter contract (repeated params, 422 on a bad ``type``).
 """
@@ -48,13 +48,13 @@ SOIL_ID = "b" * 64
 
 
 def _zeta_doc() -> dict:
-    """A snapshot unlike the shipped three: other creator, category, licence,
+    """A snapshot unlike the shipped three: other creator, tags, licence,
     WBM version, period, resolution and only one output."""
     d = copy.deepcopy(_example("snapshot-spec", "wbm_storage_v2.0.0.json"))
     d["id"] = ZETA_ID
     d["slug"] = "zeta-flood-study"
     d["about"].update(
-        name="Zeta flood study", category="research", license="MIT", datePublished="2025-01-01",
+        name="Zeta flood study", tags=["test"], license="MIT", datePublished="2025-01-01",
         description="Peak flows.", keywords=["flooding"],
     )
     d["about"]["creator"] = [{"name": "Alex Doe"}]
@@ -76,7 +76,7 @@ def _soil_doc() -> dict:
     d["id"] = SOIL_ID
     d["slug"] = "soil-texture"
     d["about"].update(
-        name="Soil texture", category="climate", license="MIT", datePublished="2024-06-01",
+        name="Soil texture", tags=["ancillary-data"], license="MIT", datePublished="2024-06-01",
         description="Sand and clay fractions.", keywords=["soil"],
     )
     d["about"]["creator"] = [{"name": "Alex Doe"}]
@@ -107,7 +107,7 @@ def _ids(resp) -> list[str]:
 
 def _run(items, *, sort="newest", page=1, page_size=100, **kw):
     selected = {k: tuple(kw.pop(k)) for k in list(kw) if k in
-                ("type", "category", "keyword", "creator", "license", "output", "forcing", "process", "wbm")}
+                ("type", "tag", "keyword", "creator", "license", "output", "forcing", "process", "wbm")}
     return build_catalogue(items, CatalogueQuery(selected=selected, **kw), sort=sort, page=page, page_size=page_size)
 
 
@@ -139,11 +139,15 @@ def test_type_filter(items):
 # ---- facet filters -------------------------------------------------------
 
 
-def test_category_creator_license_apply_to_both_kinds(items):
-    assert set(_ids(_run(items, category=["climate"]))) == {SOIL_ID}
+def test_tag_creator_license_apply_to_both_kinds(items):
+    assert set(_ids(_run(items, tag=["test"]))) == {ZETA_ID}
     assert set(_ids(_run(items, creator=["Alex Doe"]))) == {ZETA_ID, SOIL_ID}
     assert set(_ids(_run(items, license=["MIT"]))) == {ZETA_ID, SOIL_ID}
-    assert set(_ids(_run(items, category=["ancillary-data"]))) == {MI1_ID, MI2_ID}
+    assert set(_ids(_run(items, tag=["ancillary-data"]))) == {MI1_ID, MI2_ID, SOIL_ID}
+    # an item matches when it has ANY selected tag (OR), and a tag it does not carry excludes it
+    assert set(_ids(_run(items, tag=["river-network"]))) == {MI1_ID, MI2_ID}
+    assert set(_ids(_run(items, tag=["test", "tutorial"]))) == {ZETA_ID, V2_ID}
+    assert set(_ids(_run(items, tag=["tutorial", "climate-forcing"]))) == {V2_ID, MI1_ID, MI2_ID}
 
 
 def test_keyword_facet_matches_exactly_on_both_kinds(items):
@@ -156,7 +160,7 @@ def test_keyword_facet_matches_exactly_on_both_kinds(items):
     # OR within the facet, AND with another facet
     assert set(_ids(_run(items, keyword=["flooding", "soil"]))) == {ZETA_ID, SOIL_ID}
     assert set(_ids(_run(items, keyword=["flooding", "soil"], type=["snapshot"]))) == {ZETA_ID}
-    assert set(_ids(_run(items, keyword=["hydrology"], category=["ancillary-data"]))) == {MI1_ID, MI2_ID}
+    assert set(_ids(_run(items, keyword=["hydrology"], tag=["ancillary-data"]))) == {MI1_ID, MI2_ID}
 
 
 def test_keyword_facet_options_sort_and_disjunctive_counts(items):
@@ -172,7 +176,7 @@ def test_keyword_facet_options_sort_and_disjunctive_counts(items):
     resp = _run(items, keyword=["MIRCA2000"])
     assert _facet(resp, "keyword") == _facet(_run(items), "keyword")
     # ... and narrows every other group
-    assert _facet(resp, "category") == {"ancillary-data": 2}
+    assert _facet(resp, "tag") == {"ancillary-data": 2, "climate-forcing": 2, "river-network": 2}
     assert _facet(resp, "type") == {"snapshot": 0, "model-input": 2}
     # another group's selection narrows the keyword group
     assert _facet(_run(items, type=["model-input"]), "keyword") == {
@@ -200,7 +204,7 @@ def test_or_within_a_facet_and_across_facets(items):
     assert set(_ids(_run(items, wbm=["1.0.0", "2.0.0"]))) == {GLOBAL_ID, WYOMING_ID, V2_ID}
     both = _run(items, wbm=["1.0.0", "2.0.0"], creator=["Casey Nolan"])
     assert set(_ids(both)) == {V2_ID}
-    assert _run(items, category=["climate"], license=["GPL-3.0-only"]).items == []
+    assert _run(items, tag=["test"], license=["GPL-3.0-only"]).items == []
 
 
 # ---- ranges --------------------------------------------------------------
@@ -238,11 +242,13 @@ def test_model_input_without_resolved_network_never_matches_resolution():
 # ---- q and relevance -----------------------------------------------------
 
 
-def test_q_is_case_insensitive_over_name_description_keywords(items):
+def test_q_is_case_insensitive_over_name_description_keywords_tags(items):
     assert set(_ids(_run(items, q="ZETA"))) == {ZETA_ID}
     assert set(_ids(_run(items, q="flooding"))) == {ZETA_ID}
     assert set(_ids(_run(items, q="clay fractions"))) == {SOIL_ID}
     assert SOIL_ID not in _ids(_run(items, q="wyoming"))
+    # a hit in a tag value counts like a keyword hit
+    assert set(_ids(_run(items, q="CLIMATE-forcing"))) == {MI1_ID, MI2_ID}
 
 
 def test_relevance_score_weights():
@@ -254,6 +260,8 @@ def test_relevance_score_weights():
     assert relevance_score(item, "FLOOD") == 6
     assert relevance_score(item, None) == 0
     assert relevance_score(item, "absent") == 0
+    # a tag hit scores 2, the same as a keyword hit (zeta carries the tag "test")
+    assert relevance_score(item, "test") == 2
 
 
 def test_relevance_orders_by_score_then_newest(items):
@@ -332,9 +340,12 @@ def test_type_facet_is_fixed_and_labelled(items):
 
 def test_facet_sorting_and_labels(items):
     resp = _run(items)
-    cat = resp.facets.category
-    assert [(o.value, o.count) for o in cat] == [
-        ("ancillary-data", 2), ("publication", 2), ("climate", 1), ("research", 1), ("tutorial", 1),
+    # every tag of an item is counted, so a three-tag model input adds to three options;
+    # the label is the raw tag value
+    assert [(o.value, o.label, o.count) for o in resp.facets.tag] == [
+        ("ancillary-data", "ancillary-data", 3), ("climate-forcing", "climate-forcing", 2),
+        ("publication", "publication", 2), ("river-network", "river-network", 2),
+        ("test", "test", 1), ("tutorial", "tutorial", 1),
     ]
     out = {o.value: o.label for o in resp.facets.output}
     assert out["discharge"] == "Discharge"          # label is simulation.outputVariables[].fullName
@@ -349,32 +360,34 @@ def test_facets_are_disjunctive_concrete_case(items):
     resp = _run(items, wbm=["1.0.0"])
     assert _facet(resp, "wbm") == {"1.0.0": 2, "2.0.0": 1, "3.0.0": 1}
     # ... while every OTHER group is narrowed by it (model inputs fall away).
-    assert _facet(resp, "category") == {"publication": 2}
+    assert _facet(resp, "tag") == {"publication": 2}
     assert _facet(resp, "type") == {"snapshot": 2, "model-input": 0}
     assert _facet(resp, "creator") == {"Jordan Rivera": 2, "Sam Whitfield": 2}
     assert len(resp.items) == 2
 
 
 def test_facet_counts_respect_q_and_ranges_but_not_own_group(items):
-    resp = _run(items, category=["tutorial"], year_end=2001)
-    # category group ignores its own selection: v2 (tutorial) plus the two publications and model inputs <= 2001
-    assert _facet(resp, "category") == {"ancillary-data": 2, "publication": 2, "tutorial": 1}
-    # the type group applies the category selection: only v2 is left
+    resp = _run(items, tag=["tutorial"], year_end=2001)
+    # tag group ignores its own selection: v2 (tutorial) plus the two publications and the two shipped model inputs <= 2001
+    assert _facet(resp, "tag") == {
+        "ancillary-data": 2, "climate-forcing": 2, "river-network": 2, "publication": 2, "tutorial": 1,
+    }
+    # the type group applies the tag selection: only v2 is left
     assert _facet(resp, "type") == {"snapshot": 1, "model-input": 0}
 
 
 def test_selected_value_with_no_match_is_listed_with_zero(items):
-    resp = _run(items, wbm=["9.9.9"], category=["publication"])
+    resp = _run(items, wbm=["9.9.9"], tag=["publication"])
     assert resp.items == []
     assert _facet(resp, "wbm")["9.9.9"] == 0
     wbm = next(o for o in resp.facets.wbm if o.value == "9.9.9")
     assert wbm.label == "9.9.9"
     # a selected option the catalogue does know keeps its real label
-    resp = _run(items, output=["streamAge"], category=["research"])
+    resp = _run(items, output=["streamAge"], tag=["test"])
     stream = next(o for o in resp.facets.output if o.value == "streamAge")
     assert stream.count == 0 and stream.label == "Stream Age (water residence time)"
     # and zero-count options that were not selected are not listed
-    assert "streamAge" not in {o.value for o in _run(items, category=["research"]).facets.output}
+    assert "streamAge" not in {o.value for o in _run(items, tag=["test"]).facets.output}
 
 
 def test_year_bounds_cover_the_whole_catalogue_not_the_filter(items):
@@ -403,9 +416,9 @@ def test_route_response_shape_and_defaults(http):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"items", "totalCount", "totalPages", "page", "facets"}
-    assert set(body["facets"]) == {"type", "category", "keyword", "creator", "license", "output",
+    assert set(body["facets"]) == {"type", "tag", "keyword", "creator", "license", "output",
                                    "forcing", "process", "wbm", "yearBounds"}
-    assert list(body["facets"])[:3] == ["type", "category", "keyword"]
+    assert list(body["facets"])[:3] == ["type", "tag", "keyword"]
     assert body["totalCount"] == 7 and len(body["items"]) == 7  # default page_size 10
     assert {i["kind"] for i in body["items"]} == {"snapshot", "model-input"}
 

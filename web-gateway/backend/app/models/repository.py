@@ -231,7 +231,7 @@ class CatalogueFacets(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: list[FacetOption]
-    category: list[FacetOption]
+    tag: list[FacetOption]
     keyword: list[FacetOption]
     creator: list[FacetOption]
     license: list[FacetOption]

@@ -15,6 +15,7 @@ function setup(
   const onChange = vi.fn();
   const onClearAll = vi.fn();
   const onRetry = vi.fn();
+  const onToggleTag = vi.fn();
   const onToggleKeyword = vi.fn();
   const view = render(
     <CatalogueResults
@@ -26,10 +27,11 @@ function setup(
       onChange={onChange}
       onClearAll={onClearAll}
       onRetry={onRetry}
+      onToggleTag={onToggleTag}
       onToggleKeyword={onToggleKeyword}
     />
   );
-  return { ...view, onChange, onClearAll, onRetry, onToggleKeyword };
+  return { ...view, onChange, onClearAll, onRetry, onToggleTag, onToggleKeyword };
 }
 
 describe("CatalogueResults header", () => {
@@ -60,13 +62,14 @@ describe("CatalogueResults header", () => {
     rerender(
       <CatalogueResults
         result={response([snapshotItem()])}
-        filters={filters({ category: ["hydrology"] })}
+        filters={filters({ tag: ["publication"] })}
         facets={FACETS}
         isLoading={false}
         error={false}
         onChange={vi.fn()}
         onClearAll={vi.fn()}
         onRetry={vi.fn()}
+        onToggleTag={vi.fn()}
         onToggleKeyword={vi.fn()}
       />
     );
@@ -148,6 +151,25 @@ describe("CatalogueResults keyword chips", () => {
   });
 });
 
+describe("CatalogueResults tag chips", () => {
+  it("passes the tag filter to each card and reports a chip press, then keeps focus on the page", () => {
+    const { onToggleTag, onToggleKeyword } = setup(
+      response([snapshotItem(), modelInputItem()]),
+      filters({ tag: ["publication", "climate-forcing"] })
+    );
+    for (const name of ["Filter by tag Publication", "Filter by tag Climate forcing"]) {
+      expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
+    }
+    const river = screen.getByRole("button", { name: "Filter by tag River network" });
+    expect(river.getAttribute("aria-pressed")).toBe("false");
+    river.focus();
+    fireEvent.click(river);
+    expect(onToggleTag).toHaveBeenCalledWith("river-network");
+    expect(onToggleKeyword).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(document.getElementById("catalogue-results"));
+  });
+});
+
 describe("CatalogueResults states", () => {
   it("shows skeleton cards while loading, announces it, and hides the pagination", () => {
     const { container } = setup(
@@ -166,7 +188,7 @@ describe("CatalogueResults states", () => {
   it("shows a dashed empty card with Clear filters when filters leave nothing", () => {
     const { container, onClearAll } = setup(
       { ...EMPTY_CATALOGUE, facets: FACETS },
-      filters({ category: ["hydrology"] })
+      filters({ tag: ["publication"] })
     );
     expect(screen.getByText("No results match these filters")).toBeTruthy();
     expect(container.querySelector(".border-dashed")).not.toBeNull();

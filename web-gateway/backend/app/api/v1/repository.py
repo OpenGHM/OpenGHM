@@ -130,9 +130,9 @@ async def _load_catalogue() -> list[SnapshotCatalogueItem | ModelInputCatalogueI
 
 @router.get("/catalogue", response_model=CatalogueResponse)
 async def list_catalogue(
-    q: str | None = Query(default=None, description="Substring over about.name, about.description, about.keywords"),
+    q: str | None = Query(default=None, description="Substring over about.name, about.description, about.keywords, about.tags"),
     type: list[Literal["snapshot", "model-input"]] | None = Query(default=None),
-    category: list[str] | None = Query(default=None),
+    tag: list[str] | None = Query(default=None, description="An about.tags value; an item matches when it has any selected tag"),
     keyword: list[str] | None = Query(default=None, description="An about.keywords entry, exact match"),
     creator: list[str] | None = Query(default=None),
     license: list[str] | None = Query(default=None),
@@ -150,14 +150,14 @@ async def list_catalogue(
 ) -> CatalogueResponse:
     """Snapshots and model inputs in one list, with facet counts
     (gateway.md, Data Repository). The facet parameters repeat
-    (``?category=a&category=b``), they are not comma lists."""
+    (``?tag=a&tag=b``), they are not comma lists."""
     query = CatalogueQuery(
         q=q, year_start=year_start, year_end=year_end,
         spatial_res_min=spatial_res_min, spatial_res_max=spatial_res_max,
         selected={
             name: tuple(values)
             for name, values in {
-                "type": type, "category": category, "keyword": keyword, "creator": creator,
+                "type": type, "tag": tag, "keyword": keyword, "creator": creator,
                 "license": license, "output": output, "forcing": forcing, "process": process, "wbm": wbm,
             }.items()
             if values

@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { cn } from "@/lib/utils";
+import { humanizeTag } from "@/lib/repository/catalogue";
 import {
   cardKeywords,
   contentsLine,
@@ -38,10 +39,42 @@ function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
   );
 }
 
-function CategoryChip({ children }: { children: React.ReactNode }) {
+/**
+ * A tag as a filter control, the emphasised chip of the row (primary tint).
+ * Like a keyword chip, the button is 40 px tall on a phone and the chip is
+ * drawn inside it; it sits above the title's stretched link.
+ */
+function TagChip({
+  tag,
+  selected,
+  onToggle,
+}: {
+  tag: string;
+  selected: boolean;
+  onToggle: (tag: string) => void;
+}) {
+  const label = humanizeTag(tag);
   return (
-    <li className="max-w-full truncate rounded-md bg-primary/10 px-2 py-0.5 text-[11.5px] font-medium text-primary">
-      {children}
+    <li className="max-w-full min-w-0">
+      <button
+        type="button"
+        aria-label={`Filter by tag ${label}`}
+        aria-pressed={selected}
+        onClick={() => onToggle(tag)}
+        className="group/tag relative z-10 inline-flex min-h-10 max-w-full min-w-0 cursor-pointer items-center outline-none sm:min-h-0"
+      >
+        <span
+          className={cn(
+            "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11.5px] font-medium transition-colors group-focus-visible/tag:ring-[3px] group-focus-visible/tag:ring-ring/50 motion-reduce:transition-none",
+            selected
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-transparent bg-primary/10 text-primary group-hover/tag:border-primary/40"
+          )}
+        >
+          {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
+          <span className="truncate">{label}</span>
+        </span>
+      </button>
     </li>
   );
 }
@@ -126,20 +159,26 @@ function TitleLink({ href, name, className }: { href: string; name: string; clas
 /**
  * One catalogue entry: a snapshot or a model input as a card, in a list or a
  * grid. The title is a stretched link, so the whole card opens the detail
- * page, and the View, Download and Cite links sit above it. The keyword chips
- * of the list card are buttons that add (or, when already on, remove) that
- * keyword as a filter.
+ * page, and the View, Download and Cite links sit above it. The tag and
+ * keyword chips of the list card are buttons that add (or, when already on,
+ * remove) that tag or keyword as a filter.
  */
 export function CatalogueCard({
   item,
   view = "list",
+  selectedTags = [],
   selectedKeywords = [],
+  onToggleTag,
   onToggleKeyword,
 }: {
   item: CatalogueItem;
   view?: CatalogueView;
+  /** The tag filter in effect: those chips show as selected. */
+  selectedTags?: readonly string[];
   /** The keyword filter in effect: those chips show as selected. */
   selectedKeywords?: readonly string[];
+  /** Add the tag to the filter, or take it off when it is already on. */
+  onToggleTag: (tag: string) => void;
   /** Add the keyword to the filter, or take it off when it is already on. */
   onToggleKeyword: (keyword: string) => void;
 }) {
@@ -216,8 +255,10 @@ export function CatalogueCard({
           </MetaCell>
         </dl>
 
-        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Category and keywords">
-          <CategoryChip>{about.category}</CategoryChip>
+        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Tags and keywords">
+          {about.tags.map((tag) => (
+            <TagChip key={tag} tag={tag} selected={selectedTags.includes(tag)} onToggle={onToggleTag} />
+          ))}
           {keywords.shown.map((keyword) => (
             <KeywordChip
               key={keyword}

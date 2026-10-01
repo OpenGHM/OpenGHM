@@ -312,14 +312,15 @@ function ResolutionFilter({
 // ─── The sidebar ─────────────────────────────────────────────────────────────
 
 type GroupSpec =
-  | { kind: "facet"; key: CatalogueFacetKey; defaultOpen: boolean | "when-short" }
+  | { kind: "facet"; key: CatalogueFacetKey; defaultOpen: boolean | "when-short"; shortAtMost?: number }
   | { kind: "temporal"; defaultOpen: boolean }
   | { kind: "resolution"; defaultOpen: boolean };
 
 /** The order of the groups, top to bottom. */
 const GROUPS: GroupSpec[] = [
   { kind: "facet", key: "type", defaultOpen: true },
-  { kind: "facet", key: "category", defaultOpen: true },
+  // The closed tag list is short: open unless it has grown past eight options.
+  { kind: "facet", key: "tag", defaultOpen: "when-short", shortAtMost: 8 },
   // Open only when the whole list fits without "Show all".
   { kind: "facet", key: "keyword", defaultOpen: "when-short" },
   { kind: "temporal", defaultOpen: true },
@@ -444,7 +445,7 @@ export function CatalogueSidebar({
                   title={CATALOGUE_FACET_NAMES[key].title}
                   defaultOpen={
                     group.defaultOpen === "when-short"
-                      ? options.length <= COLLAPSED_OPTION_COUNT
+                      ? options.length <= (group.shortAtMost ?? COLLAPSED_OPTION_COUNT)
                       : group.defaultOpen
                   }
                   activeCount={selected.length}

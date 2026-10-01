@@ -10,6 +10,7 @@ import { fetchModelInputs } from "@/lib/repository/actions";
 import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
 import type { Dataset, ModelInput, ModelInputListResponse } from "@/lib/repository/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 const EMPTY_RESULT: ModelInputListResponse = {
   items: [],
@@ -50,9 +51,7 @@ function ModelInputMiniCard({
             <h4 className="text-sm font-semibold leading-snug text-foreground">
               {modelInput.about.name}
             </h4>
-            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              {modelInput.about.category}
-            </span>
+            <TagChips tags={modelInput.about.tags} tone="primary" size="sm" className="shrink-0 justify-end" />
           </div>
           <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">

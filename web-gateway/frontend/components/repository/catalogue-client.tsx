@@ -54,6 +54,10 @@ export function CatalogueClient({
   }
 
   const handleClearAll = () => setFilters(clearedFilters(filters));
+  const handleToggleTag = (tag: string) =>
+    setFilters({
+      tag: filters.tag.includes(tag) ? filters.tag.filter((t) => t !== tag) : [...filters.tag, tag],
+    });
   const handleToggleKeyword = (keyword: string) =>
     setFilters({
       keyword: filters.keyword.includes(keyword)
@@ -80,6 +84,7 @@ export function CatalogueClient({
           onChange={setFilters}
           onClearAll={handleClearAll}
           onRetry={retry}
+          onToggleTag={handleToggleTag}
           onToggleKeyword={handleToggleKeyword}
         />
       </div>

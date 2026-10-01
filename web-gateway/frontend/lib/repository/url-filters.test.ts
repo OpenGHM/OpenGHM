@@ -12,7 +12,7 @@ import type { CatalogueFilterState } from "./types";
 const FULL: CatalogueFilterState = {
   searchQuery: "storage",
   type: ["snapshot", "model-input"],
-  category: ["hydrology", "ancillary"],
+  tag: ["publication", "ancillary-data"],
   keyword: ["water balance", "Hydrology"],
   output: ["discharge", "runoff", "soilMoisture"],
   forcing: ["windU"],
@@ -31,8 +31,8 @@ const FULL: CatalogueFilterState = {
 
 describe("toURLSearchParams", () => {
   it("keeps every value of a repeated key", () => {
-    const params = toURLSearchParams({ category: ["a", "b"], q: "x", skipped: undefined });
-    expect(params.getAll("category")).toEqual(["a", "b"]);
+    const params = toURLSearchParams({ tag: ["a", "b"], q: "x", skipped: undefined });
+    expect(params.getAll("tag")).toEqual(["a", "b"]);
     expect(params.get("q")).toBe("x");
     expect(params.has("skipped")).toBe(false);
   });
@@ -47,7 +47,7 @@ describe("toURLSearchParams", () => {
 describe("catalogue filters in the URL", () => {
   it("writes each selected value as its own repeated key, never a comma list", () => {
     const qs = catalogueFiltersToParams(FULL).toString();
-    expect(qs).toContain("category=hydrology&category=ancillary");
+    expect(qs).toContain("tag=publication&tag=ancillary-data");
     expect(qs).toContain("keyword=water+balance&keyword=Hydrology");
     expect(qs).toContain("output=discharge&output=runoff&output=soilMoisture");
     expect(qs).not.toContain(",");
@@ -65,18 +65,18 @@ describe("catalogue filters in the URL", () => {
   });
 
   it("round-trips through the Next searchParams shape too", () => {
-    const sp = { type: ["snapshot", "model-input"], category: "hydrology", q: "x" };
+    const sp = { type: ["snapshot", "model-input"], tag: "publication", q: "x" };
     const parsed = parseCatalogueFilters(toURLSearchParams(sp));
     expect(parsed.type).toEqual(["snapshot", "model-input"]);
-    expect(parsed.category).toEqual(["hydrology"]);
+    expect(parsed.tag).toEqual(["publication"]);
     expect(parsed.searchQuery).toBe("x");
   });
 
   it("drops empty and repeated values and an unknown type", () => {
     const parsed = parseCatalogueFilters(
-      new URLSearchParams("category=a&category=&category=a&type=snapshot&type=bogus")
+      new URLSearchParams("tag=a&tag=&tag=a&type=snapshot&type=bogus")
     );
-    expect(parsed.category).toEqual(["a"]);
+    expect(parsed.tag).toEqual(["a"]);
     expect(parsed.type).toEqual(["snapshot"]);
   });
 

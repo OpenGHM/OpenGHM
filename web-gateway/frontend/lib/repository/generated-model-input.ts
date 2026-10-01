@@ -140,9 +140,14 @@ export interface OpenGHMCitationBlock {
   description: string;
   datePublished: string;
   /**
-   * Open vocabulary, not an enum. A new value never needs a spec bump — see metadata-format.md#aboutcategory.
+   * What this artifact is for or contains, picked from a closed list so the catalogue's Tags filter stays usable. One or more. Adding a value to the list is an additive MINOR change — see metadata-format.md#abouttags.
+   *
+   * @minItems 1
    */
-  category: string;
+  tags: [
+    "publication" | "tutorial" | "test" | "ancillary-data" | "climate-forcing" | "river-network",
+    ...("publication" | "tutorial" | "test" | "ancillary-data" | "climate-forcing" | "river-network")[]
+  ];
   /**
    * @minItems 1
    */

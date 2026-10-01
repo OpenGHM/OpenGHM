@@ -1,6 +1,7 @@
 import { FileText, Mail } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { PartialAbout } from "@/lib/jobs/types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 /** Read-only display of a simulation's `about` block, once it can no
  * longer be edited (past DRAFT). Renders nothing if the simulation was
@@ -24,11 +25,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
           <p className="text-sm leading-relaxed text-muted-foreground">{about.description}</p>
         )}
         <div className="flex flex-wrap gap-4 text-sm">
-          {about.category && (
-            <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
-              {about.category}
-            </span>
-          )}
+          {about.tags && about.tags.length > 0 && <TagChips tags={about.tags} />}
           {about.license && <span className="text-xs text-muted-foreground">License: {about.license}</span>}
         </div>
         {about.keywords && about.keywords.length > 0 && (

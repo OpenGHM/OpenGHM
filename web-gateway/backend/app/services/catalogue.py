@@ -74,7 +74,7 @@ def _snapshot_only(extract: Callable[[SnapshotCatalogueItem], list[Option]]) -> 
 #: has no such field offers none, so a selection in that facet excludes it.
 FACETS: dict[str, Callable[[Item], list[Option]]] = {
     "type": lambda i: [(_kind(i), KIND_LABELS[_kind(i)])],
-    "category": lambda i: [(i.about.category, i.about.category)],
+    "tag": lambda i: [(t.value, t.value) for t in i.about.tags],
     "keyword": lambda i: [(k.root, k.root) for k in i.about.keywords],
     "creator": lambda i: [(c.name, c.name) for c in i.about.creator],
     "license": lambda i: [(i.about.license, i.about.license)],
@@ -89,10 +89,12 @@ FACETS: dict[str, Callable[[Item], list[Option]]] = {
 
 
 def _text_fields(item: Item) -> tuple[str, str, list[str]]:
+    """name, description, and the keyword-like terms (``about.keywords`` and
+    ``about.tags``; a hit in either counts the same)."""
     return (
         item.about.name.lower(),
         item.about.description.lower(),
-        [k.root.lower() for k in item.about.keywords],
+        [k.root.lower() for k in item.about.keywords] + [t.value.lower() for t in item.about.tags],
     )
 
 
@@ -205,7 +207,7 @@ def year_bounds(items: list[Item]) -> YearBounds | None:
 
 
 def relevance_score(item: Item, q: str | None) -> int:
-    """name hit 3, keyword hit 2, description hit 1, summed over the fields hit."""
+    """name hit 3, keyword or tag hit 2, description hit 1, summed over the fields hit."""
     if not q or not q.strip():
         return 0
     q_lower = q.strip().lower()

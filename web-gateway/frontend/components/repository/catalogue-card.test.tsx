@@ -6,17 +6,25 @@ import { modelInputItem, snapshotItem } from "./catalogue.fixtures";
 
 afterEach(cleanup);
 
-function renderCard(item: CatalogueItem, selectedKeywords: string[] = [], layout: CatalogueView = "list") {
+function renderCard(
+  item: CatalogueItem,
+  selectedKeywords: string[] = [],
+  layout: CatalogueView = "list",
+  selectedTags: string[] = []
+) {
   const onToggleKeyword = vi.fn();
+  const onToggleTag = vi.fn();
   const view = render(
     <CatalogueCard
       item={item}
       view={layout}
+      selectedTags={selectedTags}
       selectedKeywords={selectedKeywords}
+      onToggleTag={onToggleTag}
       onToggleKeyword={onToggleKeyword}
     />
   );
-  return { ...view, onToggleKeyword };
+  return { ...view, onToggleKeyword, onToggleTag };
 }
 
 function hrefOf(name: RegExp): string | null {
@@ -39,12 +47,13 @@ describe("CatalogueCard for a model snapshot", () => {
     }
   });
 
-  it("shows the Model Snapshot badge in the brand tint, the mono version and licence line, and the category", () => {
+  it("shows the Model Snapshot badge in the brand tint, the mono version and licence line, and the tags", () => {
     renderCard(snapshotItem());
     expect(screen.getByText("Model Snapshot").className).toContain("bg-primary/10");
     const line = screen.getByText("WBM 1.0.0 · GPL-3.0-only");
     expect(line.className).toContain("font-mono");
-    expect(screen.getByText("hydrology")).toBeTruthy();
+    expect(screen.getByText("Publication")).toBeTruthy();
+    expect(screen.getByText("Climate forcing")).toBeTruthy();
   });
 
   it("shows Authors, Coverage and Resolution with the values in mono", () => {
@@ -73,7 +82,7 @@ describe("CatalogueCard for a model snapshot", () => {
     expect(screen.getByRole("link", { name: /^Download/ }).className).not.toContain("bg-foreground");
   });
 
-  it("shows the category and four keywords, not the output variables", () => {
+  it("shows every tag and four keywords, not the output variables", () => {
     renderCard(snapshotItem());
     for (const name of ["storage", "water balance", "global", "monthly"]) {
       expect(screen.getByText(name)).toBeTruthy();
@@ -84,7 +93,8 @@ describe("CatalogueCard for a model snapshot", () => {
     }
     const more = screen.getByText("+2 more");
     expect(more.title).toBe("reservoirs, streamflow");
-    expect(within(more.closest("ul")!).getAllByRole("button")).toHaveLength(4);
+    // Two tag chips and four keyword chips, all buttons.
+    expect(within(more.closest("ul")!).getAllByRole("button")).toHaveLength(6);
   });
 
   it("clamps the description to two lines and shows the published date", () => {
@@ -131,9 +141,10 @@ describe("CatalogueCard for a model input", () => {
     expect(screen.getByText("Climatological")).toBeTruthy();
   });
 
-  it("shows the category and four keywords and +1 more", () => {
+  it("shows every tag and four keywords and +1 more", () => {
     renderCard(modelInputItem());
-    expect(screen.getByText("ancillary")).toBeTruthy();
+    expect(screen.getByText("Ancillary data")).toBeTruthy();
+    expect(screen.getByText("River network")).toBeTruthy();
     expect(screen.getByText("network")).toBeTruthy();
     expect(screen.getByText("elevation")).toBeTruthy();
     expect(screen.queryByText("lakes")).toBeNull();
@@ -145,7 +156,7 @@ describe("CatalogueCard for a model input", () => {
     const base = modelInputItem();
     renderCard({ ...base, about: { ...base.about, keywords: ["network", "soils"] } } as CatalogueItem);
     expect(screen.queryByText(/more$/)).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button")).toHaveLength(4);
   });
 
   it("leaves the resolution out when no network has one", () => {
@@ -189,17 +200,75 @@ describe("CatalogueCard keyword chips", () => {
     expect(chip.firstElementChild?.className).toContain("group-focus-visible/keyword:ring");
   });
 
-  it("leave the category as plain text", () => {
-    renderCard(snapshotItem());
-    expect(screen.getByText("hydrology").closest("button")).toBeNull();
-    expect(screen.queryByRole("button", { name: /hydrology/ })).toBeNull();
-  });
-
   it("do not follow the card's link when pressed", () => {
     // The chip is a button next to the title link, not inside it.
     renderCard(snapshotItem());
     const chip = screen.getByRole("button", { name: "Filter by keyword storage" });
     expect(chip.closest("a")).toBeNull();
+  });
+});
+
+describe("CatalogueCard tag chips", () => {
+  it("are buttons named for their readable tag, one per tag, before the keywords", () => {
+    renderCard(snapshotItem());
+    const publication = screen.getByRole("button", { name: "Filter by tag Publication" });
+    const forcing = screen.getByRole("button", { name: "Filter by tag Climate forcing" });
+    const firstKeyword = screen.getByRole("button", { name: "Filter by keyword storage" });
+    expect(publication.getAttribute("aria-pressed")).toBe("false");
+    expect(forcing.getAttribute("aria-pressed")).toBe("false");
+    expect(publication.compareDocumentPosition(forcing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(forcing.compareDocumentPosition(firstKeyword) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([
+    ["snapshot", snapshotItem() as CatalogueItem, "Publication", "publication"],
+    ["model input", modelInputItem(), "River network", "river-network"],
+  ])("report the raw tag value on a press, on a %s card", (_k, item, label, raw) => {
+    const { onToggleTag, onToggleKeyword } = renderCard(item);
+    fireEvent.click(screen.getByRole("button", { name: `Filter by tag ${label}` }));
+    expect(onToggleTag).toHaveBeenCalledWith(raw);
+    expect(onToggleKeyword).not.toHaveBeenCalled();
+  });
+
+  it("show a selected style, with a check, for each tag already in the filter, several at once", () => {
+    renderCard(snapshotItem(), [], "list", ["publication", "climate-forcing"]);
+    for (const name of ["Filter by tag Publication", "Filter by tag Climate forcing"]) {
+      const on = screen.getByRole("button", { name });
+      expect(on.getAttribute("aria-pressed")).toBe("true");
+      expect(on.querySelector("svg")).not.toBeNull();
+      expect(on.innerHTML).toContain("bg-primary text-primary-foreground");
+    }
+  });
+
+  it("wear the primary tint when off, and have no check", () => {
+    renderCard(snapshotItem(), [], "list", ["climate-forcing"]);
+    const off = screen.getByRole("button", { name: "Filter by tag Publication" });
+    expect(off.innerHTML).toContain("bg-primary/10");
+    expect(off.querySelector("svg")).toBeNull();
+  });
+
+  it("are 40 px targets on a phone, above the stretched link, with a focus ring on the chip", () => {
+    renderCard(snapshotItem());
+    const chip = screen.getByRole("button", { name: "Filter by tag Publication" });
+    expect(chip.className).toContain("min-h-10");
+    expect(chip.className).toContain("sm:min-h-0");
+    expect(chip.className).toContain("z-10");
+    expect(chip.className).toContain("outline-none");
+    expect(chip.firstElementChild?.className).toContain("group-focus-visible/tag:ring");
+    expect(chip.closest("a")).toBeNull();
+  });
+
+  it("keep a tag toggle and a same-named keyword toggle apart", () => {
+    const base = snapshotItem();
+    const { onToggleTag, onToggleKeyword } = renderCard({
+      ...base,
+      about: { ...base.about, keywords: ["test"], tags: ["test"] },
+    } as CatalogueItem);
+    fireEvent.click(screen.getByRole("button", { name: "Filter by keyword test" }));
+    expect(onToggleKeyword).toHaveBeenCalledWith("test");
+    expect(onToggleTag).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Filter by tag Test" }));
+    expect(onToggleTag).toHaveBeenCalledWith("test");
   });
 });
 
@@ -271,7 +340,7 @@ describe("CatalogueCard in the grid view", () => {
     expect(hrefOf(/^Download Global Storage Run$/)).toBe("/repository/snap-1#download");
     expect(screen.queryByRole("link", { name: /Cite/ })).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.queryByText("hydrology")).toBeNull();
+    expect(screen.queryByText("Publication")).toBeNull();
     expect(screen.getByText("View").closest("a")?.className).toContain("bg-foreground");
   });
 

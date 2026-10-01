@@ -15,6 +15,7 @@ import { updateSimulation } from "@/lib/jobs/actions";
 import { UNSUPPORTED_REASON, validateSlurmConfig } from "@/lib/jobs/compute";
 import { checkRunStartFor, runStartBlockedReason } from "@/lib/jobs/run-start";
 import { fetchModelInputById } from "@/lib/repository/actions";
+import { ABOUT_TAGS, humanizeTag, type AboutTag } from "@/lib/repository/catalogue";
 import type { Job, JobParameters, PartialAbout, SlurmConfig } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 import { ModelInputSection, type ModelInputSectionChoice } from "@/components/workspace/model-input-section";
@@ -43,7 +44,7 @@ function creatorsFromAbout(about: PartialAbout | null): CreatorRow[] {
 function buildAboutPayload(state: {
   name: string;
   description: string;
-  category: string;
+  tags: AboutTag[];
   license: string;
   keywords: string;
   creators: CreatorRow[];
@@ -63,7 +64,7 @@ function buildAboutPayload(state: {
   return {
     ...(state.name.trim() && { name: state.name.trim() }),
     ...(state.description.trim() && { description: state.description.trim() }),
-    ...(state.category.trim() && { category: state.category.trim() }),
+    ...(state.tags.length > 0 && { tags: state.tags as PartialAbout["tags"] }),
     ...(state.license.trim() && { license: state.license.trim() }),
     ...(keywords.length > 0 && { keywords: keywords as [string, ...string[]] }),
     ...(creators.length > 0 && {
@@ -119,7 +120,7 @@ export function SimulationEditor({
   // -- About form state -----------------------------------------------------
   const [name, setName] = useState(job.about?.name ?? "");
   const [description, setDescription] = useState(job.about?.description ?? "");
-  const [category, setCategory] = useState(job.about?.category ?? "");
+  const [tags, setTags] = useState<AboutTag[]>([...(job.about?.tags ?? [])]);
   const [license, setLicense] = useState(job.about?.license ?? "");
   const [keywords, setKeywords] = useState((job.about?.keywords ?? []).join(", "));
   const [creators, setCreators] = useState<CreatorRow[]>(creatorsFromAbout(job.about));
@@ -190,7 +191,7 @@ export function SimulationEditor({
         variables: Array.from(selectedVars),
         custom_params: customParams,
       };
-      const about = buildAboutPayload({ name, description, category, license, keywords, creators });
+      const about = buildAboutPayload({ name, description, tags, license, keywords, creators });
       const model_input_id = modelInputChoice.mode === "chosen" ? modelInputChoice.id : null;
 
       const result = await updateSimulation(job.id, {
@@ -242,16 +243,31 @@ export function SimulationEditor({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Untitled simulation" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Category</Label>
-              <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. tutorial" />
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Untitled simulation" />
           </div>
+          <fieldset className="space-y-1.5">
+            <legend className="text-xs text-muted-foreground">Tags</legend>
+            <div className="flex flex-wrap gap-x-4">
+              {ABOUT_TAGS.map((tag) => (
+                <label
+                  key={tag}
+                  className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-foreground sm:min-h-8"
+                >
+                  <input
+                    type="checkbox"
+                    checked={tags.includes(tag)}
+                    onChange={() =>
+                      setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
+                    }
+                    className="size-4 shrink-0 rounded border-border accent-primary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  />
+                  {humanizeTag(tag)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Description</Label>
             <textarea

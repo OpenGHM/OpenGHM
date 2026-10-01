@@ -5,15 +5,20 @@
   "description": "The 'who published this, and how to cite it' block, shared by every OpenGHM artifact spec (snapshot, model input) rather than defined once per spec (ADR 0018). Field names are schema.org/Dataset property names on purpose, so a JSON-LD island can be generated for Google Dataset Search at render time (see metadata-format.md#notes) — that projection is generated, never stored.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "description", "datePublished", "category", "creator", "license", "keywords", "url"],
+  "required": ["name", "description", "datePublished", "tags", "creator", "license", "keywords", "url"],
   "properties": {
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string", "minLength": 1 },
     "datePublished": { "type": "string", "format": "date" },
-    "category": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Open vocabulary, not an enum. A new value never needs a spec bump — see metadata-format.md#aboutcategory."
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["publication", "tutorial", "test", "ancillary-data", "climate-forcing", "river-network"]
+      },
+      "description": "What this artifact is for or contains, picked from a closed list so the catalogue's Tags filter stays usable. One or more. Adding a value to the list is an additive MINOR change — see metadata-format.md#abouttags."
     },
     "creator": {
       "type": "array",

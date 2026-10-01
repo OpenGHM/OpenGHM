@@ -48,7 +48,7 @@ export function toURLSearchParams(
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {
     if (value === undefined) continue;
-    // A repeated key (`?category=a&category=b`) arrives as an array: keep every value.
+    // A repeated key (`?tag=a&tag=b`) arrives as an array: keep every value.
     for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
   }
   return params;
@@ -119,7 +119,7 @@ export function parseCatalogueFilters(params: URLSearchParams): CatalogueFilterS
   return state;
 }
 
-/** Repeated keys, one per value: `?category=a&category=b`, never a comma list. */
+/** Repeated keys, one per value: `?tag=a&tag=b`, never a comma list. */
 export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.searchQuery.trim()) params.set("q", filters.searchQuery.trim());

@@ -21,7 +21,7 @@ import {
  * Data Repository page and, through `useUrlSyncedFilters`, from the browser
  * (BFF layer — the browser never calls FastAPI directly).
  *
- * A facet goes out as a repeated key (`category=a&category=b`): the client from
+ * A facet goes out as a repeated key (`tag=a&tag=b`): the client from
  * `getApiClient` serialises arrays that way (`paramsSerializer.indexes: null`).
  */
 export async function fetchCatalogue(

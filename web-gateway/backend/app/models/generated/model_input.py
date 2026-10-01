@@ -94,6 +94,15 @@ class Dataset(BaseModel):
     )
 
 
+class Tag(Enum):
+    publication = 'publication'
+    tutorial = 'tutorial'
+    test = 'test'
+    ancillary_data = 'ancillary-data'
+    climate_forcing = 'climate-forcing'
+    river_network = 'river-network'
+
+
 class CreatorItem(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -129,9 +138,10 @@ class OpenGHMCitationBlock(BaseModel):
     name: constr(min_length=1)
     description: constr(min_length=1)
     datePublished: date
-    category: constr(min_length=1) = Field(
+    tags: list[Tag] = Field(
         ...,
-        description='Open vocabulary, not an enum. A new value never needs a spec bump — see metadata-format.md#aboutcategory.',
+        description="What this artifact is for or contains, picked from a closed list so the catalogue's Tags filter stays usable. One or more. Adding a value to the list is an additive MINOR change — see metadata-format.md#abouttags.",
+        min_length=1,
     )
     creator: list[CreatorItem] = Field(..., min_length=1)
     license: str = Field(

@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 const { useSession, signOut, revokeSession } = vi.hoisted(() => ({
@@ -8,6 +8,8 @@ const { useSession, signOut, revokeSession } = vi.hoisted(() => ({
 }));
 vi.mock("next-auth/react", () => ({ useSession, signOut }));
 vi.mock("@/lib/auth-actions", () => ({ revokeSession }));
+const { usePathname } = vi.hoisted(() => ({ usePathname: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname }));
 
 import { Header } from "@/components/landing/header";
 
@@ -20,6 +22,10 @@ beforeAll(() => {
     unobserve() {}
     disconnect() {}
   };
+});
+
+beforeEach(() => {
+  usePathname.mockReturnValue("/");
 });
 
 afterEach(() => {
@@ -91,5 +97,68 @@ describe("the header's phone menu", () => {
     fireEvent.click(menu.getByRole("menuitem", { name: "Sign out" }));
     await vi.waitFor(() => expect(signOut).toHaveBeenCalledWith({ callbackUrl: "/" }));
     expect(revokeSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the header's current-page highlight", () => {
+  function current(): string[] {
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    return within(nav)
+      .getAllByRole("link")
+      .filter((el) => el.getAttribute("aria-current") === "page")
+      .map((el) => el.textContent ?? "");
+  }
+
+  it.each([
+    ["/repository", "Data Repository"],
+    ["/repository/abc", "Data Repository"],
+    ["/workspace", "Workspace"],
+    ["/workspace/new/pick", "Workspace"],
+    ["/", "Home"],
+    ["/about", "About"],
+  ])("lights only the right tab on %s", (path, label) => {
+    usePathname.mockReturnValue(path);
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    expect(current()).toEqual([label]);
+  });
+
+  it("lights nothing on a page that is not a tab", () => {
+    usePathname.mockReturnValue("/dashboard/profile");
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    expect(current()).toEqual([]);
+  });
+
+  it("does not match a path that only shares a prefix", () => {
+    usePathname.mockReturnValue("/repositoryx");
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    expect(current()).toEqual([]);
+  });
+
+  it("gives the lit tab a block, and every tab the same shape", () => {
+    usePathname.mockReturnValue("/repository");
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    const lit = nav.getByRole("link", { name: "Data Repository" });
+    expect(lit.className).toContain("bg-primary/10");
+    expect(lit.className).toContain("text-primary");
+    for (const name of ["Home", "Workspace", "Community", "About"]) {
+      const link = nav.getByRole("link", { name });
+      expect(link.className).toContain("px-3");
+      expect(link.className).not.toContain("bg-primary/10");
+    }
+  });
+
+  it("marks the current item in the phone menu too, and only that one", () => {
+    usePathname.mockReturnValue("/repository/abc");
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    const menu = openMenu();
+    const lit = menu.getAllByRole("menuitem").filter((el) => el.getAttribute("aria-current") === "page");
+    expect(lit.map((el) => el.textContent)).toEqual(["Data Repository"]);
+    expect(lit[0].className).toContain("bg-primary/10");
   });
 });

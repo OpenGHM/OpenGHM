@@ -40,7 +40,7 @@ maps to ids for browsing.
     "name": "WBM v1.0.0 Wyoming_tracking simulation …: [Wyoming] [2000-2009]",
     "description": "A WBM regional simulation over the Wyoming basin for 2022 model documentation paper.",
     "datePublished": "2026-09-23",
-    "category": "publication",
+    "tags": ["publication"],
     "creator": [
       { "name": "Jordan Rivera", "email": "jordan.rivera@example.edu" },
       { "name": "Sam Whitfield", "email": "sam.whitfield@example.edu" }
@@ -297,16 +297,27 @@ enforces it — and the string can't be queried or range-filtered. `unit` is the
 name WBM's own grid convention uses (`arc-minute`, `arc-second`), not a
 standard unit-conversion identifier.
 
-#### `about.category`
+#### `about.tags`
 
-A free string, not an enum. The three real snapshots on Anvil carry two values
-(`publication`, `wbm_storage_v1.0.0_Wyoming` and `_Global`; `tutorial`,
-`wbm_storage_v2.0.0`), and more may exist that this project hasn't seen. Closing
-the value set now, on three data points, risks rejecting a legitimate value
-later. A suggested vocabulary — `publication`, `tutorial`, and by the same
-logic `test`, `demo` — is documented here for the catalog's filter UI to seed
-itself from, but the field stays unvalidated against it: a new value never
-needs a spec bump.
+A closed list, not free text: one or more values from the table below, no
+repeats. The catalogue's browse filter is built from them, and a filter is only
+usable when the same thing is always spelled the same way. The field replaces
+`about.category`, a single free string that mixed *purpose* (`publication`,
+`tutorial`) with *content* and so could not say both at once; a snapshot can now
+be a `publication` and a model input an `ancillary-data`, `climate-forcing` and
+`river-network` artifact in one go.
+
+| Value | Meaning |
+|---|---|
+| `publication` | Reproduces the results of a published paper. |
+| `tutorial` | Teaching or workshop material, small and quick to run. |
+| `test` | Verification or regression material, not for scientific use. |
+| `ancillary-data` | Land-surface, water-use and other non-forcing model inputs. |
+| `climate-forcing` | Meteorological forcing time series. |
+| `river-network` | Flow-direction and river-network grids. |
+
+Adding a value is an additive MINOR change, the same as a new forcing role;
+removing or renaming one is breaking, because documents already carry it.
 
 #### `runtime.execution`
 
@@ -353,7 +364,7 @@ twice.
 
 `about`'s field names are schema.org/Dataset property names on purpose, so a
 JSON-LD island can be generated for Google Dataset Search at render time. That
-projection is **generated, never stored**: it drops `category`, maps
+projection is **generated, never stored**: it drops `tags` (schema.org/Dataset has no counterpart), maps
 `relatedLink` to `citation` with the DOI as a nested `identifier`
 (`PropertyValue`, `propertyID: "DOI"`), reaches into `simulation` for
 `spatialCoverage`, `temporalCoverage` and `outputVariables`, and reshapes those

@@ -48,6 +48,7 @@ import {
 import type { Dataset, ModelInput } from "@/lib/repository/types";
 import type { ActionFailure, JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import type { ModelInputChoice } from "@/lib/workspace/wizard-types";
+import { TagChips } from "@/components/repository/tag-chips";
 
 function ModelInputSummary({
   choice,
@@ -232,9 +233,7 @@ export function WizardReviewStep({
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-3">
                 <CardTitle className="text-base">{snapshot.about.name}</CardTitle>
-                <span className="shrink-0 rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">
-                  {snapshot.about.category}
-                </span>
+                <TagChips tags={snapshot.about.tags} className="shrink-0 justify-end" />
               </div>
               <p className="mt-1 font-mono text-xs text-muted-foreground">
                 {snapshot.uses.container.image}:{snapshot.uses.container.version}

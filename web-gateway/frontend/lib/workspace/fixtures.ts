@@ -418,7 +418,7 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
       name: "Fake Snapshot",
       description: "A model snapshot used only in tests.",
       datePublished: "2026-01-01T00:00:00Z",
-      category: "hydrology",
+      tags: ["test"],
       creator: [{ name: "Test Author" }],
       license: "GPL-3.0-only",
       keywords: ["test"],
