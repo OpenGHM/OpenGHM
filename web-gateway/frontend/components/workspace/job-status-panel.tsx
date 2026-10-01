@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { TimeStamp } from "@/components/workspace/time-stamp";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { formatAge, formatLocalDateTime, formatUtcDateTime } from "@/lib/workspace/time";
 import { useNow } from "@/lib/workspace/use-now";

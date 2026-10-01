@@ -35,6 +35,7 @@ export function CancelJobDialog({
   onConflict,
   onSessionExpired,
   onPendingChange,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -50,6 +51,9 @@ export function CancelJobDialog({
   onSessionExpired?: () => void;
   /** The request started or ended, for a caller that shows it elsewhere. */
   onPendingChange?: (pending: boolean) => void;
+  /** Where focus goes when the dialog closes. Opened without a trigger, Radix
+   *  would leave it on the body; the caller hands it back to its button. */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const [pending, setPending] = useState(false);
 
@@ -100,7 +104,7 @@ export function CancelJobDialog({
         if (!pending) onOpenChange(next);
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>Cancel this simulation?</AlertDialogTitle>
           <AlertDialogDescription>

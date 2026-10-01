@@ -3,7 +3,7 @@
 import { Hourglass } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
-import { TimeStamp } from "@/components/workspace/time-stamp";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { JobStatus } from "@/lib/jobs/types";
 import { describeQueueReason } from "@/lib/workspace/queue-reason";

@@ -2,7 +2,7 @@ import { FileArchive, Info, HardDriveDownload } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { CopyButton } from "@/components/workspace/copy-button";
 import { OutputFileList } from "@/components/workspace/output-file-list";
-import { TimeStamp } from "@/components/workspace/time-stamp";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { Job } from "@/lib/jobs/types";
 import { formatBytes, purgeAround, RETENTION_DAYS } from "@/lib/workspace/format";

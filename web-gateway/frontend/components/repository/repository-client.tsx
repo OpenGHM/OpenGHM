@@ -65,7 +65,7 @@ export function RepositoryClient({
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-[1280px] gap-8 px-10 py-10">
+    <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
       <RepositorySidebar
         filters={filters}
         onFiltersChange={setFilters}

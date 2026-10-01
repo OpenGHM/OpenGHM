@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Info } from "lucide-react";
+import { Cpu, FileText, Info, Loader2, Plus, Settings2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,7 +112,6 @@ export function SimulationEditor({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.model_input_id]);
 
   // -- About form state -----------------------------------------------------
@@ -228,7 +227,12 @@ export function SimulationEditor({
       {/* About */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
         <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-          <CardTitle className="text-lg font-semibold text-foreground">About</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="size-4 text-primary" />
+            </div>
+            About
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -277,21 +281,31 @@ export function SimulationEditor({
             </div>
             <div className="space-y-2">
               {creators.map((c, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
+                // One creator per row from sm; stacked in a bordered group on a phone.
+                <div
+                  key={i}
+                  className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:rounded-none sm:border-0 sm:p-0"
+                >
                   <Input
                     value={c.name}
                     onChange={(e) => updateCreator(i, { name: e.target.value })}
                     placeholder="Name"
+                    aria-label={`Creator ${i + 1} name`}
+                    className="col-start-1"
                   />
                   <Input
                     value={c.email}
                     onChange={(e) => updateCreator(i, { email: e.target.value })}
                     placeholder="Email (optional)"
+                    aria-label={`Creator ${i + 1} email`}
+                    className="col-start-1 sm:col-start-auto"
                   />
                   <Input
                     value={c.orcid}
                     onChange={(e) => updateCreator(i, { orcid: e.target.value })}
                     placeholder="ORCID (optional)"
+                    aria-label={`Creator ${i + 1} ORCID`}
+                    className="col-start-1 sm:col-start-auto"
                   />
                   <Button
                     type="button"
@@ -299,8 +313,10 @@ export function SimulationEditor({
                     size="sm"
                     onClick={() => setCreators((prev) => prev.filter((_, idx) => idx !== i))}
                     disabled={creators.length <= 1}
+                    aria-label={`Remove creator ${i + 1}`}
+                    className="col-start-2 row-start-1 min-h-10 min-w-10 sm:col-start-auto sm:row-start-auto sm:min-h-8 sm:min-w-8"
                   >
-                    <Trash2 className="size-3.5 text-muted-foreground" />
+                    <Trash2 className="size-3.5 text-muted-foreground" aria-hidden="true" />
                   </Button>
                 </div>
               ))}
@@ -325,7 +341,12 @@ export function SimulationEditor({
       {/* Parameters */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
         <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-          <CardTitle className="text-lg font-semibold text-foreground">Simulation Parameters</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+              <Settings2 className="size-4 text-primary" />
+            </div>
+            Simulation Parameters
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5 pt-5 pb-6">
           <div className="grid grid-cols-2 gap-4">
@@ -426,10 +447,8 @@ export function SimulationEditor({
           <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
             <p>
-              Spinup, routing and post-processing settings live in the model&apos;s{" "}
-              <code className="font-mono">.init</code> file, not here — the gateway will show
-              the <code className="font-mono">.init</code> itself rather than restate it (see{" "}
-              <code className="font-mono">docs/reference/metadata-format.md</code>).
+              Spin-up, routing and post-processing settings come from the model&apos;s{" "}
+              <code className="font-mono">.init</code> file and can&apos;t be changed here.
             </p>
           </div>
         </CardContent>
@@ -439,7 +458,12 @@ export function SimulationEditor({
           gateway's, so only cores and walltime are here. */}
       <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
         <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-          <CardTitle className="text-lg font-semibold text-foreground">Compute</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-compute/10">
+              <Cpu className="size-4 text-compute" />
+            </div>
+            Compute
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-5 pb-6">
           <ComputeFields

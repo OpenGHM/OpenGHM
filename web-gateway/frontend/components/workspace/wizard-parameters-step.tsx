@@ -120,10 +120,8 @@ export function WizardParametersStep({
           <div className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
             <p>
-              Spinup, routing and post-processing settings live in the model&apos;s{" "}
-              <code className="font-mono">.init</code> file, not here — the gateway shows the{" "}
-              <code className="font-mono">.init</code> itself rather than restate it (see{" "}
-              <code className="font-mono">docs/reference/metadata-format.md</code>).
+              Spin-up, routing and post-processing settings come from the model&apos;s{" "}
+              <code className="font-mono">.init</code> file and can&apos;t be changed here.
             </p>
           </div>
         </CardContent>

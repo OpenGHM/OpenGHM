@@ -146,7 +146,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
           variant="outline"
           className="w-full opacity-50 cursor-not-allowed"
           disabled
-          title="Not configured — see the private ops repository's external-services.md"
+          title="CILogon sign-in is not available on this server"
         >
           Sign in with CILogon
         </Button>

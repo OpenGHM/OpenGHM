@@ -1,4 +1,4 @@
-import { BookOpen, Mail } from "lucide-react";
+import { FileText, Mail } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { PartialAbout } from "@/lib/jobs/types";
 
@@ -13,7 +13,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
       <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
         <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <BookOpen className="size-4 text-primary" />
+            <FileText className="size-4 text-primary" />
           </div>
           About
         </CardTitle>

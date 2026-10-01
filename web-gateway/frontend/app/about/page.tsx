@@ -109,8 +109,8 @@ export default function AboutPage() {
 
       {/* Hero Section */}
       <section className="bg-gradient-to-b from-slate-50 to-white py-16 pb-12">
-        <div className="mx-auto max-w-[1200px] px-10">
-          <div className="grid grid-cols-[1.4fr_1fr] items-center gap-16">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-10">
+          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
             <div>
               <p className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-primary">
                 Our Mission
@@ -136,7 +136,7 @@ export default function AboutPage() {
                 alt="OpenGHM Team Collaboration"
                 width={600}
                 height={450}
-                className="h-auto w-full object-cover"
+                className="h-auto w-full max-w-full object-cover"
               />
             </div>
           </div>
@@ -145,8 +145,8 @@ export default function AboutPage() {
 
       {/* Main Content */}
       <main className="py-16 pb-20">
-        <div className="mx-auto max-w-[1200px] px-10">
-          <div className="grid grid-cols-[3fr_1fr] items-start gap-16">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-10">
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[3fr_1fr] lg:gap-16">
             {/* Left Column */}
             <div>
               {/* Team Section */}
@@ -200,7 +200,7 @@ export default function AboutPage() {
               </section>
 
               {/* Funding Section */}
-              <section className="rounded-xl bg-slate-50 p-10">
+              <section className="rounded-xl bg-slate-50 p-6 sm:p-10">
                 <h2 className="mb-3 text-2xl font-semibold text-foreground">
                   Supported By
                 </h2>
@@ -218,11 +218,11 @@ export default function AboutPage() {
                   global hydrologic modeling, Grant OAC-2513891) and partner
                   institutions.
                 </p>
-                <div className="mt-8 grid grid-cols-4 items-center justify-items-center gap-8">
+                <div className="mt-8 grid grid-cols-2 items-center justify-items-center gap-6 sm:grid-cols-4 sm:gap-8">
                   {FUNDING_LOGOS.map((logo) => (
                     <div
                       key={logo.alt}
-                      className="relative h-[60px] w-[160px]"
+                      className="relative h-[60px] w-full max-w-[160px]"
                     >
                       <Image
                         src={logo.src}
@@ -239,7 +239,7 @@ export default function AboutPage() {
             </div>
 
             {/* Right Sidebar */}
-            <aside className="sticky top-24 flex flex-col gap-8">
+            <aside className="flex flex-col gap-8 lg:sticky lg:top-24">
               {/* Contact */}
               <div className="rounded-lg border border-border bg-card p-6">
                 <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold">
@@ -252,21 +252,21 @@ export default function AboutPage() {
                       size={14}
                       className="mt-0.5 shrink-0 text-primary"
                     />
-                    <span>General: info@openghm.org</span>
+                    <span className="min-w-0 break-words">General: info@openghm.org</span>
                   </div>
                   <div className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
                     <ArrowRight
                       size={14}
                       className="mt-0.5 shrink-0 text-primary"
                     />
-                    <span>Support: help@openghm.org</span>
+                    <span className="min-w-0 break-words">Support: help@openghm.org</span>
                   </div>
                   <div className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
                     <ArrowRight
                       size={14}
                       className="mt-0.5 shrink-0 text-primary"
                     />
-                    <span>Press: media@openghm.org</span>
+                    <span className="min-w-0 break-words">Press: media@openghm.org</span>
                   </div>
                 </div>
               </div>

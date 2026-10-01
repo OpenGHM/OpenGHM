@@ -43,8 +43,8 @@ export function ModelInputsClient({
   });
 
   return (
-    <div className="mx-auto flex max-w-[1280px] gap-8 px-10 py-10">
-      <div className="w-64 shrink-0">
+    <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
+      <div className="w-full lg:w-64 lg:shrink-0">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input

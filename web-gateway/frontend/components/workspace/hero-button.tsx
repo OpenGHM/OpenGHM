@@ -7,7 +7,10 @@ import { AlertCircle } from "lucide-react";
  * or `variant="outline"` (secondary, danger); each brings its own focus ring,
  * since the default ring is too faint on navy.
  */
-const FOCUS = "focus-visible:border-white focus-visible:ring-white/70";
+// An outline, not the ring: the ring is a box-shadow, which `shadow-none`
+// on the secondary buttons would cancel.
+const FOCUS =
+  "focus-visible:border-white focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-white";
 
 export const HERO_BUTTON = {
   /** The one main action: solid white. */

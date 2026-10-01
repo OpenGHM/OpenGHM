@@ -26,7 +26,7 @@ function formatAuthorBibTeX(name: string): string {
 }
 
 function buildAPA(dataset: Dataset): string {
-  const year = new Date(dataset.about.datePublished).getFullYear();
+  const year = new Date(dataset.about.datePublished).getUTCFullYear();
   const authors = dataset.about.creator.map((c) => formatAuthorAPA(c.name)).join(", ");
   const title = dataset.about.name;
   const publisher = "OpenGHM";
@@ -36,7 +36,7 @@ function buildAPA(dataset: Dataset): string {
 }
 
 function buildBibTeX(dataset: Dataset): string {
-  const year = new Date(dataset.about.datePublished).getFullYear();
+  const year = new Date(dataset.about.datePublished).getUTCFullYear();
   const authors = dataset.about.creator.map((c) => formatAuthorBibTeX(c.name)).join(" and ");
   const key = dataset.id.replace(/[^a-zA-Z0-9_]/g, "_");
   const pub = dataset.about.relatedLink?.find((l) => l.doi);

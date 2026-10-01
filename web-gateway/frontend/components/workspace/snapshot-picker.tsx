@@ -76,7 +76,7 @@ export function SnapshotPicker({
     <Button
       size="sm"
       onClick={() => onSelect(dataset)}
-      className="font-semibold"
+      className="h-10 w-full font-semibold sm:h-8 sm:w-auto"
     >
       <CheckCircle2 className="mr-1.5 size-4" />
       Select
@@ -84,7 +84,7 @@ export function SnapshotPicker({
   );
 
   return (
-    <div className="mx-auto flex max-w-[1280px] gap-8 px-10 py-10">
+    <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
       <RepositorySidebar
         filters={filters}
         onFiltersChange={setFilters}
@@ -100,7 +100,7 @@ export function SnapshotPicker({
       />
 
       <div className="min-w-0 flex-1">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             {isPending ? (
               <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted" />
@@ -113,7 +113,7 @@ export function SnapshotPicker({
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div>
+          <div className="min-w-0">
             <DatasetTable
               datasets={result.items}
               modelInputIds={modelInputIds}

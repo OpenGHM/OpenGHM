@@ -13,7 +13,7 @@ import {
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { SimulationRowActions } from "@/components/workspace/simulation-row-actions";
-import { TimeStamp } from "@/components/workspace/time-stamp";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
 

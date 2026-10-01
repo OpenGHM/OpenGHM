@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { JobStatusPanel } from "@/components/workspace/job-status-panel";
 import { JobHero } from "@/components/workspace/job-hero";
 import { LogViewer } from "@/components/workspace/log-viewer";
@@ -16,12 +15,11 @@ import { describeSlurmTime } from "@/lib/jobs/compute";
 import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 import {
-  ArrowLeft,
   Calendar,
   Globe,
   Layers,
   Settings2,
-  Database,
+  Cpu,
   PencilLine,
 } from "lucide-react";
 
@@ -91,29 +89,18 @@ export function JobDetail({
 
       <main className="flex-1 bg-slate-50">
         <div className="mx-auto max-w-[1280px] px-4 py-10 sm:px-10">
-          <div className="mb-6">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/workspace">
-                <ArrowLeft className="mr-1.5 size-4" />
-                Back to Simulations
-              </Link>
-            </Button>
-          </div>
-
           {isDraft ? (
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
-              {/* Left column — editable while DRAFT */}
-              <SimulationEditor job={job} availableVariables={availableVariables} dataset={dataset} />
-
-              {/* Right column */}
-              <div className="space-y-6">
+              {/* The notice comes first in reading order so a phone shows it above the
+                  editor; from lg it sits in the right column. */}
+              <div className="space-y-6 lg:col-start-2 lg:row-start-1">
                 <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
                   <CardContent className="flex items-start gap-3 py-4 text-sm">
                     <PencilLine className="mt-0.5 size-4 shrink-0 text-status-draft" />
                     <div>
                       <p className="font-medium text-foreground">Draft</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Not yet submitted to Anvil HPC. Everything on the left is
+                        Not yet submitted to Anvil HPC. Everything on this page is
                         editable until then. Submitting runs the last saved
                         version, so save your changes first.
                       </p>
@@ -121,11 +108,38 @@ export function JobDetail({
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Editable while DRAFT */}
+              <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+                <SimulationEditor job={job} availableVariables={availableVariables} dataset={dataset} />
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
-              {/* Left column — read-only once past DRAFT */}
-              <div className="space-y-8">
+              {/* Status first in reading order, so a phone shows the verdict above the
+                  details; from lg it sits in the right column. */}
+              <div className="min-w-0 space-y-6 lg:col-start-2 lg:row-start-1">
+                <JobStatusPanel preview={preview} />
+
+                {(job.status === "PENDING" || job.status === "SUBMITTED") && (
+                  <QueuedNoticeCard status={job.status} />
+                )}
+
+                {(job.status === "RUNNING" || job.status === "COMPLETING") && (
+                  <RunningProgressCard />
+                )}
+
+                {job.status === "COMPLETED" && <CompletedResultsCard job={job} />}
+
+                {job.status === "FAILED" && <FailedNextStepsCard job={job} />}
+
+                {job.status === "CANCELLED" && (
+                  <CancelledNoticeCard job={job} viewerEmail={viewerEmail} />
+                )}
+              </div>
+
+              {/* Read-only once past DRAFT */}
+              <div className="min-w-0 space-y-8 lg:col-start-1 lg:row-start-1">
                 <AboutSummaryCard about={job.about} />
 
                 {/* Simulation Parameters */}
@@ -193,7 +207,7 @@ export function JobDetail({
                   <CardHeader className="border-b bg-gradient-to-r from-compute/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
                     <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
                       <div className="flex size-8 items-center justify-center rounded-lg bg-compute/10">
-                        <Database className="size-4 text-compute" />
+                        <Cpu className="size-4 text-compute" />
                       </div>
                       HPC Configuration
                     </CardTitle>
@@ -244,27 +258,6 @@ export function JobDetail({
 
                 {/* Logs */}
                 <LogViewer previewLogs={previewLogs} />
-              </div>
-
-              {/* Right column — Status */}
-              <div className="space-y-6">
-                <JobStatusPanel preview={preview} />
-
-                {(job.status === "PENDING" || job.status === "SUBMITTED") && (
-                  <QueuedNoticeCard status={job.status} />
-                )}
-
-                {(job.status === "RUNNING" || job.status === "COMPLETING") && (
-                  <RunningProgressCard />
-                )}
-
-                {job.status === "COMPLETED" && <CompletedResultsCard job={job} />}
-
-                {job.status === "FAILED" && <FailedNextStepsCard job={job} />}
-
-                {job.status === "CANCELLED" && (
-                  <CancelledNoticeCard job={job} viewerEmail={viewerEmail} />
-                )}
               </div>
             </div>
           )}

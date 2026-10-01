@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { RunMetadata } from "@/components/workspace/run-metadata";
-import { TimeStamp } from "@/components/workspace/time-stamp";
+import { TimeStamp } from "@/components/common/time-stamp";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { Job } from "@/lib/jobs/types";
 import { cancelledBy } from "@/lib/workspace/cancelled-by";

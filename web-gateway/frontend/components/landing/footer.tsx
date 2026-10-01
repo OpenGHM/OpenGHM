@@ -21,10 +21,10 @@ const LEGAL_LINKS = [
 
 export function Footer() {
   return (
-    <footer className="bg-[#0a192f] pt-20 pb-10 text-white">
-      <div className="mx-auto max-w-[1280px] px-10">
-        <div className="mb-12 grid grid-cols-[2fr_1fr_1fr_1fr] gap-16">
-          <div>
+    <footer className="bg-hero pt-12 pb-10 text-white lg:pt-20">
+      <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-10">
+        <div className="mb-12 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-16">
+          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
             <Image
               src="/images/logo_dark_new.webp"
               alt="OpenGHM Logo"

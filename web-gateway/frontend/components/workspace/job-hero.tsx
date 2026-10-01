@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { Ban, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -152,6 +152,7 @@ function DraftHero({
 function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
   const { jobId, status, view, apply, refresh } = useLiveJobContext();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [cancelExpired, setCancelExpired] = useState(false);
   const { menuProps, notes } = useDeleteNotes();
@@ -168,6 +169,7 @@ function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
         <div className="flex items-center gap-2">
           {(cancellable || cancelPending) && (
             <Button
+              ref={cancelRef}
               type="button"
               variant="outline"
               disabled={cancelPending}
@@ -220,6 +222,14 @@ function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
           onConflict={refresh}
           onSessionExpired={() => setCancelExpired(true)}
           onPendingChange={setCancelPending}
+          // Back to the Cancel button; once a cancel went through the button
+          // is gone and focus stays where Radix puts it.
+          onCloseAutoFocus={(event) => {
+            if (cancelRef.current) {
+              event.preventDefault();
+              cancelRef.current.focus();
+            }
+          }}
         />
       )}
     </HeroFrame>

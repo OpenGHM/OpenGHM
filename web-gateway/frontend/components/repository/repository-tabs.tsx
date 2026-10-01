@@ -59,7 +59,7 @@ export function RepositoryTabs({
 
   return (
     <>
-      <div className="mx-auto max-w-[1280px] px-10 pt-8">
+      <div className="mx-auto max-w-[1280px] px-4 pt-6 sm:px-6 lg:px-10 lg:pt-8">
         <div
           role="tablist"
           aria-label="Data Repository catalogue"

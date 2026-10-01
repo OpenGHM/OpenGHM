@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SearchX } from "lucide-react";
+import { TimeStamp } from "@/components/common/time-stamp";
 import type { Dataset } from "@/lib/repository/types";
 
 /**
@@ -14,17 +15,11 @@ import type { Dataset } from "@/lib/repository/types";
  * row are never visually interchangeable.
  */
 
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
+/** Below `sm` a row is a stack, not a table row: the cells flow as inline items
+ *  and the name and the action take a line each. From `sm` the usual table. */
+const CELL = "whitespace-nowrap sm:px-4 sm:py-3";
+/** Phone only: a middle dot between the period, the resolution and the version. */
+const DOT = "max-sm:after:ml-3 max-sm:after:content-['·']";
 
 function ModelInputBadge({
   modelInputId,
@@ -35,7 +30,7 @@ function ModelInputBadge({
 }) {
   if (modelInputIds === null) {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-muted-foreground">
+      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
         Checking…
       </span>
     );
@@ -45,7 +40,7 @@ function ModelInputBadge({
     <span
       title={modelInputId}
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-        present ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+        present ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
       }`}
     >
       {present ? "Present" : "Missing"}
@@ -85,8 +80,8 @@ export function DatasetTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="w-full text-sm">
-        <thead>
+      <table className="block w-full text-sm sm:table">
+        <thead className="hidden sm:table-header-group">
           <tr className="border-b bg-muted/40 text-left text-xs font-semibold text-muted-foreground">
             <th className="px-4 py-3">Name</th>
             <th className="px-4 py-3">Period</th>
@@ -97,7 +92,7 @@ export function DatasetTable({
             {renderAction && <th className="px-4 py-3" />}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="block sm:table-row-group">
           {datasets.map((dataset) => {
             const { start, end } = dataset.simulation.temporalCoverage;
             const { value, unit } = dataset.simulation.resolution;
@@ -105,51 +100,54 @@ export function DatasetTable({
             return (
               <tr
                 key={dataset.id}
-                className={`border-b last:border-0 ${isSelected ? "bg-[#006994]/5" : "hover:bg-muted/20"}`}
+                className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-4 last:border-0 sm:table-row sm:p-0 ${isSelected ? "bg-primary/5" : "hover:bg-muted/20"}`}
               >
-                <td className="max-w-[280px] px-4 py-3">
+                <td className="basis-full sm:max-w-[280px] sm:px-4 sm:py-3">
                   <div className="flex items-start gap-2">
                     {onNameClick ? (
                       <button
                         type="button"
                         onClick={() => onNameClick(dataset)}
-                        className="text-left font-medium text-[#006994] hover:underline"
+                        className="text-left font-medium text-primary hover:underline"
                       >
                         {dataset.about.name}
                       </button>
                     ) : (
                       <Link
                         href={`/repository/${dataset.id}`}
-                        className="font-medium text-foreground hover:text-[#006994] hover:underline"
+                        className="font-medium text-foreground hover:text-primary hover:underline"
                       >
                         {dataset.about.name}
                       </Link>
                     )}
                   </div>
-                  <span className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <span className="mt-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
                     {dataset.about.category}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                <td className={`${CELL} ${DOT} text-muted-foreground`}>
                   {start} – {end}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                <td className={`${CELL} ${DOT} text-muted-foreground`}>
                   {value} {unit}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
+                <td className={`${CELL} font-mono text-xs text-muted-foreground`}>
                   {dataset.uses.container.version}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3">
+                <td className="whitespace-nowrap sm:px-4 sm:py-3">
                   <ModelInputBadge
                     modelInputId={dataset.uses.modelInput.id}
                     modelInputIds={modelInputIds}
                   />
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                  {formatDate(dataset.generatedAt)}
+                <td className={`${CELL} text-muted-foreground`}>
+                  <span className="sm:hidden">Published </span>
+                  <TimeStamp value={dataset.generatedAt} format="date" />
                 </td>
                 {renderAction && (
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{renderAction(dataset)}</td>
+                  <td className="basis-full sm:basis-auto sm:whitespace-nowrap sm:px-4 sm:py-3 sm:text-right">
+                    {renderAction(dataset)}
+                  </td>
                 )}
               </tr>
             );

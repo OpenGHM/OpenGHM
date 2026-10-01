@@ -100,8 +100,8 @@ export function RepositorySidebar({
     filters.temporalCoverageEnd !== null;
 
   return (
-    <aside className="w-80 shrink-0">
-      <div className="sticky top-24 space-y-4 rounded-xl border border-border bg-card p-5">
+    <aside className="w-full lg:w-80 lg:shrink-0">
+      <div className="space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-24">
 
         {/* Search */}
         <div className="relative">

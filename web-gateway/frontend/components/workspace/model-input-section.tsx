@@ -160,7 +160,12 @@ export function ModelInputSection({
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
       <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="text-lg font-semibold text-foreground">Model Input</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+              <Database className="size-4 text-primary" />
+            </div>
+            Model Input
+          </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-5 pb-6">
         {choice.mode === "chosen" ? (
