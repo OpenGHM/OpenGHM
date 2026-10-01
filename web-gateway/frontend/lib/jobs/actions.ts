@@ -106,7 +106,9 @@ export async function fetchJobs(
   userId?: string
 ): Promise<JobListResponse> {
   const client = await getApiClient();
-  const params: Record<string, string | number> = { page, page_size: 10 };
+  // `sort=updated` is the backend's default; stated so the list does not
+  // depend on it.
+  const params: Record<string, string | number> = { page, page_size: 10, sort: "updated" };
   if (status) params.status = status;
   if (userId) params.user_id = userId;
   const res = await client.get<JobListResponse>("/api/v1/jobs", { params });

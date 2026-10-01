@@ -176,8 +176,8 @@ async def job_status_breakdown(
     days: int | None = Query(None, ge=1, le=365, description="Omit for all-time"),
 ):
     """Current distribution of job statuses, site-wide. Doesn't change
-    GET /jobs/stats — that endpoint's four-scalar contract is consumed by
-    the simulation listing hero; this keeps the full per-status grouping
+    GET /jobs/stats — that endpoint's counts are consumed by the simulation
+    list's tabs and the admin cards; this keeps the full per-status grouping
     that endpoint already computes internally and then discards."""
     db = get_db()
     since = None

@@ -2,11 +2,20 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, LogOut, UserCircle, ShieldCheck } from "lucide-react";
+import { ChevronDown, LogOut, Menu, UserCircle, ShieldCheck } from "lucide-react";
 import { useState, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import type { UserRole } from "@/lib/auth.types";
 import { revokeSession } from "@/lib/auth-actions";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -32,6 +41,11 @@ const RESOURCES_ITEMS = [
   { label: "Toolkit", href: "#" },
 ];
 
+/**
+ * The site header. From `lg` up the links and the account menu sit in the row;
+ * below it they fold into one menu button, because the row needs about 875 px
+ * (estimated from the link widths, not measured) and a phone has 375.
+ */
 export function Header() {
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -56,7 +70,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between bg-white px-10 py-4 border-b border-black/5">
+    <header className="sticky top-0 z-50 flex items-center justify-between bg-white px-4 py-3 sm:px-6 lg:px-10 lg:py-4 border-b border-black/5">
       <Link href="/">
         <Image
           src="/images/logo_light4.webp"
@@ -68,7 +82,7 @@ export function Header() {
         />
       </Link>
 
-      <nav className="flex gap-8 items-center">
+      <nav aria-label="Main" className="hidden gap-8 items-center lg:flex">
         {NAV_ITEMS_BEFORE.map((item) => (
           <Link
             key={item.label}
@@ -122,7 +136,7 @@ export function Header() {
       {/* Auth section */}
       {session?.user ? (
         <div
-          className="relative"
+          className="relative hidden lg:block"
           onMouseEnter={handleUserMenuEnter}
           onMouseLeave={handleUserMenuLeave}
         >
@@ -174,11 +188,86 @@ export function Header() {
       ) : (
         <Link
           href="/auth/signin"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+          className="hidden items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 lg:inline-flex"
         >
           Sign In
         </Link>
       )}
+
+      {/* Below lg: the same links and account items in one menu. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Open menu"
+            className="text-slate-700 lg:hidden"
+          >
+            <Menu aria-hidden="true" className="size-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          {NAV_ITEMS_BEFORE.map((item) => (
+            <DropdownMenuItem key={item.label} asChild className="min-h-10 text-[15px] font-medium">
+              <Link href={item.href}>{item.label}</Link>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuLabel className="pt-3 text-xs font-medium text-muted-foreground">
+            Resources
+          </DropdownMenuLabel>
+          {RESOURCES_ITEMS.map((item) => (
+            <DropdownMenuItem key={item.label} asChild className="min-h-10 pl-4 text-[15px] font-medium">
+              <Link href={item.href}>{item.label}</Link>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          {NAV_ITEMS_AFTER.map((item) => (
+            <DropdownMenuItem key={item.label} asChild className="min-h-10 text-[15px] font-medium">
+              <Link href={item.href}>{item.label}</Link>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          {session?.user ? (
+            <>
+              <div className="px-2 py-1.5">
+                <p className="truncate text-xs text-slate-500">{session.user.email}</p>
+                <p className="text-xs font-medium text-slate-400">{ROLE_LABELS[session.user.role]}</p>
+              </div>
+              <DropdownMenuItem asChild className="min-h-10 text-[15px] font-medium">
+                <Link href="/dashboard/profile">
+                  <UserCircle />
+                  My Profile
+                </Link>
+              </DropdownMenuItem>
+              {(session.user.role === "admin" || session.user.role === "staff") && (
+                <DropdownMenuItem asChild className="min-h-10 text-[15px] font-medium">
+                  <Link href="/admin">
+                    <ShieldCheck />
+                    Admin
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                variant="destructive"
+                className="min-h-10 text-[15px] font-medium"
+                onSelect={() => {
+                  // As the desktop menu: best-effort backend revoke, then
+                  // always clear the client session.
+                  void revokeSession().finally(() => signOut({ callbackUrl: "/" }));
+                }}
+              >
+                <LogOut />
+                Sign out
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem asChild className="min-h-10 text-[15px] font-semibold text-primary">
+              <Link href="/auth/signin">Sign In</Link>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }

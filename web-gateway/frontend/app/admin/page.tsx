@@ -14,7 +14,14 @@ import {
 import type { JobStatsResponse } from "@/lib/jobs/types";
 import type { AuditLogListResponse, TimeSeriesResponse, StatusBreakdownResponse } from "@/lib/admin/types";
 
-const EMPTY_STATS: JobStatsResponse = { total: 0, running: 0, completed: 0, failed: 0 };
+const EMPTY_STATS: JobStatsResponse = {
+  total: 0,
+  running: 0,
+  completed: 0,
+  failed: 0,
+  draft: 0,
+  cancelled: 0,
+};
 const EMPTY_AUDIT: AuditLogListResponse = { items: [], total_count: 0, page: 1, total_pages: 1 };
 const EMPTY_SERIES: TimeSeriesResponse = {
   metric: "", granularity: "day", timezone: "UTC", start: "", end: "", total: 0, points: [],

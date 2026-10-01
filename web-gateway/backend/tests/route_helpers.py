@@ -62,8 +62,16 @@ class FakeCursor:
     def __init__(self, docs: list[dict]) -> None:
         self._docs = docs
 
-    def sort(self, key: str, direction: int):
-        self._docs.sort(key=lambda d: d[key], reverse=direction < 0)
+    def sort(self, key: str | list[tuple[str, int]], direction: int = 1):
+        """A key and a direction, or Mongo's list of (key, direction) pairs.
+        A missing or null value sorts lowest, as in Mongo."""
+        keys = [(key, direction)] if isinstance(key, str) else key
+        # Stable sorts from the least significant key up.
+        for name, way in reversed(keys):
+            self._docs.sort(
+                key=lambda d: (d.get(name) is not None, d.get(name) or 0),
+                reverse=way < 0,
+            )
         return self
 
     def skip(self, n: int):

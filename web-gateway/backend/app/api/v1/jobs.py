@@ -8,6 +8,7 @@ import random
 import string
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -752,6 +753,11 @@ async def list_jobs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
+    sort: Literal["updated", "created"] = Query(
+        "updated",
+        description="`updated`: last change first (`updated_at`, then `created_at`); "
+        "`created`: newest first",
+    ),
     user_id: str | None = Query(
         None, description='Owner filter; "*" = all users (requires job:view:any)'
     ),
@@ -769,7 +775,14 @@ async def list_jobs(
     total_pages = max(1, math.ceil(total_count / page_size))
     skip = (page - 1) * page_size
 
-    cursor = db.jobs.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+    # `created_at` breaks ties (and orders a legacy document with no
+    # `updated_at`), so a page boundary never reshuffles rows.
+    order = (
+        [("updated_at", -1), ("created_at", -1)]
+        if sort == "updated"
+        else [("created_at", -1)]
+    )
+    cursor = db.jobs.find(query).sort(order).skip(skip).limit(page_size)
     items = [_doc_to_response(doc) async for doc in cursor]
 
     return JobListResponse(
@@ -806,6 +819,8 @@ async def get_job_stats(
         running=running,
         completed=counts.get("COMPLETED", 0),
         failed=counts.get("FAILED", 0),
+        draft=counts.get("DRAFT", 0),
+        cancelled=counts.get("CANCELLED", 0),
     )
 
 

@@ -138,11 +138,16 @@ export type PartialAbout = Partial<OpenGHMCitationBlock>;
 
 // ─── API models ──────────────────────────────────────────────────────────────
 
+/** GET /jobs/stats: one count per tab of the simulation list, and the admin
+ *  cards. `running` is every active status (pending, submitted, running,
+ *  completing), so it is the Active tab's count. */
 export interface JobStatsResponse {
   total: number;
   running: number;
   completed: number;
   failed: number;
+  draft: number;
+  cancelled: number;
 }
 
 export interface Job extends JobVerdictFields {

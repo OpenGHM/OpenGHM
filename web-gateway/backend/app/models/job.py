@@ -475,12 +475,17 @@ class JobStatusResponse(JobVerdictFields):
 
 
 class JobStatsResponse(BaseModel):
-    """Aggregate counts for the simulation listing hero."""
+    """Aggregate counts: the simulation list's tabs (one per bucket) and the
+    admin dashboard cards (`total`, `running`, `completed`, `failed`).
+
+    `running` is every active status (`ACTIVE_STATUSES`), not just RUNNING."""
 
     total: int
     running: int
     completed: int
     failed: int
+    draft: int
+    cancelled: int
 
 
 LogStream = Literal["stdout", "stderr", "wbm"]
