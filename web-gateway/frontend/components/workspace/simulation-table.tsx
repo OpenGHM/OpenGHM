@@ -14,7 +14,9 @@ import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { SimulationDeleteButton } from "@/components/workspace/simulation-delete-button";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { KindBadge } from "@/components/repository/kind-badge";
 import { displayStatus } from "@/lib/jobs/display-status";
+import { simulationSource } from "@/lib/jobs/simulation-source";
 import type { Job } from "@/lib/jobs/types";
 
 function displayName(job: Job): string {
@@ -23,7 +25,7 @@ function displayName(job: Job): string {
 
 /**
  * The simulations as a table from `sm` up, and as stacked rows below it (name
- * and status on one line, then the snapshot and the time), so a phone never
+ * and status on one line, then what it is based on and the time), so a phone never
  * scrolls sideways. Both are rendered and CSS shows one; the delete button is
  * the same component in each.
  *
@@ -48,7 +50,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Base model snapshot</TableHead>
+              <TableHead>Based on</TableHead>
               <TableHead>Updated</TableHead>
               <TableHead className="w-14">
                 <span className="sr-only">Actions</span>
@@ -58,6 +60,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
           <TableBody>
             {jobs.map((job) => {
               const name = displayName(job);
+              const source = simulationSource(job);
               return (
                 <TableRow key={job.id}>
                   <TableCell className="font-medium">
@@ -71,13 +74,13 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
                   <TableCell>
                     <JobStatusBadge status={displayStatus(job)} />
                   </TableCell>
-                  <TableCell className="max-w-64 truncate text-sm text-muted-foreground">
-                    <Link
-                      href={`/repository/${job.dataset_id}`}
-                      className="hover:text-primary hover:underline"
-                    >
-                      {job.dataset_title}
-                    </Link>
+                  <TableCell className="max-w-72 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <KindBadge kind={source.kind} />
+                      <Link href={source.href} className="min-w-0 truncate hover:text-primary hover:underline">
+                        {source.title}
+                      </Link>
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
@@ -95,6 +98,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
       <ul aria-label="Simulations" className="divide-y sm:hidden">
         {jobs.map((job) => {
           const name = displayName(job);
+          const source = simulationSource(job);
           return (
             <li key={job.id} className="flex items-start gap-1 py-1.5 pr-2 pl-4">
               <div className="min-w-0 flex-1">
@@ -107,12 +111,15 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
                   </Link>
                   <JobStatusBadge status={displayStatus(job)} />
                 </div>
-                <Link
-                  href={`/repository/${job.dataset_id}`}
-                  className="block truncate py-2.5 text-sm text-muted-foreground hover:text-primary hover:underline"
-                >
-                  {job.dataset_title}
-                </Link>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <KindBadge kind={source.kind} />
+                  <Link
+                    href={source.href}
+                    className="min-w-0 truncate py-2.5 hover:text-primary hover:underline"
+                  >
+                    {source.title}
+                  </Link>
+                </div>
                 <p className="pb-2.5 text-xs text-muted-foreground">
                   Updated{" "}
                   <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />

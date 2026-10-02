@@ -37,7 +37,7 @@ describe("the simulation table", () => {
     render(<SimulationTable jobs={[job("a", "RUNNING")]} />);
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      "Name", "Status", "Base model snapshot", "Updated", "Actions",
+      "Name", "Status", "Based on", "Updated", "Actions",
     ]);
   });
 
@@ -46,6 +46,22 @@ describe("the simulation table", () => {
     const row = within(screen.getByRole("table")).getAllByRole("row")[1];
     expect(within(row).getByRole("link", { name: "Run a" }).getAttribute("href")).toBe("/workspace/a");
     expect(within(row).getByRole("link", { name: "Dataset one" }).getAttribute("href")).toBe("/repository/ds-1");
+  });
+
+  it("labels what a simulation is based on with the kind badge, before the title", () => {
+    render(<SimulationTable jobs={[job("a", "RUNNING")]} />);
+    const cell = within(screen.getByRole("table")).getByRole("link", { name: "Dataset one" }).parentElement!;
+    expect(within(cell).getByText("Model Snapshot")).toBeTruthy();
+    expect(cell.firstElementChild?.textContent).toBe("Model Snapshot");
+    const list = within(screen.getByRole("list", { name: "Simulations" }));
+    expect(list.getByText("Model Snapshot")).toBeTruthy();
+  });
+
+  it("truncates a long title in the cell rather than growing the row", () => {
+    render(<SimulationTable jobs={[job("a", "RUNNING", { dataset_title: "A very long title ".repeat(10) })]} />);
+    const link = within(screen.getByRole("table")).getByRole("link", { name: /A very long title/ });
+    expect(link.className).toContain("truncate");
+    expect(link.className).toContain("min-w-0");
   });
 
   it("prints the update time as a TimeStamp with its absolute time, not toLocaleString", () => {
