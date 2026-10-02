@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { Job } from "@/lib/jobs/types";
 
 vi.mock("@/lib/jobs/actions", () => ({ cancelJob: vi.fn(), deleteSimulation: vi.fn() }));
@@ -33,7 +33,7 @@ function job(id: string, status: Job["status"], over: Partial<Job> = {}): Job {
 }
 
 describe("the simulation table", () => {
-  it("has the five columns, the last one for the row menu", () => {
+  it("has the five columns, the last one for the delete button", () => {
     render(<SimulationTable jobs={[job("a", "RUNNING")]} />);
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
@@ -62,7 +62,7 @@ describe("the simulation table", () => {
     expect(row.querySelector("time")?.getAttribute("datetime")).toBe("2026-09-30T10:00:00Z");
   });
 
-  it("also renders stacked rows for a phone: name, status, snapshot, time and menu per row", () => {
+  it("also renders stacked rows for a phone: name, status, snapshot, time and delete button per row", () => {
     render(
       <SimulationTable
         jobs={[job("a", "RUNNING"), job("b", "DRAFT", { cancel_requested_at: null })]}
@@ -80,16 +80,18 @@ describe("the simulation table", () => {
     expect(first.getByText("Running")).toBeTruthy();
     expect(first.getByRole("link", { name: "Dataset one" }).getAttribute("href")).toBe("/repository/ds-1");
     expect(first.getByText(/^Updated/)).toBeTruthy();
-    expect(first.getByRole("button", { name: "Actions for Run a" })).toBeTruthy();
+    // A running job has no delete button; a draft has.
+    expect(first.queryByRole("button")).toBeNull();
     expect(within(rows[1]).getByText("Draft")).toBeTruthy();
+    expect(within(rows[1]).getByRole("button", { name: "Delete draft Run b" })).toBeTruthy();
   });
 
   it("gives each stacked-row link a 40 px target", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING")]} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} />);
     const list = within(screen.getByRole("list", { name: "Simulations" }));
     expect(list.getByRole("link", { name: "Run a" }).className).toContain("py-2.5");
     expect(list.getByRole("link", { name: "Dataset one" }).className).toContain("py-2.5");
-    expect(list.getByRole("button", { name: "Actions for Run a" }).className).toContain("size-10");
+    expect(list.getByRole("button", { name: "Delete Run a" }).className).toContain("size-10");
   });
 
   it("names an untitled job by its slug, then its sim id", () => {
@@ -101,5 +103,26 @@ describe("the simulation table", () => {
     const table = within(screen.getByRole("table"));
     expect(table.getByRole("link", { name: "my-slug" })).toBeTruthy();
     expect(table.getByRole("link", { name: "sim-b" })).toBeTruthy();
+  });
+
+  it("offers Delete on a draft and an ended job in the table, never on an active one", () => {
+    render(
+      <SimulationTable
+        jobs={[job("a", "RUNNING"), job("b", "DRAFT"), job("c", "FAILED"), job("d", "COMPLETING")]}
+      />
+    );
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Delete draft Run b",
+      "Delete Run c",
+    ]);
+  });
+
+  it("opens the delete confirmation from a row's button without navigating", () => {
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} />);
+    const table = within(screen.getByRole("table"));
+    fireEvent.click(table.getByRole("button", { name: "Delete Run a" }));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(screen.getByText("Delete this simulation?")).toBeTruthy();
   });
 });

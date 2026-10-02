@@ -19,7 +19,7 @@ import type { FilesState } from "@/lib/jobs/types";
 
 /**
  * The confirmation before a delete, controlled so that any control can open
- * it: the detail page's button, a list row's menu. The dialog says what goes
+ * it: the detail page's button, a list row's button. The dialog says what goes
  * (ADR 0026): a draft is only a record; a finished job also has two
  * directories on Anvil, listed here by path, and deleting it removes them. If
  * anything fails the simulation still exists and the backend says why.
@@ -62,9 +62,10 @@ export function DeleteSimulationDialog({
   /** The delete failed and the simulation still exists; `message` is the
    *  backend's reason, for a caller that shows it beside the control. */
   onError?: (message: string) => void;
-  /** Where focus goes when the dialog closes. Radix returns it to the element
-   *  focused when it opened, which is gone when a menu item opened it: the
-   *  caller calls `event.preventDefault()` and focuses the menu's trigger. */
+  /** Where focus goes when the dialog closes. Radix returns it only to a
+   *  Trigger it wraps, which a caller with the dialog as a sibling of its
+   *  button, or a menu item that is gone, does not have: the caller calls
+   *  `event.preventDefault()` and focuses the control itself. */
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const router = useRouter();

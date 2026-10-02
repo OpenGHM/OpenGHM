@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { SimulationRowActions } from "@/components/workspace/simulation-row-actions";
+import { SimulationDeleteButton } from "@/components/workspace/simulation-delete-button";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
@@ -24,11 +24,11 @@ function displayName(job: Job): string {
 /**
  * The simulations as a table from `sm` up, and as stacked rows below it (name
  * and status on one line, then the snapshot and the time), so a phone never
- * scrolls sideways. Both are rendered and CSS shows one; the row menu is the
- * same component in each.
+ * scrolls sideways. Both are rendered and CSS shows one; the delete button is
+ * the same component in each.
  *
  * It is a client component because it owns the sign-in banner that a row's
- * Cancel or Delete shows when the session has ended.
+ * Delete shows when the session has ended.
  */
 export function SimulationTable({ jobs }: { jobs: Job[] }) {
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -83,7 +83,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
                     <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
                   </TableCell>
                   <TableCell className="py-1 text-right">
-                    <SimulationRowActions job={job} name={name} onSessionExpired={expire} />
+                    <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
                   </TableCell>
                 </TableRow>
               );
@@ -118,7 +118,7 @@ export function SimulationTable({ jobs }: { jobs: Job[] }) {
                   <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
                 </p>
               </div>
-              <SimulationRowActions job={job} name={name} onSessionExpired={expire} />
+              <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
             </li>
           );
         })}
