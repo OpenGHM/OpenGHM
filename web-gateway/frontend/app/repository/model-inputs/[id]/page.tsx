@@ -25,6 +25,7 @@ import { ModelInputDatasetsTable } from "@/components/repository/model-input-dat
 import { DownloadCard } from "@/components/repository/download-card";
 import { CitationCard } from "@/components/repository/citation-card";
 import { TagChips } from "@/components/repository/tag-chips";
+import { formatLongDate } from "@/lib/workspace/time";
 
 export default async function ModelInputDetailPage({
   params,
@@ -283,9 +284,7 @@ export default async function ModelInputDetailPage({
                     <InfoRow
                       icon={<Calendar className="size-4" />}
                       label="Published"
-                      value={new Date(about.datePublished).toLocaleDateString("en-US", {
-                        year: "numeric", month: "long", day: "numeric",
-                      })}
+                      value={formatLongDate(about.datePublished)}
                       iconColor="text-rose-500"
                     />
                     <InfoRow

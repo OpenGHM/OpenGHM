@@ -14,6 +14,16 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A calendar date with no time, exactly `YYYY-MM-DD` (`about.datePublished`).
+ *  It names a day, not a moment: `new Date("2022-02-23")` is UTC midnight, so
+ *  converting it to a zone west of UTC would print 22 Feb. The date formats
+ *  below therefore read it in UTC whatever zone they were asked for. */
+export function isDateOnly(value: string): boolean {
+  return DATE_ONLY.test(value) && !Number.isNaN(new Date(value).getTime());
+}
+
 /** `30 Sep 2026` in UTC. */
 export function formatUtcDate(iso: string): string {
   const d = new Date(iso);
@@ -28,11 +38,30 @@ export function formatUtcDateTime(iso: string): string {
   return `${formatUtcDate(iso)}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
 }
 
-/** The viewer's own zone. Only call in the browser, after hydration. */
+/** The viewer's own zone, except a date-only value, which is the same day
+ *  everywhere. Only call in the browser, after hydration. */
 export function formatLocalDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    ...(isDateOnly(iso) && { timeZone: "UTC" }),
+  });
+}
+
+/** `February 23, 2022`, for a detail page. A date-only value is the same day
+ *  in every zone; a full timestamp is read in the zone the code runs in. */
+export function formatLongDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    ...(isDateOnly(iso) && { timeZone: "UTC" }),
+  });
 }
 
 /** The viewer's own zone. Only call in the browser, after hydration. */

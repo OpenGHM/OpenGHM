@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   formatAge,
   formatDuration,
+  formatLocalDate,
+  formatLongDate,
+  isDateOnly,
   formatRelative,
   formatUtcDate,
   formatUtcDateTime,
@@ -91,5 +94,36 @@ describe("formatDuration", () => {
     expect(formatDuration(1380, { withSeconds: false })).toBe("23 min");
     expect(formatDuration(3660, { withSeconds: false })).toBe("1 h 1 min");
     expect(formatDuration(20, { withSeconds: false })).toBe("0 min");
+  });
+});
+
+describe("date-only values", () => {
+  let savedZone: string | undefined;
+  beforeEach(() => {
+    savedZone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+  });
+  afterEach(() => {
+    if (savedZone === undefined) delete process.env.TZ;
+    else process.env.TZ = savedZone;
+  });
+
+  it("is exactly YYYY-MM-DD", () => {
+    expect(isDateOnly("2022-02-23")).toBe(true);
+    expect(isDateOnly("2022-02-23T00:00:00Z")).toBe(false);
+    expect(isDateOnly("2022-02")).toBe(false);
+    expect(isDateOnly("2022-13-45")).toBe(false);
+    expect(isDateOnly("soon")).toBe(false);
+  });
+
+  it("reads as the same day in a zone west of UTC", () => {
+    expect(formatUtcDate("2022-02-23")).toBe("23 Feb 2022");
+    expect(formatLocalDate("2022-02-23")).toBe("Feb 23, 2022");
+    expect(formatLongDate("2022-02-23")).toBe("February 23, 2022");
+  });
+
+  it("leaves a full timestamp in the local zone", () => {
+    expect(formatLocalDate("2022-02-23T01:30:00Z")).toBe("Feb 22, 2022");
+    expect(formatLongDate("2022-02-23T01:30:00Z")).toBe("February 22, 2022");
   });
 });
