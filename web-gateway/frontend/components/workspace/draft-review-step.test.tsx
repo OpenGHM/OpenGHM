@@ -171,6 +171,27 @@ describe("DraftReviewStep: the summaries", () => {
     expect(within(unset).getByText("model snapshot's recommendation + 50%")).toBeTruthy();
   });
 
+  it("repeats the low-cores warning under Cores, and only then", () => {
+    const BIG = { cores: 64, walltime: "15:00" };
+    review({ recommended: BIG, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
+    const compute = card("Compute");
+    const note = within(compute).getByText(/This model snapshot's reference run used 64 cores/);
+    expect(note.textContent).toContain("with 1 core (about 1.9 GB) the run may be stopped for running out of memory.");
+    expect(note.className).toContain("text-muted-foreground");
+    // Under the Cores value, not in the Needs attention list: it blocks nothing.
+    expect(note.closest("dd")?.previousElementSibling?.textContent).toBe("Cores");
+    expect(screen.queryByText("Needs attention")).toBeNull();
+
+    for (const cores of [64, null]) {
+      cleanup();
+      review({ recommended: BIG, local: { ...LOCAL, slurm: { cores, walltime: null } } });
+      expect(screen.queryByText(/reference run used/)).toBeNull();
+    }
+    cleanup();
+    review({ recommended: null, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
+    expect(screen.queryByText(/reference run used/)).toBeNull();
+  });
+
   it("shows an automatic walltime cut to the limit as the limit", () => {
     review({
       local: { ...LOCAL, slurm: { cores: null, walltime: null } },

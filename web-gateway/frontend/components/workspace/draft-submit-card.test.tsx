@@ -119,6 +119,41 @@ describe("DraftSubmitCard: what it says", () => {
   });
 });
 
+describe("DraftSubmitCard: cores below the reference run's", () => {
+  const warning = /This model snapshot's reference run used 64 cores/;
+  const withCores = (cores: number | null) => ({
+    ...SAVED,
+    slurm_config: { cores, walltime: "02:00:00" },
+  });
+
+  it("is in the confirmation, which still lets the person submit", async () => {
+    flush.mockResolvedValue({ ok: true, job: withCores(1), withheld: [] });
+    card({ recommended: { cores: 64, walltime: "15:00" } });
+    expect(screen.queryByText(warning)).toBeNull(); // not before the dialog
+    await openDialog();
+    const note = within(dialog()).getByText(warning);
+    expect(note.textContent).toContain("with 1 core (about 1.9 GB)");
+    expect(note.closest("dd")?.previousElementSibling?.textContent).toBe("Cores");
+    expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(submit).toHaveBeenCalledWith("job-1"));
+  });
+
+  it.each([64, null])("is not in the confirmation for cores %s", async (cores) => {
+    flush.mockResolvedValue({ ok: true, job: withCores(cores), withheld: [] });
+    card({ recommended: { cores: 64, walltime: "15:00" } });
+    await openDialog();
+    expect(within(dialog()).queryByText(warning)).toBeNull();
+  });
+
+  it("is not in the confirmation without a recommendation", async () => {
+    flush.mockResolvedValue({ ok: true, job: withCores(1), withheld: [] });
+    card({ recommended: null });
+    await openDialog();
+    expect(within(dialog()).queryByText(/reference run used/)).toBeNull();
+  });
+});
+
 describe("DraftSubmitCard: the stale error", () => {
   const STALE = {
     code: "sbatch_rejected",

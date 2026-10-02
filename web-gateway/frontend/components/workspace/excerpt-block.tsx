@@ -3,10 +3,12 @@
 import { useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { CopyButton } from "@/components/workspace/copy-button";
+import { isShortExcerpt } from "@/lib/workspace/log-lines";
 
 /**
- * A log excerpt: collapsed until asked for, monospace, scrolling inside a
- * fixed height so a long one does not push the page, with a Copy button.
+ * A log excerpt: open when it is short (`isShortExcerpt`), else collapsed
+ * behind "Show log excerpt". Monospace, scrolling inside a fixed height so a
+ * long one does not push the page, with a Copy button either way.
  */
 export function ExcerptBlock({
   excerpt,
@@ -15,7 +17,7 @@ export function ExcerptBlock({
   excerpt: string;
   label?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => isShortExcerpt(excerpt));
   const regionId = useId();
 
   return (
@@ -33,7 +35,7 @@ export function ExcerptBlock({
           ) : (
             <ChevronRight className="size-4" aria-hidden="true" />
           )}
-          {label}
+          {open ? label : `Show ${label.toLowerCase()}`}
         </button>
         <CopyButton text={excerpt} label={label.toLowerCase()} />
       </div>

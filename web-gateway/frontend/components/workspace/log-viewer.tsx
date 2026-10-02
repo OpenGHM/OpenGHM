@@ -10,11 +10,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/workspace/copy-button";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import type { FilesState, JobStatus, LogStream } from "@/lib/jobs/types";
+import type { FilesState, JobFailure, JobStatus, LogStream } from "@/lib/jobs/types";
 import { displayLines, isEmptyText, MAX_LOG_LINES, toPlainText } from "@/lib/workspace/log-lines";
 import { filenameFromDisposition, messageFromErrorBody } from "@/lib/workspace/log-download";
 import { previewStreamState, type StreamState } from "@/lib/workspace/log-stream";
-import { defaultLogStream, logEmptyMessage, LOG_STREAMS, logsReadable } from "@/lib/workspace/log-view";
+import {
+  blankStreams,
+  defaultLogStream,
+  logEmptyMessage,
+  LOG_STREAMS,
+  logsReadable,
+} from "@/lib/workspace/log-view";
 import { formatBytes } from "@/lib/workspace/format";
 import { useJobLogs } from "@/lib/workspace/use-job-logs";
 
@@ -129,6 +135,8 @@ function LogPane({
   state,
   status,
   files,
+  failure,
+  wbmLog,
   fetching,
   onRetry,
   onDownload,
@@ -137,6 +145,9 @@ function LogPane({
   state: StreamState;
   status: JobStatus;
   files: FilesState | null;
+  failure: Pick<JobFailure, "cause" | "excerpt"> | null;
+  /** WBM's log may have something to show (see `logEmptyMessage`). */
+  wbmLog: boolean;
   /** Reads happen for this job (not the dev preview). */
   fetching: boolean;
   onRetry: () => void;
@@ -152,6 +163,8 @@ function LogPane({
     stream,
     hasText: !empty,
     exists: state.exists,
+    failure,
+    wbmLog,
   });
 
   return (
@@ -228,10 +241,10 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
   const preview = previewLogs !== undefined;
 
   // The tab follows the job until the person picks one: the page may have been
-  // rendered while SUBMITTED (Output) and the job moves on to RUNNING (WBM log).
+  // rendered while SUBMITTED (Output) and the job moves on to RUNNING (WBM log),
+  // and an ended job's WBM log may turn out to be missing (`defaultLogStream`).
   const [picked, setPicked] = useState<LogStream | null>(null);
-  const stream = picked ?? defaultLogStream(view.status, view.failure);
-  const logs = useJobLogs({ jobId, stream, status, disabled: preview });
+  const logs = useJobLogs({ jobId, picked, status, disabled: preview });
   const previewStates = useMemo(
     () => ({
       wbm: previewStreamState(previewLogs?.wbm),
@@ -241,7 +254,9 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
     [previewLogs]
   );
   const states = preview ? previewStates : logs.states;
+  const stream = preview ? (picked ?? defaultLogStream(status, blankStreams(previewStates))) : logs.stream;
   const state = states[stream];
+  const wbmLog = !blankStreams(states).wbm;
 
   const [downloading, setDownloading] = useState(false);
   const [downloadExpired, setDownloadExpired] = useState(false);
@@ -337,6 +352,8 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
                 state={states[s.stream]}
                 status={status}
                 files={view.files}
+                failure={view.failure}
+                wbmLog={wbmLog}
                 fetching={!preview}
                 onRetry={logs.retry}
                 onDownload={() => void download()}

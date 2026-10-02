@@ -400,6 +400,12 @@ SLURM is asked for `--cpus-per-task` and `--time`:
   value with seconds up to the minute);
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
+Memory on the `shared` partition comes at 1896 MB per core (`MaxMemPerCPU`,
+read from Anvil on 2026-10-02), so a run given fewer cores than the snapshot's
+reference run may be killed for memory. The wizard shows a warning for that
+(`describeCoresBelowReference`), not an error: Submit stays on and the backend
+does not check it.
+
 The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 `work_dir` (`ANVIL_OUTPUT_BASE/<sim_id>`) and slurmly's `remote_job_dir`
 (`ANVIL_REMOTE_BASE_DIR/jobs/…`).
@@ -457,7 +463,9 @@ one chunk by byte offset (base64 over one SSH command), and
 `JOB_LOG_DOWNLOAD_MAX_BYTES` (50 MiB). The browser polls every 5 s through
 server actions, and not at all while its tab is hidden; the download goes
 through the one Next route handler for jobs,
-`web-gateway/frontend/app/api/jobs/[id]/logs/[stream]/route.ts`.
+`web-gateway/frontend/app/api/jobs/[id]/logs/[stream]/route.ts`. The Logs
+panel of an ended job opens on the WBM log, else Output, and on Errors only
+when both are empty (`defaultLogStream`).
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

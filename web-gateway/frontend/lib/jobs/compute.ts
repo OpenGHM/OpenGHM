@@ -131,6 +131,49 @@ export function describeWalltimeBelowReference(
   return `The model snapshot's reference run took about ${describeHours(reference)}. If this run needs longer than your walltime, it may be stopped when time runs out.`;
 }
 
+/** Memory SLURM gives one core on Anvil's `shared` partition, in MB. Verified
+ *  on Anvil on 2026-10-02: `scontrol show partition shared` reports
+ *  `DefMemPerCPU=1896` and `MaxMemPerCPU=1896`, and `sacct` for a 1-core run
+ *  that SLURM killed (`OUT_OF_MEMORY`) shows `ReqMem` 1896M. So memory comes
+ *  only with cores: a job cannot ask for more per core.
+ *
+ *  This is the `shared` partition only, which is where the gateway submits
+ *  (`ANVIL_PARTITION` in web-gateway/backend/app/core/config.py). It is advice
+ *  for `describeCoresBelowReference`, not a rule: the backend does not know it
+ *  and does not enforce it. Nothing else depends on it; if Anvil changes the
+ *  figure, change it here. */
+export const ANVIL_SHARED_MB_PER_CORE = 1896;
+
+/** Memory for `cores` cores on the shared partition, in GB (1 GB = 1000 MB)
+ *  with one decimal: `1.9`, `121.3`. Taken from the total in MB, not from the
+ *  rounded per-core figure, so 64 cores read 121.3 and not 121.6. */
+export function sharedMemoryGb(cores: number): string {
+  return ((cores * ANVIL_SHARED_MB_PER_CORE) / 1000).toFixed(1);
+}
+
+/** A hint for a draft whose cores are below the number the snapshot's
+ *  reference run used, or null. Memory on the shared partition comes with the
+ *  cores (`ANVIL_SHARED_MB_PER_CORE`), so fewer cores than the reference run
+ *  may not hold what it did. It is not an error and blocks nothing: a smaller
+ *  run period or domain may fit. Null when the draft leaves cores to the
+ *  recommendation, when the snapshot has none, when cores are at or above it,
+ *  and when they are not a whole number from 1 (`validateSlurmConfig` says so
+ *  instead). */
+export function describeCoresBelowReference(
+  config: SlurmConfig,
+  recommended: Recommended | null
+): string | null {
+  const cores = config.cores;
+  if (cores === null || !recommended || !Number.isInteger(cores) || cores < 1) return null;
+  if (!Number.isInteger(recommended.cores) || cores >= recommended.cores) return null;
+  return (
+    `This model snapshot's reference run used ${recommended.cores} cores (about ${sharedMemoryGb(recommended.cores)} GB of memory). ` +
+    `Anvil's shared partition gives about ${sharedMemoryGb(1)} GB of memory per core, ` +
+    `so with ${cores} ${cores === 1 ? "core" : "cores"} (about ${sharedMemoryGb(cores)} GB) ` +
+    `the run may be stopped for running out of memory.`
+  );
+}
+
 /** What the automatic walltime is, in a few words after the value: the
  *  recommendation plus 50%, or the limit for one job when that is more.
  *  `placeholder` is the short form for an input's placeholder. */

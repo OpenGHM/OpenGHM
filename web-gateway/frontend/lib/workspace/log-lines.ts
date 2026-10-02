@@ -56,3 +56,16 @@ export function toPlainText(text: LogText): string {
 export function isEmptyText(text: LogText): boolean {
   return text.lines.length === 0 && text.partial === "";
 }
+
+/** A failure card's excerpt opens by itself up to this many lines and
+ *  characters; a longer one waits behind "Show log excerpt". */
+export const SHORT_EXCERPT_LINES = 8;
+export const SHORT_EXCERPT_CHARS = 600;
+
+/** Whether an excerpt is short enough to show without being asked: the first
+ *  thing a reader of a failed job wants is the reason, and a few lines do not
+ *  push the page. A trailing newline is not a line. */
+export function isShortExcerpt(excerpt: string): boolean {
+  const trimmed = excerpt.replace(/\n+$/, "");
+  return trimmed.length <= SHORT_EXCERPT_CHARS && trimmed.split("\n").length <= SHORT_EXCERPT_LINES;
+}

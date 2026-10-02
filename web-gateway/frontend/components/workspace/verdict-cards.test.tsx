@@ -31,8 +31,25 @@ describe("the failed card", () => {
     const escape = (t: string) => t.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
     expect(html).toContain(escape(FAILURE_COPY[cause].title));
     expect(html).toContain(escape(job.failure!.message));
-    if (job.failure?.excerpt) expect(html).toContain("Log excerpt");
+    if (job.failure?.excerpt) expect(html).toMatch(/(Show l|L)og excerpt/);
     if (job.slurm_state) expect(html).toContain(job.slurm_state);
+  });
+
+  it("opens a short excerpt, and keeps a long one behind Show log excerpt", () => {
+    const base = previewSimulation("failed:out_of_memory");
+    const slurmLine = "error: Detected 1 oom_kill event in StepId=1.batch. Some of the step tasks have been OOM Killed.";
+    const short = { ...base, failure: { ...base.failure!, excerpt: slurmLine } };
+    const shortHtml = renderToString(<FailedNextStepsCard job={short} />);
+    expect(shortHtml).toContain("<pre");
+    expect(shortHtml).toContain("oom_kill event");
+    expect(shortHtml).not.toContain("Show log excerpt");
+    expect(shortHtml).toContain("Copy log excerpt");
+
+    const long = { ...base, failure: { ...base.failure!, excerpt: Array.from({ length: 30 }, (_, i) => `l${i}`).join("\n") } };
+    const longHtml = renderToString(<FailedNextStepsCard job={long} />);
+    expect(longHtml).not.toContain("<pre");
+    expect(longHtml).toContain("Show log excerpt");
+    expect(longHtml).toContain("Copy log excerpt");
   });
 
   it("offers to try again with these settings, and says to pick a longer walltime after a timeout", () => {

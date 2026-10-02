@@ -95,18 +95,121 @@ describe("LogViewer with fixture text", () => {
     expect(selectedTab()).toBe("WBM log");
     unmount();
 
-    render(
-      viewer("FAILED", {
-        previewLogs: {},
-        data: { failure: { cause: "fetch_failed", phase: "fetch", message: "x", excerpt: null } },
-      })
-    );
+    // Nothing in any log: Errors is all that is left.
+    render(viewer("FAILED", { previewLogs: {} }));
+    expect(selectedTab()).toBe("Errors");
+  });
+
+  it.each<JobStatus>(["FAILED", "CANCELLED", "COMPLETED"])(
+    "opens an ended %s job on the WBM log when it has one, whatever the cause",
+    (status) => {
+      render(
+        viewer(status, {
+          previewLogs: { wbm: "wbm line", stdout: "out line", stderr: "err line" },
+          data: { failure: { cause: "fetch_failed", phase: null, message: "x", excerpt: null } },
+        })
+      );
+      expect(selectedTab()).toBe("WBM log");
+    }
+  );
+
+  it.each<JobStatus>(["FAILED", "CANCELLED", "COMPLETED"])(
+    "opens an ended %s job on Output when it has no WBM log",
+    (status) => {
+      render(viewer(status, { previewLogs: { stdout: "out line", stderr: "err line" } }));
+      expect(selectedTab()).toBe("Output");
+    }
+  );
+
+  it("opens on Errors only when the WBM log and Output are both empty", () => {
+    render(viewer("FAILED", { previewLogs: { stdout: "", stderr: "err line" } }));
     expect(selectedTab()).toBe("Errors");
   });
 
   it("says an ended job wrote nothing on a stream it never wrote", () => {
     render(viewer("COMPLETED", { previewLogs: { wbm: "a", stderr: undefined } }));
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Errors" }), { button: 0 });
+    expect(screen.getByText("This job wrote no error output.")).toBeTruthy();
+  });
+});
+
+describe("LogViewer on an ended job", () => {
+  const stream = (c: unknown[]) => c[1];
+  const oom = {
+    cause: "out_of_memory",
+    phase: null,
+    message: "Ran out of memory",
+    excerpt: "error: Detected 1 oom_kill event",
+  } as const;
+
+  it("opens on the WBM log and reads only that", async () => {
+    fetchJobLog.mockResolvedValue(chunk({ data: "step 1\n", next_offset: 7, size: 7 }));
+    render(viewer("FAILED", { data: { failure: oom } }));
+    await tick(0);
+    expect(selectedTab()).toBe("WBM log");
+    expect(screen.getByRole("log").textContent).toContain("step 1");
+    expect(fetchJobLog.mock.calls.map(stream)).toEqual(["wbm"]);
+  });
+
+  it("moves on to Output when there is no WBM log", async () => {
+    fetchJobLog.mockImplementation(async (_id: string, s: LogStream) =>
+      s === "wbm" ? chunk({ exists: false }) : chunk({ stream: s, data: "out\n", next_offset: 4, size: 4 })
+    );
+    render(viewer("FAILED", { data: { failure: oom } }));
+    await tick(0);
+    await tick(0);
+    expect(selectedTab()).toBe("Output");
+    expect(screen.getByRole("log").textContent).toContain("out");
+  });
+
+  it("ends on Errors, with the SLURM-stopped words, when nothing else has text", async () => {
+    fetchJobLog.mockResolvedValue(chunk({ exists: false }));
+    render(viewer("FAILED", { data: { failure: oom } }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    expect(selectedTab()).toBe("Errors");
+    expect(
+      screen.getByText("Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card).")
+    ).toBeTruthy();
+  });
+
+  it("does not move on from a WBM log that failed to load: its error shows", async () => {
+    fetchJobLog.mockResolvedValue({ ok: false, reason: "error", message: "Anvil did not answer.", status: 502 });
+    render(viewer("FAILED", { data: { failure: oom } }));
+    await tick(0);
+    await tick(0);
+    expect(selectedTab()).toBe("WBM log");
+    expect(screen.getByText("Anvil did not answer.")).toBeTruthy();
+    expect(fetchJobLog.mock.calls.map(stream)).toEqual(["wbm"]);
+  });
+
+  it("leaves a tab the person picked, even when it is empty", async () => {
+    fetchJobLog.mockImplementation(async (_id: string, s: LogStream) =>
+      chunk({ stream: s, exists: s === "wbm", data: s === "wbm" ? "x\n" : "", next_offset: s === "wbm" ? 2 : 0 })
+    );
+    render(viewer("FAILED", { data: { failure: oom } }));
+    await tick(0);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Errors" }), { button: 0 });
+    await tick(0);
+    expect(selectedTab()).toBe("Errors");
+    expect(
+      screen.getByText(
+        "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+      )
+    ).toBeTruthy();
+  });
+
+  it("says a timeout the same way, and an ordinary failure as before", async () => {
+    fetchJobLog.mockResolvedValue(chunk({ exists: false }));
+    const { unmount } = render(
+      viewer("FAILED", { data: { failure: { cause: "timeout", phase: null, message: "x", excerpt: null } } })
+    );
+    for (let i = 0; i < 4; i++) await tick(0);
+    // No WBM log was found, so it does not send the reader there.
+    expect(screen.getByText("Nothing was written to stderr. SLURM stopped this job.")).toBeTruthy();
+    unmount();
+
+    render(viewer("FAILED", { data: { failure: { cause: "wbm_error", phase: null, message: "x", excerpt: null } } }));
+    for (let i = 0; i < 4; i++) await tick(0);
     expect(screen.getByText("This job wrote no error output.")).toBeTruthy();
   });
 });

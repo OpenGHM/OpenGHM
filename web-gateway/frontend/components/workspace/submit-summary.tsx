@@ -67,6 +67,7 @@ export function SubmitSummary({
   walltime,
   walltimeFromSnapshot,
   walltimeCapped = false,
+  coresWarning = null,
 }: {
   snapshotTitle: string;
   start: string;
@@ -78,6 +79,9 @@ export function SubmitSummary({
   walltimeFromSnapshot: boolean;
   /** The automatic walltime was cut to the limit for one job. */
   walltimeCapped?: boolean;
+  /** `describeCoresBelowReference`: shown under Cores, because the dialog is
+   *  the last place to notice it. A hint; Submit stays on. */
+  coresWarning?: string | null;
 }) {
   return (
     <>
@@ -94,6 +98,9 @@ export function SubmitSummary({
           <Recommendation show={cores !== null && coresFromSnapshot}>
             model snapshot&apos;s recommendation
           </Recommendation>
+          {coresWarning && (
+            <span className="mt-1 block text-xs font-normal text-warning">{coresWarning}</span>
+          )}
         </SummaryRow>
         <SummaryRow label="Walltime">
           {walltime ? describeSlurmTime(walltime) : "Not known"}

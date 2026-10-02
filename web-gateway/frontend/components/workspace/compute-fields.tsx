@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { draftField } from "@/components/workspace/draft-field";
 import {
   automaticWalltimeLabel,
+  describeCoresBelowReference,
   describeSlurmTime,
   describeWalltimeBelowReference,
   describeWalltimeOverLimit,
@@ -41,6 +42,8 @@ export function ComputeFields({
   const defaultWalltime = automatic.walltime;
   const overLimit = walltimeOverLimit(config, recommended);
   const belowReference = describeWalltimeBelowReference(config, recommended);
+  const coresWarning = describeCoresBelowReference(config, recommended);
+  const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
   const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
 
   return (
@@ -62,7 +65,9 @@ export function ComputeFields({
             placeholder={recommended ? `${recommended.cores} (recommended)` : "Recommended"}
             value={config.cores ?? ""}
             aria-invalid={errors.cores !== undefined}
-            aria-describedby={errors.cores ? `${id}-cores-error` : undefined}
+            aria-describedby={
+              [errors.cores ? `${id}-cores-error` : null, coresWarningId].filter(Boolean).join(" ") || undefined
+            }
             onChange={(e) =>
               onChange({
                 ...config,
@@ -108,6 +113,12 @@ export function ComputeFields({
           )}
         </div>
       </div>
+      {coresWarning && (
+        <p id={coresWarningId} className="flex items-start gap-2 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{coresWarning}</span>
+        </p>
+      )}
       {overLimit !== null && (
         <p
           id={walltimeNoteId}

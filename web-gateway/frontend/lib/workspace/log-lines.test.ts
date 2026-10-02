@@ -5,7 +5,10 @@ import {
   appendText,
   collapseCr,
   displayLines,
+  SHORT_EXCERPT_CHARS,
+  SHORT_EXCERPT_LINES,
   isEmptyText,
+  isShortExcerpt,
   toPlainText,
 } from "@/lib/workspace/log-lines";
 
@@ -93,5 +96,25 @@ describe("toPlainText / isEmptyText", () => {
   it("is empty only with no lines and no partial", () => {
     expect(isEmptyText(EMPTY_LOG_TEXT)).toBe(true);
     expect(isEmptyText(appendText(EMPTY_LOG_TEXT, "x"))).toBe(false);
+  });
+});
+
+describe("isShortExcerpt", () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+
+  it("is short up to the line limit, and not past it", () => {
+    expect(isShortExcerpt(lines(1))).toBe(true);
+    expect(isShortExcerpt(lines(SHORT_EXCERPT_LINES))).toBe(true);
+    expect(isShortExcerpt(lines(SHORT_EXCERPT_LINES + 1))).toBe(false);
+  });
+
+  it("is short up to the character limit, and not past it", () => {
+    expect(isShortExcerpt("x".repeat(SHORT_EXCERPT_CHARS))).toBe(true);
+    expect(isShortExcerpt("x".repeat(SHORT_EXCERPT_CHARS + 1))).toBe(false);
+  });
+
+  it("does not count trailing newlines as lines or characters", () => {
+    expect(isShortExcerpt(lines(SHORT_EXCERPT_LINES) + "\n\n")).toBe(true);
+    expect(isShortExcerpt("x".repeat(SHORT_EXCERPT_CHARS) + "\n")).toBe(true);
   });
 });

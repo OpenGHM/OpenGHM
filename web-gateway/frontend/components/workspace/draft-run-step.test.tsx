@@ -358,6 +358,55 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   });
 });
 
+describe("the draft run step: cores below the reference run's", () => {
+  const BIG = { cores: 64, walltime: "15:00" };
+  const warning = () => screen.queryByText(/This model snapshot's reference run used 64 cores/);
+
+  it("warns next to the Cores field, with the numbers, and does not make it an error", () => {
+    step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
+    const note = warning()!;
+    expect(note.textContent).toBe(
+      "This model snapshot's reference run used 64 cores (about 121.3 GB of memory). " +
+        "Anvil's shared partition gives about 1.9 GB of memory per core, " +
+        "so with 1 core (about 1.9 GB) the run may be stopped for running out of memory."
+    );
+    const cores = screen.getByLabelText("Cores");
+    expect(cores.getAttribute("aria-describedby")).toBe(note.parentElement?.id);
+    expect(cores.getAttribute("aria-invalid")).not.toBe("true");
+  });
+
+  it("appears and goes as the value is typed", () => {
+    const { onSlurmChange, rerender } = step({ recommended: BIG });
+    expect(warning()).toBeNull();
+    fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "1" } });
+    expect(onSlurmChange).toHaveBeenLastCalledWith({ cores: 1, walltime: null });
+
+    const props = (cores: number | null) => (
+      <DraftRunStep
+        ctx={FOUND}
+        parameters={PARAMETERS}
+        slurm={{ cores, walltime: null }}
+        recommended={BIG}
+        serverErrors={{}}
+        startRefusal={null}
+        onParametersChange={vi.fn()}
+        onSlurmChange={vi.fn()}
+      />
+    );
+    rerender(props(1));
+    expect(warning()).toBeTruthy();
+    rerender(props(64));
+    expect(warning()).toBeNull();
+    rerender(props(null));
+    expect(warning()).toBeNull();
+  });
+
+  it("says nothing without a recommendation", () => {
+    step({ recommended: null, slurm: { cores: 1, walltime: null } });
+    expect(screen.queryByText(/reference run used/)).toBeNull();
+  });
+});
+
 describe("the draft run step: disabled", () => {
   it("switches every control off while a submit is under way", () => {
     step({

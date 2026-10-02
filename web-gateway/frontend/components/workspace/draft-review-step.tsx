@@ -12,6 +12,7 @@ import { ModelInputStatus } from "@/components/workspace/model-input-panel";
 import { SnapshotSummaryCard } from "@/components/workspace/snapshot-summary-card";
 import {
   automaticWalltimeLabel,
+  describeCoresBelowReference,
   describeSlurmTime,
   effectiveCompute,
   type Recommended,
@@ -144,6 +145,7 @@ export function DraftReviewStep({
   const id = useId();
   const { parameters, slurm } = local;
   const compute = effectiveCompute(slurm, recommended);
+  const coresWarning = describeCoresBelowReference(slurm, recommended);
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
 
@@ -271,6 +273,7 @@ export function DraftReviewStep({
                 {compute.coresSource === "snapshot" && compute.cores !== null && (
                   <Note>model snapshot&apos;s recommendation</Note>
                 )}
+                {coresWarning && <Note>{coresWarning}</Note>}
               </SummaryRow>
               <SummaryRow label="Walltime">
                 {compute.walltime ? describeSlurmTime(compute.walltime) : "Not known"}

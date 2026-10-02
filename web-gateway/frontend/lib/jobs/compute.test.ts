@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANVIL_SHARED_MB_PER_CORE,
   automaticWalltimeLabel,
+  describeCoresBelowReference,
   describeHours,
   describeSlurmTime,
   describeWalltimeBelowReference,
@@ -10,6 +12,7 @@ import {
   withHeadroom,
   parseSlurmTime,
   secondsToHms,
+  sharedMemoryGb,
   submitBlockedReason,
   validateSlurmConfig,
   walltimeOverLimit,
@@ -210,5 +213,59 @@ describe("submitBlockedReason", () => {
     expect(submitBlockedReason({ ...user, email_verified: false })).toMatch(/Verify your email/);
     expect(submitBlockedReason({ ...user, is_active: false })).toMatch(/deactivated/);
     expect(submitBlockedReason(null)).toBeNull();
+  });
+});
+
+describe("shared-partition memory", () => {
+  it("is the figure verified on Anvil, 1896 MB a core", () => {
+    expect(ANVIL_SHARED_MB_PER_CORE).toBe(1896);
+  });
+
+  it("is shown in GB with one decimal, from the total and not from the rounded per-core figure", () => {
+    expect(sharedMemoryGb(1)).toBe("1.9");
+    expect(sharedMemoryGb(2)).toBe("3.8");
+    expect(sharedMemoryGb(3)).toBe("5.7");
+    expect(sharedMemoryGb(64)).toBe("121.3"); // 64 x 1.9 would read 121.6
+    expect(sharedMemoryGb(128)).toBe("242.7");
+  });
+});
+
+describe("describeCoresBelowReference", () => {
+  const rec = { cores: 64, walltime: "15:00" };
+  const cores = (n: number | null) => ({ cores: n, walltime: null });
+
+  it("warns, with the numbers, when cores are below the reference run's", () => {
+    expect(describeCoresBelowReference(cores(1), rec)).toBe(
+      "This model snapshot's reference run used 64 cores (about 121.3 GB of memory). " +
+        "Anvil's shared partition gives about 1.9 GB of memory per core, " +
+        "so with 1 core (about 1.9 GB) the run may be stopped for running out of memory."
+    );
+  });
+
+  it("builds the numbers from the values, and says cores in the plural", () => {
+    const text = describeCoresBelowReference(cores(3), { cores: 16, walltime: "15:00" });
+    expect(text).toContain("reference run used 16 cores (about 30.3 GB");
+    expect(text).toContain("with 3 cores (about 5.7 GB)");
+  });
+
+  it("warns one core below, and never when at or above", () => {
+    expect(describeCoresBelowReference(cores(63), rec)).toContain("with 63 cores (about 119.4 GB)");
+    expect(describeCoresBelowReference(cores(64), rec)).toBeNull();
+    expect(describeCoresBelowReference(cores(65), rec)).toBeNull();
+    expect(describeCoresBelowReference(cores(128), rec)).toBeNull();
+  });
+
+  it("says nothing when cores are unset: the recommendation is used", () => {
+    expect(describeCoresBelowReference(cores(null), rec)).toBeNull();
+  });
+
+  it("says nothing when the snapshot has no recommendation", () => {
+    expect(describeCoresBelowReference(cores(1), null)).toBeNull();
+  });
+
+  it("leaves a value that is not a valid number of cores to the field's own error", () => {
+    expect(describeCoresBelowReference(cores(0), rec)).toBeNull();
+    expect(describeCoresBelowReference(cores(-2), rec)).toBeNull();
+    expect(describeCoresBelowReference(cores(1.5), rec)).toBeNull();
   });
 });

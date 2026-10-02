@@ -5,7 +5,7 @@ import { fetchJobLog } from "@/lib/jobs/actions";
 import type { JobLogChunk, JobStatus, LogStream } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import { nextPollDelay } from "@/lib/workspace/live-poll";
-import { logsReadable } from "@/lib/workspace/log-view";
+import { blankStreams, defaultLogStream, logsReadable } from "@/lib/workspace/log-view";
 import {
   INITIAL_STREAM,
   LOG_POLL_MS,
@@ -40,8 +40,10 @@ function reducer(states: LogStates, action: Action): LogStates {
 type ReadOutcome = "more" | "idle" | "error" | "stop";
 
 /**
- * Reads the active log stream of a job (ADR 0027). Only that stream is read;
- * another loads the first time it is selected. The first read is a tail; then
+ * Reads the active log stream of a job (ADR 0027): the one the person `picked`,
+ * else `defaultLogStream`, which for an ended job can move on from a stream
+ * that turns out to be empty. Only the active stream is read; another loads
+ * the first time it is shown. The first read is a tail; then
  * it appends from `next_offset`, at once while there is more, every 5 s once
  * caught up. It reads only while the job is not over and the tab is visible;
  * when the job ends it reads to the end of the file once more and stops. Not
@@ -49,16 +51,19 @@ type ReadOutcome = "more" | "idle" | "error" | "stop";
  */
 export function useJobLogs({
   jobId,
-  stream,
+  picked,
   status,
   disabled,
 }: {
   jobId: string;
-  stream: LogStream;
+  /** The tab the person chose; null while the job's own default is on show. */
+  picked: LogStream | null;
   status: JobStatus;
   /** Fixture data: never read. */
   disabled: boolean;
 }): {
+  /** The stream being read and shown. */
+  stream: LogStream;
   states: LogStates;
   sessionExpired: boolean;
   /** Read again now, after a failure. */
@@ -67,6 +72,7 @@ export function useJobLogs({
   const [states, dispatch] = useReducer(reducer, INITIAL_STATES);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
+  const stream = picked ?? defaultLogStream(status, blankStreams(states));
 
   const offsetsRef = useRef<Record<LogStream, number | null>>({ wbm: null, stdout: null, stderr: null });
   const inFlightRef = useRef<Partial<Record<LogStream, Promise<ReadOutcome>>>>({});
@@ -208,5 +214,5 @@ export function useJobLogs({
 
   const retry = useCallback(() => setRetryTick((n) => n + 1), []);
 
-  return { states, sessionExpired, retry };
+  return { stream, states, sessionExpired, retry };
 }
