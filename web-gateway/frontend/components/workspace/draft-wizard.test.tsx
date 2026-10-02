@@ -688,12 +688,22 @@ describe("submitting", () => {
     await act(async () => answer({ ok: true, data: SUBMITTED }));
   });
 
-  it("asks the server for the page again when the answer did not come but the job moved on", async () => {
+  it("takes the success path when the answer did not come but the job moved on", async () => {
     submitSimulation.mockRejectedValue(new Error("timed out"));
     fetchJob.mockResolvedValue({ ok: true, data: { ...JOB, status: "PENDING" } });
     wizard();
     confirm(await openSubmitDialog());
-    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/job-1"));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Submitted — opening the job page…")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps the 'could not confirm' message when the job is still a draft", async () => {
+    submitSimulation.mockRejectedValue(new Error("timed out"));
+    wizard();
+    confirm(await openSubmitDialog());
+    await waitFor(() => expect(screen.getAllByRole("alert").some((a) => a.textContent?.includes("Could not confirm"))).toBe(true));
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -701,5 +711,167 @@ describe("submitting", () => {
     wizard({ blockedReason: "Your account has not been approved to run simulations." });
     expect((screen.getByRole("button", { name: "Submit to Anvil" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Your account has not been approved to run simulations.")).toBeTruthy();
+  });
+});
+
+describe("after a submit went through: the page that does not follow", () => {
+  const SUBMITTED = { ...JOB, status: "PENDING" as const };
+  const PAGE = "/workspace/job-1";
+  const assign = vi.fn();
+
+  /** jsdom's `location.assign` cannot be replaced, so replace the location with
+   *  one that reads the real one and has an `assign` of its own. */
+  function stubLocation() {
+    const real = window.location;
+    vi.stubGlobal("location", {
+      get search() {
+        return real.search;
+      },
+      get pathname() {
+        return real.pathname;
+      },
+      get href() {
+        return real.href;
+      },
+      assign,
+    });
+  }
+
+  beforeEach(() => {
+    assign.mockReset();
+    stubLocation();
+    // Only timers: the promises, Radix and Testing Library keep running as usual.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** Submit, with the wizard staying on screen (the mocked router does nothing). */
+  async function submitAndStay() {
+    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    const view = wizard();
+    fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(PAGE));
+    fetchJob.mockClear();
+    return view;
+  }
+  const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+  it("hides the old error as soon as the submit goes through", async () => {
+    const view = render(
+      <DraftWizard
+        job={{ ...JOB, last_submit_error: { code: "sbatch_rejected", message: "QOSMaxWallDurationPerJobLimit", at: "2026-10-02T00:00:00Z" } }}
+        ctx={FOUND}
+        blockedReason={null}
+        initialStep="review"
+      />
+    );
+    expect(screen.getByRole("alert").textContent).toContain("The last submit didn't go through");
+    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    expect(screen.queryByText(/QOSMaxWallDurationPerJobLimit/)).toBeNull();
+    expect(screen.getByText("Submitted — opening the job page…")).toBeTruthy();
+    view.unmount();
+  });
+
+  it("does nothing more while Next is still doing the navigation", async () => {
+    await submitAndStay();
+    await advance(2_400);
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("navigates the hard way when the job has left DRAFT and the wizard is still there", async () => {
+    await submitAndStay();
+    fetchJob.mockResolvedValue({ ok: true, data: SUBMITTED });
+    await advance(2_500);
+    expect(fetchJob).toHaveBeenCalledWith("job-1");
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith(PAGE);
+    expect(screen.queryByRole("link", { name: "Open the job page" })).toBeNull();
+  });
+
+  it("never navigates when the wizard has gone away", async () => {
+    const view = await submitAndStay();
+    fetchJob.mockResolvedValue({ ok: true, data: SUBMITTED });
+    view.unmount();
+    await advance(20_000);
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate for an answer that arrives after the wizard went away", async () => {
+    const view = await submitAndStay();
+    let answer!: (r: ActionResult<Job>) => void;
+    fetchJob.mockReturnValue(new Promise((r) => (answer = r)));
+    await advance(2_500);
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    view.unmount();
+    await act(async () => answer({ ok: true, data: SUBMITTED }));
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("asks again every 2 s while it is still a draft, and navigates when it is not", async () => {
+    await submitAndStay();
+    fetchJob.mockResolvedValue({ ok: true, data: JOB });
+    await advance(2_500);
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    await advance(1_900);
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    await advance(100);
+    expect(fetchJob).toHaveBeenCalledTimes(2);
+    fetchJob.mockResolvedValue({ ok: false, reason: "error", message: "down" });
+    await advance(2_000);
+    expect(fetchJob).toHaveBeenCalledTimes(3);
+    expect(assign).not.toHaveBeenCalled();
+    fetchJob.mockResolvedValue({ ok: true, data: SUBMITTED });
+    await advance(2_000);
+    expect(fetchJob).toHaveBeenCalledTimes(4);
+    expect(assign).toHaveBeenCalledWith(PAGE);
+  });
+
+  it("counts a poll that throws as 'still a draft'", async () => {
+    await submitAndStay();
+    fetchJob.mockRejectedValue(new Error("network"));
+    await advance(2_500 + 3 * 2_000);
+    expect(fetchJob).toHaveBeenCalledTimes(4);
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Open the job page" })).toBeTruthy();
+  });
+
+  it("gives up after 3 retries and links to the job page instead", async () => {
+    await submitAndStay();
+    fetchJob.mockResolvedValue({ ok: true, data: JOB });
+    await advance(2_500 + 2_000 + 2_000);
+    expect(screen.queryByRole("link", { name: "Open the job page" })).toBeNull();
+    await advance(2_000);
+    expect(fetchJob).toHaveBeenCalledTimes(4);
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByText(/The submit went through but this page did not update\./)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Open the job page" });
+    expect(link.getAttribute("href")).toBe(PAGE);
+    // And it stops asking.
+    await advance(30_000);
+    expect(fetchJob).toHaveBeenCalledTimes(4);
+  });
+
+  it("does the same hard navigation after a lost answer once the job turns out to be submitted", async () => {
+    submitSimulation.mockRejectedValue(new Error("timed out"));
+    fetchJob.mockResolvedValue({ ok: true, data: SUBMITTED });
+    wizard();
+    fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(PAGE));
+    expect(assign).not.toHaveBeenCalled();
+    await advance(2_500);
+    expect(assign).toHaveBeenCalledWith(PAGE);
   });
 });

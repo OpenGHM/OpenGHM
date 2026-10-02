@@ -40,6 +40,13 @@ import {
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
 import { useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
 
+/** After a submit went through, how long Next gets to show the job's page by
+ *  itself before the wizard checks the server and steps in. */
+const OPEN_FALLBACK_MS = 2_500;
+/** The checks after that one, and the gap between them. */
+const OPEN_RETRIES = 3;
+const OPEN_RETRY_MS = 2_000;
+
 /** What the header calls a draft: the list's `displayName` rule applied to the
  *  name being typed (then the slug, the run id, `Untitled (<id8>)`), so a draft
  *  reads the same in the list and here. Follows the input on every keystroke. */
@@ -135,6 +142,18 @@ function WizardBody({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteExpired, setDeleteExpired] = useState(false);
   const deleted = useRef(false);
+  // The address of the job's page once a submit went through; the card offers a
+  // link to it when the page did not follow.
+  const [pageStuck, setPageStuck] = useState<string | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (openTimer.current !== null) clearTimeout(openTimer.current);
+    };
+  }, []);
 
   const autosave = useDraftAutosave({ jobId, initialSaved: initialJob, local, ctx });
   const { flush, suspend, resume } = autosave;
@@ -238,8 +257,34 @@ function WizardBody({
 
   // ── Submit and delete ─────────────────────────────────────────────────────
   const onSubmitted = (submitted: Job) => {
-    router.replace(`/workspace/${encodeURIComponent(submitted.id)}`);
+    const url = `/workspace/${encodeURIComponent(submitted.id)}`;
+    setLastSubmitError(null);
+    router.replace(url);
     router.refresh();
+
+    // Next should now swap this page for the job's. If this wizard is still on
+    // screen a moment later it did not (a real browser did this once):
+    // ask the server, and when the job has left DRAFT load its page the hard
+    // way, which always shows what the server holds. When it cannot be
+    // confirmed, say so and link to the page.
+    if (openTimer.current !== null) clearTimeout(openTimer.current);
+    const check = async (retriesLeft: number) => {
+      openTimer.current = null;
+      const result = await fetchJob(submitted.id).catch(() => null);
+      if (!mounted.current) return;
+      if (result?.ok && result.data.status !== "DRAFT") {
+        window.location.assign(url);
+        return;
+      }
+      if (retriesLeft > 0) openTimer.current = setTimeout(() => void check(retriesLeft - 1), OPEN_RETRY_MS);
+      else setPageStuck(url);
+    };
+    openTimer.current = setTimeout(() => void check(OPEN_RETRIES), OPEN_FALLBACK_MS);
+  };
+  // For a submit whose answer was lost: the job, if it is no longer a draft.
+  const checkSubmitted = async (id: string): Promise<Job | null> => {
+    const result = await fetchJob(id).catch(() => null);
+    return result?.ok && result.data.status !== "DRAFT" ? result.data : null;
   };
   const onSubmitFailed = () => {
     // Still a draft, and auto-save was suspended for the submit.
@@ -449,6 +494,8 @@ function WizardBody({
                     onSubmitted={onSubmitted}
                     onSubmitFailed={onSubmitFailed}
                     onSubmittingChange={setSubmitting}
+                    checkSubmitted={checkSubmitted}
+                    openJobHref={pageStuck}
                   />
                 }
               />

@@ -119,6 +119,96 @@ describe("DraftSubmitCard: what it says", () => {
   });
 });
 
+describe("DraftSubmitCard: the stale error", () => {
+  const STALE = {
+    code: "sbatch_rejected",
+    message: "QOSMaxWallDurationPerJobLimit",
+    at: "2026-10-02T00:00:00Z",
+  };
+  const stale = () => screen.queryByText(/QOSMaxWallDurationPerJobLimit/);
+
+  it("hides the last submit's error while this one is in flight", async () => {
+    submit.mockReturnValueOnce(new Promise(() => {}));
+    card({ lastSubmitError: STALE });
+    expect(stale()).toBeTruthy();
+    await openDialog();
+    expect(stale()).toBeTruthy();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(within(dialog()).getByText("Submitting…")).toBeTruthy());
+    expect(stale()).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows nothing but Submitted once it went through, even if the stale error is still passed in", async () => {
+    card({ lastSubmitError: STALE });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
+    expect(stale()).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the job page…");
+    expect(screen.queryByRole("button", { name: "Submit to Anvil" })).toBeNull();
+    expect(screen.queryByText(/Your draft saves automatically/)).toBeNull();
+  });
+
+  it("shows a new failure's own message and not the old one", async () => {
+    submit.mockResolvedValueOnce({ ok: false, reason: "error", message: "new reason", code: "sbatch_rejected" });
+    card({ lastSubmitError: STALE });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert").textContent).toContain("new reason");
+    expect(stale()).toBeNull();
+  });
+
+  it("does not bring the old error back after a failure that has no message of its own", async () => {
+    submit.mockResolvedValueOnce({ ok: false, reason: "session_expired" });
+    card({ lastSubmitError: STALE });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    expect(stale()).toBeNull();
+  });
+});
+
+describe("DraftSubmitCard: after it went through", () => {
+  it("shows a spinner and the opening message, and nothing else", async () => {
+    card();
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("Submitted — opening the job page…");
+    expect(status.querySelector("svg.animate-spin, svg[class*='animate-spin']")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("offers a plain link to the job page when the wizard says the page did not follow", async () => {
+    const view = card();
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
+    view.rerender(
+      <DraftSubmitCard
+        jobId="job-1"
+        problems={[]}
+        lastSubmitError={null}
+        recommended={RECOMMENDED}
+        flush={flush}
+        suspend={suspend}
+        submit={submit}
+        onSubmitted={onSubmitted}
+        openJobHref="/workspace/job-1"
+      />
+    );
+    expect(screen.getByRole("status").textContent).toContain("The submit went through but this page did not update.");
+    const link = screen.getByRole("link", { name: "Open the job page" });
+    expect(link.getAttribute("href")).toBe("/workspace/job-1");
+    expect(screen.queryByText(/opening the job page…/)).toBeNull();
+  });
+});
+
 describe("DraftSubmitCard: long refusals", () => {
   const LONG =
     "Anvil refused the requested run time: it is over the limit for one job (96 h). Shorten the run period or set a shorter walltime. SLURM said: QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: Job violates accounting/QOS policy (job submit limit, user's size and/or time limits). Your draft is unchanged.";
@@ -165,7 +255,7 @@ describe("DraftSubmitCard: submitting", () => {
     expect(calls).toEqual(["flush", "suspend", "submitting:true", "submit"]);
     expect(submit).toHaveBeenCalledWith("job-1");
     expect(onSubmitFailed).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toContain("Submitted to Anvil");
+    expect(screen.getByRole("status").textContent).toContain("Submitted — opening the job page…");
   });
 
   it("says where a field comes from the snapshot's recommendation", async () => {
@@ -268,6 +358,58 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     const text = screen.getByRole("alert").textContent ?? "";
     expect(text).toContain("Could not confirm the submit: timeout of 60000ms exceeded.");
     expect(text).toContain("Check My Simulations");
+  });
+
+  it("checks the server after a lost answer, and takes the success path when the job is no longer a draft", async () => {
+    const checkSubmitted = vi.fn().mockResolvedValue(SUBMITTED);
+    submit.mockRejectedValueOnce(new Error("timeout of 60000ms exceeded"));
+    card({ checkSubmitted });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith(SUBMITTED));
+    expect(checkSubmitted).toHaveBeenCalledWith("job-1");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the job page…");
+    // Never unlocked, never told the submit failed.
+    expect(onSubmitFailed).not.toHaveBeenCalled();
+    expect(calls).toEqual(["flush", "suspend", "submitting:true"]);
+  });
+
+  it("shows the message first, and keeps it when the check says the job is still a draft", async () => {
+    let answer: (job: Job | null) => void = () => {};
+    const checkSubmitted = vi.fn(() => new Promise<Job | null>((resolve) => (answer = resolve)));
+    submit.mockRejectedValueOnce(new Error("timeout"));
+    card({ checkSubmitted });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(checkSubmitted).toHaveBeenCalled());
+    expect(screen.getByRole("alert").textContent).toContain("Could not confirm the submit: timeout.");
+    expect(submitButton().disabled).toBe(true);
+    answer(null);
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    expect(screen.getByRole("alert").textContent).toContain("Could not confirm the submit");
+    expect(onSubmitted).not.toHaveBeenCalled();
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it("treats a check that itself throws as a draft that is still a draft", async () => {
+    const checkSubmitted = vi.fn().mockRejectedValue(new Error("down"));
+    submit.mockRejectedValueOnce(new Error("timeout"));
+    card({ checkSubmitted });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    expect(onSubmitted).not.toHaveBeenCalled();
+  });
+
+  it("does not check after a refusal: the backend answered", async () => {
+    const checkSubmitted = vi.fn();
+    submit.mockResolvedValueOnce({ ok: false, reason: "error", message: "no", code: "sbatch_rejected" });
+    card({ checkSubmitted });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    expect(checkSubmitted).not.toHaveBeenCalled();
   });
 
   it("keeps the dialog open and Cancel off while the submit is in flight", async () => {

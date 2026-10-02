@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Lock, Rocket, Send } from "lucide-react";
 import {
   AlertDialog,
@@ -22,7 +22,9 @@ import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
 import type { FlushResult } from "@/lib/workspace/use-draft-autosave";
 
-type Stage = "idle" | "flushing" | "confirming" | "submitting" | "done";
+/** `checking` is the short stretch after a submit whose answer never came: the
+ *  card asks the server whether the job went out anyway. */
+type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "done";
 
 /**
  * "Submit to Anvil" for the draft wizard's last step.
@@ -37,11 +39,17 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "done";
  *   and the list on the review step says why (a permission the user lacks is one
  *   of them).
  * - `lastSubmitError` is the stored reason the last submit did not reach Anvil,
- *   shown until a submit from here replaces it.
- * - Success calls `onSubmitted(job)` and the card stays on "Submitted" while the
- *   wizard navigates. A failed submit calls `onSubmitFailed`: the draft is still a
- *   draft, but auto-save has been suspended for good, so the wizard has to load
- *   the job again and start over with it (a new `key`) before more can be saved.
+ *   shown until a submit from here is confirmed: from then on only what this
+ *   page's own attempt says is shown, and nothing at all once it succeeded.
+ * - Success calls `onSubmitted(job)` and the card shows only "Submitted, opening
+ *   the job page" while the wizard navigates. If the page never follows, the
+ *   wizard sets `openJobHref` and the card offers a plain link to it instead.
+ * - A submit whose answer never came (the request threw) is not necessarily a
+ *   failure: `checkSubmitted` asks the server, and a job that is no longer a
+ *   draft takes the success path. A failed submit calls `onSubmitFailed`: the
+ *   draft is still a draft, but auto-save has been suspended for good, so the
+ *   wizard has to load the job again and start over with it (a new `key`) before
+ *   more can be saved.
  * - `onSubmittingChange(true)` is called at Confirm, not while saving, so the
  *   wizard may switch its inputs off without stopping the save.
  *
@@ -59,6 +67,8 @@ export function DraftSubmitCard({
   onSubmitted,
   onSubmitFailed,
   onSubmittingChange,
+  checkSubmitted,
+  openJobHref = null,
 }: {
   jobId: string;
   problems: readonly SubmitProblem[];
@@ -71,15 +81,33 @@ export function DraftSubmitCard({
   onSubmitted: (job: Job) => void;
   onSubmitFailed?: () => void;
   onSubmittingChange?: (submitting: boolean) => void;
+  /** After a submit that threw: the job as the server holds it now when it is no
+   *  longer a draft (so the submit did go through), else null. */
+  checkSubmitted?: (jobId: string) => Promise<Job | null>;
+  /** Set by the wizard once a submit went through but its page did not change. */
+  openJobHref?: string | null;
 }) {
   const noteId = useId();
   const [stage, setStage] = useState<Stage>("idle");
   const [saved, setSaved] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Once Confirm was pressed the stored reason of an earlier submit is history.
+  const [attempted, setAttempted] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const blocked = problems.length > 0;
-  const shownError = error ?? (lastSubmitError ? `The last submit didn't go through: ${lastSubmitError.message}` : null);
+  const quiet = stage === "submitting" || stage === "done";
+  const shownError = quiet
+    ? null
+    : (error ??
+      (lastSubmitError && !attempted ? `The last submit didn't go through: ${lastSubmitError.message}` : null));
 
   const start = async () => {
     if (stage !== "idle" || blocked) return;
@@ -111,10 +139,14 @@ export function DraftSubmitCard({
   const confirm = async () => {
     if (stage !== "confirming") return;
     setStage("submitting");
+    setAttempted(true);
+    setError(null);
+    setSessionExpired(false);
     suspend();
     onSubmittingChange?.(true);
 
     let message: string | null = null;
+    let thrown = false;
     try {
       const result = await submit(jobId);
       if (result.ok) {
@@ -126,6 +158,7 @@ export function DraftSubmitCard({
       else if (result.reason === "not_found") message = "This simulation no longer exists.";
       else message = describeSubmitFailure(result);
     } catch (err) {
+      thrown = true;
       // A thrown error is the request itself failing (for example the 60 s
       // timeout), not an answer from the backend: say what is known.
       message =
@@ -134,6 +167,24 @@ export function DraftSubmitCard({
           : "Could not confirm the submit. Check My Simulations before trying again.";
     }
     setError(message);
+    if (thrown && checkSubmitted) {
+      // The answer was lost, the submit may not have been: say what is known
+      // above, then look. A job that left DRAFT went out.
+      setStage("checking");
+      let went: Job | null = null;
+      try {
+        went = await checkSubmitted(jobId);
+      } catch {
+        went = null;
+      }
+      if (!mounted.current) return;
+      if (went) {
+        setError(null);
+        setStage("done");
+        onSubmitted(went);
+        return;
+      }
+    }
     setStage("idle");
     onSubmittingChange?.(false);
     onSubmitFailed?.();
@@ -141,13 +192,17 @@ export function DraftSubmitCard({
 
   const compute = saved ? effectiveCompute(saved.slurm_config, recommended) : null;
 
+  const done = stage === "done";
+
   return (
     <DraftCard title="Submit" icon={Rocket}>
-      <p className="text-sm text-muted-foreground">
-        Your draft saves automatically. Submitting runs it on Anvil and spends compute time.
-      </p>
+      {!done && (
+        <p className="text-sm text-muted-foreground">
+          Your draft saves automatically. Submitting runs it on Anvil and spends compute time.
+        </p>
+      )}
 
-      {blocked && (
+      {blocked && !done && (
         <p
           id={noteId}
           className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
@@ -161,7 +216,7 @@ export function DraftSubmitCard({
         </p>
       )}
 
-      {sessionExpired && <SessionExpiredBanner />}
+      {sessionExpired && !done && <SessionExpiredBanner />}
 
       {shownError && (
         <div
@@ -173,11 +228,25 @@ export function DraftSubmitCard({
         </div>
       )}
 
-      {stage === "done" ? (
-        <p role="status" className="flex items-center gap-2 text-sm font-medium text-success">
-          <CheckCircle2 className="size-4" aria-hidden="true" />
-          Submitted to Anvil. Opening the run…
-        </p>
+      {done ? (
+        openJobHref ? (
+          <div role="status" className="flex flex-col gap-3 text-sm">
+            <p className="flex items-start gap-2 font-medium text-success">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              The submit went through but this page did not update.
+            </p>
+            <Button asChild className="min-h-10 w-full font-semibold">
+              {/* A plain link on purpose: a full page load always shows the
+                  server's current page, which is what is out of step here. */}
+              <a href={openJobHref}>Open the job page</a>
+            </Button>
+          </div>
+        ) : (
+          <p role="status" className="flex items-center gap-2 text-sm font-medium text-success">
+            <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
+            Submitted — opening the job page…
+          </p>
+        )
       ) : (
         <Button
           type="button"
