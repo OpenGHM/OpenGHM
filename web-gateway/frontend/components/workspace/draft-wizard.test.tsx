@@ -127,13 +127,41 @@ const settle = () => act(async () => {});
 /** Real time passing, with the renders it causes inside `act`. */
 const pause = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
+describe("the header", () => {
+  it("names the draft by the list's rule, with the live typed name first", () => {
+    const { again } = wizard();
+    const h1 = () => screen.getByRole("heading", { level: 1 }).textContent;
+    expect(h1()).toBe("Untitled (job-1)");
+    type("  My run ");
+    expect(h1()).toBe("My run");
+    type("   ");
+    expect(h1()).toBe("Untitled (job-1)");
+    // A slug comes before the placeholder, a run id before neither (a draft has none).
+    again({ job: { ...JOB, slug: "my-slug", updated_at: "2026-10-01T13:00:00.000Z" } });
+    expect(h1()).toBe("my-slug");
+    type("Typed");
+    expect(h1()).toBe("Typed");
+  });
+
+  it("keeps the Based on line to one truncated line, with the full text on hover and underline only on hover", () => {
+    wizard({ job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) } });
+    const link = screen.getByRole("link", { name: /^Based on A very long/ });
+    expect(link.className).toContain("truncate");
+    expect(link.className).toContain("block");
+    expect(link.className).toContain("hover:underline");
+    expect(link.className).not.toMatch(/(^|\s)underline(\s|$)/);
+    expect(link.getAttribute("title")).toBe(`Based on ${"A very long model snapshot title ".repeat(6)}`);
+    expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
+  });
+});
+
 describe("the page", () => {
   it("has the breadcrumb, the name, a Draft badge, the snapshot link and the steps", () => {
     wizard();
     expect(screen.getByRole("link", { name: "My Simulations" }).getAttribute("href")).toBe("/workspace");
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toBe("Untitled simulation");
-    expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Untitled simulation");
+    expect(h1.textContent).toBe("Untitled (job-1)");
+    expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Untitled (job-1)");
     expect(screen.getByText("Draft")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Based on Fake Snapshot" }).getAttribute("href")).toBe(
       `/repository/${dataset.id}`

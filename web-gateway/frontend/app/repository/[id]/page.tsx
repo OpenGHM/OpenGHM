@@ -24,7 +24,6 @@ import {
   BookOpen,
   Shield,
   Cpu,
-  Play,
   Server,
 } from "lucide-react";
 import { CitationCard } from "@/components/repository/citation-card";
@@ -109,12 +108,6 @@ export default async function DatasetDetailPage({
             </Button>
             <div className="flex flex-wrap items-center gap-3">
               <DeriveSimulationButton datasetId={dataset.id} />
-              <Button asChild size="lg" className="h-auto min-h-10 gap-2 whitespace-normal px-6 text-left text-base font-semibold">
-                <Link href={`/workspace/new/configure?snapshotId=${encodeURIComponent(dataset.id)}`}>
-                  <Play className="size-5" aria-hidden="true" />
-                  Run this model snapshot
-                </Link>
-              </Button>
             </div>
           </div>
 

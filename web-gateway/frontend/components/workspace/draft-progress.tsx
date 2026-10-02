@@ -99,3 +99,37 @@ export function DraftProgress({
     </nav>
   );
 }
+
+/**
+ * The same strip on the Start screen, before there is a draft: "Start from" is
+ * the current step, the other three are ahead and are not links (there is
+ * nothing to open yet). On a phone only the current step keeps its label.
+ */
+export function StartProgress() {
+  return (
+    <nav aria-label="Steps">
+      <ol className="flex items-center gap-2">
+        <li className="flex items-center gap-2">
+          <span aria-current="step" className="flex min-h-8 items-center gap-2">
+            <span className={`${CIRCLE} bg-white text-primary`}>1</span>
+            <span className="text-xs font-medium text-white">{START_STEP_LABEL}</span>
+          </span>
+          <span className="mx-0.5 h-px w-3 shrink-0 bg-white/20 sm:mx-1 sm:w-8" aria-hidden="true" />
+        </li>
+        {DRAFT_STEPS.map((step, i) => (
+          <li key={step} className="flex items-center gap-2">
+            <span className="flex min-h-8 items-center gap-2">
+              <span className={`${CIRCLE} bg-white/10 text-white/70`}>{i + 2}</span>
+              <span className="sr-only text-xs font-medium text-white/70 sm:not-sr-only">
+                {STEP_LABELS[step]}
+              </span>
+            </span>
+            {i < DRAFT_STEPS.length - 1 && (
+              <span className="mx-0.5 h-px w-3 shrink-0 bg-white/20 sm:mx-1 sm:w-8" aria-hidden="true" />
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}

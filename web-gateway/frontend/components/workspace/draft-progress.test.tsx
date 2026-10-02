@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 
-import { DraftProgress } from "@/components/workspace/draft-progress";
+import { DraftProgress, StartProgress } from "@/components/workspace/draft-progress";
 
 afterEach(cleanup);
 
@@ -80,5 +80,16 @@ describe("DraftProgress", () => {
     strip("model");
     expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(0);
     expect(screen.queryByText(/needs attention/)).toBeNull();
+  });
+});
+
+describe("StartProgress", () => {
+  it("shows Start from as the current step and the rest as plain, unclickable steps", () => {
+    render(<StartProgress />);
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(screen.getByText("Start from").closest("[aria-current]")?.getAttribute("aria-current")).toBe("step");
+    for (const label of ["Model & input", "Run settings", "Review & submit"]) {
+      expect(screen.getByText(label).closest("[aria-current]")).toBeNull();
+    }
   });
 });

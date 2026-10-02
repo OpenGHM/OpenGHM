@@ -17,6 +17,7 @@ import { JobDeleteMenu } from "@/components/workspace/job-delete-menu";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
+import { displayName } from "@/lib/jobs/display-name";
 import { simulationSource } from "@/lib/jobs/simulation-source";
 import type { Job, SubmitError } from "@/lib/jobs/types";
 import { newerJob, writeDraftCache } from "@/lib/workspace/draft-cache";
@@ -37,10 +38,11 @@ import {
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
 import { useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
 
-/** What the header calls a draft: the name being typed, else its slug, else a
- *  placeholder (a draft has no run id yet). Follows the input on every keystroke. */
+/** What the header calls a draft: the list's `displayName` rule applied to the
+ *  name being typed (then the slug, the run id, `Untitled (<id8>)`), so a draft
+ *  reads the same in the list and here. Follows the input on every keystroke. */
 function liveName(name: string, job: Job): string {
-  return name.trim() || job.slug || "Untitled simulation";
+  return displayName({ ...job, about: { name: name.trim() } });
 }
 
 /** The step the address bar names right now. */
@@ -266,10 +268,11 @@ function WizardBody({
                   <JobStatusBadge status="DRAFT" />
                 </span>
               </div>
-              <p className="mt-2 text-sm">
+              <p className="mt-2 min-w-0 text-sm">
                 <Link
                   href={source.href}
-                  className="rounded text-white/90 underline underline-offset-2 outline-none transition-colors hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/70"
+                  title={`Based on ${source.title}`}
+                  className="block max-w-full truncate rounded text-white/90 underline-offset-2 outline-none transition-colors hover:text-white hover:underline focus-visible:ring-[3px] focus-visible:ring-white/70"
                 >
                   Based on {source.title}
                 </Link>

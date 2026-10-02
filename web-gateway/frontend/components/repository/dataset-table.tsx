@@ -7,7 +7,7 @@ import { TagChips } from "@/components/repository/tag-chips";
 
 /**
  * The one snapshot-list presentation, shared by `/repository` (browse) and
- * the new-simulation picker (`/workspace/new/pick`) — spec.md's "one list
+ * the Start screen's picker (`/workspace/new`) — spec.md's "one list
  * component serving both ... differing by the action it renders per row."
  *
  * Browse passes neither `onNameClick` nor `renderAction`: the name is a
@@ -109,7 +109,7 @@ export function DatasetTable({
             <th className="px-4 py-3">Model Input</th>
             <th className="px-4 py-3">Published</th>
             {renderAction && (
-              <th className="px-4 py-3">
+              <th className="sticky right-0 bg-card px-4 py-3">
                 <span className="sr-only">Action</span>
               </th>
             )}
@@ -150,7 +150,8 @@ export function DatasetTable({
                   <TimeStamp value={dataset.generatedAt} format="date" />
                 </td>
                 {renderAction && (
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                  // Stays in view when a narrow container scrolls the table sideways.
+                  <td className="sticky right-0 whitespace-nowrap bg-card px-4 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.12)]">
                     {renderAction(dataset)}
                   </td>
                 )}

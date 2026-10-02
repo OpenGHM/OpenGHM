@@ -34,11 +34,15 @@ export function SnapshotPicker({
   initialData,
   initialModelInputIds,
   onSelect,
+  embedded = false,
 }: {
   initialFilters: FilterState;
   initialData: RepositoryListResponse;
   initialModelInputIds: Set<string> | null;
   onSelect: (dataset: Dataset) => void;
+  /** Inside a page that already sets the width and the gutters (the Start
+   *  screen): drop the picker's own. */
+  embedded?: boolean;
 }) {
   const { filters, setFilters, result, isPending } = useUrlSyncedFilters<
     FilterState,
@@ -90,7 +94,12 @@ export function SnapshotPicker({
   );
 
   return (
-    <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-10 lg:py-10">
+    <div
+      className={cn(
+        "flex flex-col gap-6 lg:flex-row lg:gap-8",
+        embedded ? "" : "mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10"
+      )}
+    >
       <RepositorySidebar
         filters={filters}
         onFiltersChange={setFilters}
@@ -116,7 +125,7 @@ export function SnapshotPicker({
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className={cn("grid gap-6", openDataset && "lg:grid-cols-[1fr_360px]")}>
           <div
             aria-busy={busy ? "true" : undefined}
             className={cn("min-w-0 transition-opacity duration-200", busy && "opacity-60")}
