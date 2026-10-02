@@ -75,6 +75,11 @@ describe("the published list", () => {
     expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
   });
 
+  it("keeps its loading state out of sight for the first 300 ms", () => {
+    render(<PublishedListSkeleton />);
+    expect(screen.getByRole("status").className).toContain("reveal-delayed");
+  });
+
   it("has an error state that offers the page again", () => {
     render(<PublishedLoadError retryHref="/workspace/published" />);
     expect(screen.getByRole("alert").textContent).toContain("Couldn't load what you published.");

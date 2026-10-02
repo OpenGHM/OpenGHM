@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 /**
  * Treats the URL as the source of truth for a filtered/sorted/paginated
@@ -10,8 +10,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
  * rendered unfiltered and the back button did nothing).
  *
  * Two directions, both driven off the same `URLSearchParams`:
- *  - a local edit debounces into `router.push` (so the back button steps
- *    through *committed* searches, not every keystroke) and refetches;
+ *  - a local edit debounces into a `history.pushState` (so the back button
+ *    steps through *committed* searches, not every keystroke) and refetches.
+ *    Not `router.push`: that would render the server page again for a result
+ *    the client throws away, because it keeps its own. Next's router follows a
+ *    native pushState, so `useSearchParams` and `usePathname` see the new URL.
  *  - an external URL change — back/forward navigation, or a link someone
  *    pasted — is told apart from our own push via `lastPushedQuery`, and
  *    resyncs local state + refetches without pushing again (which would
@@ -44,7 +47,6 @@ export function useUrlSyncedFilters<F extends object, R>({
    */
   inertKeys?: readonly (keyof F)[];
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -94,7 +96,13 @@ export function useUrlSyncedFilters<F extends object, R>({
     debounceRef.current = setTimeout(() => {
       const qs = serialize(filters).toString();
       lastPushedQuery.current = qs;
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      // A native pushState always adds an entry, even for the URL we are at:
+      // after back/forward the resynced filters would push it again and end the
+      // forward history. So push only a URL that differs.
+      const url = qs ? `${pathname}?${qs}` : pathname;
+      if (url !== window.location.pathname + window.location.search) {
+        window.history.pushState(null, "", url);
+      }
       if (fetchKey(filters) !== lastFetchKey.current) doFetch(filters);
     }, debounceMs);
     return () => {

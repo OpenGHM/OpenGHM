@@ -1,11 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CatalogueResults } from "./catalogue-results";
 import { EMPTY_CATALOGUE } from "@/lib/repository/catalogue";
 import type { CatalogueFilterState, CatalogueResponse } from "@/lib/repository/types";
 import { FACETS, filters, modelInputItem, response, snapshotItem } from "./catalogue.fixtures";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 function setup(
   result: CatalogueResponse,
@@ -126,10 +129,10 @@ describe("CatalogueResults views", () => {
     expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 
-  it("shows grid-shaped skeletons while loading the grid", () => {
-    const { container } = setup(response([snapshotItem()]), filters({ view: "grid" }), { isLoading: true });
+  it("shows grid-shaped skeletons when a retry has no results to keep", () => {
+    const { container } = setup(EMPTY_CATALOGUE, filters({ view: "grid" }), { isLoading: true, error: true });
     expect(container.querySelectorAll('[data-slot="card"][aria-hidden="true"]')).toHaveLength(6);
-    expect(container.querySelector('[aria-busy="true"]')?.className).toContain("xl:grid-cols-3");
+    expect(container.querySelector('[aria-busy="true"] .xl\\:grid-cols-3')).not.toBeNull();
   });
 });
 
@@ -172,16 +175,13 @@ describe("CatalogueResults tag chips", () => {
 });
 
 describe("CatalogueResults states", () => {
-  it("shows skeleton cards while loading, announces it, and hides the pagination", () => {
-    const { container } = setup(
-      response([snapshotItem()], { totalPages: 3 }),
-      filters(),
-      { isLoading: true }
-    );
+  it("shows delayed skeleton cards when a retry has no results to keep, and announces it", () => {
+    const { container } = setup(EMPTY_CATALOGUE, filters(), { isLoading: true, error: true });
     expect(container.querySelectorAll('[data-slot="card"][aria-hidden="true"]')).toHaveLength(3);
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(container.querySelector(".reveal-delayed")).not.toBeNull();
     expect(screen.getByText("Loading results")).toBeTruthy();
-    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Pagination" })).toBeNull();
     expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
   });
@@ -213,5 +213,67 @@ describe("CatalogueResults states", () => {
     expect(screen.queryByText("Nothing has been published yet")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CatalogueResults while a refetch is pending", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  const results = () => document.querySelector<HTMLElement>('[aria-busy="true"]');
+
+  it("keeps the cards, the count and the pagination, with no skeleton and nothing dimmed at first", () => {
+    const { container } = setup(
+      response([snapshotItem(), modelInputItem()], { totalCount: 12, totalPages: 3 }),
+      filters(),
+      { isLoading: true }
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+    expect(screen.getByText("12").closest("[aria-live]")?.textContent).toBe("12 results");
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
+    expect(screen.getByRole("navigation", { name: "Pagination" })).toBeTruthy();
+    expect(results()).toBeNull();
+    expect(screen.queryByText("Loading results")).toBeNull();
+    expect(container.querySelector(".opacity-60")).toBeNull();
+  });
+
+  it("dims the results and marks them busy only once the wait passes 300 ms", () => {
+    const { container } = setup(response([snapshotItem()], { totalCount: 5 }), filters(), {
+      isLoading: true,
+    });
+    act(() => void vi.advanceTimersByTime(299));
+    expect(results()).toBeNull();
+    act(() => void vi.advanceTimersByTime(1));
+
+    const busy = results()!;
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(busy.className).toContain("opacity-60");
+    expect(within(busy).getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText("Loading results").className).toContain("sr-only");
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
+  });
+
+  it("undims at once when the results arrive", () => {
+    const { rerender, container } = setup(response([snapshotItem()]), filters(), { isLoading: true });
+    act(() => void vi.advanceTimersByTime(300));
+    expect(results()).not.toBeNull();
+
+    rerender(
+      <CatalogueResults
+        result={response([snapshotItem(), modelInputItem()], { totalCount: 2 })}
+        filters={filters()}
+        facets={FACETS}
+        isLoading={false}
+        error={false}
+        onChange={vi.fn()}
+        onClearAll={vi.fn()}
+        onRetry={vi.fn()}
+        onToggleTag={vi.fn()}
+        onToggleKeyword={vi.fn()}
+      />
+    );
+    expect(results()).toBeNull();
+    expect(container.querySelector(".opacity-60")).toBeNull();
+    expect(screen.queryByText("Loading results")).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 });

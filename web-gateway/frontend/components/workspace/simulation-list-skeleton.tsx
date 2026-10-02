@@ -4,10 +4,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 /**
  * The list while it loads: the tab bar and five rows, in the shape of what
  * replaces them so nothing jumps. Announced once, as busy, not row by row.
+ * Invisible for the first 300 ms, so a fast load never shows it.
  */
 export function SimulationListSkeleton() {
   return (
-    <div role="status" aria-busy="true" aria-label="Loading simulations">
+    <div role="status" aria-busy="true" aria-label="Loading simulations" className="reveal-delayed">
       <Skeleton className="h-12 w-full max-w-[34rem] rounded-lg" />
       <Skeleton className="mt-4 mb-2 h-3 w-36" />
       <Card className="py-0">

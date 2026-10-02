@@ -68,10 +68,18 @@ export function PublishedLoadError({ retryHref }: { retryHref: string }) {
   );
 }
 
-/** The list while it loads: the count line and six cards, in the grid's shape. */
+/**
+ * The list while it loads: the count line and six cards, in the grid's shape.
+ * Invisible for the first 300 ms, so a fast load never shows it.
+ */
 export function PublishedListSkeleton() {
   return (
-    <div role="status" aria-busy="true" aria-label="Loading published artifacts" className="space-y-3">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Loading published artifacts"
+      className="reveal-delayed space-y-3"
+    >
       <Skeleton className="h-3 w-20" />
       <div className={CARD_GRID_CLASS}>
         {Array.from({ length: 6 }, (_, i) => (

@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
 const search = new URLSearchParams();
 const push = vi.fn();
+const pushState = vi.spyOn(window.history, "pushState").mockImplementation(() => {});
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => "/repository",
@@ -14,6 +15,7 @@ import { useUrlSyncedFilters } from "./use-url-filters";
 afterEach(() => {
   cleanup();
   push.mockClear();
+  pushState.mockClear();
 });
 
 type F = { q: string; page: number };
@@ -97,7 +99,7 @@ describe("useUrlSyncedFilters inert keys", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
 
     act(() => result.current.setFilters({ view: "grid" }));
-    await waitFor(() => expect(push).toHaveBeenLastCalledWith("/repository?view=grid&page=3", { scroll: false }));
+    await waitFor(() => expect(pushState).toHaveBeenLastCalledWith(null, "", "/repository?view=grid&page=3"));
     expect(result.current.filters.page).toBe(3);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
@@ -112,5 +114,41 @@ describe("useUrlSyncedFilters inert keys", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
     expect(result.current.filters.page).toBe(1);
     expect(fetcher).toHaveBeenLastCalledWith({ q: "x", view: "grid", page: 1 });
+  });
+});
+
+describe("useUrlSyncedFilters history", () => {
+  it("writes the URL with the native pushState, not router.push", async () => {
+    const fetcher = vi.fn<(f: F) => Promise<R>>().mockResolvedValue({ items: ["b"] });
+    const { result } = setup(fetcher);
+
+    act(() => result.current.setFilters({ q: "x" }));
+    await waitFor(() => expect(pushState).toHaveBeenCalledWith(null, "", "/repository?q=x"));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("does not push the URL the page is already at", async () => {
+    window.history.replaceState(null, "", "/repository?q=x");
+    const fetcher = vi.fn<(f: F) => Promise<R>>().mockResolvedValue({ items: ["b"] });
+    const { result } = setup(fetcher);
+
+    act(() => result.current.setFilters({ q: "x" }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalled());
+    expect(pushState).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("keeps the current results while a fetch is pending", async () => {
+    let resolve!: (r: R) => void;
+    const fetcher = vi.fn<(f: F) => Promise<R>>(() => new Promise<R>((r) => (resolve = r)));
+    const { result } = setup(fetcher);
+
+    act(() => result.current.setFilters({ q: "x" }));
+    await waitFor(() => expect(result.current.isPending).toBe(true));
+    expect(result.current.result.items).toEqual(["a"]);
+
+    await act(async () => resolve({ items: ["b"] }));
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.result.items).toEqual(["b"]);
   });
 });

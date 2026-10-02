@@ -12,14 +12,17 @@ function HeaderSkeleton() {
   );
 }
 
-/** Overview and system: a row of figures, then a few cards. Announced once. */
+/**
+ * Overview and system: a row of figures, then a few cards. Announced once.
+ * Both skeletons are invisible for the first 300 ms, so a fast load shows none.
+ */
 export function OverviewSkeleton() {
   return (
     <div
       role="status"
       aria-busy="true"
       aria-label="Loading"
-      className={cn(ADMIN_PAGE_CLASS)}
+      className={cn(ADMIN_PAGE_CLASS, "reveal-delayed")}
     >
       <HeaderSkeleton />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -55,7 +58,7 @@ export function ListSkeleton() {
       role="status"
       aria-busy="true"
       aria-label="Loading"
-      className={cn(ADMIN_PAGE_CLASS)}
+      className={cn(ADMIN_PAGE_CLASS, "reveal-delayed")}
     >
       <HeaderSkeleton />
       <Skeleton className="h-9 w-full max-w-sm" />

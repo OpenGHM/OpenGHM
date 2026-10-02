@@ -6,6 +6,7 @@ import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/aut
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
+import { LinkPending } from "@/components/ui/link-pending";
 import { Card, CardContent } from "@/components/ui/card";
 import { SimulationListSkeleton } from "@/components/workspace/simulation-list-skeleton";
 import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
@@ -37,8 +38,11 @@ export default async function WorkspacePage({
         {/* Content */}
         <div className="bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
           <div className="mx-auto max-w-[1024px]">
-            {/* Keyed by the URL so a click on a tab shows the skeleton again. */}
-            <Suspense key={here} fallback={<SimulationListSkeleton />}>
+            {/* Not keyed by the URL: a click on a tab or a page link is a
+                transition, so the list on screen stays until the next one is
+                ready, and the link that was clicked shows a spinner if that
+                takes a while. The skeleton is only for the first load. */}
+            <Suspense fallback={<SimulationListSkeleton />}>
               <SimulationList here={here} page={page} statusFilter={statusFilter} />
             </Suspense>
           </div>
@@ -145,10 +149,11 @@ async function SimulationList({
               className="flex items-center justify-center gap-4 pt-4"
             >
               {page > 1 ? (
-                <Button asChild variant="ghost" size="sm" className="min-h-10 sm:min-h-8">
+                <Button asChild variant="ghost" size="sm" className="relative min-h-10 sm:min-h-8">
                   <Link href={listHref(statusFilter, page - 1)}>
                     <ChevronLeft className="mr-1 size-4" />
                     Previous
+                    <LinkPending className="top-0.5 right-0.5" />
                   </Link>
                 </Button>
               ) : (
@@ -169,10 +174,11 @@ async function SimulationList({
               </span>
 
               {page < jobData.total_pages ? (
-                <Button asChild variant="ghost" size="sm" className="min-h-10 sm:min-h-8">
+                <Button asChild variant="ghost" size="sm" className="relative min-h-10 sm:min-h-8">
                   <Link href={listHref(statusFilter, page + 1)}>
                     Next
                     <ChevronRight className="ml-1 size-4" />
+                    <LinkPending className="top-0.5 right-0.5" />
                   </Link>
                 </Button>
               ) : (

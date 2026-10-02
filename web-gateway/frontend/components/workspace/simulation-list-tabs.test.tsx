@@ -1,9 +1,18 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
 import { STATUS_TABS, listHref, tabForStatus } from "@/lib/jobs/filters";
 
-afterEach(cleanup);
+const status = { pending: false };
+vi.mock("next/link", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/link")>()),
+  useLinkStatus: () => status,
+}));
+
+afterEach(() => {
+  cleanup();
+  status.pending = false;
+});
 
 const STATS = { total: 12, running: 3, completed: 4, failed: 1, draft: 2, cancelled: 2 };
 
@@ -63,6 +72,26 @@ describe("the list's tab bar", () => {
     expect(nav.className).toContain("overflow-x-auto");
     expect(nav.className).toContain("max-w-full");
     for (const a of links()) expect(a.className).toContain("min-h-10");
+  });
+});
+
+describe("the list's pending feedback", () => {
+  const spinners = () => document.querySelectorAll('[data-slot="link-pending"]');
+
+  it("shows nothing while no navigation is pending", () => {
+    render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
+    expect(spinners()).toHaveLength(0);
+  });
+
+  it("puts a delayed spinner inside the tab whose navigation is pending", () => {
+    status.pending = true;
+    render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
+    // useLinkStatus is mocked to be pending for every link; each tab can show it.
+    expect(spinners()).toHaveLength(STATUS_TABS.length);
+    for (const a of links()) {
+      expect(a.querySelector('[data-slot="link-pending"]')?.className).toContain("reveal-delayed");
+      expect(a.className).toContain("relative");
+    }
   });
 });
 

@@ -165,3 +165,57 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Loading feedback that waits to be needed. A skeleton or spinner that carries
+   this class is invisible for 300 ms and then fades in over 150 ms, so a load
+   that is over by then shows nothing at all. Pure CSS: it works in server
+   components, and it starts when the element is mounted. Under reduced motion
+   the delay stays and the fade goes. */
+@keyframes reveal-delayed {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility reveal-delayed {
+  animation: reveal-delayed 150ms ease-out 300ms both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation-duration: 0s;
+  }
+}
+
+/* The bar at the top of the viewport while a page change is slow
+   (components/navigation-progress.tsx). Width does the work: it creeps toward
+   80% while pending, jumps to 100% when the page arrives, then fades. Under
+   reduced motion it is shown full width and hidden, with nothing animated. */
+.nav-progress {
+  width: 0;
+  opacity: 0;
+}
+.nav-progress[data-phase="active"] {
+  width: 80%;
+  opacity: 1;
+  transition: width 8s cubic-bezier(0.1, 0.6, 0.2, 1);
+}
+.nav-progress[data-phase="completing"] {
+  width: 100%;
+  opacity: 0;
+  transition:
+    width 150ms ease-out,
+    opacity 200ms linear 150ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress[data-phase="active"] {
+    width: 100%;
+    transition: none;
+  }
+  .nav-progress[data-phase="completing"] {
+    width: 100%;
+    opacity: 0;
+    transition: none;
+  }
+}

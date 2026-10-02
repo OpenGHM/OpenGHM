@@ -10,6 +10,8 @@ import { SnapshotDetailPanel } from "./snapshot-detail-panel";
 import { fetchDatasets, fetchModelInputIds } from "@/lib/repository/actions";
 import { datasetFiltersToParams, parseDatasetFilters } from "@/lib/repository/url-filters";
 import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
+import { cn } from "@/lib/utils";
 import type { Dataset, FilterState, RepositoryListResponse } from "@/lib/repository/types";
 
 const EMPTY_RESULT: RepositoryListResponse = {
@@ -49,6 +51,10 @@ export function SnapshotPicker({
     serialize: datasetFiltersToParams,
     fetcher: fetchDatasets,
   });
+
+  // A refetch keeps the table and the count on screen; they dim only if the
+  // answer takes a while.
+  const busy = useDelayedFlag(isPending);
 
   const [modelInputIds, setModelInputIds] = useState<Set<string> | null>(initialModelInputIds);
   useEffect(() => {
@@ -101,19 +107,20 @@ export function SnapshotPicker({
 
       <div className="min-w-0 flex-1">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {isPending ? (
-              <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted" />
-            ) : (
-              <>
-                {result.totalCount} model snapshot{result.totalCount !== 1 ? "s" : ""} available
-              </>
-            )}
+          <p
+            aria-live="polite"
+            className={cn("text-sm text-muted-foreground transition-opacity duration-200", busy && "opacity-60")}
+          >
+            {result.totalCount} model snapshot{result.totalCount !== 1 ? "s" : ""} available
+            {busy && <span className="sr-only"> Loading results</span>}
           </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="min-w-0">
+          <div
+            aria-busy={busy ? "true" : undefined}
+            className={cn("min-w-0 transition-opacity duration-200", busy && "opacity-60")}
+          >
             <DatasetTable
               datasets={result.items}
               modelInputIds={modelInputIds}

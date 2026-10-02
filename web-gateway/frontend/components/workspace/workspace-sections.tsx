@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LinkPending } from "@/components/ui/link-pending";
 
 export type WorkspaceSection = "simulations" | "published";
 
@@ -25,13 +26,14 @@ export function WorkspaceSections({ active }: { active: WorkspaceSection }) {
               <Link
                 href={section.href}
                 aria-current={selected ? "page" : undefined}
-                className={`-mb-px flex min-h-10 items-center border-b-2 px-3 text-sm font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset sm:px-4 ${
+                className={`relative -mb-px flex min-h-10 items-center border-b-2 px-3 text-sm font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-inset sm:px-4 ${
                   selected
                     ? "border-white text-white"
                     : "border-transparent text-white/70 hover:text-white"
                 }`}
               >
                 {section.label}
+                <LinkPending className="top-0 right-0 size-3.5" />
               </Link>
             </li>
           );
