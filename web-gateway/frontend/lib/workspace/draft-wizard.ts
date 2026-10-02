@@ -13,7 +13,7 @@ export const DRAFT_STEPS = ["model", "run", "review"] as const;
 export type DraftStep = (typeof DRAFT_STEPS)[number];
 
 /** The step a draft opens at when `?step=` is missing or not one of ours. */
-export const DEFAULT_STEP: DraftStep = "review";
+const DEFAULT_STEP: DraftStep = "review";
 
 export const START_STEP_LABEL = "Start from";
 

@@ -47,7 +47,7 @@ export type FlushResult =
   | { ok: true; job: Job; withheld: DraftField[] }
   | { ok: false };
 
-export interface UseDraftAutosave {
+interface UseDraftAutosave {
   state: SaveState;
   /** The last job the server answered with: the baseline. Never the local copy. */
   saved: Job;

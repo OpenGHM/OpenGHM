@@ -6,7 +6,7 @@ import { deriveSimulation, duplicateSimulation } from "@/lib/jobs/actions";
 import type { ActionResult, Job } from "@/lib/jobs/types";
 import { stepHref } from "@/lib/workspace/draft-wizard";
 
-export type CreateDraftError =
+type CreateDraftError =
   /** Show `SessionExpiredBanner`. */
   | { kind: "session-expired" }
   /** `code` is the backend's, when it sent one (`snapshot_not_found`). */

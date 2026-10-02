@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => "/workspace/new/pick",
+  usePathname: () => "/workspace/new",
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/lib/repository/actions", () => ({

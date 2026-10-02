@@ -118,6 +118,41 @@ describe("the draft run step: dates", () => {
     expect(screen.queryByRole("button", { name: /instead/ })).toBeNull();
   });
 
+  it("offers no fix when no allowed start is inside the coverage", () => {
+    const narrow = fakeDataset({
+      runStartAlignment: "year",
+      simulation: {
+        ...dataset.simulation,
+        temporalCoverage: { start: "2001-03-01", end: "2001-12-31" },
+      },
+    });
+    step({
+      ctx: { dataset: narrow, snapshotState: "found" },
+      parameters: { ...PARAMETERS, temporal_range_start: "2001-05-01" },
+    });
+    expect(start().getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByRole("button", { name: /instead/ })).toBeNull();
+  });
+
+  it("says it could not check a model whose rule is unknown, and flags nothing", () => {
+    step({
+      ctx: { dataset: fakeDataset({ runStartAlignment: null }), snapshotState: "found" },
+      parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
+    });
+    expect(screen.getByText(/couldn't check where this model's runs may start/)).toBeTruthy();
+    expect(start().getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("says nothing about a model with no rule", () => {
+    step({
+      ctx: { dataset: fakeDataset({ runStartAlignment: "none" }), snapshotState: "found" },
+      parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
+    });
+    expect(screen.queryByText(/couldn't check/)).toBeNull();
+    expect(screen.queryByText(/one file per/)).toBeNull();
+    expect(start().getAttribute("aria-invalid")).toBeNull();
+  });
+
   it("says a date that does not exist and an end before the start", () => {
     step({ parameters: { ...PARAMETERS, temporal_range_start: "", temporal_range_end: "2000-01-01" } });
     expect(screen.getByText("Choose a start date that exists.")).toBeTruthy();

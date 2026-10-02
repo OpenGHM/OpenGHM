@@ -113,7 +113,7 @@ describe("the header's current-page highlight", () => {
     ["/repository", "Data Repository"],
     ["/repository/abc", "Data Repository"],
     ["/workspace", "Workspace"],
-    ["/workspace/new/pick", "Workspace"],
+    ["/workspace/new", "Workspace"],
     ["/workspace/data", "Workspace"],
     ["/", "Home"],
     ["/about", "About"],

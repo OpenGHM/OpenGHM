@@ -107,8 +107,3 @@ export function checkRunStartFor(snapshot: Dataset | null, start: string): RunSt
   const { start: lo, end: hi } = snapshot.simulation.temporalCoverage;
   return checkRunStart(snapshot.runStartAlignment ?? null, start, lo, hi);
 }
-
-/** Why a Next, Save or Submit is off for this start, or null. */
-export function runStartBlockedReason(problem: RunStartProblem | null): string | null {
-  return problem ? "The start date doesn't suit this model. Change it to continue." : null;
-}

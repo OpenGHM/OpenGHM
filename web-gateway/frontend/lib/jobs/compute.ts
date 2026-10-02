@@ -135,16 +135,6 @@ export function validateSlurmConfig(config: SlurmConfig): ComputeErrors {
   return errors;
 }
 
-/** The PATCH payload for a draft's `slurm_config`: only what the user set.
- *  Null when both are unset, so nothing is sent and the snapshot's
- *  recommendation stays in force. */
-export function slurmConfigPatch(config: SlurmConfig): Partial<SlurmConfig> | null {
-  const patch: Partial<SlurmConfig> = {};
-  if (config.cores !== null) patch.cores = config.cores;
-  if (config.walltime !== null) patch.walltime = config.walltime;
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-
 /** Why a signed-in user cannot submit, in words for them, or null when they
  *  can (or when their profile could not be read, and the backend will
  *  decide). Mirrors `require_submitter` (ADR 0024): the backend checks the

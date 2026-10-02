@@ -1,6 +1,7 @@
 /**
  * URL ⇄ filter-state conversion for the repository catalogue and the
- * new-simulation snapshot picker, which shares the dataset list. This is the fix for open item 16: a search result is only
+ * Start screen's snapshot picker (`/workspace/new`), which shares the dataset list.
+ * This is the fix for open item 16: a search result is only
  * linkable/bookmarkable if the URL is the source of truth for the filters,
  * not a `useState` seeded once from it.
  *

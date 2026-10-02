@@ -7,10 +7,6 @@ import type { ModelInput } from "@/lib/repository/types";
  * A model input in a list. With `onSelect` it is a button; without, it is
  * plain text, because a control that can only ever be disabled is not worth a
  * tab stop (choosing a model input cannot run yet, ADR 0025).
- *
- * Copied from the old wizard's private `ModelInputMiniCard`
- * (`wizard-model-input-step.tsx`, `model-input-section.tsx`), which the
- * cleanup slice deletes; this is the one shared card.
  */
 export function ModelInputMiniCard({
   modelInput,

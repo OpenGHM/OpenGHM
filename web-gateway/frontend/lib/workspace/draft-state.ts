@@ -53,7 +53,7 @@ export interface DraftLocal {
 }
 
 /** A draft in the form it is compared and sent in. */
-export interface CanonicalDraft {
+interface CanonicalDraft {
   name: string | null;
   description: string | null;
   parameters: JobParameters;
@@ -62,9 +62,9 @@ export interface CanonicalDraft {
 }
 
 /** The parts of a PATCH. They are saved, and can be refused, independently. */
-export type DraftGroup = "modelInput" | "parameters" | "slurm" | "about";
+type DraftGroup = "modelInput" | "parameters" | "slurm" | "about";
 
-export const GROUP_FIELDS: Record<DraftGroup, readonly DraftField[]> = {
+const GROUP_FIELDS: Record<DraftGroup, readonly DraftField[]> = {
   modelInput: ["modelInput"],
   parameters: ["start", "end", "variables", "spatial", "custom"],
   slurm: ["cores", "walltime"],
@@ -80,7 +80,7 @@ export interface ServerRefusals {
   >;
 }
 
-export interface DraftPatch {
+interface DraftPatch {
   /** Null when the server already holds everything that may be sent. */
   patch: SimulationUpdateRequest | null;
   /** Fields whose local value is not in the patch and not on the server. */
@@ -274,7 +274,7 @@ export function buildDraftPatch(
 // ─── Refusals ────────────────────────────────────────────────────────────────
 
 /** The groups a patch carries. */
-export function groupsOf(patch: SimulationUpdateRequest): DraftGroup[] {
+function groupsOf(patch: SimulationUpdateRequest): DraftGroup[] {
   const groups: DraftGroup[] = [];
   if ("model_input_id" in patch) groups.push("modelInput");
   if (patch.parameters) groups.push("parameters");

@@ -193,12 +193,14 @@ over the public HTTPS read of §5, once per snapshot id, with the same patterns
 `openghm sim run` uses. `GET /api/v1/repository/datasets/{id}` carries the
 result as `runStartAlignment` (`year`, `month`, `none` for `File_Size 'day'`,
 another value, or no `File_Size` beside a `Time_Series` key, or `null` when the
-init could not be read). The wizard's parameters step and the
-draft editor say the rule beside the Start date, flag a start that breaks it and
-offer the nearest valid one; `PATCH /jobs/{id}` (when the start changes) and
-the submit (every start) answer `422 run_start_not_aligned` for the same start.
-A rule that cannot be read blocks nothing, and the toolkit's own check stays
-as the last line.
+init could not be read). The browser holds the same rule in
+`web-gateway/frontend/lib/jobs/run-start.ts` (`checkRunStartFor`). The draft
+wizard's Run settings step says it beside the Start date, flags a start that
+breaks it and offers the nearest valid one; auto-save does not send such a
+start, and Review lists it under "Needs attention", which keeps Submit off.
+`PATCH /jobs/{id}` (when the start changes) and the submit (every start) answer
+`422 run_start_not_aligned` for the same start. A rule that cannot be read
+blocks nothing, and the toolkit's own check stays as the last line.
 
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
@@ -207,9 +209,9 @@ names; set, it overrides that. `_resolve_effective_model_input()` in
 `web-gateway/backend/app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
 or `inherited-missing` (the base snapshot cites an id the `model_inputs`
 catalogue does not hold, which is the common case among the shipped
-examples, not an edge case) — and both the reopened draft's own page and the
-new-simulation wizard render all three distinctly, so an override never
-looks identical to an inheritance. The override changes nothing about how a
+examples, not an edge case) — and the draft wizard's Model & input step and
+its Review summary render all three distinctly, so an override never looks
+identical to an inheritance. The override changes nothing about how a
 run would be invoked: nothing mints a real `apptainer` command yet ([open
 item 9](../reference/open-items.md)), so this is recorded and displayed, not
 yet consumed.
@@ -312,8 +314,8 @@ ties by name, then id. The single-kind `/datasets` and `/model-inputs` routes
 do not take it.
 
 `GET /repository/datasets` and `GET /repository/model-inputs` stay as the
-separate, single-kind lists; the new-simulation snapshot picker still reads
-`/datasets`.
+separate, single-kind lists; the Start screen's snapshot picker
+(`/workspace/new`) still reads `/datasets`.
 
 `GET /repository/mine` (signed in) is the one catalogue read that needs a
 session: the same two item shapes, with `kind`, for what the caller owns, plus

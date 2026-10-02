@@ -5,7 +5,7 @@
  */
 export type StartMode = "snapshot" | "copy";
 
-export const START_PATH = "/workspace/new";
+const START_PATH = "/workspace/new";
 
 /** `?from=` as Next hands it over. Anything but `copy` is the default. */
 export function parseFrom(raw: string | null | undefined): StartMode {

@@ -6,7 +6,6 @@ import {
   withHeadroom,
   parseSlurmTime,
   secondsToHms,
-  slurmConfigPatch,
   submitBlockedReason,
   validateSlurmConfig,
 } from "@/lib/jobs/compute";
@@ -106,11 +105,6 @@ describe("effectiveCompute and the PATCH payload", () => {
       walltime: "00:15:00",
       walltimeSource: "draft",
     });
-  });
-
-  it("sends only what the user set", () => {
-    expect(slurmConfigPatch({ cores: null, walltime: null })).toBeNull();
-    expect(slurmConfigPatch({ cores: 4, walltime: null })).toEqual({ cores: 4 });
   });
 });
 

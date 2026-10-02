@@ -66,8 +66,8 @@ export async function fetchMine(): Promise<MineResponse> {
 }
 
 /**
- * Fetch a paginated, filtered list of datasets from FastAPI. The snapshot
- * picker in the new-simulation wizard uses it (BFF layer — the browser never
+ * Fetch a paginated, filtered list of datasets from FastAPI. The Start
+ * screen's snapshot picker (`/workspace/new`) uses it (BFF layer — the browser never
  * calls FastAPI directly).
  */
 export async function fetchDatasets(
@@ -164,7 +164,7 @@ export async function fetchModelInputs(
  * Every published model input's id, for the dataset table's "model input
  * status" badge — a snapshot's `uses.modelInput.id` always names one, but
  * only checking membership here tells "present" from "inherited-missing"
- * (the same distinction `wizard-review-step.tsx` draws for a simulation's
+ * (the same distinction `model-input-panel.tsx` draws for a simulation's
  * effective model input). `page_size: 100` is a one-shot upper bound, not a
  * pagination contract — the catalogue is small; this fetches it whole.
  */

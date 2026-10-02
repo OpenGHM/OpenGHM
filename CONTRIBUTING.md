@@ -29,9 +29,13 @@ in local development requires it.
 
 ## Making a change
 
-- **Application code** (`web-gateway/`): there is no automated test suite yet
-  for the frontend or backend. Verify by running the app and exercising the
-  path you changed — say how you tested it in the pull request.
+- **Application code** (`web-gateway/`): both halves have a test suite. Run
+  the one you touched, and exercise the path you changed in the running app
+  too — say how you tested it in the pull request.
+  ```bash
+  cd web-gateway/backend && pip install -r requirements.txt -r requirements-dev.txt && python3 -m pytest -q
+  cd web-gateway/frontend && npm install && npx vitest run && npx tsc --noEmit && npx eslint .
+  ```
 - **The `openghm` toolkit** (`packages/openghm/`): has a real test suite.
   ```bash
   cd packages/openghm && pip install -e ".[dev]" && pytest

@@ -208,7 +208,9 @@ export function DraftSubmitCard({
           if (!next && stage === "confirming") setStage("idle");
         }}
       >
-        <AlertDialogContent>
+        {/* A long variable list makes the summary taller than a phone: scroll
+            inside the dialog so Cancel and Submit stay reachable. */}
+        <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Submit this simulation to Anvil?</AlertDialogTitle>
             <AlertDialogDescription>

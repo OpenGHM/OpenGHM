@@ -22,8 +22,9 @@ const EMPTY_RESULT: RepositoryListResponse = {
 };
 
 /**
- * Step 1 of the new-simulation wizard: the same search/filter/sort/table
- * the Data Repository uses (`DatasetTable`, `useUrlSyncedFilters`), in
+ * The Start screen's model snapshot picker (step 1 of the draft wizard): the
+ * same search/filter/sort/table the Data Repository uses (`DatasetTable`,
+ * `useUrlSyncedFilters`), in
  * "pick" mode — a `Select` action per row and a detail panel in place of
  * navigation (spec.md's table: browse gets the detail page, the picker
  * gets a panel and a commit control). Selecting hands the chosen dataset
