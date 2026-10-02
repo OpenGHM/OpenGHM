@@ -69,7 +69,7 @@ const created = (id = "new-draft"): ActionResult<Job> => ({
 });
 const card = (name: RegExp) => screen.getByRole("link", { name });
 const row = () => within(screen.getByRole("list", { name: "Your simulations" })).getByRole("listitem");
-const pickerMounted = () => screen.queryByPlaceholderText("Search datasets...") !== null;
+const pickerMounted = () => screen.queryByRole("searchbox", { name: "Search model snapshots" }) !== null;
 
 beforeEach(() => {
   for (const m of [deriveSimulation, duplicateSimulation, fetchJobs, fetchDatasets, fetchModelInputIds, push]) m.mockReset();
@@ -170,6 +170,17 @@ describe("a model snapshot", () => {
     expect(deriveSimulation).toHaveBeenCalledWith("snap-listed");
   });
 
+  it("is derived from the Select in a snapshot's Details sheet, which closes first", async () => {
+    deriveSimulation.mockResolvedValue(created("d4"));
+    start();
+    fireEvent.click(screen.getAllByRole("button", { name: /^Details: Listed Snapshot/ })[0]);
+    const sheet = await screen.findByRole("dialog");
+    fireEvent.click(within(sheet).getByRole("button", { name: /select/i }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d4?step=model"));
+    expect(deriveSimulation).toHaveBeenCalledWith("snap-listed");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("turns everything off while one is pending, with a spinner on the clicked one, and creates one draft", async () => {
     let resolve!: (r: ActionResult<Job>) => void;
     deriveSimulation.mockReturnValue(new Promise((r) => (resolve = r)));
@@ -266,12 +277,12 @@ describe("the picker after the page loaded", () => {
     expect(screen.getByText("Loading model snapshots…")).toBeTruthy();
     await waitFor(() => expect(pickerMounted()).toBe(true));
     expect(fetchDatasets).toHaveBeenCalledWith(expect.objectContaining({ searchQuery: "wbm" }));
-    expect((screen.getByPlaceholderText("Search datasets...") as HTMLInputElement).value).toBe("wbm");
+    expect((screen.getByRole("searchbox", { name: "Search model snapshots" }) as HTMLInputElement).value).toBe("wbm");
   });
 
   it("uses the server's result when the filters match", () => {
     start();
     expect(fetchDatasets).not.toHaveBeenCalled();
-    expect(screen.getByText("1 model snapshot available")).toBeTruthy();
+    expect(screen.getByText("1", { selector: "strong" }).parentElement?.textContent).toBe("1 model snapshot");
   });
 });

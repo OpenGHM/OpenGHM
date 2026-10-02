@@ -198,7 +198,8 @@ function YearInput({
   );
 }
 
-function YearRangeFilter({
+/** Also the snapshot picker's temporal filter (`workspace/snapshot-picker-filters.tsx`). */
+export function YearRangeFilter({
   bounds,
   start,
   end,
@@ -285,7 +286,8 @@ const RES_SLIDER = { min: 0, max: 2, step: 0.001 };
 const TOGGLE_FOCUS =
   "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none";
 
-function ResolutionFilter({
+/** Also the snapshot picker's resolution filter. */
+export function ResolutionFilter({
   min,
   max,
   onChange,

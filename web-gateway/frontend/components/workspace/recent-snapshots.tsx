@@ -10,8 +10,10 @@ import { cn } from "@/lib/utils";
  * Up to five distinct snapshots the user has already based a simulation on,
  * newest first: the Start screen's shortcut past the picker. Each card is a
  * button that hands its snapshot to `onSelect`, which creates the draft at
- * once. While one is being created `disabled` turns every card off and
- * `pendingId` puts a spinner on the one that was clicked.
+ * once. A title is clamped to two lines (the whole of it is in `title`), and
+ * the cards of a row are as tall as the tallest, with the period and
+ * resolution at the foot of each. While one is being created `disabled` turns
+ * every card off and `pendingId` puts a spinner on the one that was clicked.
  */
 export function RecentSnapshots({
   snapshots,
@@ -54,7 +56,10 @@ export function RecentSnapshots({
               >
                 <CardContent className="flex h-full flex-col p-4">
                   <div className="mb-2 flex items-start justify-between gap-2">
-                    <h3 className="min-w-0 break-words text-sm font-semibold leading-snug text-foreground">
+                    <h3
+                      title={dataset.about.name}
+                      className="line-clamp-2 min-w-0 break-words text-sm font-semibold leading-snug text-foreground"
+                    >
                       {dataset.about.name}
                     </h3>
                     {pending ? (
@@ -66,7 +71,7 @@ export function RecentSnapshots({
                       <TagChips tags={dataset.about.tags} size="sm" className="shrink-0 justify-end" />
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <div className="mt-auto flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <Calendar className="size-3" />
                       {start} – {end}
