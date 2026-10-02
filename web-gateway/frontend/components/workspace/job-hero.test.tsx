@@ -67,19 +67,31 @@ describe("the header", () => {
     for (const key of ["pending", "submitted", "running", "completing", "cancelling"]) {
       renderHero(key);
       expect(button("Cancel")).toBeNull();
-      expect(button("More actions")).toBeNull();
+      expect(button("New from this model snapshot")).toBeNull();
+      expect(button("Delete simulation")).toBeNull();
       cleanup();
     }
   });
 
-  it.each(["completed", "failed:timeout", "cancelled:user"])("offers only the More menu once %s", (key) => {
-    renderHero(key);
-    expect(button("More actions")).not.toBeNull();
-    // The menu's items are not on the page until it is opened.
-    expect(button("New from this model snapshot")).toBeNull();
-    expect(screen.queryByRole("menuitem")).toBeNull();
-    expect(button("Cancel")).toBeNull();
-  });
+  it.each(["completed", "failed:timeout", "cancelled:user"])(
+    "shows New from this model snapshot and Delete, as buttons, once %s",
+    (key) => {
+      renderHero(key);
+      expect(button("New from this model snapshot")).not.toBeNull();
+      expect(button("Delete simulation")).not.toBeNull();
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+      expect(button("Cancel")).toBeNull();
+    }
+  );
+
+  it.each(["completed", "failed:timeout", "cancelled:user"])(
+    "does not repeat the retry the status summary has, once %s",
+    (key) => {
+      renderHero(key);
+      expect(button("Try again with these settings")).toBeNull();
+    }
+  );
 
   it("titles the page with the simulation's name, with the status beside it and the snapshot under it", () => {
     renderHero("running");
@@ -137,15 +149,15 @@ function answer(status: JobStatus): JobStatusResponse {
 }
 
 describe("when the status moves on", () => {
-  it("gains the More menu and announces the new status, without a reload", async () => {
+  it("gains its buttons and announces the new status, without a reload", async () => {
     pollJobStatus.mockResolvedValue({ ok: true, data: answer("CANCELLED") });
     renderHero("running", { preview: false });
 
-    // First render: no menu, and nothing announced.
-    expect(button("More actions")).toBeNull();
+    // First render: no buttons, and nothing announced.
+    expect(button("Delete simulation")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("");
 
-    await waitFor(() => expect(button("More actions")).not.toBeNull());
+    await waitFor(() => expect(button("Delete simulation")).not.toBeNull());
     expect(screen.getByRole("status").textContent).toBe("Status: Cancelled");
     // The page itself is asked for again, so the verdict follows.
     expect(refresh).toHaveBeenCalled();
@@ -157,36 +169,12 @@ describe("when the status moves on", () => {
   });
 });
 
-async function openMenu() {
-  const trigger = screen.getByRole("button", { name: "More actions" });
-  trigger.focus();
-  fireEvent.keyDown(trigger, { key: "Enter" });
-  await screen.findByRole("menuitem", { name: "Delete simulation" });
-}
-
-describe("the More menu", () => {
-  it("holds a new simulation from the snapshot, a retry for a failed run, and Delete", async () => {
+describe("the Delete button", () => {
+  it("opens the delete dialog, and leaves the page usable and focus on the button when it closes", async () => {
     renderHero("failed:timeout");
-    await openMenu();
-    expect(screen.getByRole("menuitem", { name: "New from this model snapshot" })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: "Try again with these settings" })).toBeTruthy();
-  });
-
-  it("holds no retry for a completed run", async () => {
-    renderHero("completed");
-    await openMenu();
-    expect(screen.getByRole("menuitem", { name: "New from this model snapshot" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "Try again with these settings" })).toBeNull();
-  });
-
-
-  it("opens the delete dialog, and leaves the page usable and focus on the trigger when it closes", async () => {
-    renderHero("failed:timeout");
-    const trigger = screen.getByRole("button", { name: "More actions" });
+    const trigger = screen.getByRole("button", { name: "Delete simulation" });
     trigger.focus();
-    fireEvent.keyDown(trigger, { key: "Enter" });
-
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete simulation" }));
+    fireEvent.click(trigger);
     expect(await screen.findByText("Delete this simulation?")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));

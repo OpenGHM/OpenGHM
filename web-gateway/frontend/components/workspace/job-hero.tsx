@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, FlaskConical, RotateCcw } from "lucide-react";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { ChevronRight, FlaskConical, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { JobStatusBadge, STATUS_LABEL } from "@/components/jobs/job-status-badge";
-import { HeroError } from "@/components/workspace/hero-button";
-import { JobDeleteMenu } from "@/components/workspace/job-delete-menu";
+import { HERO_BUTTON, HeroError } from "@/components/workspace/hero-button";
+import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { displayName } from "@/lib/jobs/display-name";
@@ -14,7 +14,6 @@ import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
-import { FAILURE_COPY, offersNewDraft } from "@/lib/workspace/failure-copy";
 
 /**
  * Says "Status: Running" to a screen reader when the status changes, and not
@@ -38,30 +37,26 @@ function StatusAnnouncer({ status }: { status: DisplayStatus }) {
 
 /**
  * The page's header band, the same shape as the draft wizard's: breadcrumb, the
- * simulation's own name with its status, the snapshot it is based on, and the
- * "More actions" menu once the job has ended. Nothing else is an action here:
- * Cancel lives in the status summary, where the job is.
+ * simulation's own name with its status, the snapshot it is based on, and, once
+ * the job has ended, "New from this model snapshot" and Delete. Nothing else is
+ * an action here: Cancel and "Try again with these settings" live in the status
+ * summary, where the job is.
  *
  * Render it inside a `LiveJobProvider`. A DRAFT has no header here: the draft
  * wizard has its own.
  */
 export function JobHero({ job, preview = false }: { job: Job; preview?: boolean }) {
   const { status, view } = useLiveJobContext();
-  const { error, deriveFrom, duplicateFrom } = useCreateDraft();
+  const { pending, error, deriveFrom } = useCreateDraft();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteExpired, setDeleteExpired] = useState(false);
 
   const shown = displayStatus({ status, cancel_requested_at: view.cancel_requested_at });
   const ended = isTerminalStatus(status);
   const name = displayName(job);
-  const failure = view.failure ?? job.failure;
   const meta = [name !== job.sim_id ? job.sim_id : null, job.slurm_job_id ? `Slurm #${job.slurm_job_id}` : null]
     .filter(Boolean)
     .join(" · ");
-  // A failed run offers a retry only for the causes that have one; a cancelled one always.
-  const canRetry =
-    status === "CANCELLED" ||
-    (status === "FAILED" && offersNewDraft(failure ? FAILURE_COPY[failure.cause].nextStep : "new_draft"));
 
   return (
     <div className="bg-gradient-to-br from-hero to-primary px-4 pt-6 pb-7 sm:px-6 sm:pt-8 lg:px-10">
@@ -85,7 +80,7 @@ export function JobHero({ job, preview = false }: { job: Job; preview?: boolean 
           </ol>
         </nav>
 
-        <div className="mt-4 flex items-start justify-between gap-4">
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <h1 className="min-w-0 break-words text-2xl font-bold text-white">{name}</h1>
@@ -107,37 +102,36 @@ export function JobHero({ job, preview = false }: { job: Job; preview?: boolean 
           </div>
 
           {ended && (
-            <JobDeleteMenu
-              jobId={job.id}
-              isDraft={false}
-              workDir={view.work_dir ?? job.work_dir}
-              remoteJobDir={job.remote_job_dir}
-              files={view.files ?? job.files}
-              preview={preview}
-              onOpen={() => {
-                setDeleteError(null);
-                setDeleteExpired(false);
-              }}
-              onError={setDeleteError}
-              onSessionExpired={() => setDeleteExpired(true)}
-            >
-              <DropdownMenuItem
-                className="min-h-10 sm:min-h-8"
-                onSelect={() => void deriveFrom(job.dataset_id)}
+            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => void deriveFrom(job.dataset_id)}
+                className={`min-h-10 shrink-0 gap-2 font-semibold ${HERO_BUTTON.secondary}`}
               >
-                <FlaskConical aria-hidden="true" />
+                {pending ? (
+                  <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
+                ) : (
+                  <FlaskConical aria-hidden="true" />
+                )}
                 New from this model snapshot
-              </DropdownMenuItem>
-              {canRetry && (
-                <DropdownMenuItem
-                  className="min-h-10 sm:min-h-8"
-                  onSelect={() => void duplicateFrom(job.id)}
-                >
-                  <RotateCcw aria-hidden="true" />
-                  Try again with these settings
-                </DropdownMenuItem>
-              )}
-            </JobDeleteMenu>
+              </Button>
+              <JobDeleteButton
+                jobId={job.id}
+                isDraft={false}
+                workDir={view.work_dir ?? job.work_dir}
+                remoteJobDir={job.remote_job_dir}
+                files={view.files ?? job.files}
+                preview={preview}
+                onOpen={() => {
+                  setDeleteError(null);
+                  setDeleteExpired(false);
+                }}
+                onError={setDeleteError}
+                onSessionExpired={() => setDeleteExpired(true)}
+              />
+            </div>
           )}
         </div>
 

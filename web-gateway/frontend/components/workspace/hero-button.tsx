@@ -12,8 +12,10 @@ const FOCUS =
   "focus-visible:border-white focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-white";
 
 export const HERO_BUTTON = {
-  /** A translucent outline: the hero's menu button. */
+  /** A translucent outline: the hero's secondary actions. */
   secondary: `border-white/30 bg-white/10 text-white shadow-none hover:bg-white/20 hover:text-white ${FOCUS}`,
+  /** The same, with red text: Delete. */
+  destructive: `border-red-300/60 bg-white/10 text-red-200 shadow-none hover:border-red-300 hover:bg-red-500/25 hover:text-white ${FOCUS}`,
 } as const;
 
 /** A note under the hero's buttons (an error): a light box, because the status

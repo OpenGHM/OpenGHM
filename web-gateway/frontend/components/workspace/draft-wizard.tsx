@@ -13,7 +13,7 @@ import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import { stepHeadingId } from "@/components/workspace/draft-step-heading";
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import { HeroError } from "@/components/workspace/hero-button";
-import { JobDeleteMenu } from "@/components/workspace/job-delete-menu";
+import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
@@ -356,7 +356,7 @@ function WizardBody({
                 onRetry={autosave.retry}
                 onGoToField={(field) => goTo(FIELD_STEP[field], field)}
               />
-              <JobDeleteMenu
+              <JobDeleteButton
                 jobId={jobId}
                 isDraft
                 workDir={null}

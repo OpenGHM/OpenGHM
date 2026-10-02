@@ -167,7 +167,7 @@ describe("the page", () => {
     );
     expect(screen.getByRole("navigation", { name: "Steps" })).toBeTruthy();
     expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
-    expect(button("More actions")).not.toBeNull();
+    expect(button("Delete draft")).not.toBeNull();
   });
 
   it("follows the name as it is typed, and falls back to the slug, then to a placeholder", () => {
@@ -468,9 +468,7 @@ describe("when the draft cannot be saved", () => {
 });
 
 async function openDeleteDialog() {
-  const trigger = screen.getByRole("button", { name: "More actions" });
-  fireEvent.keyDown(trigger, { key: "Enter" });
-  fireEvent.click(await screen.findByRole("menuitem", { name: "Delete draft" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete draft" }));
   await screen.findByText("Delete this draft?");
 }
 

@@ -67,16 +67,16 @@ describe("the detail page", () => {
     expect(screen.queryByText("HPC Configuration")).toBeNull();
   });
 
-  it("keeps the retry in one place on a failed run: the summary has the button, the menu the menu item", () => {
+  it("keeps the retry in one place on a failed run: the summary has the retry, the header the snapshot and Delete", () => {
     renderDetail("failed:wbm_error");
     expect(screen.getAllByRole("button", { name: "Try again with these settings" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "New from this model snapshot" })).toBeNull();
-    expect(screen.getByRole("button", { name: "More actions" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "New from this model snapshot" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Delete simulation" })).toBeTruthy();
   });
 
   it("puts Cancel in the summary while it runs, and nothing in the header", () => {
     renderDetail("running");
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete simulation" })).toBeNull();
   });
 });
