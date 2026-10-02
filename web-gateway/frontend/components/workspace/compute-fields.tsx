@@ -3,6 +3,7 @@
 import { useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { draftField } from "@/components/workspace/draft-field";
 import {
   describeSlurmTime,
   validateSlurmConfig,
@@ -41,6 +42,7 @@ export function ComputeFields({
           </Label>
           <Input
             id={`${id}-cores`}
+            {...draftField("cores")}
             type="number"
             inputMode="numeric"
             min={1}
@@ -70,6 +72,7 @@ export function ComputeFields({
           </Label>
           <Input
             id={`${id}-walltime`}
+            {...draftField("walltime")}
             inputMode="numeric"
             className="h-10 md:h-9"
             placeholder={

@@ -1,6 +1,6 @@
 import { AlertOctagon, AlertTriangle, CloudOff } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
+import { DuplicateSimulationButton } from "@/components/workspace/duplicate-simulation-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { RunMetadata } from "@/components/workspace/run-metadata";
 import { HUE, TONE_HUE } from "@/lib/jobs/status-hue";
@@ -26,7 +26,7 @@ const TONE_ICON = {
  * facts of the run; `FAILURE_COPY`'s body stands in only when there is none.
  * The excerpt is shown as it came. A failed simulation can't be
  * edited in place (PATCH /jobs/{id} is refused past DRAFT), so the next step is
- * a *new* draft from the same snapshot.
+ * a *new* draft that copies its settings (`DuplicateSimulationButton`).
  */
 export function FailedNextStepsCard({ job }: { job: Job }) {
   const failure = job.failure;
@@ -63,7 +63,7 @@ export function FailedNextStepsCard({ job }: { job: Job }) {
         )}
 
         {offersNewDraft(copy.nextStep) && (
-          <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
+          <DuplicateSimulationButton jobId={job.id} />
         )}
       </CardContent>
     </Card>

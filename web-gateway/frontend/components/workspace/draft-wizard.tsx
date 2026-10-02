@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { Button } from "@/components/ui/button";
+import { focusDraftField } from "@/components/workspace/draft-field";
 import { DraftModelStep } from "@/components/workspace/draft-model-step";
 import { DraftProgress } from "@/components/workspace/draft-progress";
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
@@ -25,6 +26,7 @@ import {
   fromJob,
   submitProblems,
   type DraftContext,
+  type DraftField,
   type DraftLocal,
 } from "@/lib/workspace/draft-state";
 import {
@@ -157,13 +159,20 @@ function WizardBody({
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // The field an Edit link or a "fix <field>" link asked to focus, until the
+  // effect below has done it. `focusTick` makes a second request for the same
+  // step (the step does not change, so nothing else would re-run the effect).
+  const focusRequest = useRef<DraftField | null>(null);
+  const [focusTick, setFocusTick] = useState(0);
   const goTo = useCallback(
-    (next: DraftStep) => {
+    (next: DraftStep, field?: DraftField) => {
       const url = stepHref(jobId, next);
       // A native pushState adds an entry even for the URL we are on.
       if (url !== window.location.pathname + window.location.search) {
         window.history.pushState(null, "", url);
       }
+      focusRequest.current = field ?? null;
+      if (field) setFocusTick((n) => n + 1);
       setStep(next);
     },
     [jobId]
@@ -178,6 +187,16 @@ function WizardBody({
     void flush();
     document.getElementById(stepHeadingId(step))?.focus();
   }, [step, flush]);
+
+  // A field was asked for: once its step has rendered, focus it (the heading
+  // when the step has no such control). Declared after the effect above, so it
+  // wins over the heading. Once per request.
+  useEffect(() => {
+    const field = focusRequest.current;
+    if (field === null) return;
+    focusRequest.current = null;
+    focusDraftField(field, step);
+  }, [step, focusTick]);
 
   // ── Back in view ──────────────────────────────────────────────────────────
   // Another tab or a submit elsewhere may have moved the draft on while this
@@ -282,7 +301,7 @@ function WizardBody({
               <SaveStatus
                 state={state}
                 onRetry={autosave.retry}
-                onGoToField={(field) => goTo(FIELD_STEP[field])}
+                onGoToField={(field) => goTo(FIELD_STEP[field], field)}
               />
               <JobDeleteMenu
                 jobId={jobId}
@@ -407,6 +426,7 @@ function WizardBody({
               <DraftReviewStep
                 datasetId={initialJob.dataset_id}
                 datasetTitle={initialJob.dataset_title}
+                fallbackName={displayName({ ...initialJob, about: null })}
                 ctx={ctx}
                 local={local}
                 recommended={recommended}

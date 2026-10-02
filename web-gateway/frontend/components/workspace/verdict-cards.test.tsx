@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 
-// The cards reach the server actions through the derive button; rendering
+// The cards reach the server actions through the duplicate button; rendering
 // never calls them.
 vi.mock("@/lib/jobs/actions", () => ({
   deleteSimulation: vi.fn(),
   deriveSimulation: vi.fn(),
+  duplicateSimulation: vi.fn(),
   cancelJob: vi.fn(),
   pollJobStatus: vi.fn(),
 }));
@@ -34,12 +35,20 @@ describe("the failed card", () => {
     if (job.slurm_state) expect(html).toContain(job.slurm_state);
   });
 
-  it("offers a new draft, and says to pick a longer walltime after a timeout", () => {
+  it("offers to try again with these settings, and says to pick a longer walltime after a timeout", () => {
     const html = renderToString(
       <FailedNextStepsCard job={previewSimulation("failed:timeout")} />
     );
-    expect(html).toContain("Start a new draft");
+    expect(html).toContain("Try again with these settings");
+    expect(html).toContain("Copies this simulation&#x27;s run settings into a new draft.");
+    expect(html).not.toContain("Start a new draft");
     expect(html).toContain("longer walltime");
+  });
+
+  it("offers nothing to retry after a cause that has no next step", () => {
+    const job = previewSimulation("failed:wbm_error");
+    const none = { ...job, failure: { ...job.failure!, cause: "cancelled_by_user" as const } };
+    expect(renderToString(<FailedNextStepsCard job={none} />)).not.toContain("Try again with these settings");
   });
 
   it("shows the backend's message and not the per-cause body", () => {
@@ -78,6 +87,15 @@ describe("the cancelled card", () => {
     expect(renderToString(<CancelledNoticeCard job={system} viewerEmail="me@purdue.edu" />)).toContain(
       "Cancelled by Anvil or an administrator"
     );
+  });
+
+  it("offers to try again with these settings, not to start over from the snapshot", () => {
+    const html = renderToString(
+      <CancelledNoticeCard job={previewSimulation("cancelled:user")} viewerEmail={null} />
+    );
+    expect(html).toContain("Try again with these settings");
+    expect(html).toContain("Copies this simulation&#x27;s run settings into a new draft.");
+    expect(html).not.toContain("Start a new draft");
   });
 
   it("renders the same twice, so hydration has nothing to disagree about", () => {

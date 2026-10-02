@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ComputeFields } from "@/components/workspace/compute-fields";
 import { DraftCard } from "@/components/workspace/draft-card";
+import { draftField } from "@/components/workspace/draft-field";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { RunStartNote } from "@/components/workspace/run-start-note";
 import { UNSUPPORTED_REASON, type Recommended } from "@/lib/jobs/compute";
@@ -143,6 +144,7 @@ export function DraftRunStep({
             </Label>
             <Input
               id={`${id}-start`}
+              {...draftField("start")}
               type="date"
               className="h-10 md:h-9"
               min={coverage?.start}
@@ -159,6 +161,7 @@ export function DraftRunStep({
             </Label>
             <Input
               id={`${id}-end`}
+              {...draftField("end")}
               type="date"
               className="h-10 md:h-9"
               min={coverage?.start}
@@ -200,7 +203,7 @@ export function DraftRunStep({
           )}
         </p>
 
-        <fieldset className="min-w-0 space-y-2">
+        <fieldset {...draftField("variables")} className="min-w-0 space-y-2">
           <legend className="text-xs text-muted-foreground">
             Output variables ({parameters.variables.length}/{options.length})
           </legend>
@@ -267,6 +270,7 @@ export function DraftRunStep({
               type="checkbox"
               checked={spatial !== null}
               disabled={spatial === null}
+              {...draftField("spatial")}
               aria-describedby={`${id}-spatial-note`}
               onChange={() => set({ spatial_domain: null })}
               className={CHECKBOX}
@@ -307,6 +311,7 @@ export function DraftRunStep({
               variant="outline"
               size="sm"
               className="min-h-10 shrink-0 bg-white sm:min-h-8"
+              {...draftField("custom")}
               onClick={() => set({ custom_params: null })}
             >
               Remove

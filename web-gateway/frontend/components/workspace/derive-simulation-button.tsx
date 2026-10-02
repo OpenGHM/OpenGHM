@@ -10,6 +10,10 @@ import { SessionExpiredBanner } from "@/components/workspace/session-expired-ban
 import { deriveSimulation } from "@/lib/jobs/actions";
 import { stepHref } from "@/lib/workspace/draft-wizard";
 
+/** The outline button the detail page's cards use (also `DuplicateSimulationButton`). */
+export const CARD_BUTTON =
+  "h-auto min-h-10 gap-2 whitespace-normal border-primary px-6 text-left text-base font-semibold text-primary hover:bg-primary/5";
+
 /**
  * "New simulation from this snapshot" (T9). Creates a DRAFT inheriting the
  * snapshot's own configuration and opens it at the draft wizard's second step,
@@ -76,7 +80,7 @@ export function DeriveSimulationButton({
         className={
           hero
             ? `min-h-10 gap-2 px-4 font-semibold ${HERO_BUTTON.primary}`
-            : "h-auto min-h-10 gap-2 whitespace-normal border-primary px-6 text-left text-base font-semibold text-primary hover:bg-primary/5"
+            : CARD_BUTTON
         }
       >
         {pending ? (

@@ -1,6 +1,6 @@
 import { Ban } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
+import { DuplicateSimulationButton } from "@/components/workspace/duplicate-simulation-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { RunMetadata } from "@/components/workspace/run-metadata";
 import { TimeStamp } from "@/components/common/time-stamp";
@@ -53,7 +53,7 @@ export function CancelledNoticeCard({ job, viewerEmail }: { job: Job; viewerEmai
           </p>
         )}
 
-        <DeriveSimulationButton datasetId={job.dataset_id} label="Start a new draft" fullWidth />
+        <DuplicateSimulationButton jobId={job.id} />
       </CardContent>
     </Card>
   );

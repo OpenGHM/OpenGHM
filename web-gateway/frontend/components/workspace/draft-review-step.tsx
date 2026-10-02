@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DraftCard, SummaryRow } from "@/components/workspace/draft-card";
+import { draftField } from "@/components/workspace/draft-field";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { ModelInputStatus } from "@/components/workspace/model-input-panel";
 import { SnapshotSummaryCard } from "@/components/workspace/snapshot-summary-card";
@@ -93,7 +94,8 @@ function Note({ children }: { children: ReactNode }) {
  * submit, and the submit card.
  *
  * Name and description describe this simulation, not a published snapshot, and
- * are the only inputs here. The snapshot card has no Edit (a draft's starting
+ * are the only inputs here. The Name's placeholder is `fallbackName`: what the
+ * header and the list call the draft while it has no name. The snapshot card has no Edit (a draft's starting
  * point cannot change), only its repository link. `problems` is `submitProblems`;
  * each one with a field has an Edit link to the step that field is on, and
  * `onEditStep` receives that field too so the wizard can focus it. `submitCard`
@@ -103,6 +105,7 @@ function Note({ children }: { children: ReactNode }) {
 export function DraftReviewStep({
   datasetId,
   datasetTitle,
+  fallbackName,
   ctx,
   local,
   recommended,
@@ -117,6 +120,9 @@ export function DraftReviewStep({
 }: {
   datasetId: string;
   datasetTitle: string;
+  /** What the draft is called with an empty name (`displayName`), shown as the
+   *  Name's placeholder. */
+  fallbackName: string;
   ctx: DraftContext;
   local: DraftLocal;
   recommended: Recommended | null;
@@ -150,7 +156,8 @@ export function DraftReviewStep({
           <Input
             id={`${id}-name`}
             value={local.name}
-            placeholder="Untitled simulation"
+            placeholder={fallbackName}
+            {...draftField("name")}
             className="h-10 md:h-9"
             aria-describedby={`${id}-about-hint${serverErrors.name ? ` ${id}-name-error` : ""}`}
             aria-invalid={serverErrors.name ? true : undefined}
@@ -171,6 +178,7 @@ export function DraftReviewStep({
             value={local.description}
             rows={3}
             placeholder="What is this simulation for?"
+            {...draftField("description")}
             aria-describedby={`${id}-about-hint${serverErrors.description ? ` ${id}-description-error` : ""}`}
             aria-invalid={serverErrors.description ? true : undefined}
             onChange={(e) => onDescriptionChange(e.target.value)}

@@ -6,6 +6,7 @@ vi.mock("@/lib/jobs/actions", () => ({
   cancelJob: vi.fn(),
   deleteSimulation: vi.fn(),
   deriveSimulation: vi.fn(),
+  duplicateSimulation: vi.fn(),
   submitSimulation: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -45,6 +46,14 @@ function before(a: HTMLElement, b: HTMLElement) {
 }
 
 describe("the detail page", () => {
+  it("copies the failed simulation's settings from the card, and starts over from its snapshot in the header", () => {
+    renderDetail("failed:wbm_error");
+    expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New from this model snapshot" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start a new draft" })).toBeNull();
+  });
+
+
   it("has no Back button; the breadcrumb is the way back", () => {
     renderDetail("completed");
     expect(screen.queryByText("Back to Simulations")).toBeNull();

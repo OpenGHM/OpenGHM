@@ -35,6 +35,7 @@ function review(props: Partial<React.ComponentProps<typeof DraftReviewStep>> = {
     <DraftReviewStep
       datasetId="snap-1"
       datasetTitle="Stored title"
+      fallbackName="Untitled (job-1)"
       ctx={{ dataset, snapshotState: "found" }}
       local={LOCAL}
       recommended={dataset.simulation.recommendedCompute}
@@ -66,10 +67,23 @@ describe("DraftReviewStep: name and description", () => {
     const description = screen.getByLabelText("Description") as HTMLTextAreaElement;
     expect(name.value).toBe("My run");
     expect(description.value).toBe("A test");
-    expect(name.placeholder).toBe("Untitled simulation");
+    expect(name.placeholder).toBe("Untitled (job-1)");
     const hint = screen.getByText(/describe this simulation, not a published model snapshot/);
     expect(name.getAttribute("aria-describedby")).toContain(hint.id);
     expect(description.getAttribute("aria-describedby")).toContain(hint.id);
+  });
+
+  it("has what the draft is called with no name as the Name placeholder", () => {
+    review({ fallbackName: "my-slug", local: { ...LOCAL, name: "" } });
+    const name = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(name.value).toBe("");
+    expect(name.placeholder).toBe("my-slug");
+  });
+
+  it("marks the two inputs for the wizard's focus", () => {
+    review();
+    expect(screen.getByLabelText("Name").getAttribute("data-draft-field")).toBe("name");
+    expect(screen.getByLabelText("Description").getAttribute("data-draft-field")).toBe("description");
   });
 
   it("reports what is typed, whole", () => {

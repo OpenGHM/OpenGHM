@@ -100,17 +100,17 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
 
 /** The sentence under the body that says what to do. */
 export const NEXT_STEP_COPY: Record<NextStep, string> = {
-  resubmit: "Start a new draft from the same model snapshot and submit it again.",
+  resubmit: "Try again from a new draft with the same settings.",
   resubmit_longer_walltime:
-    "Start a new draft and pick a longer walltime before you submit it.",
+    "Try again from a new draft with the same settings, and pick a longer walltime before you submit it.",
   new_draft:
-    "Start a new draft, change what caused this, and submit it again.",
+    "Try again from a new draft, change what caused this, and submit it.",
   contact_admin:
-    "Start a new draft to try again. If it keeps happening, tell an administrator this simulation's ID.",
+    "Try again from a new draft. If it keeps happening, tell an administrator this simulation's ID.",
   none: "",
 };
 
-/** Whether a failed job's card offers "Start a new draft". */
+/** Whether a failed job's card offers "Try again with these settings". */
 export function offersNewDraft(step: NextStep): boolean {
   return step !== "none";
 }

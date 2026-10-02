@@ -11,6 +11,7 @@ vi.mock("@/lib/jobs/actions", () => ({
   cancelJob: vi.fn(),
   deleteSimulation: vi.fn(),
   deriveSimulation: vi.fn(),
+  duplicateSimulation: vi.fn(),
   submitSimulation: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));

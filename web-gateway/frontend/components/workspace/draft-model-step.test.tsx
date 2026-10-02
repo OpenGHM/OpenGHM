@@ -45,6 +45,13 @@ describe("DraftModelStep", () => {
     expect(screen.getByRole("button", { name: "Browse model inputs" }).getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("marks the model input panel for the wizard's focus, and not the catalogue", () => {
+    step({ modelInputId: "other-id" });
+    const marked = document.querySelector('[data-draft-field="modelInput"]') as HTMLElement;
+    expect(marked.contains(screen.getByRole("button", { name: "Revert to inherit" }))).toBe(true);
+    expect(marked.contains(screen.getByRole("button", { name: "Browse model inputs" }))).toBe(false);
+  });
+
   it("reverts a chosen model input, and shows the server's refusal", () => {
     const { onRevertModelInput } = step({ modelInputId: "other-id", error: "Not a model input." });
     expect(screen.getByText("Not a model input.")).toBeTruthy();

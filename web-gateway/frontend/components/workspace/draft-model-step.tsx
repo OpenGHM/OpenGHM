@@ -1,3 +1,4 @@
+import { draftField } from "@/components/workspace/draft-field";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { ModelInputBrowser } from "@/components/workspace/model-input-browser";
 import { ModelInputPanel } from "@/components/workspace/model-input-panel";
@@ -42,14 +43,18 @@ export function DraftModelStep({
       </DraftStepHeading>
       <SnapshotSummaryCard ctx={ctx} datasetId={datasetId} fallbackTitle={datasetTitle} />
       <div className="space-y-3">
-        <ModelInputPanel
-          modelInputId={modelInputId}
-          inheritedId={ctx.dataset?.uses.modelInput.id ?? null}
-          resolved={resolvedModelInput}
-          onRevert={onRevertModelInput}
-          disabled={disabled}
-          error={error}
-        />
+        {/* The panel's one control is Revert, which a problem with the model
+            input sends focus to; with no override, the step's heading. */}
+        <div {...draftField("modelInput")}>
+          <ModelInputPanel
+            modelInputId={modelInputId}
+            inheritedId={ctx.dataset?.uses.modelInput.id ?? null}
+            resolved={resolvedModelInput}
+            onRevert={onRevertModelInput}
+            disabled={disabled}
+            error={error}
+          />
+        </div>
         <ModelInputBrowser currentId={effectiveModelInputId(modelInputId, ctx.dataset)} />
       </div>
     </div>

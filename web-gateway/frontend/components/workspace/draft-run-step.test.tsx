@@ -55,6 +55,28 @@ const start = () => screen.getByLabelText("Start") as HTMLInputElement;
 const end = () => screen.getByLabelText("End") as HTMLInputElement;
 const checkbox = (name: string | RegExp) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
 
+describe("the draft run step: fields the wizard can focus", () => {
+  it("marks each control an Edit link can send focus to", () => {
+    step({
+      parameters: {
+        ...PARAMETERS,
+        spatial_domain: { north: 5, south: -5, east: 5, west: -5 },
+        custom_params: { a: "1" },
+      },
+    });
+    const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
+    expect(marked("start")).toBe(start());
+    expect(marked("end")).toBe(end());
+    expect(marked("cores")).toBe(screen.getByLabelText("Cores"));
+    expect(marked("walltime")).toBe(screen.getByLabelText("Walltime"));
+    expect(marked("spatial")).toBe(screen.getByRole("checkbox", { name: /Restrict to a spatial subset/ }));
+    expect(marked("custom")).toBe(screen.getByRole("button", { name: "Remove" }));
+    // The group: focus goes to its first checkbox.
+    expect(marked("variables").tagName).toBe("FIELDSET");
+    expect(marked("variables").querySelector("input")).toBe(checkbox("discharge"));
+  });
+});
+
 describe("the draft run step: dates", () => {
   it("has a focusable heading for the wizard to move focus to", () => {
     step();

@@ -181,6 +181,16 @@ describe("the page", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("my-slug");
   });
 
+  it("shows what the draft will be called as the Name placeholder, and follows it", () => {
+    const { again } = wizard();
+    expect(nameInput().placeholder).toBe("Untitled (job-1)");
+    again({ job: { ...JOB, slug: "my-slug", updated_at: "2026-10-01T13:00:00.000Z" } });
+    expect(nameInput().placeholder).toBe("my-slug");
+    // Typing a name does not change what an empty one falls back to.
+    type("Typed");
+    expect(nameInput().placeholder).toBe("my-slug");
+  });
+
   it("shows a saved name from the start", () => {
     wizard({ job: { ...JOB, about: { name: "Stored name" } } });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Stored name");
@@ -294,6 +304,52 @@ describe("the step", () => {
     fireEvent.click(button("Next")!);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2 })));
     expect(document.activeElement?.id).toBe("draft-step-run-heading");
+  });
+
+  describe("an Edit link in Needs attention", () => {
+    const badStart = { ...JOB, parameters: { ...JOB.parameters, temporal_range_start: "2001-03-15" } };
+    // The one in "Needs attention", which carries the field: after a summary card's own.
+    const editLink = (name: string) => screen.getAllByRole("button", { name }).at(-1)!;
+
+    it("goes to the step and focuses the field's control", async () => {
+      wizard({ ctx: { dataset: yearly, snapshotState: "found" }, job: badStart });
+      fireEvent.click(editLink("Edit start date"));
+      expect(heading()).toBe("Run settings");
+      expect(search()).toBe("?step=run");
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Start")));
+    });
+
+    it("focuses the first checkbox of the variables, and the Revert button of a chosen model input", async () => {
+      const { unmount } = wizard({ job: { ...JOB, parameters: { ...JOB.parameters, variables: [] } } });
+      fireEvent.click(editLink("Edit output variables"));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole("checkbox")[0]));
+      unmount();
+
+      wizard({ job: { ...JOB, model_input_id: "other-input" } });
+      fireEvent.click(editLink("Edit model input"));
+      expect(heading()).toBe("Model & input");
+      await waitFor(() => expect(document.activeElement).toBe(button("Revert to inherit")));
+    });
+
+    it("falls back to the step's heading when the step has no such control", async () => {
+      // No snapshot and no variables chosen: there is no list to take focus.
+      wizard({
+        ctx: { dataset: null, snapshotState: "unavailable" },
+        job: { ...JOB, parameters: { ...JOB.parameters, variables: [] } },
+      });
+      fireEvent.click(editLink("Edit output variables"));
+      await waitFor(() => expect(document.activeElement?.id).toBe("draft-step-run-heading"));
+    });
+
+    it("focuses once: later steps go to their heading again", async () => {
+      wizard({ ctx: { dataset: yearly, snapshotState: "found" }, job: badStart });
+      fireEvent.click(editLink("Edit start date"));
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Start")));
+      fireEvent.click(button("Next")!);
+      await waitFor(() => expect(document.activeElement?.id).toBe("draft-step-review-heading"));
+      fireEvent.click(button("Back")!);
+      await waitFor(() => expect(document.activeElement?.id).toBe("draft-step-run-heading"));
+    });
   });
 
   it("marks the step that has a problem, and nothing is blocked by it", () => {
