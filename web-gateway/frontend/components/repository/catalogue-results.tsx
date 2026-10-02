@@ -42,7 +42,7 @@ function ResultCount({
         "Results unavailable"
       ) : (
         <>
-          <strong className="font-semibold text-foreground">{totalCount}</strong>{" "}
+          <strong className="font-semibold text-highlight">{totalCount}</strong>{" "}
           {totalCount === 1 ? "result" : "results"}
           {q && (
             <>

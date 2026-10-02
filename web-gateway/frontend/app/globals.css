@@ -50,6 +50,7 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-compute: var(--compute);
+  --color-highlight: var(--highlight);
   --color-hero: var(--hero);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
@@ -105,6 +106,10 @@
   --warning: #92400e;
   --info: #1d4ed8;
   --compute: #6d28d9;
+  /* Data emphasis: the coverage box on a map, a result count, a count badge.
+     Never interaction or selection, which stays --primary. AA as text on a
+     10% tint of itself. */
+  --highlight: #ac4b07;
   /* The navy the page heroes start from, ending in --primary. */
   --hero: #0a192f;
   --sidebar: #f8fafc;
@@ -124,6 +129,7 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
+  --highlight: oklch(0.78 0.15 65);
   --primary: oklch(0.922 0 0);
   --primary-foreground: oklch(0.205 0 0);
   --secondary: oklch(0.269 0 0);

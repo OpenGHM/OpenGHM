@@ -49,9 +49,11 @@ describe("CatalogueCard for a model snapshot", () => {
     expect(screen.queryByRole("link", { name: /View details|Download|Cite/ })).toBeNull();
   });
 
-  it("shows the Model Snapshot badge in the brand tint, the mono version and licence line, and the tags", () => {
+  it("shows the Model Snapshot badge as an outlined label with a brand dot, the mono version and licence line, and the tags", () => {
     renderCard(snapshotItem());
-    expect(screen.getByText("Model Snapshot").className).toContain("bg-primary/10");
+    const badge = screen.getByText("Model Snapshot");
+    expect(badge.className).toContain("border-border");
+    expect(badge.querySelector(".bg-primary")).not.toBeNull();
     const line = screen.getByText("WBM 1.0.0 · GPL-3.0-only");
     expect(line.className).toContain("font-mono");
     expect(screen.getByText("Publication")).toBeTruthy();
@@ -127,7 +129,7 @@ describe("CatalogueCard for a model input", () => {
 
   it("shows the Model Input badge in the info tint, datasets and networks, and distinct resolutions", () => {
     renderCard(modelInputItem());
-    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
+    expect(screen.getByText("Model Input").querySelector(".bg-compute")).not.toBeNull();
     expect(screen.getByText("3 datasets · 3 networks · CC-BY-4.0")).toBeTruthy();
     expect(screen.getByText("5 arc-min, 30 arc-sec")).toBeTruthy();
     expect(screen.getByText("Climatological")).toBeTruthy();
@@ -237,10 +239,11 @@ describe("CatalogueCard tag chips", () => {
     }
   });
 
-  it("wear the primary tint when off, and have no check", () => {
+  it("are outlined when off, and have no check", () => {
     renderCard(snapshotItem(), [], "list", ["climate-forcing"]);
     const off = screen.getByRole("button", { name: "Filter by tag Publication" });
-    expect(off.innerHTML).toContain("bg-primary/10");
+    expect(off.innerHTML).toContain("border-border bg-transparent");
+    expect(off.innerHTML).not.toContain("bg-primary/10");
     expect(off.querySelector("svg")).toBeNull();
   });
 
@@ -307,7 +310,7 @@ describe("CatalogueCard layout", () => {
     expect(card.className).toContain("group/card");
     expect(card.className).toContain("motion-safe:hover:-translate-y-0.5");
     expect(card.className).toContain("hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)]");
-    expect(card.className).toContain("hover:border-primary/30");
+    expect(card.className).toContain("hover:border-foreground/20");
     expect(card.className).toContain("transition-[translate,box-shadow,border-color]");
     expect(card.className).not.toContain("motion-reduce:transition-none");
     expect(card.className).not.toMatch(/(^|\s)hover:-translate-y/);
@@ -397,7 +400,7 @@ describe("CatalogueCard in the grid view", () => {
     const card = container.firstElementChild!;
     expect(card.firstElementChild?.className).toContain("h-[150px]");
     expect(card.firstElementChild?.querySelector("svg[role='img']")).not.toBeNull();
-    expect(screen.getByText("Model Snapshot").className).toContain("bg-primary/10");
+    expect(screen.getByText("Model Snapshot").className).toContain("border-border");
     expect(screen.getByRole("heading", { level: 3 }).className).toContain("line-clamp-4");
     expect(screen.getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
   });
@@ -430,7 +433,7 @@ describe("CatalogueCard in the grid view", () => {
 
   it("describes a model input the same way", () => {
     renderCard(modelInputItem(), [], "grid");
-    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
+    expect(screen.getByText("Model Input").querySelector(".bg-compute")).not.toBeNull();
     expect(screen.getByText("Climatological · 5 arc-min, 30 arc-sec")).toBeTruthy();
     onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });

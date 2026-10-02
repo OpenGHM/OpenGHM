@@ -143,12 +143,13 @@ describe("the header's current-page highlight", () => {
     render(<Header />);
     const nav = within(screen.getByRole("navigation", { name: "Main" }));
     const lit = nav.getByRole("link", { name: "Data Repository" });
-    expect(lit.className).toContain("bg-primary/10");
-    expect(lit.className).toContain("text-primary");
+    expect(lit.className).toContain("bg-slate-100");
+    expect(lit.className).toContain("text-foreground");
+    expect(lit.className).not.toContain("text-primary");
     for (const name of ["Home", "Workspace", "Community", "About"]) {
       const link = nav.getByRole("link", { name });
       expect(link.className).toContain("px-3");
-      expect(link.className).not.toContain("bg-primary/10");
+      expect(link.className).not.toContain("bg-slate-100");
     }
   });
 
@@ -159,6 +160,6 @@ describe("the header's current-page highlight", () => {
     const menu = openMenu();
     const lit = menu.getAllByRole("menuitem").filter((el) => el.getAttribute("aria-current") === "page");
     expect(lit.map((el) => el.textContent)).toEqual(["Data Repository"]);
-    expect(lit[0].className).toContain("bg-primary/10");
+    expect(lit[0].className).toContain("bg-slate-100");
   });
 });

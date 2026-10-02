@@ -170,7 +170,7 @@ export function CoverageThumbnail({
   return (
     <div
       className={cn(
-        "relative aspect-[2/1] overflow-hidden rounded-md border border-border bg-primary/10",
+        "relative aspect-[2/1] overflow-hidden rounded-md border border-border bg-slate-100",
         className
       )}
     >
@@ -184,12 +184,12 @@ export function CoverageThumbnail({
         <path
           data-testid="coverage-land"
           d={WORLD_LAND_PATH}
-          className="fill-muted stroke-foreground/25"
+          className="fill-white stroke-slate-400/70"
           strokeWidth={0.5}
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
-        <g className="stroke-foreground/10" strokeWidth={1}>
+        <g className="stroke-slate-300/60" strokeWidth={1}>
           {GRID.vertical.map((x) => (
             <line
               key={`x${x}`}
@@ -219,13 +219,17 @@ export function CoverageThumbnail({
             y={r.y}
             width={r.width}
             height={r.height}
-            className="fill-primary/25 stroke-primary"
+            className="fill-highlight/[0.22] stroke-highlight"
             strokeWidth={1.5}
             vectorEffect="non-scaling-stroke"
           />
         ))}
       </svg>
-      <span aria-hidden="true" className="absolute right-3 bottom-3 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm">
+      <span
+        aria-hidden="true"
+        className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm"
+      >
+        <span className="size-1.5 shrink-0 rounded-full bg-highlight" />
         {label}
       </span>
     </div>

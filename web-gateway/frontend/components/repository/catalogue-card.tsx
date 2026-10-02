@@ -28,7 +28,7 @@ import { CoverageThumbnail } from "./coverage-thumbnail";
  * card wears the focus ring itself, and the same effects apply.
  */
 const CARD =
-  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-primary/30 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50";
+  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-foreground/20 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50";
 
 /**
  * The corner mark of a map panel: a round chip with an arrow that fades in
@@ -47,22 +47,25 @@ function ArrowChip() {
   );
 }
 
-/** "Model Snapshot" in the brand tint, "Model Input" in the compute tint. */
+/** "Model Snapshot" or "Model Input": a quiet outlined label, with a dot in the kind's hue (brand, compute). */
 function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
   return (
     <span
       className={cn(
-        "inline-flex w-fit shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium",
-        kind === "snapshot" ? "bg-primary/10 text-primary" : "bg-compute/10 text-compute"
+        "inline-flex w-fit shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground"
       )}
     >
+      <span
+        aria-hidden="true"
+        className={cn("size-1.5 shrink-0 rounded-full", kind === "snapshot" ? "bg-primary" : "bg-compute")}
+      />
       {kindLabel(kind)}
     </span>
   );
 }
 
 /**
- * A tag as a filter control, the emphasised chip of the row (primary tint).
+ * A tag as a filter control, the emphasised chip of the row (outlined, no fill).
  * Like a keyword chip, the button is 40 px tall on a phone and the chip is
  * drawn inside it; it sits above the title's stretched link.
  */
@@ -90,7 +93,7 @@ function TagChip({
             "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11.5px] font-medium transition-colors group-focus-visible/tag:ring-[3px] group-focus-visible/tag:ring-ring/50 motion-reduce:transition-none",
             selected
               ? "border-primary bg-primary text-primary-foreground"
-              : "border-transparent bg-primary/10 text-primary group-hover/tag:border-primary/40"
+              : "border-border bg-transparent text-foreground group-hover/tag:border-foreground/30"
           )}
         >
           {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
@@ -137,7 +140,7 @@ function KeywordChip({
             "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11.5px] transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50 motion-reduce:transition-none",
             selected
               ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-muted/60 text-foreground/80 group-hover/keyword:border-primary/40 group-hover/keyword:text-primary"
+              : "border-border bg-muted/60 text-foreground/80 group-hover/keyword:border-foreground/30 group-hover/keyword:text-foreground"
           )}
         >
           {selected && <Check aria-hidden="true" className="size-3 shrink-0" />}
@@ -220,7 +223,7 @@ export function CatalogueCard({
   if (grid) {
     return (
       <Card className={cn(CARD, "h-full")}>
-        <div className="relative h-[150px] shrink-0 border-b bg-primary/10">
+        <div className="relative h-[150px] shrink-0 border-b bg-slate-100">
           <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
           <ArrowChip />
         </div>
@@ -282,7 +285,7 @@ export function CatalogueCard({
         </ul>
       </div>
 
-      <div className="relative h-36 shrink-0 border-t bg-primary/10 md:h-auto md:w-[260px] md:border-t-0 md:border-l">
+      <div className="relative h-36 shrink-0 border-t bg-slate-100 md:h-auto md:w-[260px] md:border-t-0 md:border-l">
         <CoverageThumbnail
           box={toBox(item)}
           aspect="wide"

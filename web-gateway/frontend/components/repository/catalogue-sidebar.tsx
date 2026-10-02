@@ -361,7 +361,7 @@ function ResolutionFilter({
                   TOGGLE_FOCUS,
                   active
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-foreground/80 hover:border-primary/50"
+                    : "border-border bg-card text-foreground/80 hover:border-foreground/30"
                 )}
               >
                 <span aria-hidden="true">{u.symbol}</span>
@@ -422,7 +422,7 @@ function ResolutionFilter({
                 TOGGLE_FOCUS,
                 active
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-foreground/80 hover:border-primary/50"
+                  : "border-border bg-card text-foreground/80 hover:border-foreground/30"
               )}
             >
               {p.label}
@@ -490,7 +490,7 @@ export function CatalogueSidebar({
             <SlidersHorizontal aria-hidden="true" />
             Filters
             {activeCount > 0 && (
-              <Badge className="bg-primary/10 text-primary">
+              <Badge className="bg-highlight/10 text-highlight">
                 <span aria-hidden="true">{activeCount}</span>
                 <span className="sr-only">{activeCount} active</span>
               </Badge>

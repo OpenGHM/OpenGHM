@@ -33,6 +33,7 @@ palette classes.
 | `status-*` | one per job status (draft, pending, submitted, running, cancelling, completed, failed, cancelled), applied through [`lib/jobs/status-hue.ts`](lib/jobs/status-hue.ts) |
 | `success`, `warning`, `info` | found, caution, note; not a status |
 | `compute` | the compute cards (HPC configuration, cores and walltime) |
+| `highlight` | data emphasis: the coverage box, a result count; not for actions or selection |
 | `destructive` | errors and destructive actions |
 
 Text in a hue sits on at most a 10% tint of that hue (`bg-status-failed/10
@@ -86,6 +87,7 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   [`TagChips`](components/repository/tag-chips.tsx). A grid card is
   the map on top, then the badge, the title, one mono line and the date.
   The map is a real SVG land outline with the bounding box, not a map tile.
+  Colour has three roles here: `primary` is selection and interaction (checked boxes, the slider, pressed chips, focus), neutral slate is labels at rest (kind badge, tag and keyword chips, active-filter chips, the map's ocean and land) and `highlight` is data emphasis (the coverage box, the result count, the Filters count badge).
 - The sidebar is built from the facets the backend returns, in one "Filters"
   card with a Reset link (shown only while something is on; it keeps the sort
   and the view). Groups are separated by rules and open and close with a + / –

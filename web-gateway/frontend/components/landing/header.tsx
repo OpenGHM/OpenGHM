@@ -57,7 +57,7 @@ const NAV_LINK =
   "rounded-md px-3 py-1.5 text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const NAV_LINK_IDLE = "font-medium text-slate-700 hover:bg-muted hover:text-foreground";
 // Same weight as idle: font-semibold is a few px wider and would shift the row.
-const NAV_LINK_ACTIVE = "bg-primary/10 font-medium text-primary";
+const NAV_LINK_ACTIVE = "bg-slate-100 font-medium text-foreground";
 
 /**
  * The site header. From `lg` up the links and the account menu sit in the row;
@@ -233,7 +233,7 @@ export function Header() {
             <DropdownMenuItem
               key={item.label}
               asChild
-              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? "bg-primary/10 font-medium text-primary" : "font-medium"}`}
+              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : "font-medium"}`}
             >
               <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
                 {item.label}
@@ -253,7 +253,7 @@ export function Header() {
             <DropdownMenuItem
               key={item.label}
               asChild
-              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? "bg-primary/10 font-medium text-primary" : "font-medium"}`}
+              className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : "font-medium"}`}
             >
               <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
                 {item.label}
