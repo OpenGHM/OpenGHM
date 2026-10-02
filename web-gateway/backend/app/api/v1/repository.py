@@ -202,7 +202,10 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     detail = DatasetDetailResponse.from_metadata_json(doc)
     # Read once per snapshot (immutable by id) and kept; None if it cannot be read.
-    detail.runStartAlignment = await run_start.run_start_alignment(doc["document"], dataset_id)
+    rules = await run_start.read_init_rules(doc["document"], dataset_id)
+    if rules is not None:
+        detail.runStartAlignment = rules.alignment
+        detail.aggregationStartYear = rules.aggregation_start_year
     return detail
 
 

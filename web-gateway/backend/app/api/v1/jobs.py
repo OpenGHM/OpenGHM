@@ -577,6 +577,37 @@ async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -
         )
 
 
+async def _refuse_dates_outside_aggregation(
+    dataset_id: str, snapshot: dict, start: str, end: str
+) -> None:
+    """422 when the run dates contradict the snapshot's multi-year aggregation
+    window, which WBM would only say once the job runs ("Aggregation multi-year
+    start is outside of the run dates"). Only a submit refuses: an edit saves
+    whatever the person is part-way through typing, and the wizard says it on
+    the field. A window that cannot be read blocks nothing."""
+    rules = await run_start.read_init_rules(snapshot, dataset_id)
+    if rules is None:
+        return
+    temporal = (snapshot.get("simulation") or {}).get("temporalCoverage") or {}
+    violation = run_start.check_run_dates(
+        rules.aggregation_start_year,
+        start,
+        end,
+        snapshot_start=temporal.get("start"),
+        snapshot_end=temporal.get("end"),
+    )
+    if violation is not None:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "run_dates_outside_aggregation",
+            violation.message,
+            fields=list(violation.fields),
+            aggregation_start_year=violation.aggregation_start_year,
+            latest_start=violation.latest_start,
+            earliest_end=violation.earliest_end,
+        )
+
+
 _ANVIL_NOT_CONFIGURED = (
     "This gateway is not set up to run simulations on Anvil yet. "
     "Ask an administrator. Your draft is unchanged."
@@ -658,6 +689,12 @@ async def submit_simulation(
 
     await _refuse_unaligned_start(
         job.dataset_id, snapshot, job.parameters.temporal_range_start
+    )
+    await _refuse_dates_outside_aggregation(
+        job.dataset_id,
+        snapshot,
+        job.parameters.temporal_range_start,
+        job.parameters.temporal_range_end,
     )
 
     now = datetime.now(timezone.utc)

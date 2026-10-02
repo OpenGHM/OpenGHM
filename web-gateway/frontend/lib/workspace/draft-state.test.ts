@@ -470,6 +470,43 @@ describe("submitProblems", () => {
     expect(problems(fromJob(ok))).toEqual([]);
   });
 
+  describe("the snapshot's multi-year aggregation", () => {
+    // 2000-01-01 .. 2004-12-31 here; aggregation starts in 2001, so a run must
+    // start in or before 2001 and end on or after 2001-12-31.
+    const aggregated: DraftContext = { snapshotState: "found", dataset: { ...dataset, aggregationStartYear: 2001 } };
+
+    it("puts an end that is too early on the End field, at the run step", () => {
+      const local = edited(ok, { params: { temporal_range_start: "2000-01-01", temporal_range_end: "2000-12-31" } });
+      expect(problems(local, aggregated)).toEqual([
+        {
+          field: "end",
+          step: "run",
+          message:
+            "This snapshot's model also aggregates its results over multi-year periods that begin in 2001, so a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).",
+        },
+      ]);
+    });
+
+    it("puts a start that is too late on the Start field", () => {
+      const local = edited(ok, { params: { temporal_range_start: "2002-01-01", temporal_range_end: "2003-12-31" } });
+      const found = problems(local, aggregated);
+      expect(found.map((p) => p.field)).toEqual(["start"]);
+      expect(found[0].message).toContain("a run can start no later than 2001-12-31");
+    });
+
+    it("lists nothing for dates that reach the year, or when the snapshot has no window", () => {
+      expect(problems(fromJob(ok), aggregated)).toEqual([]); // 2001-01-01 .. 2003-12-31
+      const short = edited(ok, { params: { temporal_range_end: "2001-06-30" } });
+      expect(problems(short, FOUND)).toEqual([]); // aggregationStartYear absent
+      expect(problems(short, aggregated)).toHaveLength(1);
+    });
+
+    it("is saved, not withheld: an edit may hold dates only a submit refuses", () => {
+      const local = edited(ok, { params: { temporal_range_start: "2001-01-01", temporal_range_end: "2001-06-30" } });
+      expect(buildDraftPatch(local, ok, aggregated).withheld).toEqual([]);
+    });
+  });
+
   describe("the snapshot's reference run is longer than one job may be", () => {
     const withWalltime = (walltime: string): DraftContext => ({
       snapshotState: "found",

@@ -175,6 +175,51 @@ describe("the draft run step: dates", () => {
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });
 
+  it("flags an end the snapshot's multi-year aggregation cannot run with, on the End field", () => {
+    // 2000-01-01 .. 2001-12-31, aggregating from 2001: the run that failed on Anvil.
+    const aggregated = fakeDataset({
+      runStartAlignment: "year",
+      aggregationStartYear: 2001,
+      simulation: {
+        ...dataset.simulation,
+        temporalCoverage: { start: "2000-01-01", end: "2001-12-31" },
+      },
+    });
+    step({
+      ctx: { dataset: aggregated, snapshotState: "found" },
+      parameters: { ...PARAMETERS, temporal_range_start: "2000-01-01", temporal_range_end: "2000-12-31" },
+    });
+    expect(end().getAttribute("aria-invalid")).toBe("true");
+    const message = document.getElementById(end().getAttribute("aria-describedby")!)?.textContent;
+    expect(message).toContain("a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2001-12-31).");
+    expect(start().getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("flags a start after the aggregation's year on the Start field, and clears for valid dates", () => {
+    const aggregated = fakeDataset({
+      runStartAlignment: "year",
+      aggregationStartYear: 2001,
+      simulation: {
+        ...dataset.simulation,
+        temporalCoverage: { start: "2000-01-01", end: "2003-12-31" },
+      },
+    });
+    const ctx: DraftContext = { dataset: aggregated, snapshotState: "found" };
+    const { unmount } = step({
+      ctx,
+      parameters: { ...PARAMETERS, temporal_range_start: "2002-01-01", temporal_range_end: "2003-12-31" },
+    });
+    expect(start().getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/a run can start no later than 2001-12-31 \(allowed: 2000-01-01 to 2001-12-31\)/)).toBeTruthy();
+    unmount();
+    step({
+      ctx,
+      parameters: { ...PARAMETERS, temporal_range_start: "2001-01-01", temporal_range_end: "2003-12-31" },
+    });
+    expect(start().getAttribute("aria-invalid")).toBeNull();
+    expect(end().getAttribute("aria-invalid")).toBeNull();
+  });
+
   it("says a date that does not exist and an end before the start", () => {
     step({ parameters: { ...PARAMETERS, temporal_range_start: "", temporal_range_end: "2000-01-01" } });
     expect(screen.getByText("Choose a start date that exists.")).toBeTruthy();

@@ -146,6 +146,10 @@ class DatasetDetailResponse(DatasetResponse):
     #: init was read and sets no rule, ``null`` the init could not be read, so
     #: nothing is known and nothing is blocked.
     runStartAlignment: Literal["year", "month", "none"] | None = None
+    #: The year the init's multi-year aggregation starts in, which the run
+    #: must reach (``run_start.check_run_dates``); ``null`` when the init sets
+    #: none or could not be read, and then nothing is blocked.
+    aggregationStartYear: int | None = None
 
 
 class RepositoryListResponse(BaseModel):

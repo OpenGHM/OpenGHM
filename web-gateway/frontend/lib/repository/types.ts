@@ -38,6 +38,10 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
    *  the first of a month, `none` no rule, `null` the init could not be read.
    *  Absent on a list row. */
   runStartAlignment?: "year" | "month" | "none" | null;
+  /** The year the init's multi-year aggregation starts in, which a run must
+   *  reach (`lib/jobs/aggregation-window.ts`); `null` when the init sets none
+   *  or could not be read. Absent on a list row. */
+  aggregationStartYear?: number | null;
 }
 
 // ─── Filter state ─────────────────────────────────────────────────────────────

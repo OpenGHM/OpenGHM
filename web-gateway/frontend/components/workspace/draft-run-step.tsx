@@ -11,6 +11,7 @@ import { draftField } from "@/components/workspace/draft-field";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { RunStartNote } from "@/components/workspace/run-start-note";
 import { UNSUPPORTED_REASON, type Recommended } from "@/lib/jobs/compute";
+import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { checkRunStartFor, isRealDate, type RunStartProblem } from "@/lib/jobs/run-start";
 import type { JobParameters, SlurmConfig } from "@/lib/jobs/types";
 import {
@@ -91,17 +92,20 @@ export function DraftRunStep({
   const startProblem =
     checkRunStartFor(dataset, start) ?? (startRefusal ? serverStartProblem(startRefusal) : null);
   // What the note does not say: the date itself, or a refusal the server worded.
+  // The snapshot's multi-year aggregation asks the run to reach a year; it says
+  // which date is off, in words that name the allowed range.
+  const aggregation = checkAggregationWindowFor(dataset, start, end);
   const startText = !isRealDate(start)
     ? "Choose a start date that exists."
     : startProblem === null
-      ? (serverErrors.start ?? null)
+      ? (aggregation.start ?? serverErrors.start ?? null)
       : null;
   const startInvalid = startProblem !== null || startText !== null;
   const endText = !isRealDate(end)
     ? "Choose an end date that exists."
     : isRealDate(start) && start > end
       ? "The end date is before the start date."
-      : (serverErrors.end ?? null);
+      : (aggregation.end ?? serverErrors.end ?? null);
 
   // Variables: the snapshot's, in its order, then the stored ones it does not list.
   const listed: VariableOption[] =

@@ -16,6 +16,7 @@ import {
   validateSlurmConfig,
   walltimeOverLimit,
 } from "@/lib/jobs/compute";
+import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { checkRunStartFor, isRealDate } from "@/lib/jobs/run-start";
 import type {
   AboutUpdate,
@@ -443,6 +444,11 @@ export function submitProblems(
   }
   if (!endReal) add("end", "Choose an end date that exists.");
   else if (startReal && start > end) add("end", "The end date is before the start date.");
+  // The snapshot's multi-year aggregation: WBM stops at start-up unless its
+  // first year lies inside the run. An edit saves these; a submit refuses them.
+  const aggregation = checkAggregationWindowFor(ctx.dataset, start, end);
+  if (aggregation.start) add("start", aggregation.start);
+  if (aggregation.end) add("end", aggregation.end);
 
   const { variables, spatial_domain: spatial, custom_params: custom } = local.parameters;
   if (variables.length === 0) add("variables", "Choose at least one output variable.");

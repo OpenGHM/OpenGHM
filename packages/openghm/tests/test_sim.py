@@ -754,3 +754,92 @@ def test_read_sidecar_roundtrip_and_error(tmp_path):
     assert read_sidecar(str(d / "simulation.json"))["slurm_job_id"] == "7"
     with pytest.raises(OpenghmError, match="cannot read"):
         read_sidecar(str(tmp_path / "nope.json"))
+
+
+# ── multi-year aggregation vs the run dates ──────────────────────────────────
+
+# The published v2.0.0 wbm_test.init, cut to what the rule reads. Job 21016198
+# ran it with 2000-01-01 .. 2000-12-31 and WBM stopped at start-up with
+# "Aggregation multi-year start is outside of the run dates...".
+_V2_AGGREGATED = (
+    "{\n"
+    "MT_Code_Name\t=>  {\n"
+    "          File_Size\t=> 'year',\n"
+    "          Output_dir\t=> 'wbm/wbm_output/WBM_test',\n"
+    "          Run_End\t=> '2001-12-31'\n"
+    "        },\n"
+    "Spinup => {\nState_ID\t=> '',\nLoops\t=> 1,\nStart\t=> '2000-01-01',\nEnd\t=> '2000-12-31',\n       },\n"
+    "PostProcessing\t=>  {\n"
+    "          Forks\t\t=> 4,\n"
+    "          Polygon_Aggregation\t=> ,\n"
+    "          Run\t\t=> 0,\n"
+    "          TA_multi_year_start\t=> 2001,\n"
+    "          TA_multi_year_timestep\t=> 2,\n"
+    "          Temporal_Aggregation\t=> 1\n"
+    "        },\n"
+    "}\n"
+)
+
+
+def test_the_run_that_failed_on_anvil_is_refused_before_staging():
+    with pytest.raises(OpenghmError) as exc:
+        _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2000-12-31")
+    msg = str(exc.value)
+    assert "starting in 2001" in msg and "ends on 2000-12-31" in msg
+    assert "on or after 2001-12-31" in msg
+    assert "starts on" not in msg  # the start was fine
+
+
+def test_a_late_start_is_refused_with_the_latest_start():
+    with pytest.raises(OpenghmError, match="starts on 2002-01-01.*on or before 2001-12-31"):
+        _build(_V2_AGGREGATED, run_start="2002-01-01")
+
+
+def test_dates_that_contain_the_aggregation_year_are_accepted():
+    _build(_V2_AGGREGATED, run_start="2001-01-01", run_end="2001-12-31")
+    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2001-12-31")
+    # the 360-day calendar's last day: left to WBM, which knows the calendar
+    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2001-12-30")
+    # past the year: its last complete year is still 2001
+    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2002-06-30")
+
+
+def test_the_published_run_is_not_rechecked_without_an_override():
+    # Same init, a start and an end the snapshot never changed: no flag, no check.
+    _build(_V2_AGGREGATED)
+    _build(_V2_AGGREGATED.replace("Spinup =>", "Output_vars => 'x',\nSpinup =>"), output_vars="runoff")
+
+
+def test_a_start_override_is_checked_against_the_inits_own_end():
+    # --run-start alone: the end is the init's 2001-12-31, so only the start can fail.
+    _build(_V2_AGGREGATED, run_start="2001-01-01")
+
+
+@pytest.mark.parametrize(
+    "pp",
+    [
+        "TA_multi_year_start => '', TA_multi_year_timestep => '',",
+        "TA_multi_year_start => 2001, TA_multi_year_timestep => '',",
+        "TA_multi_year_start => '', TA_multi_year_timestep => 2,",
+        "TA_multi_year_start => 0, TA_multi_year_timestep => 2,",
+        "Temporal_Aggregation => 1,",
+    ],
+)
+def test_no_aggregation_window_no_rule(pp):
+    tpl = _V2_AGGREGATED.replace(
+        "          TA_multi_year_start\t=> 2001,\n          TA_multi_year_timestep\t=> 2,\n", pp + "\n"
+    )
+    _build(tpl, run_start="2000-01-01", run_end="2000-12-31")
+
+
+def test_quoted_aggregation_year_and_a_run_start_in_the_init_are_read():
+    tpl = _V2_AGGREGATED.replace("=> 2001,", "=> '2001',").replace(
+        "Run_End\t=> '2001-12-31'", "Run_Start => '2000-03-01',\n          Run_End\t=> '2001-12-31'"
+    )
+    with pytest.raises(OpenghmError, match="ends on 2000-12-31"):
+        _build(tpl, run_end="2000-12-31")
+
+
+def test_an_init_with_no_run_end_is_left_alone():
+    tpl = _V2_AGGREGATED.replace("          Run_End\t=> '2001-12-31'\n", "          Run_Start => '2000-01-01'\n")
+    _build(tpl, run_start="2000-01-01")  # WBM would take the forcing's last day: unknown here

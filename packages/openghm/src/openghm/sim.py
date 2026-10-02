@@ -346,6 +346,68 @@ def _check_run_start_alignment(content: str, run_start: str) -> None:
         )
 
 
+# A Perl scalar value: quoted, or bare up to the next ``,``, ``}`` or end of line.
+_PERL_VALUE = r"(?:'([^']*)'|\"([^\"]*)\"|([^,}\n]+))"
+
+
+def _perl_scalar(content: str, key: str) -> Optional[str]:
+    """The first ``key => value`` in a Perl-hash init, unquoted and trimmed;
+    ``None`` when the key is absent. ``\\bkey\\b`` does not match ``Run_Start``
+    for ``Start`` (see :func:`_set_perl_key`)."""
+    m = re.search(rf"\b{re.escape(key)}\b\s*=>\s*{_PERL_VALUE}", content)
+    if m is None:
+        return None
+    quoted = m.group(1) if m.group(1) is not None else m.group(2)
+    return (quoted if quoted is not None else m.group(3)).strip()
+
+
+def _check_run_dates_vs_aggregation(content: str) -> None:
+    """Refuse run dates that WBM's multi-year aggregation rejects.
+
+    With ``TA_multi_year_start`` and ``TA_multi_year_timestep`` both set in the
+    init's ``PostProcessing`` block, WBM dies at its start-up, before the run,
+    unless the aggregation's first year lies inside the run
+    (``images/wbm-tools-lite/wbm/model/RIMS/WBM.pm`` line 4279)::
+
+        Aggregation multi-year start is outside of the run dates...
+
+    It compares the year with the run's first year (``Run_Start``, else the
+    spinup's ``Start``) and its last complete year: the year of ``Run_End``, one
+    less unless ``Run_End`` is the last day of the year. So the run must start
+    in or before that year and end on or after its December 31. It is read for
+    every ``PostProcessing`` block, whatever its ``Run`` flag: the failed job
+    that found this (Anvil 21016198) had ``Run => 0``.
+
+    Only a changed start or end is checked (the caller), on ``content`` as
+    overridden. Not checked, because the init does not say: a missing ``Run_End``
+    (WBM then takes the forcing's last day), a value that is not a plain year or
+    date, and the 360-day calendar's December 30, which WBM counts as a year's
+    last day but which the init does not announce (the calendar comes from the
+    forcing data), so December 30 is let through and WBM has the last word.
+    """
+    first = _perl_scalar(content, "TA_multi_year_start")
+    step = _perl_scalar(content, "TA_multi_year_timestep")
+    if not first or first == "0" or not step or step == "0" or not re.fullmatch(r"\d{4}", first):
+        return
+    start = _perl_scalar(content, "Run_Start") or _perl_scalar(content, "Start")
+    end = _perl_scalar(content, "Run_End")
+    if not start or not end or not _ISO_DATE_RE.match(start) or not _ISO_DATE_RE.match(end):
+        return
+    year = int(first)
+    problems = []
+    if int(start[:4]) > year:
+        problems.append(f"the run starts on {start}, after the aggregation's first year; it must start on or before {year}-12-31")
+    if end < f"{year}-12-30":
+        problems.append(f"the run ends on {end}, before that year is complete; it must end on or after {year}-12-31")
+    if problems:
+        raise OpenghmError(
+            f"This init aggregates over multi-year periods starting in {year} "
+            f"(TA_multi_year_start {year}, TA_multi_year_timestep {step}), but "
+            + " and ".join(problems)
+            + ". WBM would stop at start-up with 'Aggregation multi-year start is outside of the run dates'."
+        )
+
+
 def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) -> str:
     """Normalize output paths to absolute container paths, then apply overrides.
 
@@ -383,6 +445,9 @@ def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) ->
         out = _set_perl_key(out, "End", opts.spinup_end, quote=True, required=True, label="--spinup-end")
     if opts.spinup_loops is not None:
         out = _set_perl_key(out, "Loops", opts.spinup_loops, quote=False, required=True, label="--spinup-loops")
+    # A published run is left as it was published; a changed period is checked.
+    if opts.run_start is not None or opts.run_end is not None:
+        _check_run_dates_vs_aggregation(out)
     return out
 
 

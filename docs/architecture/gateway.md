@@ -202,6 +202,28 @@ start, and Review lists it under "Needs attention", which keeps Submit off.
 `422 run_start_not_aligned` for the same start. A rule that cannot be read
 blocks nothing, and the toolkit's own check stays as the last line.
 
+The same init also limits the run's *end*. With `TA_multi_year_start` and
+`TA_multi_year_timestep` both set in its `PostProcessing` block, WBM stops at
+start-up unless that year lies inside the run: `post_processing` in
+`images/wbm-tools-lite/wbm/model/RIMS/WBM.pm` (line 4279) dies with "Aggregation
+multi-year start is outside of the run dates..." when the year is before the
+run's first year or after its last complete year, whatever the block's `Run`
+flag (Anvil job 21016198, `Run => 0`, ran the v2.0.0 snapshot from 2000-01-01 to
+2000-12-31 and died of it; the snapshot's aggregation starts in 2001). So a run
+must start in or before that year and end on or after its December 31. Snapshot
+metadata does not hold `PostProcessing`, so the gateway reads the year from the
+same init read, once per snapshot id, and sends it as `aggregationStartYear` on
+`GET /api/v1/repository/datasets/{id}` (`null` when none is set or the init
+could not be read). The browser mirrors the rule in
+`web-gateway/frontend/lib/jobs/aggregation-window.ts`, says it on the Start or
+End field with the allowed range, and Review lists it. The save is not refused:
+an edit stores whatever the person is part-way through typing. A date equal to
+the snapshot's own is not held to it (the published run passed), and December 30
+is let through, as a 360-day calendar's last day that the init does not
+announce. `openghm sim run` and `sim submit` check the same rule on a
+`--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
+stop before staging.
+
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
 inherits whichever model input its base snapshot's own `uses.modelInput.id`
@@ -331,7 +353,8 @@ that; the browser downloads from Anvil S3 directly, bypassing the API. The
 config file states this in a comment, and there is no S3 client in
 `requirements.txt` to contradict it. The one object it reads itself is a
 snapshot's init, with a plain `httpx` GET of the public URL
-(`web-gateway/backend/app/services/run_start.py`), to learn where a run may start.
+(`web-gateway/backend/app/services/run_start.py`), to learn what the init asks of
+a run's dates.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
@@ -418,6 +441,10 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 - A start date the snapshot's model cannot start a run on: 422
   `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
   the snapshot's period.
+- Run dates outside the snapshot's multi-year aggregation window (above): 422
+  `run_dates_outside_aggregation`, with `fields` (`start`, `end` or both),
+  `aggregation_start_year`, `latest_start` and `earliest_end`, and a message that
+  names the allowed range. A window that cannot be read blocks nothing.
 - A draft with no walltime of its own whose snapshot's recommended walltime is
   by itself over 96 h, which no single job can run: 422 `walltime_over_limit`,
   before any SSH or SLURM call. Its message gives the reference run's time and
