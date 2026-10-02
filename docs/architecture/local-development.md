@@ -82,6 +82,19 @@ backend never lets submit. A volume seeded before the ids changed keeps the old
 ones until `just migrate-seed-users` is run once against it; it moves the
 accounts, their jobs and their catalogue items, and signs them out.
 
+**Submitting to Anvil from the local stack.** A submit is a real SLURM job on
+Anvil as `x-openghm`, so it needs the gateway's SSH key and the toolkit path
+(`ANVIL_OPENGHM_HOME`). When `~/.ssh/openghm_anvil_ed25519` exists on your
+machine, `just` adds `deploy/local/docker-compose.anvil.yml` to every compose
+call: it sets the non-secret values the dev cluster uses and mounts that key
+read-only where `web-gateway/backend/.env` says to find it (`ANVIL_SSH_*`
+still come from `.env`). Without the key nothing changes, and a submit answers
+`503 anvil_not_configured`. Calling `docker compose -f
+deploy/local/docker-compose.yml` by hand leaves the file out and recreates the
+backend without it: every log read then fails with "Anvil could not be reached".
+The run is charged to the shared allocation and writes under the same scratch
+directories as the dev cluster, so keep local test runs short.
+
 ## Why `just -n` over every recipe, and not a grep
 
 Ten recipes call `docker compose`, and **six of them name no path at all** —

@@ -29,7 +29,11 @@ import? 'ops/justfile'
 # It is defined ONCE, here: `just` rejects a second definition in an imported
 # file with "Variable `namespace` has multiple definitions".
 namespace := "openghm"
-compose := "docker compose -f deploy/local/docker-compose.yml"
+# The local backend can submit real jobs to Anvil when this machine holds the
+# gateway's SSH key: then deploy/local/docker-compose.anvil.yml (the toolkit
+# path, the account, and the key mounted read-only) joins every compose call.
+anvil_key := env_var("HOME") + "/.ssh/openghm_anvil_ed25519"
+compose := "docker compose -f deploy/local/docker-compose.yml" + if path_exists(anvil_key) == "true" { " -f deploy/local/docker-compose.anvil.yml" } else { "" }
 
 default:
     @just --list

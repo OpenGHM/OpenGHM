@@ -1,0 +1,21 @@
+# Lets the local backend submit real jobs to Anvil. `just` adds this file to
+# every compose call when the key below exists on this machine (see `compose`
+# in the justfile), so a restart or `just run` does not drop it.
+#
+# The values are the non-secret ones the dev cluster sets
+# (ops/k8s/overlays/dev/backend-env.yml): a local submit is a real SLURM job as
+# `x-openghm`, charged to the same allocation, and it writes under the same
+# scratch directories (every run has its own random sim id). The SSH username
+# and the key path still come from web-gateway/backend/.env; this file only
+# mounts the key at the path that setting points to.
+services:
+  backend:
+    environment:
+      ANVIL_ACCOUNT: ees260008
+      ANVIL_OPENGHM_HOME: /home/x-openghm/apps/openghm/8c3077b
+      ANVIL_CACHE_DIR: /anvil/scratch/x-openghm/cache
+      ANVIL_FETCH_LOCK: /home/x-openghm/apps/openghm/locks/fetch.lock
+      ANVIL_OUTPUT_BASE: /anvil/scratch/x-openghm/simulations
+      ANVIL_REMOTE_BASE_DIR: /anvil/scratch/x-openghm/gateway
+    volumes:
+      - ${HOME}/.ssh/openghm_anvil_ed25519:/root/.ssh/openghm_anvil_ed25519:ro
