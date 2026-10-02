@@ -39,8 +39,8 @@ no endpoint uses it — the catalogue is seed data
 ([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every run spends
 the one shared SLURM allocation, so the routes that create or submit a job do
 not trust the token. They read the user's document at call time, through
-`require_active_user` (a draft) and `require_submitter` (a submit) in
-`authz.py`.
+`require_active_user` (a draft: derive and duplicate) and `require_submitter`
+(a submit) in `authz.py`.
 
 - **A submit needs:**
   - `is_active` and `email_verified`;

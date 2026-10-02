@@ -297,14 +297,18 @@ class SimulationDeriveRequest(BaseModel):
 
 class SimulationUpdateRequest(BaseModel):
     """PATCH /jobs/{job_id} body. Every field is optional and only the ones
-    supplied are changed — a "save" button posting the editor's current
-    state, not a full replacement. Refused once the simulation has moved
-    past `DRAFT` (app/api/v1/jobs.py)."""
+    supplied are changed — an auto-save posting what changed, not a full
+    replacement. Refused once the simulation has moved past `DRAFT`
+    (app/api/v1/jobs.py)."""
 
     model_config = {"protected_namespaces": ()}
 
     slug: str | None = None
+    #: Merged into the stored block key by key: a key sent replaces that key, a
+    #: key sent as `null` removes it, a key left out stays. `null` for the whole
+    #: block clears it.
     about: PartialAbout | None = None
+    #: Replaces the stored parameters whole; it cannot be `null`.
     parameters: JobParameters | None = None
     #: Cores and walltime to ask SLURM for. Only the fields sent change;
     #: `null` goes back to the snapshot's recommended compute.
@@ -315,6 +319,14 @@ class SimulationUpdateRequest(BaseModel):
     #: PATCH body changes anything, so omitting this key leaves whatever
     #: was there untouched, same as every other field here.
     model_input_id: str | None = None
+
+    @field_validator("parameters")
+    @classmethod
+    def _v_parameters(cls, v: JobParameters | None) -> JobParameters | None:
+        # Runs only when the key is sent, so omitting it is still allowed.
+        if v is None:
+            raise ValueError("parameters cannot be null; leave it out to keep it as it is")
+        return v
 
 
 class OutputFile(BaseModel):

@@ -95,7 +95,7 @@ moved. The record of what we believed, and when, is the whole value.
 
 Write one when a choice will outlive the mission making it. A decision buried
 in a mission file is invisible six months later. Numbers are never reused: 0011
-and 0012 were folded into 0010 and the next ADR is 0017.
+and 0012 were folded into 0010.
 
 | # | Decision | Status |
 |---|---|---|
@@ -115,6 +115,16 @@ and 0012 were folded into 0010 and the next ADR is 0017.
 | [0016](decisions/0016-split-public-and-ops-repositories.md) | The product is public; this instance's deployment is a separate private repository | accepted |
 | [0017](decisions/0017-the-spec-is-the-source-of-truth.md) | The snapshot spec is the source of truth; the gateway stores its shape | accepted |
 | [0018](decisions/0018-shared-definitions-and-no-renderings.md) | Specs share definitions from `schemas/common/`, and ship no generated renderings | accepted — amends 0006 |
+| [0019](decisions/0019-publishing-infrastructure-is-a-single-instance.md) | Publishing infrastructure is a single instance, in prod | accepted |
+| [0020](decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md) | A live schema viewer is not a generated rendering | superseded by 0021 |
+| [0021](decisions/0021-generate-schema-docs-with-json-schema-for-humans.md) | Schema docs are generated with json-schema-for-humans | accepted |
+| [0022](decisions/0022-file-modes-are-object-metadata.md) | A published file's mode is recorded on its own object | accepted |
+| [0023](decisions/0023-simulation-output-stays-on-scratch.md) | A simulation's output stays on Anvil scratch until it is published | accepted |
+| [0024](decisions/0024-who-may-run-a-simulation.md) | Only a user an administrator has permitted runs a simulation | accepted |
+| [0025](decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md) | A gateway job is a slurmly batch job whose body runs the pinned toolkit | accepted |
+| [0026](decisions/0026-how-a-job-verdict-is-reached.md) | How a job's verdict is reached, and how long its files live | accepted |
+| [0027](decisions/0027-live-updates-are-polled.md) | A job's live state is polled and shared, and its logs are read by byte offset | accepted |
+| [0028](decisions/0028-a-new-simulation-is-a-saved-draft-from-its-first-step.md) | A new simulation is a saved draft from its first step, and its edits auto-save | accepted |
 
 ## Missions
 

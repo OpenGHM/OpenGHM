@@ -80,6 +80,8 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
     "stats": ("GET", "/api/v1/jobs/stats", None, None),
     "submit": ("POST", "/api/v1/jobs/{id}/submit", None, "DRAFT"),
     "derive": ("POST", "/api/v1/jobs/derive/ds-1", {}, None),
+    # The owner copies a simulation of any status; the copy is a new draft.
+    "duplicate": ("POST", "/api/v1/jobs/{id}/duplicate", None, "RUNNING"),
     "get": ("GET", "/api/v1/jobs/{id}", None, "RUNNING"),
     "status": ("GET", "/api/v1/jobs/{id}/status", None, "RUNNING"),
     "logs": ("GET", "/api/v1/jobs/{id}/logs?stream=stdout", None, "RUNNING"),
@@ -100,18 +102,20 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
 # - `submit` is the gate of ADR 0024, then the owner alone (404 for anyone
 #   else, staff and admin included: no "any" permission submits another
 #   user's draft); `derive` (a draft) only needs an active account, so an
-#   unverified, unpermitted or mock user may still prepare one.
+#   unverified, unpermitted or mock user may still prepare one. `duplicate`
+#   has derive's gate, then the owner alone (404 for anyone else).
 NOT_OWNER = {"list": 200, "stats": 200, "get": 404, "status": 404, "logs": 404,
-             "cancel": 404, "patch": 404, "delete": 404}
+             "cancel": 404, "patch": 404, "delete": 404, "duplicate": 404}
 EXPECTED: dict[str, dict[str, int]] = {
     "anonymous": {r: 401 for r in ROUTES},
     "guest": {r: 403 for r in ROUTES},
     "unverified": {**NOT_OWNER, "submit": 403, "derive": 201},
-    "deactivated": {**NOT_OWNER, "submit": 403, "derive": 403},
+    "deactivated": {**NOT_OWNER, "submit": 403, "derive": 403, "duplicate": 403},
     "not_permitted": {**NOT_OWNER, "submit": 403, "derive": 201},
     "permitted_other": {**NOT_OWNER, "submit": 404, "derive": 201},
-    "owner": {"list": 200, "stats": 200, "submit": 202, "derive": 201, "get": 200,
-              "status": 200, "logs": 200, "cancel": 200, "patch": 200, "delete": 204},
+    "owner": {"list": 200, "stats": 200, "submit": 202, "derive": 201, "duplicate": 201,
+              "get": 200, "status": 200, "logs": 200, "cancel": 200, "patch": 200,
+              "delete": 204},
     "staff": {**NOT_OWNER, "get": 200, "status": 200, "logs": 200, "cancel": 200,
               "submit": 404, "derive": 201},
     "admin": {**NOT_OWNER, "get": 200, "status": 200, "logs": 200, "cancel": 200,
@@ -153,9 +157,10 @@ def test_non_owner_404_is_the_same_answer_as_a_missing_id(client, db):
         real = client.get(f"/api/v1/jobs/job-1{suffix}", headers=headers)
         missing = client.get(f"/api/v1/jobs/nope{suffix}", headers=headers)
         assert (real.status_code, real.json()) == (missing.status_code, missing.json())
-    real = client.post("/api/v1/jobs/job-1/cancel", headers=headers)
-    missing = client.post("/api/v1/jobs/nope/cancel", headers=headers)
-    assert (real.status_code, real.json()) == (missing.status_code, missing.json())
+    for suffix in ("/cancel", "/duplicate"):
+        real = client.post(f"/api/v1/jobs/job-1{suffix}", headers=headers)
+        missing = client.post(f"/api/v1/jobs/nope{suffix}", headers=headers)
+        assert (real.status_code, real.json()) == (missing.status_code, missing.json())
 
 
 def test_non_owner_cancel_leaves_the_job_running(client, db):

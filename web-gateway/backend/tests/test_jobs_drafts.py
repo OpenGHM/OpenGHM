@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -27,6 +28,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1.jobs import (
     _can_access_job,
     _derive_simulation_parameters,
+    _duplicate_document,
     _is_editable,
     _is_owner,
     _job_scope_query,
@@ -282,8 +284,6 @@ def test_derive_does_not_modify_the_source_document():
 
 
 def _draft_doc(job_id: str, user: TokenPayload = ALICE) -> dict:
-    from datetime import datetime, timezone
-
     return _new_draft_document(
         job_id=job_id,
         dataset_id="dataset-1",
@@ -322,6 +322,132 @@ def test_draft_document_carries_updated_at():
     not just fall back to created_at."""
     doc = _draft_doc("job-1")
     assert doc["updated_at"] == doc["created_at"]
+
+
+# ---- deriving through the route: the answer and the audit event -----------
+
+
+def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    response = client.post("/api/v1/jobs/derive/ds-1", json={}, headers=token_for("alice"))
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "DRAFT" and body["sim_id"] == ""
+    assert body["user_id"] == "alice"
+    assert body["dataset_id"] == "ds-1" and body["dataset_title"] == "Dataset one"
+    assert body["parameters"] == {
+        "temporal_range_start": "2000-01-01",
+        "temporal_range_end": "2000-12-31",
+        "spatial_domain": None,
+        "variables": ["runoff", "discharge"],
+        "custom_params": None,
+    }
+    assert body["slurm_config"] == {"cores": None, "walltime": None}
+    assert body["about"] is None and body["model_input_id"] is None
+    assert body["updated_at"] == body["created_at"]
+
+    assert "sim_id" not in db.jobs.docs[body["id"]]
+    (event,) = [e for e in db.audit_events.docs.values() if e["action"] == "simulation_derived"]
+    assert event["category"] == "job" and event["actor_id"] == "alice"
+    assert event["target_id"] == body["id"]
+    assert event["detail"] == {"dataset_id": "ds-1"}
+
+
+# ---- _duplicate_document: an allowlist, not a copy of the source -----------
+
+#: Every field a run, a verdict, a cancel or a submit adds to a job, plus one
+#: no code knows about yet. None of them may reach a copy.
+_RUN_FIELDS = {
+    "sim_id": "sim-20260930-0a1b2c",
+    "status": "COMPLETED",
+    "status_reason": "r",
+    "slurm_job_id": "1",
+    "slurm_job_name": "sim-x",
+    "internal_job_id": "slurmly-1",
+    "remote_job_dir": "/d",
+    "remote_script_path": "/d/run.sh",
+    "stdout_path": "/d/o",
+    "stderr_path": "/d/e",
+    "slurmly_submitted_at": "2026-09-30T00:00:00Z",
+    "submitted_at": "t",
+    "toolkit": {"home": "/h", "commit": "c"},
+    "work_dir": "/w",
+    "last_submit_error": {"code": "c", "message": "m", "at": "t"},
+    "output_s3_key": "k",
+    "slurm_state": "COMPLETED",
+    "slurm_exit_code": "0:0",
+    "slurm_start": "t",
+    "slurm_end": "t",
+    "failure": {"cause": "wbm_error", "message": "m"},
+    "outcome": {"ok": True},
+    "cancel_requested_at": "t",
+    "cancel_requested_by": "u",
+    "cancel_requested_by_email": "u@example.org",
+    "missing_since": "t",
+    "files": "present",
+    "files_checked_at": "t",
+    "wbm_log_path": "p",
+    "orphan_sim_ids": ["sim-20260930-ffffff"],
+    "started_at": "t",
+    "completed_at": "t",
+    "a_field_added_later": "x",
+}
+
+
+def _source_with_a_run() -> dict:
+    return {
+        "_id": "source",
+        "user_id": "bob",
+        "user_email": "bob@example.org",
+        "dataset_id": "dataset-1",
+        "dataset_title": "Stale title",
+        "slug": "slug",
+        "about": {"name": "Basin", "keywords": ["k"]},
+        "model_input_id": "mi-1",
+        "parameters": {
+            "temporal_range_start": "2001-01-01",
+            "temporal_range_end": "2001-12-31",
+            "variables": ["runoff"],
+        },
+        "slurm_config": {"cores": 4, "walltime": "01:00:00"},
+        "created_at": "old",
+        "updated_at": "old",
+        **_RUN_FIELDS,
+    }
+
+
+def test_duplicate_document_has_exactly_the_keys_of_a_fresh_draft():
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    copy_ = _duplicate_document(
+        _source_with_a_run(), job_id="new", user=ALICE, now=now, dataset_title="Fresh title"
+    )
+    assert set(copy_) == set(_draft_doc("x"))
+    assert copy_["_id"] == "new" and copy_["status"] == "DRAFT"
+    assert (copy_["user_id"], copy_["user_email"]) == ("alice", "u@example.org")
+    assert copy_["created_at"] == copy_["updated_at"] == now
+    assert copy_["dataset_title"] == "Fresh title"
+    assert "sim_id" not in copy_
+    for field in _RUN_FIELDS:
+        assert copy_.get(field) in (None, "", [], "DRAFT"), field
+    # What a copy does take.
+    assert copy_["dataset_id"] == "dataset-1" and copy_["slug"] == "slug"
+    assert copy_["about"] == {"name": "Basin (copy)", "keywords": ["k"]}
+    assert copy_["model_input_id"] == "mi-1"
+    assert copy_["parameters"]["variables"] == ["runoff"]
+    assert copy_["slurm_config"] == {"cores": 4, "walltime": "01:00:00"}
+
+
+def test_duplicate_document_does_not_share_or_change_the_sources_about():
+    source = _source_with_a_run()
+    copy_ = _duplicate_document(
+        source, job_id="new", user=ALICE, now=datetime.now(timezone.utc), dataset_title="t"
+    )
+    assert source["about"] == {"name": "Basin", "keywords": ["k"]}
+    copy_["about"]["keywords"].append("x")
+    assert source["about"]["keywords"] == ["k"]
 
 
 # ---- _resolve_model_input: the three states (T1) --------------------------

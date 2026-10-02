@@ -1,6 +1,7 @@
 """Jobs API — drafts, submit, list, status, cancel, logs."""
 
 import asyncio
+import copy
 import logging
 import math
 import posixpath
@@ -12,6 +13,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from slurmly.exceptions import (
     InvalidJobSpec,
     SbatchError,
@@ -37,6 +39,7 @@ from app.models.job import (
     JobStatusResponse,
     LogStream,
     ModelInputState,
+    PartialAbout,
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
@@ -229,6 +232,8 @@ def _new_draft_document(
     user: TokenPayload,
     now: datetime,
     model_input_id: str | None = None,
+    about: dict | None = None,
+    slurm_config: SlurmConfig | None = None,
 ) -> dict:
     """Build a fresh draft's Mongo document. Pure — no Mongo, no request —
     so the property that matters is directly testable: `sim_id` is a real
@@ -246,14 +251,14 @@ def _new_draft_document(
         "dataset_id": dataset_id,
         "dataset_title": dataset_title,
         "slug": slug,
-        "about": None,
+        "about": about,
         "model_input_id": model_input_id,
         "slurm_job_id": None,
         "slurm_job_name": "",
         "status": "DRAFT",
         "status_reason": None,
         "parameters": parameters.model_dump(),
-        "slurm_config": SlurmConfig().model_dump(),
+        "slurm_config": (slurm_config or SlurmConfig()).model_dump(),
         "internal_job_id": None,
         "remote_job_dir": None,
         "remote_script_path": None,
@@ -267,6 +272,39 @@ def _new_draft_document(
         "completed_at": None,
         "updated_at": now,
     }
+
+
+def _duplicate_document(
+    source: dict,
+    *,
+    job_id: str,
+    user: TokenPayload,
+    now: datetime,
+    dataset_title: str,
+) -> dict:
+    """A new draft that starts with `source`'s settings. Pure. It is built by
+    `_new_draft_document` from an explicit list of what a copy takes (the
+    snapshot, slug, about, model input, parameters, compute), never from the
+    source's own document: every SLURM, verdict, cancel and files field, `sim_id`
+    (the sparse unique index would refuse a second one) and `orphan_sim_ids` (the
+    sweep runs scancel on them) belong to the run that was, and a field added to a
+    job later is left out of a copy until someone decides it belongs in one.
+    `dataset_title` is read from the snapshot again by the caller, not copied."""
+    about = copy.deepcopy(source.get("about"))
+    if about and about.get("name"):
+        about["name"] = f"{about['name']} (copy)"
+    return _new_draft_document(
+        job_id=job_id,
+        dataset_id=source["dataset_id"],
+        dataset_title=dataset_title,
+        parameters=JobParameters.model_validate(source["parameters"]),
+        slug=source.get("slug"),
+        user=user,
+        now=now,
+        model_input_id=source.get("model_input_id"),
+        about=about,
+        slurm_config=SlurmConfig(**(source.get("slurm_config") or {})),
+    )
 
 
 def _derive_simulation_parameters(dataset_doc: dict) -> JobParameters:
@@ -299,12 +337,12 @@ def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
 # POST /jobs/derive/{dataset_id}  —  New simulation from a snapshot
 # ---------------------------------------------------------------------------
 #
-# A simulation's only creation path in this mission (spec.md, "Out of
-# scope": starting one from scratch needs a model-input catalogue the
-# gateway does not have yet). It is created as a draft — no Slurm
-# submission happens here — inheriting its dataset, title and parameters
-# from the published catalogue entry named in the path. `datasets` is only
-# ever read by this route, never written to: the source snapshot is
+# One of the two ways a simulation is created (the other is the duplicate
+# route below; spec.md, "Out of scope": starting one from scratch needs a
+# model-input catalogue the gateway does not have yet). It is created as a
+# draft — no Slurm submission happens here — inheriting its dataset, title and
+# parameters from the published catalogue entry named in the path. `datasets`
+# is only ever read by this route, never written to: the source snapshot is
 # untouched by deriving from it.
 
 
@@ -359,6 +397,59 @@ async def derive_simulation(
 
 
 # ---------------------------------------------------------------------------
+# POST /jobs/{job_id}/duplicate  —  New draft from a simulation of one's own
+# ---------------------------------------------------------------------------
+#
+# The second creation path: a new draft that starts from the settings of one of
+# the caller's own simulations, whatever its status. Owner only, like edit and
+# delete; the copy is the caller's, and the source is read, never written.
+
+
+@router.post(
+    "/{job_id}/duplicate",
+    response_model=JobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_simulation(
+    job_id: str,
+    user: TokenPayload = Depends(require_active_user),
+):
+    db = get_db()
+    source = await _get_job_for(job_id, user, None)
+    envelope = await db.datasets.find_one({"_id": source["dataset_id"]})
+    if envelope is None:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "snapshot_not_found",
+            "The model snapshot this simulation is based on is no longer in the "
+            "repository, so it can't be copied.",
+        )
+
+    now = datetime.now(timezone.utc)
+    new_id = str(uuid.uuid4())
+    doc = _duplicate_document(
+        source,
+        job_id=new_id,
+        user=user,
+        now=now,
+        dataset_title=envelope["document"].get("about", {}).get("name", source["dataset_id"]),
+    )
+    await db.jobs.insert_one(doc)
+
+    await log_event(
+        "simulation_duplicated",
+        actor_id=user.sub,
+        actor_email=user.email,
+        target_id=new_id,
+        category=AuditCategory.JOB,
+        detail={"source_id": job_id, "dataset_id": source["dataset_id"]},
+    )
+
+    effective = await _resolve_effective_model_input(doc)
+    return _doc_to_response(doc, effective=effective)
+
+
+# ---------------------------------------------------------------------------
 # PATCH /jobs/{job_id}  —  Edit while draft
 # ---------------------------------------------------------------------------
 
@@ -376,24 +467,41 @@ async def update_simulation(
     # same 404 as for a missing id.
     doc = await _get_job_for(job_id, user, None)
     if not _is_editable(doc):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot edit a simulation in state {doc['status']}",
-        )
+        raise _not_a_draft(doc["status"])
 
     changes = body.model_dump(exclude_unset=True, mode="json")
     if not changes:
         effective = await _resolve_effective_model_input(doc)
         return _doc_to_response(doc, effective=effective)
 
-    if "parameters" in changes:
-        envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
-        if envelope is not None:
-            await _refuse_unaligned_start(
-                doc["dataset_id"],
-                envelope["document"],
-                changes["parameters"]["temporal_range_start"],
+    if "about" in changes and changes["about"] is not None:
+        # Key by key: what the client sends replaces those keys and no others,
+        # so a client that edits only `name` leaves `creator` and `keywords`
+        # as they were. `PartialAbout` makes every key nullable, and the dump
+        # below drops nulls, so a stored `about` never holds one; a null key in
+        # the request therefore means "remove this key" and nothing else.
+        # `about: null` (the whole block) is not merged and clears it.
+        merged = {**(doc.get("about") or {}), **changes["about"]}
+        merged = {key: value for key, value in merged.items() if value is not None}
+        try:
+            validated = PartialAbout.model_validate(merged)
+        except ValidationError as exc:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "invalid_about",
+                f"The about block is not valid once merged: {exc.errors()[0]['msg']}",
             )
+        changes["about"] = validated.model_dump(exclude_none=True, mode="json") or None
+
+    if "parameters" in changes:
+        # Only a start that changes is checked: a draft whose stored start the
+        # rule now refuses (saved before the rule, or the snapshot's own) can
+        # still have its end date or variables edited. Submit checks every start.
+        start = changes["parameters"]["temporal_range_start"]
+        stored_start = (doc.get("parameters") or {}).get("temporal_range_start")
+        envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+        if envelope is not None and start != stored_start:
+            await _refuse_unaligned_start(doc["dataset_id"], envelope["document"], start)
 
     if "slurm_config" in changes:
         # Only the fields the client sent change; `null` goes back to the
@@ -405,8 +513,14 @@ async def update_simulation(
         ).model_dump()
 
     changes["updated_at"] = datetime.now(timezone.utc)
-    await db.jobs.update_one({"_id": job_id}, {"$set": changes})
+    # The status is part of the filter: a submit or a delete between the read
+    # above and here must not have an edit written under it.
+    written = await db.jobs.update_one({"_id": job_id, "status": "DRAFT"}, {"$set": changes})
     updated = await db.jobs.find_one({"_id": job_id})
+    if written.matched_count == 0:
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        raise _not_a_draft(updated["status"])
     effective = await _resolve_effective_model_input(updated)
     return _doc_to_response(updated, effective=effective)
 
@@ -428,6 +542,14 @@ def _error(http_status: int, code: str, message: str, **extra) -> HTTPException:
     same shape `app.core.authz` refuses with."""
     return HTTPException(
         status_code=http_status, detail={"code": code, "message": message, **extra}
+    )
+
+
+def _not_a_draft(current: str) -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "not_a_draft",
+        f"Only a draft can be edited; this simulation is {current}.",
     )
 
 

@@ -299,6 +299,35 @@ def test_a_patch_that_does_not_touch_the_parameters_reads_no_init(client, db, dr
     assert reads == []
 
 
+def test_an_unchanged_start_the_rule_forbids_does_not_block_another_edit(client, db, draft, reads):
+    """A draft saved before the rule, or one the snapshot itself started off
+    wrong, keeps its start; only a start that changes is checked."""
+    db.jobs.docs["job-1"]["parameters"]["temporal_range_start"] = "2000-03-01"
+    r = client.patch(
+        "/api/v1/jobs/job-1",
+        json={"parameters": _params("2000-03-01", "2000-10-31")},
+        headers=HEADERS,
+    )
+    assert r.status_code == 200
+    assert db.jobs.docs["job-1"]["parameters"]["temporal_range_end"] == "2000-10-31"
+    assert reads == []  # not even the init was read
+    # Changing it to another forbidden start is still refused, and a submit
+    # still checks whatever is stored.
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2000-04-01")}, headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "run_start_not_aligned"
+    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "run_start_not_aligned"
+
+
+def test_a_patch_is_checked_when_the_draft_has_no_stored_parameters(client, db, draft, reads):
+    del db.jobs.docs["job-1"]["parameters"]
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2000-03-01")}, headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "run_start_not_aligned"
+
+
 def test_an_unreadable_rule_blocks_nothing_on_a_patch(client, db, draft):
     # conftest's no-network read: the rule is unknown, the save goes through.
     r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params("2000-03-01")}, headers=HEADERS)

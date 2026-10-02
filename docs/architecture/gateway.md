@@ -153,14 +153,28 @@ this write path replaced it.
 
 A `jobs` document is a **simulation**: mutable while its `status` is `DRAFT`,
 read-only from the moment it is submitted (mission `2026-09-20-simulations`,
-private). `POST /api/v1/jobs/derive/{dataset_id}` creates a draft pre-filled
-from a published snapshot's parameters — the only creation path, since
-starting one from nothing would need a model-input catalogue the gateway
-does not have yet. `PATCH /api/v1/jobs/{id}` refuses with `409` once the
-status has moved past `DRAFT`, so a finished run's own record cannot be
-rewritten under it. `DELETE` removes a draft, or a finished job together with
-its files on Anvil (§5); an active job gets `409 job_active`. A simulation and a snapshot are deliberately not the same
-document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
+private). Two routes create one, both as a draft, both for an active account
+that is not a guest (`require_active_user`): `POST /api/v1/jobs/derive/{dataset_id}`
+pre-fills it from a published snapshot's parameters, and
+`POST /api/v1/jobs/{id}/duplicate` copies the settings of one of the caller's
+own simulations, whatever its status (`422 snapshot_not_found` when its snapshot
+has left the repository). Neither starts one from nothing, which would need a
+model-input catalogue the gateway does not have yet. A copy takes the snapshot,
+slug, `about` (its name gets " (copy)"), model input, parameters and compute,
+and nothing of the run.
+
+`PATCH /api/v1/jobs/{id}` writes only while `status` is `DRAFT`: the update's
+own filter carries the status, so once it has moved past `DRAFT`, or a submit
+lands between the read and the write, the answer is `409 not_a_draft` and a
+finished run's own record cannot be rewritten. `about` is merged key by key (a
+key sent as `null` is removed, `about: null` clears the block), `parameters`
+replaces the stored object and cannot be `null`, and `slurm_config` changes the
+fields sent. A start date is checked (below) only when it differs from the
+stored one. An edit writes no audit event.
+
+`DELETE` removes a draft, or a finished job together with its files on Anvil
+(§5); an active job gets `409 job_active`. A simulation and a snapshot are
+deliberately not the same document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
 and `slurmJobId`, none of which a draft can honestly carry, and a
 finished simulation is not itself in `datasets` until someone publishes it —
 a step that does not exist yet ([open items
@@ -181,9 +195,10 @@ result as `runStartAlignment` (`year`, `month`, `none` for `File_Size 'day'`,
 another value, or no `File_Size` beside a `Time_Series` key, or `null` when the
 init could not be read). The wizard's parameters step and the
 draft editor say the rule beside the Start date, flag a start that breaks it and
-offer the nearest valid one; `PATCH /jobs/{id}` and the submit answer `422
-run_start_not_aligned` for the same start. A rule that cannot be read blocks
-nothing, and the toolkit's own check stays as the last line.
+offer the nearest valid one; `PATCH /jobs/{id}` (when the start changes) and
+the submit (every start) answer `422 run_start_not_aligned` for the same start.
+A rule that cannot be read blocks nothing, and the toolkit's own check stays
+as the last line.
 
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
 mission `2026-09-21-choose-a-model-input`. Absent means the simulation
@@ -338,8 +353,9 @@ no job-output link to return.
 
 ### Jobs — SSH, and no queue
 
-A simulation is created as a DRAFT (`POST /jobs/derive/{dataset_id}`) and
-edited with PATCH, including its `slurm_config` (cores, walltime).
+A simulation is created as a DRAFT (`POST /jobs/derive/{dataset_id}` or
+`POST /jobs/{id}/duplicate`) and edited with PATCH, including its `slurm_config`
+(cores, walltime).
 `POST /jobs/{id}/submit` then **awaits the SLURM submission in the request**.
 There is no worker and no broker.
 `web-gateway/backend/app/services/slurm.py` holds one lazily created
@@ -489,12 +505,14 @@ staff read it at `GET /admin/audit-log`. Every event carries a category,
 because the two streams
 have nothing in common: `auth` is low-volume and security-relevant (sign-in
 success and failure, registration, password reset, role and status changes, SSO
-account creation and linking), `job` is operational (submission, cancellation,
-SLURM transitions).
+account creation and linking), `job` is operational (a draft created as
+`simulation_derived` or `simulation_duplicated`, submission, cancellation, SLURM
+transitions, deletion).
 
 Job-status events are written **only at genuine transitions**. The sweep runs
 on every background tick and every status-page load, so the audit call lives
 in `slurm._move`, after a conditional write that changed the status. A poll
 that finds nothing changed never reaches it. That placement is the only thing
 keeping the log from filling with polling noise — preserve it if that code is
-ever restructured. A delete writes `job_deleted` with the paths it removed.
+ever restructured. A delete writes `job_deleted` with the paths it removed. Editing a draft
+writes nothing.
