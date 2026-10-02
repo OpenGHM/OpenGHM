@@ -119,7 +119,7 @@ const blankToNull = (text: string): string | null => {
 /** `run_overrides` compares `parameters.variables` with the snapshot's as lists,
  *  so they are stored in the snapshot's order; names it does not list follow in
  *  the order they were given. Each name once. */
-function orderVariables(variables: readonly string[], order: readonly string[]): string[] {
+export function orderVariables(variables: readonly string[], order: readonly string[]): string[] {
   const chosen = new Set(variables);
   const known = order.filter((name) => chosen.has(name));
   const rest = variables.filter((name) => !order.includes(name));
