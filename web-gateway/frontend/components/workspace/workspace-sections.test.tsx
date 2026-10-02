@@ -1,0 +1,60 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { WorkspaceHero } from "@/components/workspace/workspace-hero";
+import { WorkspaceSections } from "@/components/workspace/workspace-sections";
+
+afterEach(cleanup);
+
+function links() {
+  return within(screen.getByRole("navigation", { name: "Workspace sections" })).getAllByRole("link");
+}
+
+describe("the Workspace section switch", () => {
+  it("is two links, Simulations then Published, to their pages", () => {
+    render(<WorkspaceSections active="simulations" />);
+    expect(links().map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Simulations", "/workspace"],
+      ["Published", "/workspace/published"],
+    ]);
+  });
+
+  it.each([
+    ["simulations", "Simulations"],
+    ["published", "Published"],
+  ] as const)("marks %s as the current page, and only that one", (section, label) => {
+    render(<WorkspaceSections active={section} />);
+    const current = links().filter((a) => a.getAttribute("aria-current") === "page");
+    expect(current.map((a) => a.textContent)).toEqual([label]);
+  });
+
+  it("keeps every target 40 px tall", () => {
+    render(<WorkspaceSections active="simulations" />);
+    for (const a of links()) expect(a.className).toContain("min-h-10");
+  });
+});
+
+describe("the Workspace hero", () => {
+  it("says what the Simulations section says today, with its action", () => {
+    render(<WorkspaceHero section="simulations" />);
+    expect(screen.getByText("Workspace · Private & unpublished")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "My Simulations" })).toBeTruthy();
+    expect(
+      screen.getByText("Working configurations only you can see. Nothing here is a published model snapshot.")
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "New Simulation" }).getAttribute("href")).toBe("/workspace/new");
+    expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Simulations");
+  });
+
+  it("says what the Published section says, with no action", () => {
+    render(<WorkspaceHero section="published" />);
+    expect(screen.getByText("Workspace · Public & immutable")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Published by me" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Model snapshots and model inputs you have published. A published artifact never changes; a correction is a new version."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "New Simulation" })).toBeNull();
+    expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Published");
+  });
+});

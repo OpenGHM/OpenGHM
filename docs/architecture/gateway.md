@@ -130,10 +130,13 @@ into the document rather than kept beside it would make that document fail
 its own spec — which is what happened before this mission, tolerated only
 because nobody wrote it down. `app.models.repository.build_envelope()` is
 the one place that assembles this shape; `from_metadata_json()` is the one
-place that reads it back out. Today every document is written
-`owner_user_id: null`, `visibility: "public"`, and no route filters on
-either — the fields exist so "my snapshots" and private snapshots have
-somewhere to go, not because anything reads them yet.
+place that reads it back out. `GET /api/v1/repository/mine` reads
+`owner_user_id`: it returns the snapshots and model inputs whose owner is the
+signed-in user, newest `registered_at` first, and it feeds the Workspace's
+Published section. Nothing filters on `visibility`. Every write path — the
+`POST` routes and `resync_published.py` — still writes `owner_user_id: null`
+(`resync_published.py` keeps an existing one), so nothing sets an owner
+except by hand until the publish path exists.
 
 `POST /api/v1/repository/datasets` is the write path; Mongo's unique `_id`
 rejects a repeat of the same snapshot with `409` rather than silently
@@ -292,6 +295,10 @@ do not take it.
 `GET /repository/datasets` and `GET /repository/model-inputs` stay as the
 separate, single-kind lists; the new-simulation snapshot picker still reads
 `/datasets`.
+
+`GET /repository/mine` (signed in) is the one catalogue read that needs a
+session: the same two item shapes, with `kind`, for what the caller owns. No
+paging, no facets.
 
 ## 5. The two paths that leave the cluster
 
@@ -469,7 +476,7 @@ assume. None of them is here:
 | MinIO | removed; see `ops/docs/reference/anvil-environment.md` (private) |
 | MongoDB Atlas | self-hosted, in-cluster |
 | Deck.gl / Plotly | not installed; Leaflet and two SVG components (§3) |
-| A `/catalog/search` endpoint | the routes are `/repository/catalogue` and, per kind, `/repository/datasets`, `/repository/model-inputs` |
+| A `/catalog/search` endpoint | the routes are `/repository/catalogue`, `/repository/mine` and, per kind, `/repository/datasets`, `/repository/model-inputs` |
 
 ## 7. Audit log
 

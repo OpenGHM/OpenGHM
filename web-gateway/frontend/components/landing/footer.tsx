@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { CurrentYear } from "./current-year";
 
 const PLATFORM_LINKS = [
   "Data Repository",
@@ -46,7 +47,7 @@ export function Footer() {
 
         <div className="border-t border-white/10 pt-8 text-center text-sm text-slate-500">
           <p>
-            &copy; 2025 OpenGHM Project. This material is based upon work
+            &copy; <CurrentYear /> OpenGHM Project. This material is based upon work
             supported by the{" "}
             <a
               href="https://www.nsf.gov/funding/opportunities/cssi-cyberinfrastructure-sustained-scientific-innovation"

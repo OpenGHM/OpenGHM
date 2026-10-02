@@ -26,7 +26,8 @@ genuinely computable from it and are never stored — see
 ``docs/reference/metadata-format.md#the-gateways-catalogue`` for why each one
 is here and not in the spec. The envelope's own fields
 (``owner_user_id``/``visibility``/``registered_at``) are not in this response
-either — nothing reads them yet (spec.md, out of scope: no behaviour change).
+either. Only ``GET /repository/mine`` reads one of them, ``owner_user_id``,
+to find what a user published (``docs/architecture/gateway.md`` §4).
 """
 
 from __future__ import annotations
@@ -208,6 +209,15 @@ class ModelInputCatalogueItem(ModelInputResponse):
 CatalogueItem = Annotated[
     SnapshotCatalogueItem | ModelInputCatalogueItem, Field(discriminator="kind")
 ]
+
+
+class MineResponse(BaseModel):
+    """``GET /repository/mine``: what the caller published, both kinds in one
+    list. No paging and no facets — a user publishes a handful of things."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CatalogueItem]
 
 
 class FacetOption(BaseModel):

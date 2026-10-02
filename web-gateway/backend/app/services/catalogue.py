@@ -10,8 +10,9 @@ spec examples (``tests/test_catalogue.py``). The semantics are written once, in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from math import ceil
-from typing import Callable
+from typing import Callable, TypeVar
 
 from app.models.repository import (
     CatalogueFacets,
@@ -24,6 +25,7 @@ from app.models.repository import (
 )
 
 Item = SnapshotCatalogueItem | ModelInputCatalogueItem
+T = TypeVar("T")
 Option = tuple[str, str]  # (value, label)
 
 KIND_LABELS: dict[str, str] = {"snapshot": "Model Snapshot", "model-input": "Model Input"}
@@ -245,6 +247,20 @@ def sort_catalogue(items: list[Item], sort: str, q: str | None = None) -> list[I
         if sort == "relevance" and q and q.strip():
             out.sort(key=lambda i: relevance_score(i, q), reverse=True)
     return out
+
+
+_NEVER = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def newest_registered_first(rows: list[tuple[T, dict]]) -> list[T]:
+    """The first element of each ``(x, envelope)`` pair, by the envelope's
+    ``registered_at`` descending, then ``_id``, so the order is total (a
+    snapshot and a model input sharing an id keep the order they came in).
+    Pure and not in-place; an envelope with no ``registered_at`` sorts last."""
+    out = sorted(rows, key=lambda r: r[1]["_id"])
+    out.sort(key=lambda r: r[1].get("registered_at") or _NEVER, reverse=True)
+    # reverse=True keeps equal elements in their (id-ascending) order.
+    return [x for x, _ in out]
 
 
 def paginate_catalogue(

@@ -16,6 +16,7 @@ from app.models.repository import (
     DatasetDetailResponse,
     DatasetResponse,
     CatalogueResponse,
+    MineResponse,
     ModelInputCatalogueItem,
     ModelInputLinks,
     ModelInputListResponse,
@@ -27,8 +28,9 @@ from app.models.repository import (
     model_input_links,
     snapshot_links,
 )
+from app.models.user import TokenPayload
 from app.services import run_start
-from app.services.catalogue import CatalogueQuery, build_catalogue
+from app.services.catalogue import CatalogueQuery, build_catalogue, newest_registered_first
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -164,6 +166,30 @@ async def list_catalogue(
         },
     )
     return build_catalogue(await _load_catalogue(), query, sort=sort, page=page, page_size=page_size)
+
+
+async def _load_owned(owner_user_id: str) -> list[SnapshotCatalogueItem | ModelInputCatalogueItem]:
+    """Every snapshot and model input whose envelope names this user as its
+    owner, newest registration first (ids break ties) across both kinds."""
+    db = get_db()
+    query = {"owner_user_id": owner_user_id}
+    datasets = await db["datasets"].find(query).to_list(length=None)
+    model_inputs = await db["model_inputs"].find(query).to_list(length=None)
+    return newest_registered_first(
+        [(SnapshotCatalogueItem.from_metadata_json(d), d) for d in datasets]
+        + [(ModelInputCatalogueItem.from_metadata_json(m), m) for m in model_inputs]
+    )
+
+
+@router.get("/mine", response_model=MineResponse)
+async def list_mine(
+    user: TokenPayload = Depends(require_permission(Permission.REPO_VIEW)),
+) -> MineResponse:
+    """What the signed-in user published: the snapshots and model inputs whose
+    envelope ``owner_user_id`` is theirs, in the catalogue's item shapes. Needs
+    a session, unlike the rest of the read routes. Nothing filters on
+    ``visibility``."""
+    return MineResponse(items=await _load_owned(user.sub))
 
 
 @router.get("/datasets/{dataset_id}")

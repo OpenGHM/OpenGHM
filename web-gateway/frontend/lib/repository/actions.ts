@@ -8,6 +8,7 @@ import {
   RepositoryListResponse,
   Dataset,
   FilterState,
+  MineResponse,
   ModelInput,
   ModelInputFilterState,
   ModelInputListResponse,
@@ -49,6 +50,18 @@ export async function fetchCatalogue(
   const response = await client.get<CatalogueResponse>("/api/v1/repository/catalogue", {
     params,
   });
+  return response.data;
+}
+
+/**
+ * Fetch what the signed-in user published — their snapshots and model inputs,
+ * newest registration first — for the Workspace's Published section. Unlike
+ * the other reads here it needs a session: a 401 is thrown as the Axios error
+ * it is, for the page to turn into a sign-in redirect.
+ */
+export async function fetchMine(): Promise<MineResponse> {
+  const client = await getApiClient();
+  const response = await client.get<MineResponse>("/api/v1/repository/mine");
   return response.data;
 }
 

@@ -1,7 +1,7 @@
 """In-memory stand-in for the Mongo collections the job and user routes
 touch, plus document and token builders for route-level tests.
 
-The fake covers exactly what the routes call — `find_one`, `find`, `insert_one`,
+The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`,
 `update_one` (`$set`, `$unset`, `$addToSet`, `$pull`), `delete_one`,
 `count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
@@ -83,6 +83,9 @@ class FakeCursor:
     def limit(self, n: int):
         self._docs = self._docs[:n]
         return self
+
+    async def to_list(self, length: int | None = None) -> list[dict]:
+        return list(self._docs if length is None else self._docs[:length])
 
     def __aiter__(self):
         async def gen():

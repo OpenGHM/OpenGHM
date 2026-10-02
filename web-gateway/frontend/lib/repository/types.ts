@@ -132,6 +132,11 @@ export interface CatalogueResponse {
   facets: CatalogueFacets;
 }
 
+/** `GET /repository/mine`: what the signed-in user published, newest first. No paging, no facets. */
+export interface MineResponse {
+  items: CatalogueItem[];
+}
+
 /**
  * The catalogue's filters. Each facet key holds the selected option `value`s
  * and is also the query-parameter name (repeated, one per value): within one

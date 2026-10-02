@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SimulationListSkeleton } from "@/components/workspace/simulation-list-skeleton";
 import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
 import { SimulationTable } from "@/components/workspace/simulation-table";
+import { WorkspaceHero } from "@/components/workspace/workspace-hero";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
 import { listHref, tabForStatus } from "@/lib/jobs/filters";
 import { AlertCircle, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
@@ -31,32 +32,7 @@ export default async function WorkspacePage({
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1">
-        {/* Hero */}
-        <div className="bg-gradient-to-br from-hero to-primary px-4 py-8 sm:px-6 sm:py-12 lg:px-10">
-          <div className="mx-auto max-w-[1024px]">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="mb-1 text-sm font-medium text-white/60 uppercase tracking-wider">
-                  Workspace &middot; Private &amp; unpublished
-                </p>
-                <h1 className="text-3xl font-bold text-white">My Simulations</h1>
-                <p className="mt-2 text-sm text-white/70">
-                  Working configurations only you can see. Nothing here is a
-                  published model snapshot.
-                </p>
-              </div>
-              <Button
-                asChild
-                className="min-h-10 w-fit shrink-0 bg-white text-primary hover:bg-white/90 font-semibold"
-              >
-                <Link href="/workspace/new">
-                  <Plus className="mr-1.5 size-4" />
-                  New Simulation
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
+        <WorkspaceHero section="simulations" />
 
         {/* Content */}
         <div className="bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">

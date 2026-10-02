@@ -114,6 +114,7 @@ describe("the header's current-page highlight", () => {
     ["/repository/abc", "Data Repository"],
     ["/workspace", "Workspace"],
     ["/workspace/new/pick", "Workspace"],
+    ["/workspace/published", "Workspace"],
     ["/", "Home"],
     ["/about", "About"],
   ])("lights only the right tab on %s", (path, label) => {

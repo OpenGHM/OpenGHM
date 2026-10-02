@@ -19,6 +19,9 @@ import {
 import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CoverageThumbnail } from "./coverage-thumbnail";
 
+/** The grid the cards sit in, wherever they are listed in the grid view. */
+export const CARD_GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
+
 /**
  * A card the whole surface of which is one link (see TitleLink). It is
  * `relative` for the link's overlay and the `group/card` the hover effects

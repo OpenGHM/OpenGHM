@@ -9,7 +9,7 @@ import type {
   CatalogueResponse,
 } from "@/lib/repository/types";
 import { ActiveFilterChips } from "./active-filter-chips";
-import { CatalogueCard, CatalogueCardSkeleton } from "./catalogue-card";
+import { CARD_GRID_CLASS, CatalogueCard, CatalogueCardSkeleton } from "./catalogue-card";
 import { CatalogueToolbar } from "./catalogue-toolbar";
 import { Pagination } from "./pagination";
 
@@ -17,7 +17,7 @@ const SKELETON_COUNT = 3;
 const GRID_SKELETON_COUNT = 6;
 
 const LIST_CLASS = "flex flex-col gap-3.5";
-const GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
+const GRID_CLASS = CARD_GRID_CLASS;
 
 function ResultCount({
   totalCount,
