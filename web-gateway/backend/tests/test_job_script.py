@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models.job import JobParameters, SpatialDomain
+from app.models.job import JobParameters, SlurmConfig, SpatialDomain
 from app.services import job_script
 from app.services.job_script import SubmitInputError, render_job_body
 
@@ -267,10 +267,53 @@ def test_a_non_time_is_refused():
         ("60", "1:30:00"),  # bare number: 60 minutes
         ("1-00:00:00", "36:00:00"),
         ("0:01", "0:02"),  # 1 s -> 1.5 s, rounded up
+        ("80:00:00", "96:00:00"),  # 120 h would be over the limit: capped
+        ("64:00:00", "96:00:00"),  # exactly the limit
+        ("111:30:00", "96:00:00"),  # the recommendation alone is over it
     ],
 )
-def test_headroom_is_half_again_in_slurms_format(recommended, with_headroom):
+def test_headroom_is_half_again_in_slurms_format_and_never_over_the_limit(
+    recommended, with_headroom
+):
     assert job_script.with_headroom(recommended) == with_headroom
+
+
+# The same numbers as `lib/jobs/compute.test.ts`: the two sides must agree.
+@pytest.mark.parametrize(
+    "recommended, over",
+    [
+        ("111:30:00", 111 * 3600 + 30 * 60),
+        ("96:00:01", 96 * 3600 + 1),
+        ("96:00:00", None),  # exactly the limit still fits
+        ("80:00:00", None),
+        ("4:30:00", None),
+        ("15:00", None),
+        ("not a time", None),  # `resolve_compute` reports that one
+    ],
+)
+def test_a_recommendation_over_the_limit_is_found_only_when_the_draft_sets_none(recommended, over):
+    snapshot = {"simulation": {"recommendedCompute": {"cores": 16, "walltime": recommended}}}
+    assert job_script.walltime_over_limit(SlurmConfig(), snapshot) == over
+    # A walltime the draft chose is its own business (the PATCH holds it to 96 h).
+    assert job_script.walltime_over_limit(SlurmConfig(walltime="02:00:00"), snapshot) is None
+
+
+def test_a_snapshot_without_a_recommendation_is_not_over_the_limit():
+    assert job_script.walltime_over_limit(SlurmConfig(), {"simulation": {}}) is None
+
+
+@pytest.mark.parametrize(
+    "seconds, text",
+    [
+        (111 * 3600 + 30 * 60, "111 h 30 min"),
+        (4 * 3600, "4 h"),
+        (22 * 60 + 30, "22 min 30 s"),
+        (15 * 60, "15 min"),
+        (45, "45 s"),
+    ],
+)
+def test_a_duration_is_written_in_hours_for_a_person(seconds, text):
+    assert job_script.describe_hours(seconds) == text
 
 
 # ---- what the toolkit cannot do yet -----------------------------------------

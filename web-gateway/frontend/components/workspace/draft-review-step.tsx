@@ -10,7 +10,12 @@ import { draftField } from "@/components/workspace/draft-field";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { ModelInputStatus } from "@/components/workspace/model-input-panel";
 import { SnapshotSummaryCard } from "@/components/workspace/snapshot-summary-card";
-import { describeSlurmTime, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
+import {
+  automaticWalltimeLabel,
+  describeSlurmTime,
+  effectiveCompute,
+  type Recommended,
+} from "@/lib/jobs/compute";
 import type { ModelInput } from "@/lib/repository/types";
 import type { DraftContext, DraftField, DraftLocal, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
@@ -270,7 +275,7 @@ export function DraftReviewStep({
               <SummaryRow label="Walltime">
                 {compute.walltime ? describeSlurmTime(compute.walltime) : "Not known"}
                 {compute.walltimeSource === "snapshot" && compute.walltime !== null && (
-                  <Note>model snapshot&apos;s recommendation + 50%</Note>
+                  <Note>{automaticWalltimeLabel(compute.walltimeCapped)}</Note>
                 )}
               </SummaryRow>
             </dl>

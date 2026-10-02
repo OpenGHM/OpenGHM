@@ -171,6 +171,17 @@ describe("DraftReviewStep: the summaries", () => {
     expect(within(unset).getByText("model snapshot's recommendation + 50%")).toBeTruthy();
   });
 
+  it("shows an automatic walltime cut to the limit as the limit", () => {
+    review({
+      local: { ...LOCAL, slurm: { cores: null, walltime: null } },
+      recommended: { cores: 16, walltime: "111:30:00" },
+    });
+    const compute = card("Compute");
+    expect(within(compute).getByText("4 d")).toBeTruthy();
+    expect(within(compute).getByText("the limit for one job")).toBeTruthy();
+    expect(within(compute).queryByText("model snapshot's recommendation + 50%")).toBeNull();
+  });
+
   it("says what the model input is, from the catalogue lookup the wizard shares", () => {
     review();
     expect(within(card("Model input")).getByText("Inherited: Global network")).toBeTruthy();

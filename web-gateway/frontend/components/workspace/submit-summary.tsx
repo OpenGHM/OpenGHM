@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import { describeSlurmTime, describeUnsupportedField } from "@/lib/jobs/compute";
+import {
+  automaticWalltimeLabel,
+  describeSlurmTime,
+  describeUnsupportedField,
+} from "@/lib/jobs/compute";
 import type { ActionFailure } from "@/lib/jobs/types";
 
 /** The words a person reads when a submit does not go through. The backend's
@@ -17,6 +21,10 @@ export function describeSubmitFailure(
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
         .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
+    case "walltime_over_limit":
+      // The backend's sentence says how long the reference run took, what one
+      // job may use, and what to change.
+      return failure.message;
     case "not_a_draft":
       return "This simulation was already submitted or was changed in the meantime. Reload the page to see where it stands.";
     default:
@@ -47,7 +55,7 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
  * allocation it is. `cores` and `walltime` are what SLURM will be asked for
  * (`effectiveCompute`); `*FromSnapshot` says the draft left them unset, which
  * means the snapshot's recommendation for cores and the recommendation plus 50%
- * for walltime.
+ * (at most the limit for one job: `walltimeCapped`) for walltime.
  */
 export function SubmitSummary({
   snapshotTitle,
@@ -58,6 +66,7 @@ export function SubmitSummary({
   coresFromSnapshot,
   walltime,
   walltimeFromSnapshot,
+  walltimeCapped = false,
 }: {
   snapshotTitle: string;
   start: string;
@@ -67,6 +76,8 @@ export function SubmitSummary({
   coresFromSnapshot: boolean;
   walltime: string | null;
   walltimeFromSnapshot: boolean;
+  /** The automatic walltime was cut to the limit for one job. */
+  walltimeCapped?: boolean;
 }) {
   return (
     <>
@@ -87,7 +98,7 @@ export function SubmitSummary({
         <SummaryRow label="Walltime">
           {walltime ? describeSlurmTime(walltime) : "Not known"}
           <Recommendation show={walltime !== null && walltimeFromSnapshot}>
-            model snapshot&apos;s recommendation + 50%
+            {automaticWalltimeLabel(walltimeCapped)}
           </Recommendation>
         </SummaryRow>
       </dl>

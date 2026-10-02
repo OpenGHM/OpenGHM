@@ -1,13 +1,18 @@
 "use client";
 
 import { useId } from "react";
+import { AlertTriangle, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { draftField } from "@/components/workspace/draft-field";
 import {
+  automaticWalltimeLabel,
   describeSlurmTime,
+  describeWalltimeBelowReference,
+  describeWalltimeOverLimit,
+  effectiveCompute,
   validateSlurmConfig,
-  withHeadroom,
+  walltimeOverLimit,
   type Recommended,
 } from "@/lib/jobs/compute";
 import { MAX_CORES, MAX_WALLTIME, type SlurmConfig } from "@/lib/jobs/types";
@@ -30,8 +35,13 @@ export function ComputeFields({
 }) {
   const id = useId();
   const errors = validateSlurmConfig(config);
-  // What an empty walltime means: the recommendation plus 50%.
-  const defaultWalltime = recommended ? withHeadroom(recommended.walltime) : null;
+  // What an empty walltime means: the recommendation plus 50%, at most the
+  // limit for one job.
+  const automatic = effectiveCompute({ cores: null, walltime: null }, recommended);
+  const defaultWalltime = automatic.walltime;
+  const overLimit = walltimeOverLimit(config, recommended);
+  const belowReference = describeWalltimeBelowReference(config, recommended);
+  const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
 
   return (
     <div className="space-y-3">
@@ -77,12 +87,16 @@ export function ComputeFields({
             className="h-10 md:h-9"
             placeholder={
               defaultWalltime
-                ? `${describeSlurmTime(defaultWalltime)} (recommended + 50%)`
+                ? `${describeSlurmTime(defaultWalltime)} (${automaticWalltimeLabel(automatic.walltimeCapped, "placeholder")})`
                 : "HH:MM:SS"
             }
             value={config.walltime ?? ""}
             aria-invalid={errors.walltime !== undefined}
-            aria-describedby={errors.walltime ? `${id}-walltime-error` : undefined}
+            aria-describedby={
+              [errors.walltime ? `${id}-walltime-error` : null, walltimeNoteId]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
             onChange={(e) =>
               onChange({ ...config, walltime: e.target.value === "" ? null : e.target.value })
             }
@@ -94,10 +108,29 @@ export function ComputeFields({
           )}
         </div>
       </div>
+      {overLimit !== null && (
+        <p
+          id={walltimeNoteId}
+          className="flex items-start gap-2 text-xs text-warning"
+        >
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{describeWalltimeOverLimit(overLimit)}</span>
+        </p>
+      )}
+      {belowReference && (
+        <p id={walltimeNoteId} className="flex items-start gap-2 text-xs text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">{belowReference}</span>
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         Leave a field empty to use the model snapshot&apos;s recommendation
         {recommended && defaultWalltime
-          ? ` (${recommended.cores} cores, and ${describeSlurmTime(recommended.walltime)} plus 50%, which is ${describeSlurmTime(defaultWalltime)})`
+          ? ` (${recommended.cores} cores, and ${describeSlurmTime(recommended.walltime)} plus 50%${
+              automatic.walltimeCapped
+                ? `, at most ${MAX_WALLTIME}, which is ${describeSlurmTime(defaultWalltime)}`
+                : `, which is ${describeSlurmTime(defaultWalltime)}`
+            })`
           : ""}
         . The most you can ask for is {MAX_CORES} cores and {MAX_WALLTIME}.
       </p>

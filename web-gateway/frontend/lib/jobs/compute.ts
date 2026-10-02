@@ -7,7 +7,7 @@
  * backend passes it to SLURM as written, so this file reads it the way SLURM
  * does. A draft's own walltime is always `HH:MM:SS` (app/models/job.py).
  */
-import { MAX_CORES, MAX_WALLTIME, type SlurmConfig } from "@/lib/jobs/types";
+import { MAX_CORES, MAX_WALLTIME, MAX_WALLTIME_SECONDS, type SlurmConfig } from "@/lib/jobs/types";
 
 const HMS = /^(\d{1,3}):([0-5]\d):([0-5]\d)$/;
 
@@ -49,14 +49,16 @@ export function formatSlurmTime(total: number): string {
 }
 
 /** A snapshot's recommended walltime plus 50%, in SLURM's format, rounded up
- *  to a whole second: `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`.
- *  This is what the backend asks SLURM for when a draft has no walltime of its
- *  own (`with_headroom` in app/services/job_script.py): the recommendation is
- *  what a run took, not what it is safe to ask for. Null if `value` is not a
- *  SLURM time. */
+ *  to a whole second and never over what one job may use (`MAX_WALLTIME`):
+ *  `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`, `80:00:00` becomes
+ *  `96:00:00`. This is what the backend asks SLURM for when a draft has no
+ *  walltime of its own (`with_headroom` in app/services/job_script.py): the
+ *  recommendation is what a run took, not what it is safe to ask for. Null if
+ *  `value` is not a SLURM time. */
 export function withHeadroom(value: string): string | null {
   const seconds = parseSlurmTime(value);
-  return seconds === null ? null : formatSlurmTime(Math.ceil(seconds * 1.5));
+  if (seconds === null) return null;
+  return formatSlurmTime(Math.min(Math.ceil(seconds * 1.5), MAX_WALLTIME_SECONDS));
 }
 
 /** "15 min", "22 min 30 s", "2 h 30 min", "4 d 15 h" — for a person, not for
@@ -72,6 +74,15 @@ export function describeDuration(total: number): string {
   return seconds > 0 ? `${minutes} min ${seconds} s` : `${minutes} min`;
 }
 
+/** "111 h 30 min", "4 h", "22 min 30 s": hours however long it is, the way the
+ *  limit is written (`describe_hours` in app/services/job_script.py). */
+export function describeHours(total: number): string {
+  const hours = Math.floor(total / 3600);
+  if (hours === 0) return describeDuration(total);
+  const minutes = Math.floor((total % 3600) / 60);
+  return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+}
+
 /** A walltime in SLURM syntax, written for a person; unparseable values are
  *  shown as they are rather than hidden. */
 export function describeSlurmTime(value: string): string {
@@ -84,13 +95,61 @@ export interface Recommended {
   walltime: string;
 }
 
+/** The snapshot's recommended walltime in seconds, when a submit of a draft
+ *  with this `walltime` would have to ask for more than one job may use: the
+ *  draft has none of its own and the recommendation alone is over the limit.
+ *  Null otherwise, and when the snapshot is unknown or its value is not a time
+ *  (the backend decides). The same rule as `walltime_over_limit` in
+ *  app/services/job_script.py, which refuses the submit. */
+export function walltimeOverLimit(
+  config: SlurmConfig,
+  recommended: Recommended | null
+): number | null {
+  if (config.walltime !== null || !recommended) return null;
+  const seconds = parseSlurmTime(recommended.walltime);
+  return seconds !== null && seconds > MAX_WALLTIME_SECONDS ? seconds : null;
+}
+
+/** What to tell a person when `walltimeOverLimit` applies: why, and what to do. */
+export function describeWalltimeOverLimit(seconds: number): string {
+  return `This model snapshot's reference run took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out).`;
+}
+
+/** A softer hint for a walltime the draft chose that is shorter than the
+ *  reference run took, or null. It does not block anything: a shorter run
+ *  period needs less time. */
+export function describeWalltimeBelowReference(
+  config: SlurmConfig,
+  recommended: Recommended | null
+): string | null {
+  if (config.walltime === null || !recommended) return null;
+  const chosen = HMS.exec(config.walltime);
+  const reference = parseSlurmTime(recommended.walltime);
+  if (!chosen || reference === null) return null;
+  const seconds = Number(chosen[1]) * 3600 + Number(chosen[2]) * 60 + Number(chosen[3]);
+  if (seconds <= 0 || seconds >= reference) return null;
+  return `The model snapshot's reference run took about ${describeHours(reference)}. If this run needs longer than your walltime, it may be stopped when time runs out.`;
+}
+
+/** What the automatic walltime is, in a few words after the value: the
+ *  recommendation plus 50%, or the limit for one job when that is more.
+ *  `placeholder` is the short form for an input's placeholder. */
+export function automaticWalltimeLabel(
+  capped: boolean,
+  form: "placeholder" | "summary" = "summary"
+): string {
+  if (capped) return "the limit for one job";
+  return form === "placeholder" ? "recommended + 50%" : "model snapshot's recommendation + 50%";
+}
+
 /** The cores and walltime a submit will ask for, the same as the backend's
  *  `resolve_compute`: the draft's own, else the snapshot's recommendation.
  *  Cores are the recommendation as it is; the walltime is the recommendation
- *  plus 50% (`withHeadroom`), and a walltime the draft chose is used as given.
- *  `recommended` is null when the snapshot could not be loaded. `*Source` says
- *  which one answered ("snapshot" means the recommendation, with headroom for
- *  the walltime). */
+ *  plus 50% (`withHeadroom`, at most the limit for one job), and a walltime the
+ *  draft chose is used as given. `recommended` is null when the snapshot could
+ *  not be loaded. `*Source` says which one answered ("snapshot" means the
+ *  recommendation, with headroom for the walltime); `walltimeCapped` says the
+ *  automatic walltime was cut to the limit. */
 export function effectiveCompute(
   config: SlurmConfig,
   recommended: Recommended | null
@@ -99,13 +158,17 @@ export function effectiveCompute(
   coresSource: "draft" | "snapshot";
   walltime: string | null;
   walltimeSource: "draft" | "snapshot";
+  walltimeCapped: boolean;
 } {
+  const automatic = recommended ? withHeadroom(recommended.walltime) : null;
+  const reference = recommended ? parseSlurmTime(recommended.walltime) : null;
   return {
     cores: config.cores ?? recommended?.cores ?? null,
     coresSource: config.cores !== null ? "draft" : "snapshot",
-    walltime:
-      config.walltime ?? (recommended ? withHeadroom(recommended.walltime) : null),
+    walltime: config.walltime ?? automatic,
     walltimeSource: config.walltime !== null ? "draft" : "snapshot",
+    walltimeCapped:
+      config.walltime === null && reference !== null && Math.ceil(reference * 1.5) > MAX_WALLTIME_SECONDS,
   };
 }
 
@@ -128,7 +191,7 @@ export function validateSlurmConfig(config: SlurmConfig): ComputeErrors {
     const seconds = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
     if (!m) {
       errors.walltime = "Use hours:minutes:seconds, for example 02:00:00.";
-    } else if (seconds <= 0 || seconds > 96 * 3600) {
+    } else if (seconds <= 0 || seconds > MAX_WALLTIME_SECONDS) {
       errors.walltime = `Use more than zero and at most ${MAX_WALLTIME}.`;
     }
   }

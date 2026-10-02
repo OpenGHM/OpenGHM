@@ -394,9 +394,10 @@ success, so SLURM's state agrees. The body's schema is the docstring of
 SLURM is asked for `--cpus-per-task` and `--time`:
 - cores come from the draft's `slurm_config`, or else the snapshot's
   `simulation.recommendedCompute.cores`;
-- walltime comes from the draft's `slurm_config`, or else the snapshot's
-  recommended walltime × 1.5 (SLURM rounds a value with seconds up to the
-  minute);
+- walltime comes from the draft's `slurm_config` (a PATCH holds it to at most
+  96:00:00, `MAX_WALLTIME_SECONDS`), or else the snapshot's recommended
+  walltime × 1.5, **never more than 96:00:00** (`with_headroom`; SLURM rounds a
+  value with seconds up to the minute);
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
@@ -410,12 +411,25 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 - A start date the snapshot's model cannot start a run on: 422
   `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
   the snapshot's period.
+- A draft with no walltime of its own whose snapshot's recommended walltime is
+  by itself over 96 h, which no single job can run: 422 `walltime_over_limit`,
+  before any SSH or SLURM call. Its message gives the reference run's time and
+  says to shorten the run period or set a walltime. A walltime the draft set is
+  sent as given and is not refused here. The frontend mirrors both rules
+  (`withHeadroom`, `submitProblems`), so Review lists the problem and keeps
+  Submit off.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name
   stays in the draft's `orphan_sim_ids` and the sweep retries it.
 - An sbatch that says no: 502 `sbatch_rejected`. slurmly's leftover job
   directory, found by the attempt's `sim_id` in its `metadata.json`, is removed.
+  The message names the cause in plain English when SLURM's reason code is one
+  of a few known ones (`web-gateway/backend/app/services/sbatch_refusal.py`: a run time or core
+  count over the limit, too many jobs, the allocation's compute budget used
+  up), followed by the first lines of SLURM's own text with paths left out.
+  Any other refusal is shown as SLURM wrote it. The code stays
+  `sbatch_rejected` either way.
 
 After a refusal the draft goes **back to DRAFT**, with `last_submit_error`.
 The DRAFT→SUBMITTED claim is one conditional update, so a double click or a

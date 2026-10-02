@@ -29,6 +29,7 @@ from app.core.roles import Permission
 from app.models.job import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
+    MAX_WALLTIME_SECONDS,
     TERMINAL_STATUSES,
     JobListResponse,
     JobLogResponse,
@@ -46,7 +47,7 @@ from app.models.job import (
     verdict_fields,
 )
 from app.models.user import TokenPayload
-from app.services import job_live, job_script, run_start, slurm
+from app.services import job_live, job_script, run_start, sbatch_refusal, slurm
 
 logger = logging.getLogger(__name__)
 
@@ -587,11 +588,11 @@ _ANVIL_UNREACHABLE = (
 
 
 def _sbatch_refusal_message(exc: Exception) -> str:
-    detail = ""
+    detail = also = ""
     if isinstance(exc, SbatchError):
         detail = (exc.stderr or exc.stdout or "").strip()
-    detail = (detail or str(exc)).strip()[:500]
-    return f"SLURM refused the job: {detail} Your draft is unchanged."
+        also = f"{exc.stderr}\n{exc.stdout}"
+    return f"{sbatch_refusal.explain(detail or str(exc), also)} Your draft is unchanged."
 
 
 @router.post(
@@ -639,6 +640,20 @@ async def submit_simulation(
             f"them: {', '.join(fields)}. Reset them to the snapshot's own values "
             "and submit again.",
             fields=fields,
+        )
+
+    over = job_script.walltime_over_limit(job.slurm_config, snapshot)
+    if over is not None:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "walltime_over_limit",
+            "This model snapshot's reference run took about "
+            f"{job_script.describe_hours(over)}, and one job may use at most "
+            f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, or set a "
+            "walltime yourself (a run that needs longer may be stopped when time "
+            "runs out).",
+            recommended_seconds=over,
+            limit_seconds=MAX_WALLTIME_SECONDS,
         )
 
     await _refuse_unaligned_start(

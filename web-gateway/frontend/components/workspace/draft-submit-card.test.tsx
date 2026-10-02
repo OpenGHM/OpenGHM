@@ -119,6 +119,29 @@ describe("DraftSubmitCard: what it says", () => {
   });
 });
 
+describe("DraftSubmitCard: long refusals", () => {
+  const LONG =
+    "Anvil refused the requested run time: it is over the limit for one job (96 h). Shorten the run period or set a shorter walltime. SLURM said: QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: Job violates accounting/QOS policy (job submit limit, user's size and/or time limits). Your draft is unchanged.";
+
+  it("wraps the stored reason of the last submit instead of overflowing", () => {
+    card({ lastSubmitError: { code: "sbatch_rejected", message: LONG, at: "2026-10-02T00:00:00Z" } });
+    const text = screen.getByText(/The last submit didn't go through: Anvil refused the requested run time/);
+    expect(text.textContent).toContain("QOSMaxWallDurationPerJobLimit");
+    expect(text.className).toContain("break-words");
+    expect(text.className).toContain("min-w-0");
+  });
+
+  it("shows the backend's sentence for walltime_over_limit as it is", async () => {
+    const message =
+      "This model snapshot's reference run took about 111 h 30 min, and one job may use at most 96 h. Shorten the run period, or set a walltime yourself.";
+    submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "walltime_over_limit" });
+    card();
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(message));
+  });
+});
+
 describe("DraftSubmitCard: submitting", () => {
   it("saves first, confirms with what is saved, and submits only on Confirm", async () => {
     card();

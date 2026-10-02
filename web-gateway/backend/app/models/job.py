@@ -106,14 +106,21 @@ class SlurmConfig(BaseModel):
     walltime: str | None = None
 
 
-#: Bounds for `SlurmConfigUpdate`. Anvil's documented per-job limits for the
-#: `shared` partition (https://rcac.purdue.edu/knowledge/anvil/run/partitions,
-#: the page slurmly's `purdue_anvil` preset cites) are 128 cores (one node) and
-#: 96 hours. Nothing in this repository records them, so they are unverified
-#: here: SLURM is the authority, and a request it refuses comes back as
-#: `sbatch_rejected` with its own message.
+#: Bounds for `SlurmConfigUpdate`, and the cap on the walltime a submit asks
+#: for by itself (`job_script.with_headroom`). The source for both figures is
+#: Anvil's documented per-job limits for the `shared` partition
+#: (https://rcac.purdue.edu/knowledge/anvil/run/partitions, the page slurmly's
+#: `purdue_anvil` preset cites): 128 cores (one node) and 96 hours. This
+#: repository does not record them as page values. What has been verified is a
+#: refusal: on 2026-10-02 a request for 167:15:00 was refused by SLURM with
+#: `QOSMaxWallDurationPerJobLimit`, so a per-job duration limit exists. That
+#: it is 96 h (and the core limit 128) rests on the cited page alone. SLURM
+#: stays the authority: a request it refuses comes back as `sbatch_rejected`
+#: with its own message (`sbatch_refusal.explain`).
 MAX_CORES = 128
 MAX_WALLTIME_SECONDS = 96 * 3600
+#: The same limit as SLURM writes it, for messages.
+MAX_WALLTIME = f"{MAX_WALLTIME_SECONDS // 3600}:00:00"
 
 _WALLTIME_RE = re.compile(r"^(\d{1,3}):([0-5]\d):([0-5]\d)$")
 
@@ -124,7 +131,7 @@ class SlurmConfigUpdate(BaseModel):
 
     cores: int | None = Field(default=None, ge=1, le=MAX_CORES)
     walltime: str | None = Field(
-        default=None, description="HH:MM:SS, at most 96:00:00", examples=["02:00:00"]
+        default=None, description=f"HH:MM:SS, at most {MAX_WALLTIME}", examples=["02:00:00"]
     )
 
     @field_validator("walltime")
@@ -137,7 +144,7 @@ class SlurmConfigUpdate(BaseModel):
             raise ValueError("walltime must be HH:MM:SS, for example 02:00:00")
         seconds = int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3])
         if not 0 < seconds <= MAX_WALLTIME_SECONDS:
-            raise ValueError("walltime must be more than zero and at most 96:00:00")
+            raise ValueError(f"walltime must be more than zero and at most {MAX_WALLTIME}")
         return v
 
 

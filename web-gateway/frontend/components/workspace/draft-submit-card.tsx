@@ -228,6 +228,7 @@ export function DraftSubmitCard({
               coresFromSnapshot={compute.coresSource === "snapshot"}
               walltime={compute.walltime}
               walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
+              walltimeCapped={compute.walltimeCapped}
             />
           )}
 

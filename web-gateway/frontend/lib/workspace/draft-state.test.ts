@@ -470,6 +470,39 @@ describe("submitProblems", () => {
     expect(problems(fromJob(ok))).toEqual([]);
   });
 
+  describe("the snapshot's reference run is longer than one job may be", () => {
+    const withWalltime = (walltime: string): DraftContext => ({
+      snapshotState: "found",
+      dataset: {
+        ...dataset,
+        simulation: {
+          ...dataset.simulation,
+          recommendedCompute: { cores: 16, walltime },
+        },
+      },
+    });
+
+    it("is a problem on the walltime field, at the run step, until the draft sets one", () => {
+      const ctx = withWalltime("111:30:00");
+      expect(problems(fromJob(ok), ctx)).toEqual([
+        {
+          field: "walltime",
+          step: "run",
+          message:
+            "This model snapshot's reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out).",
+        },
+      ]);
+      expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
+      expect(problems(edited(ok, { slurm: { cores: 4, walltime: null } }), ctx)).toHaveLength(1);
+    });
+
+    it("is not one when the recommendation fits, as the backend counts it", () => {
+      for (const walltime of ["4:30:00", "15:00", "80:00:00", "96:00:00"]) {
+        expect(problems(fromJob(ok), withWalltime(walltime))).toEqual([]);
+      }
+    });
+  });
+
   it("lists nothing without the snapshot, for the cases that need it: the backend decides", () => {
     expect(problems(fromJob(ok), UNAVAILABLE)).toEqual([]);
   });

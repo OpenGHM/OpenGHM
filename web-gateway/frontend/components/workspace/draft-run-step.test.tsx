@@ -327,6 +327,37 @@ describe("the draft run step: compute", () => {
   });
 });
 
+describe("the draft run step: a walltime the snapshot's reference run does not fit in", () => {
+  const long = { cores: 16, walltime: "111:30:00" };
+
+  it("explains it next to the Walltime field, and shows the automatic one as the limit", () => {
+    step({ recommended: long });
+    const notice = screen.getByText(/reference run took about 111 h 30 min, more than the 96 h/);
+    expect(notice.textContent).toMatch(/Shorten the run period, or set a walltime yourself/);
+    expect(screen.getByLabelText("Walltime").getAttribute("aria-describedby")).toBe(notice.parentElement?.id);
+    expect(screen.getByLabelText("Walltime").getAttribute("placeholder")).toBe("4 d (the limit for one job)");
+  });
+
+  it("is gone once the draft sets a walltime of its own", () => {
+    step({ recommended: long, slurm: { cores: null, walltime: "96:00:00" } });
+    expect(screen.queryByText(/more than the 96 h/)).toBeNull();
+  });
+
+  it("says nothing for a recommendation that fits", () => {
+    step();
+    expect(screen.queryByText(/reference run took/)).toBeNull();
+    expect(screen.getByLabelText("Walltime").getAttribute("placeholder")).toBe(
+      "22 min 30 s (recommended + 50%)"
+    );
+  });
+
+  it("only hints, without an error, at a walltime shorter than the reference run", () => {
+    step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
+    expect(screen.getByText(/reference run took about 4 h 30 min/)).toBeTruthy();
+    expect(screen.getByLabelText("Walltime").getAttribute("aria-invalid")).not.toBe("true");
+  });
+});
+
 describe("the draft run step: disabled", () => {
   it("switches every control off while a submit is under way", () => {
     step({

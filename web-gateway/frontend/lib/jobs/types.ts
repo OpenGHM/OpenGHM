@@ -113,6 +113,7 @@ export interface SlurmConfig {
 /** The limits the backend enforces on a draft's `slurm_config`
  *  (`MAX_CORES`, `MAX_WALLTIME_SECONDS` in app/models/job.py). */
 export const MAX_CORES = 128;
+export const MAX_WALLTIME_SECONDS = 96 * 3600;
 export const MAX_WALLTIME = "96:00:00";
 
 /** The toolkit install a submitted job runs (ADR 0025). */

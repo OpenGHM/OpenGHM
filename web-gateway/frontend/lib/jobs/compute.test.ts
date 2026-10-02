@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  automaticWalltimeLabel,
+  describeHours,
   describeSlurmTime,
+  describeWalltimeBelowReference,
+  describeWalltimeOverLimit,
   effectiveCompute,
   formatSlurmTime,
   withHeadroom,
@@ -8,6 +12,7 @@ import {
   secondsToHms,
   submitBlockedReason,
   validateSlurmConfig,
+  walltimeOverLimit,
 } from "@/lib/jobs/compute";
 
 describe("parseSlurmTime", () => {
@@ -51,7 +56,10 @@ describe("withHeadroom", () => {
     ["60", "1:30:00"],
     ["1-00:00:00", "36:00:00"],
     ["0:01", "0:02"],
-  ])("adds 50%% to %s: %s", (value, expected) => {
+    ["80:00:00", "96:00:00"], // 120 h would be over the limit: capped
+    ["64:00:00", "96:00:00"],
+    ["111:30:00", "96:00:00"], // the recommendation alone is over it
+  ])("adds 50%% to %s, at most the limit: %s", (value, expected) => {
     expect(withHeadroom(value)).toBe(expected);
   });
 
@@ -62,6 +70,85 @@ describe("withHeadroom", () => {
   it("writes SLURM's format", () => {
     expect(formatSlurmTime(1350)).toBe("22:30");
     expect(formatSlurmTime(24300)).toBe("6:45:00");
+  });
+});
+
+describe("a recommendation over the limit for one job", () => {
+  const unset = { cores: null, walltime: null };
+  const snapshot = (walltime: string) => ({ cores: 16, walltime });
+
+  // The same cases as tests/test_job_script.py: the two sides must agree.
+  it.each([
+    ["111:30:00", 111 * 3600 + 30 * 60],
+    ["96:00:01", 96 * 3600 + 1],
+    ["96:00:00", null],
+    ["80:00:00", null],
+    ["4:30:00", null],
+    ["15:00", null],
+    ["not a time", null],
+  ])("%s", (walltime, over) => {
+    expect(walltimeOverLimit(unset, snapshot(walltime))).toBe(over);
+    // A walltime the draft chose is not refused.
+    expect(walltimeOverLimit({ cores: null, walltime: "02:00:00" }, snapshot(walltime))).toBeNull();
+  });
+
+  it("is not known without the snapshot", () => {
+    expect(walltimeOverLimit(unset, null)).toBeNull();
+  });
+
+  it("says how long the reference run took, what one job may use, and what to do", () => {
+    expect(describeWalltimeOverLimit(111 * 3600 + 30 * 60)).toBe(
+      "This model snapshot's reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out)."
+    );
+  });
+
+  it("writes hours however long, the way the backend does", () => {
+    expect(describeHours(111 * 3600 + 30 * 60)).toBe("111 h 30 min");
+    expect(describeHours(4 * 3600)).toBe("4 h");
+    expect(describeHours(22 * 60 + 30)).toBe("22 min 30 s");
+  });
+
+  it("shows the automatic walltime capped, and says so", () => {
+    expect(effectiveCompute(unset, snapshot("111:30:00"))).toMatchObject({
+      walltime: "96:00:00",
+      walltimeSource: "snapshot",
+      walltimeCapped: true,
+    });
+    expect(effectiveCompute(unset, snapshot("80:00:00"))).toMatchObject({
+      walltime: "96:00:00",
+      walltimeCapped: true,
+    });
+    expect(effectiveCompute(unset, snapshot("4:30:00"))).toMatchObject({
+      walltime: "6:45:00",
+      walltimeCapped: false,
+    });
+    expect(effectiveCompute(unset, snapshot("15:00"))).toMatchObject({
+      walltime: "22:30",
+      walltimeCapped: false,
+    });
+    expect(effectiveCompute({ cores: null, walltime: "96:00:00" }, snapshot("111:30:00"))).toMatchObject({
+      walltime: "96:00:00",
+      walltimeSource: "draft",
+      walltimeCapped: false,
+    });
+  });
+
+  it("labels the automatic walltime for what it is", () => {
+    expect(automaticWalltimeLabel(false)).toBe("model snapshot's recommendation + 50%");
+    expect(automaticWalltimeLabel(false, "placeholder")).toBe("recommended + 50%");
+    expect(automaticWalltimeLabel(true)).toBe("the limit for one job");
+  });
+
+  it("hints, softly, at a walltime shorter than the reference run", () => {
+    const rec = snapshot("4:30:00");
+    expect(describeWalltimeBelowReference({ cores: null, walltime: "02:00:00" }, rec)).toMatch(
+      /reference run took about 4 h 30 min/
+    );
+    expect(describeWalltimeBelowReference({ cores: null, walltime: "04:30:00" }, rec)).toBeNull();
+    expect(describeWalltimeBelowReference({ cores: null, walltime: "08:00:00" }, rec)).toBeNull();
+    expect(describeWalltimeBelowReference(unset, rec)).toBeNull();
+    expect(describeWalltimeBelowReference({ cores: null, walltime: "02:00:00" }, null)).toBeNull();
+    expect(describeWalltimeBelowReference({ cores: null, walltime: "x" }, rec)).toBeNull();
   });
 });
 

@@ -11,7 +11,11 @@
  * snapshot's own order). Opening a draft therefore never saves, and a value the
  * server normalises never makes the two differ for ever.
  */
-import { validateSlurmConfig } from "@/lib/jobs/compute";
+import {
+  describeWalltimeOverLimit,
+  validateSlurmConfig,
+  walltimeOverLimit,
+} from "@/lib/jobs/compute";
 import { checkRunStartFor, isRealDate } from "@/lib/jobs/run-start";
 import type {
   AboutUpdate,
@@ -451,6 +455,11 @@ export function submitProblems(
   if (custom && Object.keys(custom).length > 0) {
     add("custom", "Custom parameters can't run yet. Remove them to submit.");
   }
+
+  // The snapshot's reference run is longer than one job may be: a submit
+  // refuses it (`walltime_over_limit`) unless the draft sets a walltime.
+  const over = walltimeOverLimit(local.slurm, ctx.dataset?.simulation.recommendedCompute ?? null);
+  if (over !== null) add("walltime", describeWalltimeOverLimit(over));
 
   // Not saved: a submit would run the saved value, not this one.
   for (const field of save.withheld) {

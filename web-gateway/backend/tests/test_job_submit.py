@@ -271,6 +271,46 @@ def test_a_snapshot_that_left_the_repository_is_a_422(client, db, draft):
     assert response.json()["detail"]["code"] == "snapshot_not_found"
 
 
+def _recommend(db, walltime: str):
+    db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["walltime"] = walltime
+
+
+def test_a_recommendation_over_the_limit_is_refused_before_anvil_is_called(
+    client, db, draft, sent
+):
+    _recommend(db, "111:30:00")  # the Global_tracking snapshot
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "walltime_over_limit"
+    assert "111 h 30 min" in detail["message"] and "96 h" in detail["message"]
+    assert "shorten the run period" in detail["message"].lower()
+    assert detail["recommended_seconds"] == 111 * 3600 + 30 * 60
+    assert detail["limit_seconds"] == 96 * 3600
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT" and "last_submit_error" not in stored
+    assert sent == []  # no SSH, no SLURM
+
+
+def test_a_walltime_the_draft_chose_is_not_refused_whatever_the_recommendation(
+    client, db, draft, sent
+):
+    _recommend(db, "111:30:00")
+    assert _patch(client, slurm_config={"walltime": "96:00:00"}).status_code == 200
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    (call,) = sent
+    assert slurm.build_job_spec(call[0], call[1], "x").time_limit == "96:00:00"
+
+
+def test_an_automatic_walltime_is_capped_at_the_limit_when_the_recommendation_fits(
+    client, db, draft, sent
+):
+    _recommend(db, "80:00:00")  # + 50% would be 120 h
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    (call,) = sent
+    assert slurm.build_job_spec(call[0], call[1], "x").time_limit == "96:00:00"
+
+
 # ---- Anvil does not take it: the draft stays a draft ------------------------
 
 
@@ -314,6 +354,33 @@ def test_sbatch_refusal_is_502_with_slurms_message_and_leaves_a_draft(
     assert detail["code"] == "sbatch_rejected"
     assert "Invalid account" in detail["message"]
     _assert_back_to_draft(db, "sbatch_rejected")
+
+
+def test_a_run_time_refusal_is_explained_and_slurms_own_text_follows(
+    client, db, draft, monkeypatch
+):
+    _fail_with(
+        monkeypatch,
+        SbatchError(
+            command="cd /anvil/scratch/x-openghm/openghm/slurmly-1a2b3c4d && sbatch run.sh",
+            exit_status=1,
+            stderr=(
+                "sbatch: error: Batch job submission failed: Job violates accounting/QOS "
+                "policy (job submit limit, user's size and/or time limits)"
+            ),
+            stdout="QOSMaxWallDurationPerJobLimit",
+        ),
+    )
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail["code"] == "sbatch_rejected"  # unchanged: clients rely on it
+    assert detail["message"].startswith("Anvil refused the requested run time")
+    assert "Job violates accounting/QOS policy" in detail["message"]
+    assert "/anvil" not in detail["message"]
+    assert detail["message"].endswith("Your draft is unchanged.")
+    _assert_back_to_draft(db, "sbatch_rejected")
+    assert db.jobs.docs["job-1"]["last_submit_error"]["message"] == detail["message"]
 
 
 def test_an_invalid_spec_is_502_sbatch_rejected(client, db, draft, monkeypatch):

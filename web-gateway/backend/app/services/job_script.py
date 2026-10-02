@@ -57,7 +57,7 @@ import shlex
 from dataclasses import dataclass
 from datetime import date
 
-from app.models.job import JobParameters
+from app.models.job import MAX_WALLTIME_SECONDS, JobParameters, SlurmConfig
 
 
 class SubmitInputError(ValueError):
@@ -424,12 +424,50 @@ def format_slurm_time(seconds: int) -> str:
 
 def with_headroom(walltime: str) -> str:
     """A snapshot's recommended walltime plus 50%, in SLURM's format, rounded
-    up to a whole second: `15:00` becomes `22:30`, `4:30:00` becomes
-    `6:45:00`. A run of the v2 snapshot took 13:49 of its recommended 15:00,
-    so the bare recommendation leaves no room. Applied only to a snapshot's
-    value; a walltime the user chose is sent as given. Mirrored by
+    up to a whole second and never over `MAX_WALLTIME_SECONDS` (what one job
+    may use on Anvil): `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`,
+    `80:00:00` becomes `96:00:00`. A run of the v2 snapshot took 13:49 of its
+    recommended 15:00, so the bare recommendation leaves no room. Applied only
+    to a snapshot's value; a walltime the user chose is sent as given.
+    A recommendation that is itself over the limit cannot be run in one job:
+    `walltime_over_limit` is how a submit finds that out. Mirrored by
     `withHeadroom` in the frontend's lib/jobs/compute.ts."""
-    return format_slurm_time((parse_slurm_time(walltime) * 3 + 1) // 2)
+    seconds = (parse_slurm_time(walltime) * 3 + 1) // 2
+    return format_slurm_time(min(seconds, MAX_WALLTIME_SECONDS))
+
+
+def walltime_over_limit(slurm_config: SlurmConfig, snapshot: dict) -> int | None:
+    """The snapshot's recommended walltime, in seconds, when a submit of this
+    draft would have to ask for more than one job may use: the draft has no
+    walltime of its own and the recommendation alone is over
+    `MAX_WALLTIME_SECONDS`. None otherwise, including when the snapshot says
+    nothing or something that is not a SLURM time (`resolve_compute` reports
+    that). A walltime the draft chose is never refused here; the PATCH
+    validator already holds it to the limit. Mirrored by `submitProblems` in
+    the frontend's lib/workspace/draft-state.ts."""
+    if slurm_config.walltime:
+        return None
+    recommended = (snapshot.get("simulation", {}).get("recommendedCompute") or {}).get("walltime")
+    if not recommended:
+        return None
+    try:
+        seconds = parse_slurm_time(str(recommended))
+    except SubmitInputError:
+        return None
+    return seconds if seconds > MAX_WALLTIME_SECONDS else None
+
+
+def describe_hours(seconds: int) -> str:
+    """"111 h 30 min", "4 h", "22 min 30 s": a duration for a person, in hours
+    however long it is, the way the limit is written. Mirrored by
+    `describeHours` in the frontend's lib/jobs/compute.ts."""
+    h, rest = divmod(seconds, 3600)
+    m, s = divmod(rest, 60)
+    if h:
+        return f"{h} h {m} min" if m else f"{h} h"
+    if m:
+        return f"{m} min {s} s" if s else f"{m} min"
+    return f"{s} s"
 
 
 # ---------------------------------------------------------------------------
