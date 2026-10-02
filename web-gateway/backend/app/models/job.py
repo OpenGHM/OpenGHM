@@ -107,16 +107,16 @@ class SlurmConfig(BaseModel):
 
 
 #: Bounds for `SlurmConfigUpdate`, and the cap on the walltime a submit asks
-#: for by itself (`job_script.with_headroom`). The source for both figures is
-#: Anvil's documented per-job limits for the `shared` partition
-#: (https://rcac.purdue.edu/knowledge/anvil/run/partitions, the page slurmly's
-#: `purdue_anvil` preset cites): 128 cores (one node) and 96 hours. This
-#: repository does not record them as page values. What has been verified is a
-#: refusal: on 2026-10-02 a request for 167:15:00 was refused by SLURM with
-#: `QOSMaxWallDurationPerJobLimit`, so a per-job duration limit exists. That
-#: it is 96 h (and the core limit 128) rests on the cited page alone. SLURM
-#: stays the authority: a request it refuses comes back as `sbatch_rejected`
-#: with its own message (`sbatch_refusal.explain`).
+#: for by itself (`job_script.with_headroom`): 128 cores and 96 hours per job
+#: on the `shared` partition. Checked on Anvil on 2026-10-02 with `scontrol show
+#: partition shared` (QoS=part-shared), `sacctmgr show qos` (part-shared
+#: MaxWall=4-00:00:00) and `sinfo` (128 CPUs per node); the gateway's account
+#: `ees260008` may use only the `cpu` QOS. Longer QOSes exist on the cluster
+#: (`wholenode-long` 10 days, `longwalltime` 30 days) but are not granted to
+#: this account. The same day a request for 167:15:00 was refused by SLURM
+#: with `QOSMaxWallDurationPerJobLimit`. SLURM stays the authority: a request
+#: it refuses comes back as `sbatch_rejected` with its own message
+#: (`sbatch_refusal.explain`).
 MAX_CORES = 128
 MAX_WALLTIME_SECONDS = 96 * 3600
 #: The same limit as SLURM writes it, for messages.
