@@ -132,9 +132,22 @@ export interface CatalogueResponse {
   facets: CatalogueFacets;
 }
 
-/** `GET /repository/mine`: what the signed-in user published, newest first. No paging, no facets. */
+/**
+ * Who may find an artifact in the catalogue: the envelope's `visibility`.
+ * Separate from freezing, which every published artifact is.
+ */
+export type Visibility = "public" | "private";
+
+/**
+ * A catalogue item the signed-in user owns: the item plus the envelope's
+ * `visibility` and `registeredAt` (an ISO timestamp, when this gateway learned
+ * of the artifact). Spread over the union, so each kind keeps its own shape.
+ */
+export type MineItem = CatalogueItem & { visibility: Visibility; registeredAt: string };
+
+/** `GET /repository/mine`: what the signed-in user published, newest registration first. No paging, no facets. */
 export interface MineResponse {
-  items: CatalogueItem[];
+  items: MineItem[];
 }
 
 /**

@@ -133,7 +133,11 @@ the one place that assembles this shape; `from_metadata_json()` is the one
 place that reads it back out. `GET /api/v1/repository/mine` reads
 `owner_user_id`: it returns the snapshots and model inputs whose owner is the
 signed-in user, newest `registered_at` first, and it feeds the Workspace's
-Published section. Nothing filters on `visibility`. Every write path — the
+Snapshots & Inputs section. Each item carries its envelope's `visibility`
+(`"public"` or `"private"`) and `registeredAt` beside the catalogue fields.
+Freezing and visibility are separate: a snapshot is immutable once published
+whichever it is. Nothing filters on `visibility` and nothing can change it
+yet; every envelope is `"public"`. Every write path — the
 `POST` routes and `resync_published.py` — still writes `owner_user_id: null`
 (`resync_published.py` keeps an existing one), so nothing sets an owner
 except by hand until the publish path exists.
@@ -297,8 +301,8 @@ separate, single-kind lists; the new-simulation snapshot picker still reads
 `/datasets`.
 
 `GET /repository/mine` (signed in) is the one catalogue read that needs a
-session: the same two item shapes, with `kind`, for what the caller owns. No
-paging, no facets.
+session: the same two item shapes, with `kind`, for what the caller owns, plus
+each item's `visibility` and `registeredAt`. No paging, no facets.
 
 ## 5. The two paths that leave the cluster
 

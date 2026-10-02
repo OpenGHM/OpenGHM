@@ -21,6 +21,8 @@ from app.models.repository import (
     ModelInputLinks,
     ModelInputListResponse,
     ModelInputResponse,
+    OwnedModelInputItem,
+    OwnedSnapshotItem,
     RepositoryListResponse,
     SnapshotCatalogueItem,
     SnapshotLinks,
@@ -168,7 +170,7 @@ async def list_catalogue(
     return build_catalogue(await _load_catalogue(), query, sort=sort, page=page, page_size=page_size)
 
 
-async def _load_owned(owner_user_id: str) -> list[SnapshotCatalogueItem | ModelInputCatalogueItem]:
+async def _load_owned(owner_user_id: str) -> list[OwnedSnapshotItem | OwnedModelInputItem]:
     """Every snapshot and model input whose envelope names this user as its
     owner, newest registration first (ids break ties) across both kinds."""
     db = get_db()
@@ -176,8 +178,8 @@ async def _load_owned(owner_user_id: str) -> list[SnapshotCatalogueItem | ModelI
     datasets = await db["datasets"].find(query).to_list(length=None)
     model_inputs = await db["model_inputs"].find(query).to_list(length=None)
     return newest_registered_first(
-        [(SnapshotCatalogueItem.from_metadata_json(d), d) for d in datasets]
-        + [(ModelInputCatalogueItem.from_metadata_json(m), m) for m in model_inputs]
+        [(OwnedSnapshotItem.from_envelope(d), d) for d in datasets]
+        + [(OwnedModelInputItem.from_envelope(m), m) for m in model_inputs]
     )
 
 
@@ -186,9 +188,9 @@ async def list_mine(
     user: TokenPayload = Depends(require_permission(Permission.REPO_VIEW)),
 ) -> MineResponse:
     """What the signed-in user published: the snapshots and model inputs whose
-    envelope ``owner_user_id`` is theirs, in the catalogue's item shapes. Needs
-    a session, unlike the rest of the read routes. Nothing filters on
-    ``visibility``."""
+    envelope ``owner_user_id`` is theirs, in the catalogue's item shapes plus
+    each envelope's ``visibility`` and ``registeredAt``. Needs a session,
+    unlike the rest of the read routes. Nothing filters on ``visibility``."""
     return MineResponse(items=await _load_owned(user.sub))
 
 

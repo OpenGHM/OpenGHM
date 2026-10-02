@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { LinkPending } from "@/components/ui/link-pending";
+import { MY_DATA_PATH } from "@/lib/workspace/my-data";
 
-export type WorkspaceSection = "simulations" | "published";
+export type WorkspaceSection = "simulations" | "data";
 
 /** The Workspace's sections, in the order the hero shows them. */
 export const WORKSPACE_SECTIONS: readonly { id: WorkspaceSection; label: string; href: string }[] = [
   { id: "simulations", label: "Simulations", href: "/workspace" },
-  { id: "published", label: "Published", href: "/workspace/published" },
+  { id: "data", label: "Snapshots & Inputs", href: MY_DATA_PATH },
 ];
 
 /**

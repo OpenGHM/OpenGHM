@@ -15,12 +15,13 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from route_helpers import FakeDB, token_for
 
 from app.api.v1 import repository as repository_router
 from app.core.config import settings
-from app.models.repository import build_envelope
+from app.models.repository import OwnedModelInputItem, OwnedSnapshotItem, build_envelope
 
 SCHEMAS = Path(__file__).resolve().parents[3] / "schemas"
 T0 = datetime(2026, 9, 1, tzinfo=timezone.utc)
@@ -33,18 +34,22 @@ def _example(spec: str, name: str) -> dict:
     return json.loads((SCHEMAS / spec / "examples" / name).read_text())
 
 
-def _snapshot(id_: str, owner: str | None, minutes: int = 0) -> dict:
+def _snapshot(id_: str, owner: str | None, minutes: int = 0, visibility: str = "public") -> dict:
     doc = copy.deepcopy(_example("snapshot-spec", "wbm_storage_v2.0.0.json"))
     doc["id"] = id_
     doc["slug"] = f"snapshot-{id_[0]}"
-    return build_envelope(doc, owner_user_id=owner, registered_at=T0 + timedelta(minutes=minutes))
+    return build_envelope(
+        doc, owner_user_id=owner, visibility=visibility, registered_at=T0 + timedelta(minutes=minutes)
+    )
 
 
-def _model_input(id_: str, owner: str | None, minutes: int = 0) -> dict:
+def _model_input(id_: str, owner: str | None, minutes: int = 0, visibility: str = "public") -> dict:
     doc = copy.deepcopy(_example("model-input-spec", "wbm_ancillary_data_v2.0.0.json"))
     doc["id"] = id_
     doc["slug"] = f"input-{id_[0]}"
-    return build_envelope(doc, owner_user_id=owner, registered_at=T0 + timedelta(minutes=minutes))
+    return build_envelope(
+        doc, owner_user_id=owner, visibility=visibility, registered_at=T0 + timedelta(minutes=minutes)
+    )
 
 
 @pytest.fixture
@@ -135,11 +140,47 @@ def test_empty_when_the_caller_owns_nothing(http, mongo):
 
 
 def test_does_not_filter_on_visibility(http, mongo):
-    private = _snapshot("a" * 64, ME)
-    private["visibility"] = "private"
-    _put(mongo, "datasets", private)
+    _put(mongo, "datasets", _snapshot("a" * 64, ME, visibility="private"))
 
     assert [i["id"] for i in _get(http).json()["items"]] == ["a" * 64]
+
+
+def test_each_item_carries_its_envelopes_visibility_and_registration_time(http, mongo):
+    _put(
+        mongo, "datasets",
+        _snapshot("a" * 64, ME, minutes=10), _snapshot("c" * 64, ME, minutes=20, visibility="private"),
+    )
+    _put(mongo, "model_inputs", _model_input("b" * 64, ME, minutes=30, visibility="private"))
+
+    items = {i["id"]: i for i in _get(http).json()["items"]}
+
+    assert {k: v["visibility"] for k, v in items.items()} == {
+        "a" * 64: "public", "c" * 64: "private", "b" * 64: "private",
+    }
+    assert items["a" * 64]["registeredAt"] == "2026-09-01T00:10:00Z"
+    assert items["c" * 64]["registeredAt"] == "2026-09-01T00:20:00Z"
+    assert items["b" * 64]["registeredAt"] == "2026-09-01T00:30:00Z"
+    # Beside the spec's own fields, never inside `about` or any other block.
+    assert "visibility" not in items["a" * 64]["about"]
+
+
+def test_an_item_of_either_kind_keeps_the_catalogues_fields(http, mongo):
+    _put(mongo, "datasets", _snapshot("a" * 64, ME))
+    _put(mongo, "model_inputs", _model_input("b" * 64, ME))
+
+    items = {i["kind"]: i for i in _get(http).json()["items"]}
+
+    assert {"spatialResolutionDegrees", "licenseUrl", "generatedAt"} <= set(items["snapshot"])
+    assert "licenseUrl" in items["model-input"] and "spatialResolutionDegrees" not in items["model-input"]
+
+
+def test_visibility_is_public_or_private_and_nothing_else():
+    for visibility in ("public", "private"):
+        assert OwnedSnapshotItem.from_envelope(_snapshot("a" * 64, ME, visibility=visibility)).visibility == visibility
+    with pytest.raises(ValidationError):
+        OwnedSnapshotItem.from_envelope(_snapshot("a" * 64, ME, visibility="friends"))
+    with pytest.raises(ValidationError):
+        OwnedModelInputItem.from_envelope(_model_input("b" * 64, ME, visibility="friends"))
 
 
 def test_ordered_by_registration_time_newest_first_across_kinds(http, mongo):

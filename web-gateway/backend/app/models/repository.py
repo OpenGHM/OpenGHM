@@ -26,8 +26,9 @@ genuinely computable from it and are never stored — see
 ``docs/reference/metadata-format.md#the-gateways-catalogue`` for why each one
 is here and not in the spec. The envelope's own fields
 (``owner_user_id``/``visibility``/``registered_at``) are not in this response
-either. Only ``GET /repository/mine`` reads one of them, ``owner_user_id``,
-to find what a user published (``docs/architecture/gateway.md`` §4).
+either, with one exception: ``GET /repository/mine`` reads ``owner_user_id``
+to find what a user published and returns ``visibility`` and ``registered_at``
+beside each item (``docs/architecture/gateway.md`` §4).
 """
 
 from __future__ import annotations
@@ -42,11 +43,17 @@ from .generated.model_input import Resolution as ModelInputResolution
 from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
 
 
+#: Who may find an artifact in the catalogue. Separate from freezing: a
+#: published snapshot is immutable whichever it is. Nothing sets ``private``
+#: yet, and no read route filters on it.
+Visibility = Literal["public", "private"]
+
+
 def build_envelope(
     document: dict[str, Any],
     *,
     owner_user_id: str | None = None,
-    visibility: str = "public",
+    visibility: Visibility = "public",
     registered_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Wrap a spec document (already ``model_dump(by_alias=True,
@@ -211,13 +218,53 @@ CatalogueItem = Annotated[
 ]
 
 
+# ---- what the caller owns (GET /repository/mine) --------------------------
+#
+# The catalogue item of each kind plus the two envelope fields a Workspace row
+# needs. They are the gateway's record of this registration (see the module
+# docstring), so they are camelCase beside the spec's own fields, not inside
+# any of them. Both are always present: an envelope with an ``owner_user_id``
+# is one ``build_envelope()`` wrote.
+
+
+class _OwnedFields(BaseModel):
+    #: the envelope's ``visibility``.
+    visibility: Visibility
+    #: the envelope's ``registered_at``: when this gateway learned of the artifact.
+    registeredAt: AwareDatetime
+
+
+def _owned_payload(item: BaseModel, envelope: dict) -> dict:
+    return {
+        **item.model_dump(by_alias=True, mode="json"),
+        "visibility": envelope["visibility"],
+        "registeredAt": envelope["registered_at"],
+    }
+
+
+class OwnedSnapshotItem(SnapshotCatalogueItem, _OwnedFields):
+    @classmethod
+    def from_envelope(cls, envelope: dict) -> "OwnedSnapshotItem":
+        return cls.model_validate(_owned_payload(SnapshotCatalogueItem.from_metadata_json(envelope), envelope))
+
+
+class OwnedModelInputItem(ModelInputCatalogueItem, _OwnedFields):
+    @classmethod
+    def from_envelope(cls, envelope: dict) -> "OwnedModelInputItem":
+        return cls.model_validate(_owned_payload(ModelInputCatalogueItem.from_metadata_json(envelope), envelope))
+
+
+OwnedItem = Annotated[OwnedSnapshotItem | OwnedModelInputItem, Field(discriminator="kind")]
+
+
 class MineResponse(BaseModel):
     """``GET /repository/mine``: what the caller published, both kinds in one
-    list. No paging and no facets — a user publishes a handful of things."""
+    list, each with its ``visibility`` and ``registeredAt``. No paging and no
+    facets — a user publishes a handful of things."""
 
     model_config = ConfigDict(extra="forbid")
 
-    items: list[CatalogueItem]
+    items: list[OwnedItem]
 
 
 class FacetOption(BaseModel):

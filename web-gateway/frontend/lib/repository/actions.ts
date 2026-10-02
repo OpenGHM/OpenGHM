@@ -55,7 +55,7 @@ export async function fetchCatalogue(
 
 /**
  * Fetch what the signed-in user published — their snapshots and model inputs,
- * newest registration first — for the Workspace's Published section. Unlike
+ * newest registration first — for the Workspace's Snapshots & Inputs section. Unlike
  * the other reads here it needs a session: a 401 is thrown as the Axios error
  * it is, for the page to turn into a sign-in redirect.
  */

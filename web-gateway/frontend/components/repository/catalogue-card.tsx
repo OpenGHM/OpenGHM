@@ -11,13 +11,13 @@ import {
   coverageLine,
   creatorLabel,
   detailHref,
-  kindLabel,
   periodLabel,
   resolutionSummary,
   spatialBox,
 } from "@/lib/repository/catalogue-format";
 import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CoverageThumbnail } from "./coverage-thumbnail";
+import { KindBadge } from "./kind-badge";
 
 /** The grid the cards sit in, wherever they are listed in the grid view. */
 export const CARD_GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
@@ -46,23 +46,6 @@ function ArrowChip() {
       className="pointer-events-none absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-card text-foreground opacity-0 shadow-sm transition-[opacity,translate] delay-75 duration-200 ease-out group-hover/card:opacity-100 group-has-[a:focus-visible]/card:opacity-100 motion-safe:translate-y-1 motion-safe:group-hover/card:translate-y-0 motion-safe:group-has-[a:focus-visible]/card:translate-y-0"
     >
       <ArrowUpRight className="size-4" />
-    </span>
-  );
-}
-
-/** "Model Snapshot" or "Model Input": a quiet outlined label, with a dot in the kind's hue (brand, compute). */
-function KindBadge({ kind }: { kind: CatalogueItem["kind"] }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex w-fit shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn("size-1.5 shrink-0 rounded-full", kind === "snapshot" ? "bg-primary" : "bg-compute")}
-      />
-      {kindLabel(kind)}
     </span>
   );
 }

@@ -19,17 +19,17 @@ function links() {
 }
 
 describe("the Workspace section switch", () => {
-  it("is two links, Simulations then Published, to their pages", () => {
+  it("is two links, Simulations then Snapshots & Inputs, to their pages", () => {
     render(<WorkspaceSections active="simulations" />);
     expect(links().map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
       ["Simulations", "/workspace"],
-      ["Published", "/workspace/published"],
+      ["Snapshots & Inputs", "/workspace/data"],
     ]);
   });
 
   it.each([
     ["simulations", "Simulations"],
-    ["published", "Published"],
+    ["data", "Snapshots & Inputs"],
   ] as const)("marks %s as the current page, and only that one", (section, label) => {
     render(<WorkspaceSections active={section} />);
     const current = links().filter((a) => a.getAttribute("aria-current") === "page");
@@ -64,16 +64,16 @@ describe("the Workspace hero", () => {
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Simulations");
   });
 
-  it("says what the Published section says, with no action", () => {
-    render(<WorkspaceHero section="published" />);
-    expect(screen.getByText("Workspace · Public & immutable")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1, name: "Published by me" })).toBeTruthy();
+  it("says what the Snapshots & Inputs section says, with no action", () => {
+    render(<WorkspaceHero section="data" />);
+    expect(screen.getByText("Workspace · Immutable records")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "My Snapshots & Inputs" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Model snapshots and model inputs you have published. A published artifact never changes; a correction is a new version."
+        "Snapshots and model inputs you published. Their contents never change, and a correction is a new version; visibility decides who can find them."
       )
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: "New Simulation" })).toBeNull();
-    expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Published");
+    expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshots & Inputs");
   });
 });

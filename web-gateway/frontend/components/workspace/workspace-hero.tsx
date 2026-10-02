@@ -11,11 +11,11 @@ const COPY: Record<WorkspaceSection, { eyebrow: string; title: string; subtitle:
     subtitle:
       "Working configurations only you can see. Nothing here is a published model snapshot.",
   },
-  published: {
-    eyebrow: "Workspace · Public & immutable",
-    title: "Published by me",
+  data: {
+    eyebrow: "Workspace · Immutable records",
+    title: "My Snapshots & Inputs",
     subtitle:
-      "Model snapshots and model inputs you have published. A published artifact never changes; a correction is a new version.",
+      "Snapshots and model inputs you published. Their contents never change, and a correction is a new version; visibility decides who can find them.",
   },
 };
 

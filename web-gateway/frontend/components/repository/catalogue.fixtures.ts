@@ -9,6 +9,7 @@ import type {
   CatalogueFilterState,
   CatalogueItem,
   CatalogueResponse,
+  MineItem,
   ModelInput,
 } from "@/lib/repository/types";
 
@@ -152,4 +153,12 @@ export function response(
     facets: FACETS,
     ...overrides,
   };
+}
+
+/** A catalogue item as `GET /repository/mine` returns it: with its envelope's visibility and registration time. */
+export function mineItem(
+  item: CatalogueItem,
+  overrides: Partial<Pick<MineItem, "visibility" | "registeredAt">> = {}
+): MineItem {
+  return { ...item, visibility: "public", registeredAt: "2026-09-01T00:00:00Z", ...overrides };
 }
