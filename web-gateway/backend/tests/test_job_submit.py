@@ -684,7 +684,7 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
     script = render_script(
         spec=slurm.build_job_spec(job, snapshot, body),
         profile=preset.cluster_profile,
-        execution_profile=preset.execution_profiles["anvil_cpu_modules"],
+        execution_profile=slurm.gateway_execution_profiles()["anvil_cpu_modules"],
         stdout_path="/o",
         stderr_path="/e",
         remote_job_dir="/j",
@@ -695,8 +695,21 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
     assert "#SBATCH --account=ees260008" in directives
     assert not [d for d in directives if "--nodes" in d or "--ntasks" in d]
     assert "--id sim-20260930-0a1b2c --spool fresh" in script
-    # slurmly's preamble comes first; the body's own marker separates them.
-    assert script.index("module list") < script.index(job_script.BODY_MARKER)
+    # `set -e`, then the quiet module preamble, then the body: a failed
+    # `module load` stops the job, and nothing is printed on a good one.
+    lines = script.splitlines()
+    assert lines[lines.index("set -euo pipefail") + 1:][:2] == [
+        "module -q purge",
+        "module -q load modtree/cpu",
+    ]
+    assert "module list" not in script
+
+
+def test_every_module_preamble_is_quiet_and_has_no_module_list():
+    for name, profile in slurm.gateway_execution_profiles().items():
+        assert profile.preamble, name
+        assert all(line.startswith("module -q ") for line in profile.preamble), name
+        assert "module -q list" not in profile.preamble, name
 
 
 def test_a_walltime_the_draft_chose_is_sent_as_given(v2_spec_inputs):

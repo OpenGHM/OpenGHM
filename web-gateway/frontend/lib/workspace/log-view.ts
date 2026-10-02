@@ -14,8 +14,7 @@ export function logsReadable(status: JobStatus): boolean {
 }
 
 /**
- * The line to put under Messages when stderr has nothing after the setup
- * messages and SLURM stopped the job from outside (out of memory, time limit):
+ * The line to put under Messages when stderr is empty and SLURM stopped the job from outside (out of memory, time limit):
  * an empty Messages is then no sign that nothing went wrong. `null` for any
  * other job.
  */
@@ -25,13 +24,10 @@ export function stoppedMessage(input: {
   /** WBM's log has something in it, or has not been read yet. False only when
    *  it is known to be missing or empty. */
   wbmLog: boolean;
-  /** stderr has text, but all of it is setup messages. */
-  afterSetup: boolean;
 }): string | null {
-  const { status, failure, wbmLog, afterSetup } = input;
+  const { status, failure, wbmLog } = input;
   if (!isTerminalStatus(status) || !failure || !SLURM_STOPPED.has(failure.cause)) return null;
   const seeExcerpt = failure.excerpt ? " (see the log excerpt in the failure card)" : "";
   const progress = wbmLog ? "; the WBM log shows how far it got" : "";
-  const nothing = afterSetup ? "Nothing was written after the setup messages." : "Nothing was written to stderr.";
-  return `${nothing} SLURM stopped this job${seeExcerpt}${progress}.`;
+  return `Nothing was written to stderr. SLURM stopped this job${seeExcerpt}${progress}.`;
 }

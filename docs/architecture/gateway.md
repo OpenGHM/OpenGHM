@@ -467,15 +467,21 @@ through the one Next route handler for jobs,
 `web-gateway/frontend/app/api/jobs/[id]/logs/[stream]/route.ts`. The three
 streams are three files: `wbm` is the model's own log, `stdout` is the job
 script's output, and `stderr` is everything the script wrote to stderr, not
-only errors: slurmly's module preamble, then the delimiter line `BODY_MARKER`
-(`job_script.py`; the frontend mirrors it as `JOB_BODY_MARKER`), then the
-toolkit's download counter, then any real errors. The Logs panel is one box
-that lays them end to end in the order they happen (they share no
-timestamps): the setup messages (stderr before the delimiter, dimmed), the job
-output, the WBM log, the messages (stderr after it, the counter as one line),
-each block opened by a `──── Job output ────` separator line. Lines that look
-like errors are red (`log-severity.ts`, a word list, plus a failed job's reason
-as the failure card quotes it). The three streams are polled one after another,
+only errors. Nothing rewrites them for the screen: the job is what keeps its
+logs clean. The module preamble is quiet (`gateway_execution_profiles` in
+`slurm.py`: `module -q` on every module command, no `module list`; an unknown
+module still prints its error and fails the job), the script writes no banner
+of its own, and `openghm snapshot fetch` prints its `N/M files` counter only
+when stderr is a terminal, so a batch job's stderr holds real messages only.
+The Logs panel is one box that lays the three files end to end in the order
+they happen (they share no timestamps): the job output, the WBM log, the
+messages, each block opened by a `──── Job output ────` separator line, each
+file's lines exactly as written and numbered as in the file. The only things
+the box adds are its own separator, note and Retry lines, and colour: lines
+that look like errors are red and warnings amber (`log-severity.ts`, a word
+list, colour only), plus a failed job's reason as the failure card quotes it.
+A job that ran before the toolkit went quiet shows its module notices and
+counter lines as they were written. The three streams are polled one after another,
 never at once.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).

@@ -27,9 +27,6 @@ interface RowProps {
   number: number;
   text: string;
   severity: LineSeverity | null;
-  dim: boolean;
-  /** Lines a summary stands for. */
-  count: number;
   /** The stream a note's Retry button reads, when it has one. */
   retry?: LogStream;
   onRetry: (stream: LogStream) => void;
@@ -37,7 +34,7 @@ interface RowProps {
   digits: number;
 }
 
-const LogRowView = memo(function LogRowView({ kind, number, text, severity, dim, count, retry, onRetry, digits }: RowProps) {
+const LogRowView = memo(function LogRowView({ kind, number, text, severity, retry, onRetry, digits }: RowProps) {
   if (kind === "separator") {
     return <div className="mt-3 mb-1 font-semibold text-slate-300 first:mt-0">{text}</div>;
   }
@@ -64,8 +61,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, dim,
   return (
     <div
       data-severity={severity ?? undefined}
-      data-dim={dim && !tone ? "true" : undefined}
-      className={`-mx-3 flex gap-3 px-3 ${tone?.row ?? (dim ? "text-slate-400" : "")}`}
+      className={`-mx-3 flex gap-3 px-3 ${tone?.row ?? ""}`}
     >
       <span aria-hidden="true" data-marker className="w-[1ch] shrink-0 text-center font-bold select-none">
         {tone?.mark}
@@ -81,7 +77,6 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, dim,
       <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
         {tone && <span className="sr-only">{tone.word}</span>}
         {text || " "}
-        {kind === "summary" && <span className="text-slate-400"> ({count.toLocaleString("en-US")} progress lines)</span>}
       </span>
     </div>
   );
@@ -122,7 +117,6 @@ export function LogBlock({
   let widest = 0;
   for (const row of rows) {
     if (row.kind === "line") widest = Math.max(widest, row.number);
-    else if (row.kind === "summary") widest = Math.max(widest, row.number + row.lines - 1);
   }
   const digits = String(widest).length;
   const newRows = pausedAt === null ? 0 : Math.max(0, rows.length - pausedAt);
@@ -144,11 +138,9 @@ export function LogBlock({
           <LogRowView
             key={i}
             kind={row.kind}
-            number={row.kind === "line" || row.kind === "summary" ? row.number : 0}
+            number={row.kind === "line" ? row.number : 0}
             text={row.text}
             severity={row.kind === "line" ? row.severity : null}
-            dim={row.kind === "line" && row.dim === true}
-            count={row.kind === "summary" ? row.lines : 0}
             retry={row.kind === "note" ? row.retry : undefined}
             onRetry={onRetry}
             digits={digits}

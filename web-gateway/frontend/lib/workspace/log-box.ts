@@ -1,21 +1,13 @@
 /**
  * What the Logs box shows: the job's three files laid end to end in the order
- * they happen (the setup messages, the job's output, WBM's log, then the
- * messages), each block opened by one plain separator line. Pure, so it is
- * tested.
+ * they happen (the job's output, WBM's log, then the messages), each block
+ * opened by one plain separator line, each file's lines exactly as written.
+ * Pure, so it is tested.
  */
 import type { FilesState, JobFailure, JobStatus, LogStream } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import { isEmptyText, MAX_LOG_LINES } from "@/lib/workspace/log-lines";
-import {
-  collapseProgress,
-  failureReasonLines,
-  fetchesDone,
-  lineRows,
-  markReason,
-  splitStderr,
-  type LogRow,
-} from "@/lib/workspace/log-sections";
+import { failureReasonLines, lineRows, markReason, type LogRow } from "@/lib/workspace/log-sections";
 import type { StreamState } from "@/lib/workspace/log-stream";
 import { logsReadable, stoppedMessage } from "@/lib/workspace/log-view";
 import { formatBytes } from "@/lib/workspace/format";
@@ -61,8 +53,7 @@ export function buildLogBox(input: {
   const stdoutRows = lineRows(states.stdout.text);
   const wbmRows = lineRows(states.wbm.text);
   const reason = status === "FAILED" ? failureReasonLines(failure?.excerpt) : new Set<string>();
-  const split = splitStderr(markReason(lineRows(states.stderr.text), reason));
-  const messageRows = collapseProgress(split.body, { live, fetches: fetchesDone(stdoutRows) });
+  const messageRows = markReason(lineRows(states.stderr.text), reason);
 
   /** What a source with no rows says: why, in one muted line. */
   const missing = (state: StreamState): LogRow[] => {
@@ -100,16 +91,12 @@ export function buildLogBox(input: {
           status,
           failure,
           wbmLog: !(states.wbm.loaded && !states.wbm.error && isEmptyText(states.wbm.text)),
-          afterSetup: split.setup.length > 0,
         })
       : null;
 
   return {
     kind: "rows",
     rows: [
-      ...(split.setup.length > 0
-        ? [separator("Setup messages"), ...split.setup.map((row) => ({ ...row, dim: true }))]
-        : []),
       ...block("stdout", stdoutRows),
       ...block("wbm", wbmRows),
       ...block("stderr", messageRows, stopped ? [{ kind: "note" as const, text: stopped }] : []),

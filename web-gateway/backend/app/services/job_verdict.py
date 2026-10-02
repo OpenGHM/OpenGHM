@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.job import FailureCause, JobFailure
-from app.services.job_script import BODY_MARKER
 
 VerdictStatus = Literal["COMPLETED", "FAILED", "CANCELLED"]
 
@@ -85,8 +84,9 @@ _WBM_LOG_LINES = 15
 _WBM_LOG_SEPARATOR = "--- last lines of WBM's log ---"
 _REASON_CHARS = 200
 
-# Stderr lines that are noise, not news: the toolkit's fetch progress and the
-# container tooling's architecture warning.
+# Stderr lines that are noise, not news: the container tooling's architecture
+# warning, and the fetch counter that a toolkit install from before it went
+# quiet off a terminal still prints.
 _PROGRESS = re.compile(r"^\s*\d+/\d+ files\s*$")
 _NOISE_PREFIXES = ("dpkg-architecture: warning:",)
 
@@ -267,15 +267,12 @@ def _message(cause: str, *, detail: str | None, code: int | None, state: str | N
 
 
 def _stderr_excerpt(stderr_tail: str) -> str | None:
-    """The part of stderr that is the job's own: after the body's marker,
-    which keeps slurmly's `module list` out. With no marker the body never
-    started, and everything there is news. Known noise lines are dropped
-    (progress may arrive as `\\r` fragments: the last one is the line) and
-    blank runs collapse to one. The last ~60 lines / 8 KB."""
+    """The part of stderr worth showing: all of it. The job's module preamble
+    is quiet (`slurm.gateway_execution_profiles`), so what is on stderr is the
+    job's own, and a failed `module load` is news too. Known noise lines are
+    dropped (progress may arrive as `\\r` fragments: the last one is the line)
+    and blank runs collapse to one. The last ~60 lines / 8 KB."""
     text = (stderr_tail or "").replace("\r\n", "\n")
-    at = text.find(BODY_MARKER)
-    if at != -1:
-        text = text[at + len(BODY_MARKER):]
     lines: list[str] = []
     for raw in text.split("\n"):
         fragments = [f for f in raw.split("\r") if f.strip()]

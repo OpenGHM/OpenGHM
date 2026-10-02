@@ -12,7 +12,7 @@ describe("logsReadable", () => {
 });
 
 describe("stoppedMessage", () => {
-  const base = { status: "FAILED", wbmLog: true, afterSetup: false } as const;
+  const base = { status: "FAILED", wbmLog: true } as const;
   const stopped = (cause: FailureCause, excerpt: string | null = "x") => ({ cause, excerpt });
 
   it.each<FailureCause>(["out_of_memory", "timeout"])("does not read like nothing went wrong for %s", (cause) => {
@@ -30,12 +30,6 @@ describe("stoppedMessage", () => {
   it("does not send the reader to a WBM log known to be missing", () => {
     expect(stoppedMessage({ ...base, failure: stopped("timeout"), wbmLog: false })).toBe(
       "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card)."
-    );
-  });
-
-  it("says it was nothing after the setup messages when stderr holds only those", () => {
-    expect(stoppedMessage({ ...base, failure: stopped("timeout"), wbmLog: false, afterSetup: true })).toBe(
-      "Nothing was written after the setup messages. SLURM stopped this job (see the log excerpt in the failure card)."
     );
   });
 

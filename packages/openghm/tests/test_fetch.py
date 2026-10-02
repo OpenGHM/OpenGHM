@@ -546,6 +546,29 @@ def test_cli_fetch_reports_and_exits_0(bucket, tmp_path, monkeypatch):
     assert "model input:" not in out.output and not (tmp_path / "mi").exists()
 
 
+def test_cli_fetch_prints_no_progress_counter_when_stderr_is_not_a_tty(bucket, tmp_path, monkeypatch):
+    # A batch job's stderr is a file: the counter would be thousands of lines
+    # of noise, and the summary line already reports the result.
+    out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
+    assert out.exit_code == 0, out.output
+    assert " files" not in out.output.replace("spool: 2 files", "")
+    assert "downloaded 15, skipped 0, failed 0" in out.output
+    out = CliRunner().invoke(
+        cli, ["model-input", "fetch", MI_ID, "--config", str(tmp_path / "config.toml"),
+              "--dest", str(tmp_path / "there")])
+    assert out.exit_code == 0 and "/5 files" not in out.output
+
+
+def test_cli_fetch_keeps_the_progress_counter_on_a_tty(bucket, tmp_path, monkeypatch):
+    import click.testing
+
+    # CliRunner's stderr is never a terminal; make it look like one.
+    monkeypatch.setattr(click.testing._NamedTextIOWrapper, "isatty", lambda self: True)
+    out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2", "--no-model-input")
+    assert out.exit_code == 0, out.output
+    assert "7/7 files" in out.output
+
+
 def test_cli_fetch_includes_the_model_input_by_default(bucket, tmp_path, monkeypatch):
     out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
     assert out.exit_code == 0, out.output

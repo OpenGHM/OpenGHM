@@ -20,7 +20,6 @@ vi.mock("sonner", () => ({ toast }));
 
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { LogViewer } from "@/components/workspace/log-viewer";
-import { JOB_BODY_MARKER } from "@/lib/workspace/log-sections";
 
 const chunk = (over: Partial<JobLogChunk> = {}): { ok: true; data: JobLogChunk } => ({
   ok: true,
@@ -111,32 +110,34 @@ describe("LogViewer with fixture text", () => {
     expect(fetchJobLog).not.toHaveBeenCalled();
   });
 
-  it("shows the sources in order, each after one plain separator line", () => {
+  it("shows the sources in order, each after one plain separator line, every line as written", () => {
     render(
       viewer("COMPLETED", {
         previewLogs: {
           wbm: "wbm line",
           stdout: "out line\ndownloaded 1, skipped 2, failed 0 (1 KB downloaded)",
-          stderr: `setup line\n${JOB_BODY_MARKER}\n  1000/32959 files\n  32000/32959 files\nmessage line`,
+          stderr: "The following modules were not unloaded:\n  1000/32959 files\n  32000/32959 files\nmessage line",
         },
       })
     );
     const text = box().textContent ?? "";
     const at = (s: string) => text.indexOf(s);
-    const order = ["Setup messages", "setup line", "Job output", "out line", "WBM log", "wbm line", "Messages", "Downloaded 32959 files", "message line"].map(at);
+    const order = [
+      "Job output",
+      "out line",
+      "WBM log",
+      "wbm line",
+      "Messages",
+      "not unloaded",
+      "1000/32959 files",
+      "32000/32959 files",
+      "message line",
+    ].map(at);
     expect(order.every((n) => n >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(text).not.toContain(JOB_BODY_MARKER);
-    expect(text).not.toContain("1000/32959");
-    expect(screen.queryByRole("button", { name: /Setup messages/ })).toBeNull();
-  });
-
-  it("dims the setup messages and keeps them plain", () => {
-    render(viewer("COMPLETED", { previewLogs: { stderr: `The following modules were not unloaded:\n${JOB_BODY_MARKER}\n` } }));
-    const row = [...box().querySelectorAll("[data-dim]")];
-    expect(row).toHaveLength(1);
-    expect(row[0].textContent).toContain("not unloaded");
-    expect(row[0].getAttribute("data-severity")).toBeNull();
+    expect(text).not.toContain("Setup messages");
+    expect(text).not.toContain("Downloaded 32959 files");
+    expect(box().querySelector("[data-dim]")).toBeNull();
   });
 
   it("marks an error line in red with a marker and a word for those who do not see colour", () => {
@@ -156,7 +157,7 @@ describe("LogViewer with fixture text", () => {
   it("shows a failed job's reason in red, as the failure card quotes it", () => {
     render(
       viewer("FAILED", {
-        previewLogs: { stderr: `${JOB_BODY_MARKER}\nAggregation multi-year start is outside of the run dates...\n` },
+        previewLogs: { stderr: "Aggregation multi-year start is outside of the run dates...\n" },
         data: { failure: { cause: "wbm_error", phase: null, message: "x", excerpt: "Aggregation multi-year start is outside of the run dates..." } },
       })
     );

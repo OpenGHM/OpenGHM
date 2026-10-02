@@ -603,17 +603,15 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
     tty = sys.stderr.isatty()
 
     def progress(done: int, total: int) -> None:
-        if tty:
-            click.echo(f"\r  {done}/{total} files", nl=False, err=True)
-        elif done % 1000 == 0:
-            click.echo(f"  {done}/{total} files", err=True)
+        click.echo(f"\r  {done}/{total} files", nl=False, err=True)
 
     try:
         cfg = load_config(path=config_path).config
         result = fetch_snapshot(
             FetchOptions(snapshot_id=snapshot_id, dest=dest, spool=spool, image=not no_image,
                          model_input=not no_model_input, jobs=jobs),
-            cfg, console=err if tty else None, on_progress=progress,
+            cfg, console=err if tty else None,
+            on_progress=progress if tty else None,  # no counter in a log file
         )
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
@@ -666,16 +664,13 @@ def model_input_fetch_cmd(model_input_id: str, dest: Optional[str], jobs: int,
     tty = sys.stderr.isatty()
 
     def progress(done: int, total: int) -> None:
-        if tty:
-            click.echo(f"\r  {done}/{total} files", nl=False, err=True)
-        elif done % 1000 == 0:
-            click.echo(f"  {done}/{total} files", err=True)
+        click.echo(f"\r  {done}/{total} files", nl=False, err=True)
 
     try:
         cfg = load_config(path=config_path).config
         result = fetch_model_input(
             ModelInputOptions(model_input_id=model_input_id, dest=dest, jobs=jobs),
-            cfg, on_progress=progress,
+            cfg, on_progress=progress if tty else None,  # no counter in a log file
         )
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)

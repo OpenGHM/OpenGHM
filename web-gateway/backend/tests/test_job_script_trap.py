@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.job_script import BODY_MARKER, render_job_body
+from app.services.job_script import render_job_body
 
 SIM_ID = "sim-20260930-0a1b2c"
 SNAPSHOT_ID = "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89"
@@ -168,9 +168,10 @@ def test_a_clean_run_exits_0_and_records_a_manifest(job):
     assert {f["bytes"] for f in out["files"] if f["path"].endswith(".nc")} == {4}
 
 
-def test_the_body_says_so_on_stderr_before_anything_else(job):
+def test_the_body_adds_nothing_of_its_own_to_stderr(job):
+    # The logs are shown as written: no banner or marker line of ours.
     done = job.run()
-    assert done.stderr.splitlines()[0] == BODY_MARKER
+    assert done.stderr == ""
 
 
 def test_the_record_is_written_atomically(job):

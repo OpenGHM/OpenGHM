@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from slurmly import (
+    ExecutionProfile,
     JobSpec,
     SlurmSSHClient,
     SubmittedJob,
@@ -62,6 +63,33 @@ _LIFECYCLE_STATE = {
     "cancelled": "CANCELLED",
     "timeout": "TIMEOUT",
 }
+
+
+# ---------------------------------------------------------------------------
+# Module preamble
+# ---------------------------------------------------------------------------
+
+
+def gateway_execution_profiles() -> dict[str, ExecutionProfile]:
+    """slurmly's execution profiles with a quiet module preamble.
+
+    The job's stderr is shown as written, so the preamble must not write to it
+    on a good run: Lmod's "modules were not unloaded" notice (the sticky `xalt`
+    survives `module purge`) and `module list`'s table would be its first
+    lines on every job. `-q` silences Lmod's warnings only; an error (an
+    unknown module) is still printed and still returns non-zero, and slurmly
+    renders `set -euo pipefail` before the preamble, so a failed `module load`
+    fails the job. `module list` only informs, so it is dropped. The sticky
+    module is left alone."""
+    quiet: dict[str, ExecutionProfile] = {}
+    for name, profile in get_preset("purdue_anvil").execution_profiles.items():
+        lines = [
+            "module -q " + line[len("module "):] if line.startswith("module ") else line
+            for line in profile.preamble
+            if line.split() != ["module", "list"]
+        ]
+        quiet[name] = profile.model_copy(update={"preamble": lines})
+    return quiet
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +143,7 @@ async def get_slurm_client() -> SlurmSSHClient:
             key_path=settings.ANVIL_SSH_KEY_PATH or None,
             remote_base_dir=_resolve_remote_base_dir(),
             cluster_profile=preset.cluster_profile,
-            execution_profiles=preset.execution_profiles,
+            execution_profiles=gateway_execution_profiles(),
             account=settings.ANVIL_ACCOUNT or None,
             max_concurrent_commands=settings.ANVIL_MAX_CONCURRENT_COMMANDS,
         )

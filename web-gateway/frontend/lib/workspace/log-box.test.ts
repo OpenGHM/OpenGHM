@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FailureCause, JobStatus, LogStream } from "@/lib/jobs/types";
 import { buildLogBox, LOG_SOURCES, type LogBox } from "@/lib/workspace/log-box";
-import { JOB_BODY_MARKER, type LogRow } from "@/lib/workspace/log-sections";
+import type { LogRow } from "@/lib/workspace/log-sections";
 import { INITIAL_STREAM, previewStreamState, type StreamState } from "@/lib/workspace/log-stream";
 
 const PREAMBLE = [
@@ -14,7 +14,7 @@ const PREAMBLE = [
 const HEALTHY: Record<LogStream, string> = {
   stdout: "openghm 0.2.0 commit 8c3077b\ndownloaded 34, skipped 32960, failed 0 (488.8 MB downloaded)\n",
   wbm: "Spinup 1/12 (1991-01-01)\nSpinup 2/12 (1991-01-02)\n",
-  stderr: [...PREAMBLE, JOB_BODY_MARKER, "  1000/32959 files", "  32000/32959 files", ""].join("\n"),
+  stderr: [...PREAMBLE, "  1000/32959 files", "  32000/32959 files", ""].join("\n"),
 };
 
 type Over = Partial<Record<LogStream, StreamState | string | undefined>>;
@@ -50,10 +50,8 @@ describe("LOG_SOURCES", () => {
 });
 
 describe("buildLogBox", () => {
-  it("lays the sources end to end: setup, job output, WBM log, messages, each after a separator", () => {
+  it("lays the sources end to end, each after a separator, every line as written", () => {
     expect(texts(build())).toEqual([
-      "──── Setup messages ────",
-      ...PREAMBLE,
       "──── Job output ────",
       "openghm 0.2.0 commit 8c3077b",
       "downloaded 34, skipped 32960, failed 0 (488.8 MB downloaded)",
@@ -61,29 +59,28 @@ describe("buildLogBox", () => {
       "Spinup 1/12 (1991-01-01)",
       "Spinup 2/12 (1991-01-02)",
       "──── Messages ────",
-      "Downloaded 32959 files",
+      ...PREAMBLE,
+      "  1000/32959 files",
+      "  32000/32959 files",
     ]);
   });
 
-  it("never shows the delimiter line", () => {
-    expect(texts(build()).join("\n")).not.toContain(JOB_BODY_MARKER);
+  it("rewrites nothing: no setup block, no hidden marker, no counter summary, no dimmed rows", () => {
+    const rows = rowsOf(build({ stderr: "== openghm gateway job body ==\n  5000/32959 files\n" }));
+    expect(rows.map((r) => r.kind)).toEqual(["separator", "line", "line", "separator", "line", "line", "separator", "line", "line"]);
+    expect(texts(build({ stderr: "== openghm gateway job body ==\n  5000/32959 files\n" })).slice(-2)).toEqual([
+      "== openghm gateway job body ==",
+      "  5000/32959 files",
+    ]);
+    expect(rows.some((r) => "dim" in r)).toBe(false);
   });
 
-  it("shows the setup messages dimmed, and plain: they are not errors", () => {
-    const setup = rowsOf(build()).filter((r) => r.kind === "line" && r.dim);
-    expect(setup).toHaveLength(PREAMBLE.length);
-    expect(setup.every((r) => r.kind === "line" && r.severity === null)).toBe(true);
-  });
-
-  it("keeps the other lines at their file line numbers", () => {
-    const messages = rowsOf(build()).filter((r) => r.kind === "summary");
-    expect(messages).toEqual([{ kind: "summary", number: PREAMBLE.length + 2, lines: 2, text: "Downloaded 32959 files" }]);
-  });
-
-  it("has no setup block when stderr has no marker: all of it is messages", () => {
-    const out = texts(build({ stderr: "module: command not found\n" }));
-    expect(out).not.toContain("──── Setup messages ────");
-    expect(out.slice(-2)).toEqual(["──── Messages ────", "module: command not found"]);
+  it("numbers each file's own lines, from 1", () => {
+    const numbers = () =>
+      rowsOf(build())
+        .filter((r) => r.kind === "line")
+        .map((r) => (r.kind === "line" ? r.number : 0));
+    expect(numbers()).toEqual([1, 2, 1, 2, 1, 2, 3, 4, 5, 6]);
   });
 
   it("marks error and warning lines in every source", () => {
@@ -98,18 +95,11 @@ describe("buildLogBox", () => {
   });
 
   it("marks a failed job's reason, as the failure card quotes it", () => {
-    const stderr = `${JOB_BODY_MARKER}\nAggregation multi-year start is outside of the run dates...\n`;
+    const stderr = "Aggregation multi-year start is outside of the run dates...\n";
     const failure = { cause: "wbm_error" as const, excerpt: "Aggregation multi-year start is outside of the run dates..." };
     const line = (box: LogBox) => rowsOf(box).find((r) => r.kind === "line" && r.text.startsWith("Aggregation"));
     expect(line(build({ stderr }, { status: "FAILED", failure }))).toMatchObject({ severity: "error" });
     expect(line(build({ stderr }, { status: "COMPLETED", failure }))).toMatchObject({ severity: null });
-  });
-
-  it("says Downloading while a live job's counter is the last thing written and stdout has no summary", () => {
-    const stderr = [JOB_BODY_MARKER, "  5000/32959 files"].join("\n");
-    expect(texts(build({ stderr, stdout: "openghm 0.2.0\n" }, { status: "RUNNING" })).at(-1)).toBe(
-      "Downloading: 5000/32959 files"
-    );
   });
 });
 
@@ -192,13 +182,6 @@ describe("an empty Messages after SLURM stopped the job", () => {
     );
   });
 
-  it("says it was nothing after the setup messages when stderr holds only those", () => {
-    const stderr = [...PREAMBLE, JOB_BODY_MARKER].join("\n");
-    expect(messagesNote(build({ stderr }, { status: "FAILED", failure: oom }))).toContain(
-      "Nothing was written after the setup messages."
-    );
-  });
-
   it("does not point to a WBM log that is missing", () => {
     expect(messagesNote(build({ stderr: "", wbm: undefined }, { status: "FAILED", failure: oom }))).toBe(
       "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card)."
@@ -208,6 +191,6 @@ describe("an empty Messages after SLURM stopped the job", () => {
   it("leaves an ordinary failure at (no output), and says nothing when there is text", () => {
     const wbmError = { cause: "wbm_error" as const, excerpt: null };
     expect(messagesNote(build({ stderr: "" }, { status: "FAILED", failure: wbmError }))).toBe("(no output)");
-    expect(messagesNote(build({ stderr: `${JOB_BODY_MARKER}\nboom\n` }, { status: "FAILED", failure: oom }))).toBe("boom");
+    expect(messagesNote(build({ stderr: "boom\n" }, { status: "FAILED", failure: oom }))).toBe("boom");
   });
 });

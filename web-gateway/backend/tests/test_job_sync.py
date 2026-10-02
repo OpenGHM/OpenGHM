@@ -165,12 +165,10 @@ def test_a_clean_finish_stores_the_verdict_with_everything_it_rests_on(db, anvil
 
 
 def test_a_failed_finish_stores_the_cause_and_the_excerpt(db, anvil, job):
-    from app.services.job_script import BODY_MARKER
-
     rec = failing(phase="fetch", steps={"fetch": {"exit_code": 1}}, staged=False)
     anvil.found["12345"] = info("FAILED", "failed", exit_code="1:0")
     anvil.files[OUTCOME] = json.dumps(rec)
-    anvil.files[STDERR] = f"Currently Loaded Modules:\n{BODY_MARKER}\nfailed:\n  a.nc: HTTP 500\n"
+    anvil.files[STDERR] = "failed:\n  a.nc: HTTP 500\n"
     sweep()
     stored = db.jobs.docs["job-1"]
     assert stored["status"] == "FAILED"

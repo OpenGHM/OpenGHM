@@ -190,7 +190,7 @@ def anvil(monkeypatch, db) -> Anvil:
         transport=transport,
         remote_base_dir=REMOTE_BASE,
         cluster_profile=preset.cluster_profile,
-        execution_profiles=preset.execution_profiles,
+        execution_profiles=slurm.gateway_execution_profiles(),
     )
     fake = Anvil(client=client, transport=transport)
     transport.handler = fake.answer

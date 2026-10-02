@@ -79,11 +79,6 @@ _COMMIT_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 _VARIABLE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-#: The first line the body prints, on stderr. slurmly's preamble (`module
-#: list` writes to stderr) comes before it, so the backend cuts a stderr
-#: excerpt after this line (`job_verdict`).
-BODY_MARKER = "== openghm gateway job body =="
-
 #: The program the EXIT trap feeds to the toolkit venv's Python, as a quoted
 #: heredoc. That Python is 3.9 on Anvil, so: stdlib only, no `X | Y`
 #: annotations. Its inputs are environment variables the body exports
@@ -342,7 +337,6 @@ def render_job_body(
 
     return "\n".join(
         [
-            f'echo "{BODY_MARKER}" >&2',
             "set -euo pipefail",
             f"OPENGHM={shlex.quote(home + '/bin/openghm')}",
             f"CONFIG={shlex.quote(home + '/gateway.toml')}",

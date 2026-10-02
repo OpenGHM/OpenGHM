@@ -58,7 +58,6 @@ def test_default_v2_draft_renders_the_golden_body_with_no_overrides(v2):
     assert overrides == job_script.RunOverrides(None, None, None)
     body = _body(**overrides.__dict__)
     assert body == f"""\
-echo "== openghm gateway job body ==" >&2
 set -euo pipefail
 OPENGHM={HOME}/bin/openghm
 CONFIG={HOME}/gateway.toml

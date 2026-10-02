@@ -15,18 +15,13 @@ import copy
 
 import pytest
 
-from app.services.job_script import BODY_MARKER
 from app.services.job_verdict import classify
 
 from route_helpers import SUCCESS_OUTCOME as SUCCESS
 
 
-# What slurmly's preamble leaves on stderr before the body's marker.
-PREAMBLE = "Currently Loaded Modules:\n  1) modtree/cpu   2) git/2.31\n"
-
-
 def stderr(*lines: str) -> str:
-    return PREAMBLE + BODY_MARKER + "\n" + "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n"
 
 
 def record(**changes) -> dict:
@@ -128,7 +123,6 @@ def test_a_wbm_error_without_a_log_falls_back_to_stderr():
 # What Anvil job 20976785 left on stderr: the reason WBM stopped is here, not
 # in WBM's own log.
 REAL_STDERR = (
-    PREAMBLE + BODY_MARKER + "\n"
     "  1000/1542 files\n"
     "dpkg-architecture: warning: cannot determine CC system type, falling back to default (native compilation)\n"
     "\n"
@@ -425,7 +419,7 @@ def test_the_excerpt_is_the_last_60_lines_and_8_kb():
 
 def test_an_empty_stderr_leaves_no_excerpt():
     assert verdict("TIMEOUT", outcome=None, err="").failure.excerpt is None
-    assert verdict("TIMEOUT", outcome=None, err=PREAMBLE + BODY_MARKER + "\n").failure.excerpt is None
+    assert verdict("TIMEOUT", outcome=None, err="\n\n").failure.excerpt is None
 
 
 @pytest.mark.parametrize("state", ["RUNNING", "PENDING", "", None, "WHATEVER"])
