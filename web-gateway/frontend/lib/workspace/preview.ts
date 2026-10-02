@@ -6,6 +6,9 @@
  * it. The fixtures are the preview's and the tests' data: only that route
  * uses them, and it answers 404 in production. No real page imports them.
  *
+ * A DRAFT is not here: it is the draft wizard's page, and its state is the
+ * person's own (`components/workspace/draft-wizard.tsx`).
+ *
  * Keys are lower case, `<status>` or `<status>:<variant>`. A bare upper-case
  * status (`/dev/workspace/FAILED`) still works.
  */
@@ -46,7 +49,6 @@ export const PREVIEW_GROUPS: readonly PreviewGroup[] = [
   {
     title: "Status",
     options: [
-      plain("DRAFT"),
       plain("PENDING"),
       plain("SUBMITTED"),
       plain("RUNNING"),

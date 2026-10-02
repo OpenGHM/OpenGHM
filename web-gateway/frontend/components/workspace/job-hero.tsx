@@ -11,9 +11,7 @@ import { HERO_BUTTON, HeroError } from "@/components/workspace/hero-button";
 import { JobDeleteMenu } from "@/components/workspace/job-delete-menu";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { SubmitSimulationButton } from "@/components/workspace/submit-simulation-button";
 import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
-import type { Recommended } from "@/lib/jobs/compute";
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 
@@ -106,50 +104,17 @@ function useDeleteNotes() {
   };
 }
 
-/** A DRAFT: submit it, or delete it from the menu. Nothing here is live. */
-function DraftHero({
-  job,
-  recommended,
-  blockedReason,
-  preview,
-}: {
-  job: Job;
-  recommended: Recommended | null;
-  blockedReason: string | null;
-  preview: boolean;
-}) {
-  const { menuProps, notes } = useDeleteNotes();
-  return (
-    <HeroFrame job={job} status="DRAFT">
-      <SubmitSimulationButton
-        job={job}
-        recommended={recommended}
-        blockedReason={blockedReason}
-        trailing={
-          <JobDeleteMenu
-            jobId={job.id}
-            isDraft
-            workDir={null}
-            remoteJobDir={null}
-            files={null}
-            preview={preview}
-            {...menuProps}
-          />
-        }
-        extraNotes={notes}
-      />
-    </HeroFrame>
-  );
-}
-
 /**
- * Every other status, following the live one: Cancel while the job is queued or
- * running, "New from this snapshot" and Delete once it has ended, and nothing
- * in between (COMPLETING finishes by itself, and a cancel already asked for is
+ * The status page's header, with the actions for the live status: Cancel while
+ * the job is queued or running, "New from this snapshot" and Delete once it has
+ * ended, and nothing in between (COMPLETING finishes by itself, and a cancel already asked for is
  * waiting on SLURM; the status panel says so). When the poll moves the status
  * on, the actions change with it, without a reload.
+ *
+ * Render it inside a `LiveJobProvider`. A DRAFT has no header here: the draft
+ * wizard has its own.
  */
-function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
+export function JobHero({ job, preview = false }: { job: Job; preview?: boolean }) {
   const { jobId, status, view, apply, refresh } = useLiveJobContext();
   const [cancelOpen, setCancelOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -233,32 +198,5 @@ function LiveHero({ job, preview }: { job: Job; preview: boolean }) {
         />
       )}
     </HeroFrame>
-  );
-}
-
-/**
- * The detail page's header, with the actions for the job's status: one home for
- * each action (Submit, Cancel, New from this snapshot, Delete). A draft has no
- * live state to follow; every other status reads `LiveJobProvider`, so render
- * it inside one for those.
- */
-export function JobHero({
-  job,
-  recommended,
-  blockedReason,
-  preview = false,
-}: {
-  job: Job;
-  /** The snapshot's own `recommendedCompute`, for the submit summary. Drafts only. */
-  recommended: Recommended | null;
-  /** Why this user cannot submit (ADR 0024), or null. Drafts only. */
-  blockedReason: string | null;
-  /** Fixture data: the dialogs answer with a toast and send nothing. */
-  preview?: boolean;
-}) {
-  return job.status === "DRAFT" ? (
-    <DraftHero job={job} recommended={recommended} blockedReason={blockedReason} preview={preview} />
-  ) : (
-    <LiveHero job={job} preview={preview} />
   );
 }

@@ -75,6 +75,16 @@ describe("the delete dialog", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("tells onDeleted before it closes, so a caller can tell a delete from a cancel", async () => {
+    deleteSimulation.mockResolvedValue({ ok: true, data: null });
+    const order: string[] = [];
+    const onDeleted = vi.fn(() => void order.push("deleted"));
+    const onOpenChange = vi.fn((open: boolean) => void order.push(`open:${open}`));
+    setup({ onDeleted, onOpenChange });
+    fireEvent.click(screen.getByRole("button", { name: "Delete simulation" }));
+    await waitFor(() => expect(order).toEqual(["deleted", "open:false"]));
+  });
+
   it("stays open while the request is in flight", async () => {
     let answer: (value: unknown) => void = () => {};
     deleteSimulation.mockReturnValue(new Promise((resolve) => (answer = resolve)));

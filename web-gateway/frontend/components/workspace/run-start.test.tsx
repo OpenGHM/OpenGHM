@@ -17,9 +17,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { NewSimulationWizard } from "@/components/workspace/new-simulation-wizard";
-import { JobDetail } from "@/components/workspace/job-detail";
-import { SimulationEditor } from "@/components/workspace/simulation-editor";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset } from "@/lib/workspace/fixtures";
 import type { Dataset } from "@/lib/repository/types";
 
 beforeAll(() => {
@@ -41,7 +39,6 @@ function setStart(value: string) {
   fireEvent.change(startField(), { target: { value } });
 }
 const nextButton = () => screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement;
-const saveButton = () => screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
 
 function wizardAtParameters(snapshot: Dataset) {
   render(<NewSimulationWizard snapshot={snapshot} submitBlockedReason={null} />);
@@ -100,54 +97,5 @@ describe("the wizard's parameters step", () => {
     expect(screen.queryByText(/couldn't check/)).toBeNull();
     expect(screen.queryByText(/one file per/)).toBeNull();
     expect(nextButton().disabled).toBe(false);
-  });
-});
-
-describe("the draft editor", () => {
-  const draft = fakeSimulation("DRAFT", {
-    parameters: {
-      temporal_range_start: "2001-03-01",
-      temporal_range_end: "2001-12-31",
-      spatial_domain: null,
-      variables: ["discharge"],
-      custom_params: null,
-    },
-  });
-
-  it("flags the saved start, keeps Save off with the reason, and the fix re-enables it", () => {
-    render(<SimulationEditor job={draft} availableVariables={["discharge"]} dataset={yearly} />);
-    expect(startField().getAttribute("aria-invalid")).toBe("true");
-    expect(saveButton().disabled).toBe(true);
-    expect(saveButton().title).toBe("The start date doesn't suit this model. Change it to continue.");
-    expect(screen.getByText("The start date doesn't suit this model. Change it to continue.")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Start on 2001-01-01 instead" }));
-    expect(startField().value).toBe("2001-01-01");
-    expect(startField().getAttribute("aria-invalid")).toBeNull();
-    expect(saveButton().disabled).toBe(false);
-  });
-
-  it("does not block when the snapshot could not be loaded", () => {
-    render(<SimulationEditor job={draft} availableVariables={["discharge"]} dataset={null} />);
-    expect(screen.getByText(/couldn't check where this model's runs may start/)).toBeTruthy();
-    expect(saveButton().disabled).toBe(false);
-  });
-});
-
-describe("the draft page's Submit", () => {
-  it("is off, with the reason, while the saved start doesn't suit the model", () => {
-    const job = fakeSimulation("DRAFT", {
-      parameters: {
-        temporal_range_start: "2001-03-01",
-        temporal_range_end: "2001-12-31",
-        spatial_domain: null,
-        variables: ["discharge"],
-        custom_params: null,
-      },
-    });
-    render(<JobDetail job={job} dataset={yearly} viewerEmail={null} blockedReason={null} preview />);
-    const submit = screen.getByRole("button", { name: /Submit to Anvil/ }) as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-    expect(screen.getByText(/start date doesn't suit the model/)).toBeTruthy();
   });
 });

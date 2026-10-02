@@ -42,9 +42,7 @@ export default async function DevWorkspacePreviewPage({
       <DevPreviewSwitcher active={preview.key} />
       <JobDetail
         job={job}
-        dataset={null}
         viewerEmail={viewerEmail}
-        blockedReason="This is a design preview; nothing can be submitted from it."
         preview
         previewLogs={fakeLogs(job.status)}
         previewLive={fakeLive(job)}

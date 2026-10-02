@@ -30,6 +30,8 @@ export function JobDeleteMenu({
   files,
   preview = false,
   onOpen,
+  onOpenChange,
+  onDeleted,
   onError,
   onSessionExpired,
 }: {
@@ -44,6 +46,11 @@ export function JobDeleteMenu({
   preview?: boolean;
   /** The dialog is about to open: the caller clears an earlier failure. */
   onOpen?: () => void;
+  /** The dialog opened or closed. A delete that went through calls `onDeleted`
+   *  first, so a caller can tell closing from deleting. */
+  onOpenChange?: (open: boolean) => void;
+  /** Called instead of going to `/workspace` once the simulation is gone. */
+  onDeleted?: () => void;
   /** The delete failed and the simulation still exists. */
   onError?: (message: string) => void;
   onSessionExpired?: () => void;
@@ -75,6 +82,7 @@ export function JobDeleteMenu({
             onSelect={() => {
               onOpen?.();
               setOpen(true);
+              onOpenChange?.(true);
             }}
           >
             <Trash2 aria-hidden="true" />
@@ -85,7 +93,11 @@ export function JobDeleteMenu({
 
       <DeleteSimulationDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => {
+          setOpen(next);
+          onOpenChange?.(next);
+        }}
+        onDeleted={onDeleted}
         jobId={jobId}
         isDraft={isDraft}
         workDir={workDir}

@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button";
 import { HERO_BUTTON, HeroError } from "@/components/workspace/hero-button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { deriveSimulation } from "@/lib/jobs/actions";
+import { stepHref } from "@/lib/workspace/draft-wizard";
 
 /**
- * "New simulation from this snapshot" (T9) — the only way to start a
- * simulation today (spec.md: starting from scratch needs a model-input
- * catalogue the gateway doesn't have yet). Creates a DRAFT inheriting the
- * snapshot's own configuration and opens it straight in the editor.
+ * "New simulation from this snapshot" (T9). Creates a DRAFT inheriting the
+ * snapshot's own configuration and opens it at the draft wizard's second step,
+ * "Model & input" (ADR 0028).
  */
 export function DeriveSimulationButton({
   datasetId,
@@ -51,7 +51,7 @@ export function DeriveSimulationButton({
           }
           return;
         }
-        router.push(`/workspace/${result.data.id}`);
+        router.push(stepHref(result.data.id, "model"));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create simulation";
         setError(msg);

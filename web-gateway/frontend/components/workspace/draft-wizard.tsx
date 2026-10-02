@@ -1,0 +1,463 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
+import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { Button } from "@/components/ui/button";
+import { DraftModelStep } from "@/components/workspace/draft-model-step";
+import { DraftProgress } from "@/components/workspace/draft-progress";
+import { DraftReviewStep } from "@/components/workspace/draft-review-step";
+import { DraftRunStep } from "@/components/workspace/draft-run-step";
+import { stepHeadingId } from "@/components/workspace/draft-step-heading";
+import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
+import { HeroError } from "@/components/workspace/hero-button";
+import { JobDeleteMenu } from "@/components/workspace/job-delete-menu";
+import { SaveStatus } from "@/components/workspace/save-status";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
+import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
+import { simulationSource } from "@/lib/jobs/simulation-source";
+import type { Job, SubmitError } from "@/lib/jobs/types";
+import { newerJob, writeDraftCache } from "@/lib/workspace/draft-cache";
+import {
+  fromJob,
+  submitProblems,
+  type DraftContext,
+  type DraftLocal,
+} from "@/lib/workspace/draft-state";
+import {
+  DRAFT_STEPS,
+  FIELD_STEP,
+  parseStep,
+  recommendedComputeFor,
+  stepHref,
+  type DraftStep,
+} from "@/lib/workspace/draft-wizard";
+import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
+import { useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
+
+/** What the header calls a draft: the name being typed, else its slug, else a
+ *  placeholder (a draft has no run id yet). Follows the input on every keystroke. */
+function liveName(name: string, job: Job): string {
+  return name.trim() || job.slug || "Untitled simulation";
+}
+
+/** The step the address bar names right now. */
+function stepFromLocation(): DraftStep {
+  return parseStep(new URLSearchParams(window.location.search).get("step"));
+}
+
+/**
+ * A draft, edited in place: the wizard behind `/workspace/<id>?step=...` (ADR
+ * 0028). It owns the local copy of the draft, which step is showing, and the
+ * auto-save (`useDraftAutosave`), and lays out the page: the hero (name, status,
+ * save status, Delete, the steps) over the content of the current step.
+ *
+ * - **Starting point.** The job the server rendered, or the copy of it this tab
+ *   last saw saved when that is newer (Next can restore a page from its
+ *   back/forward cache with props that predate it). When the server sends a
+ *   different job later (after Reload), or the tab comes back into view with
+ *   nothing unsaved and the server's copy has moved on, the wizard starts over
+ *   from it.
+ * - **Steps.** The URL says which one; Next, Back and the progress strip change
+ *   it with `history.pushState`, so there is no server round trip. Each change
+ *   saves what is waiting and moves focus to the step's heading. Nothing blocks
+ *   a step: what stands in the way of a submit is flagged on the strip and listed
+ *   on Review.
+ */
+export function DraftWizard({
+  job,
+  ctx,
+  blockedReason,
+  initialStep,
+}: {
+  /** The draft as the server page read it. */
+  job: Job;
+  ctx: DraftContext;
+  /** Why this user cannot submit (ADR 0024), or null. */
+  blockedReason: string | null;
+  initialStep: DraftStep;
+}) {
+  const [seen, setSeen] = useState(job);
+  const [start, setStart] = useState(() => ({ job: newerJob(job), step: initialStep, epoch: 0 }));
+  // The server page rendered again with another copy (Reload, a refresh); its
+  // `initialStep` is the address bar's as of then.
+  if (job !== seen) {
+    setSeen(job);
+    if (job.updated_at !== seen.updated_at) setStart((s) => ({ job, step: initialStep, epoch: s.epoch + 1 }));
+  }
+  // Back in view with the server's copy moved on: start over from it, on the
+  // step the address bar shows now.
+  const reload = useCallback((fresh: Job) => {
+    writeDraftCache(fresh);
+    setStart((s) => ({ job: fresh, step: stepFromLocation(), epoch: s.epoch + 1 }));
+  }, []);
+
+  return (
+    <WizardBody
+      key={start.epoch}
+      initialJob={start.job}
+      ctx={ctx}
+      blockedReason={blockedReason}
+      initialStep={start.step}
+      onReload={reload}
+    />
+  );
+}
+
+function WizardBody({
+  initialJob,
+  ctx,
+  blockedReason,
+  initialStep,
+  onReload,
+}: {
+  initialJob: Job;
+  ctx: DraftContext;
+  blockedReason: string | null;
+  initialStep: DraftStep;
+  onReload: (job: Job) => void;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const jobId = initialJob.id;
+
+  const [local, setLocal] = useState<DraftLocal>(() => fromJob(initialJob));
+  const [submitting, setSubmitting] = useState(false);
+  const [lastSubmitError, setLastSubmitError] = useState<SubmitError | null>(
+    initialJob.last_submit_error ?? null
+  );
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteExpired, setDeleteExpired] = useState(false);
+  const deleted = useRef(false);
+
+  const autosave = useDraftAutosave({ jobId, initialSaved: initialJob, local, ctx });
+  const { flush, suspend, resume } = autosave;
+  const modelInput = useCatalogueModelInput(effectiveModelInputId(local.modelInputId, ctx.dataset));
+
+  // ── The step ──────────────────────────────────────────────────────────────
+  // The server's reading first. Afterwards the URL is the truth: our own pushes
+  // set the step directly (Next's router follows a native pushState, so
+  // `useSearchParams` catches up with them), and anything else that moves the
+  // URL, the browser's back/forward included, comes through `useSearchParams`.
+  // Back/forward is also heard directly, so the step does not wait for Next.
+  const [step, setStep] = useState<DraftStep>(initialStep);
+  const urlStep = parseStep(searchParams.get("step"));
+  const [seenUrlStep, setSeenUrlStep] = useState(urlStep);
+  if (urlStep !== seenUrlStep) {
+    setSeenUrlStep(urlStep);
+    setStep(urlStep);
+  }
+  useEffect(() => {
+    const onPopState = () => setStep(stepFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const goTo = useCallback(
+    (next: DraftStep) => {
+      const url = stepHref(jobId, next);
+      // A native pushState adds an entry even for the URL we are on.
+      if (url !== window.location.pathname + window.location.search) {
+        window.history.pushState(null, "", url);
+      }
+      setStep(next);
+    },
+    [jobId]
+  );
+
+  // A new step (from a button, the strip, or the browser's back/forward): save
+  // what is waiting, and send focus to its heading. Not on the first render.
+  const shownStep = useRef(step);
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    void flush();
+    document.getElementById(stepHeadingId(step))?.focus();
+  }, [step, flush]);
+
+  // ── Back in view ──────────────────────────────────────────────────────────
+  // Another tab or a submit elsewhere may have moved the draft on while this
+  // one was away. Only when nothing here is unsaved, so nothing is lost.
+  const clean = autosave.state.kind === "saved";
+  const latest = useRef({ clean, savedAt: autosave.saved.updated_at });
+  useEffect(() => {
+    latest.current = { clean, savedAt: autosave.saved.updated_at };
+  });
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible" || !latest.current.clean) return;
+      const result = await fetchJob(jobId).catch(() => null);
+      // Edited while it was out: the next save settles it.
+      if (!result || !result.ok || !latest.current.clean) return;
+      if (result.data.status !== "DRAFT") router.refresh();
+      else if (result.data.updated_at !== latest.current.savedAt) onReload(result.data);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [jobId, router, onReload]);
+
+  // ── What is wrong with the draft ──────────────────────────────────────────
+  // `saving` is left out: Submit saves first, so a pause in the middle of a
+  // save is not something to fix, and it must not flash a warning on every key.
+  const problems = useMemo(
+    () => submitProblems(local, ctx, blockedReason, { withheld: autosave.withheld, saving: false }),
+    [local, ctx, blockedReason, autosave.withheld]
+  );
+  const problemSteps = useMemo(
+    () => DRAFT_STEPS.filter((s) => problems.some((p) => p.step === s)),
+    [problems]
+  );
+
+  const recommended = recommendedComputeFor(ctx.dataset);
+  const source = simulationSource(initialJob);
+  const name = liveName(local.name, initialJob);
+  const index = DRAFT_STEPS.indexOf(step);
+
+  // ── Submit and delete ─────────────────────────────────────────────────────
+  const onSubmitted = (submitted: Job) => {
+    router.replace(`/workspace/${encodeURIComponent(submitted.id)}`);
+    router.refresh();
+  };
+  const onSubmitFailed = () => {
+    // Still a draft, and auto-save was suspended for the submit.
+    resume();
+    void fetchJob(jobId)
+      .then((result) => {
+        if (!result.ok) return;
+        if (result.data.status !== "DRAFT") router.refresh();
+        else setLastSubmitError(result.data.last_submit_error ?? null);
+      })
+      .catch(() => {});
+  };
+
+  const state = autosave.state;
+
+  return (
+    <main className="flex flex-1 flex-col">
+      <div className="bg-gradient-to-br from-hero to-primary px-4 pt-6 pb-5 sm:px-6 sm:pt-8 lg:px-10">
+        <div className="mx-auto max-w-[1024px]">
+          <nav aria-label="Breadcrumb" className="text-sm text-white/70">
+            <ol className="flex min-w-0 items-center gap-1.5">
+              <li className="shrink-0">
+                <Link
+                  href="/workspace"
+                  className="rounded outline-none transition-colors hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/70"
+                >
+                  My Simulations
+                </Link>
+              </li>
+              <li aria-hidden="true" className="shrink-0">
+                <ChevronRight className="size-3.5" />
+              </li>
+              <li aria-current="page" className="min-w-0 truncate text-white">
+                {name}
+              </li>
+            </ol>
+          </nav>
+
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="min-w-0 break-words text-2xl font-bold text-white">{name}</h1>
+                {/* The badge's text is dark-on-tint, for a white card: give it one. */}
+                <span className="shrink-0 rounded-full bg-white">
+                  <JobStatusBadge status="DRAFT" />
+                </span>
+              </div>
+              <p className="mt-2 text-sm">
+                <Link
+                  href={source.href}
+                  className="rounded text-white/90 underline underline-offset-2 outline-none transition-colors hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/70"
+                >
+                  Based on {source.title}
+                </Link>
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+              <SaveStatus
+                state={state}
+                onRetry={autosave.retry}
+                onGoToField={(field) => goTo(FIELD_STEP[field])}
+              />
+              <JobDeleteMenu
+                jobId={jobId}
+                isDraft
+                workDir={null}
+                remoteJobDir={null}
+                files={null}
+                onOpen={() => {
+                  setDeleteError(null);
+                  setDeleteExpired(false);
+                }}
+                onOpenChange={(open) => {
+                  // Nothing is saved behind a Delete that may go through. A
+                  // dialog that closes without deleting gives saving back.
+                  if (open) suspend();
+                  else if (!deleted.current) resume();
+                }}
+                onDeleted={() => {
+                  deleted.current = true;
+                  suspend();
+                  router.push("/workspace");
+                }}
+                onError={setDeleteError}
+                onSessionExpired={() => setDeleteExpired(true)}
+              />
+            </div>
+          </div>
+          {deleteExpired && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
+          {deleteError && (
+            <div className="mt-4">
+              <HeroError>{deleteError}</HeroError>
+            </div>
+          )}
+
+          <div className="mt-6">
+            <DraftProgress
+              jobId={jobId}
+              current={step}
+              snapshotTitle={source.title}
+              problemSteps={problemSteps}
+              onSelectStep={goTo}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-[1024px]">
+          {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
+          {state.kind === "conflict" && (
+            <div
+              role="alert"
+              className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="flex items-start gap-2 font-medium">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                This simulation was submitted or changed elsewhere
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => router.refresh()}
+                className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8"
+              >
+                Reload
+              </Button>
+            </div>
+          )}
+          {state.kind === "gone" && (
+            <div
+              role="alert"
+              className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="flex items-start gap-2 font-medium">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                This draft was deleted
+              </p>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8"
+              >
+                <Link href="/workspace">Go to My Simulations</Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Focus leaving the step is a reason to save without waiting. */}
+          <div
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void flush();
+            }}
+          >
+            {step === "model" && (
+              <DraftModelStep
+                datasetId={initialJob.dataset_id}
+                datasetTitle={initialJob.dataset_title}
+                ctx={ctx}
+                modelInputId={local.modelInputId}
+                resolvedModelInput={modelInput}
+                onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
+                error={autosave.serverErrors.modelInput}
+                disabled={submitting}
+              />
+            )}
+            {step === "run" && (
+              <DraftRunStep
+                ctx={ctx}
+                parameters={local.parameters}
+                slurm={local.slurm}
+                recommended={recommended}
+                serverErrors={autosave.serverErrors}
+                startRefusal={autosave.startRefusal}
+                onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
+                onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
+                disabled={submitting}
+              />
+            )}
+            {step === "review" && (
+              <DraftReviewStep
+                datasetId={initialJob.dataset_id}
+                datasetTitle={initialJob.dataset_title}
+                ctx={ctx}
+                local={local}
+                recommended={recommended}
+                modelInput={modelInput}
+                problems={problems}
+                serverErrors={autosave.serverErrors}
+                onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
+                onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
+                onEditStep={goTo}
+                disabled={submitting}
+                submitCard={
+                  <DraftSubmitCard
+                    jobId={jobId}
+                    problems={problems}
+                    lastSubmitError={lastSubmitError}
+                    recommended={recommended}
+                    flush={flush}
+                    suspend={suspend}
+                    submit={submitSimulation}
+                    onSubmitted={onSubmitted}
+                    onSubmitFailed={onSubmitFailed}
+                    onSubmittingChange={setSubmitting}
+                  />
+                }
+              />
+            )}
+          </div>
+
+          {/* Never blocked: a step with problems says so on the strip. Step 2
+              has no Back (the browser's goes to Start from), step 4 no Next. */}
+          <div className="mt-8 flex items-center justify-between gap-3 border-t pt-6">
+            {step === "model" ? (
+              <span />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={() => goTo(DRAFT_STEPS[index - 1])}
+                className="min-h-10"
+              >
+                <ArrowLeft aria-hidden="true" />
+                Back
+              </Button>
+            )}
+            {step !== "review" && (
+              <Button type="button" onClick={() => goTo(DRAFT_STEPS[index + 1])} className="min-h-10">
+                Next
+                <ArrowRight aria-hidden="true" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}

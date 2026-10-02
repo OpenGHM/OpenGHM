@@ -41,12 +41,8 @@ afterEach(() => {
   document.body.style.pointerEvents = "";
 });
 
-function renderHero(key: string, { blockedReason = null, preview = true }: { blockedReason?: string | null; preview?: boolean } = {}) {
+function renderHero(key: string, { preview = true }: { preview?: boolean } = {}) {
   const job = previewSimulation(key);
-  const hero = (
-    <JobHero job={job} recommended={null} blockedReason={blockedReason} preview={preview} />
-  );
-  if (job.status === "DRAFT") return render(hero);
   return render(
     <LiveJobProvider
       jobId={job.id}
@@ -58,7 +54,7 @@ function renderHero(key: string, { blockedReason = null, preview = true }: { blo
       }}
       preview={preview}
     >
-      {hero}
+      <JobHero job={job} preview={preview} />
     </LiveJobProvider>
   );
 }
@@ -66,31 +62,11 @@ function renderHero(key: string, { blockedReason = null, preview = true }: { blo
 const button = (name: string) => screen.queryByRole("button", { name });
 
 describe("the header actions by status", () => {
-  it("offers Submit and the More menu for a draft, and no Cancel", () => {
-    renderHero("draft");
-    expect((button("Submit to Anvil") as HTMLButtonElement).disabled).toBe(false);
-    expect(button("More actions")).not.toBeNull();
-    expect(button("Cancel")).toBeNull();
-    expect(button("New from this model snapshot")).toBeNull();
-  });
-
-  it("disables Submit for a blocked user and says why, in text and in a tooltip", async () => {
-    const reason = "Your account has not been approved to run simulations.";
-    renderHero("draft", { blockedReason: reason });
-    const submit = button("Submit to Anvil") as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-    expect(submit.getAttribute("aria-describedby")).toBe(screen.getByText(reason).closest("p")!.id);
-    // The tooltip hangs on the focusable span around the disabled button.
-    fireEvent.focus(submit.parentElement!);
-    await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain(reason));
-  });
-
   it.each(["pending", "submitted", "running"])("offers only Cancel while %s", (key) => {
     renderHero(key);
     expect(button("Cancel")).not.toBeNull();
     expect(button("More actions")).toBeNull();
     expect(button("New from this model snapshot")).toBeNull();
-    expect(button("Submit to Anvil")).toBeNull();
   });
 
   it("offers nothing while COMPLETING", () => {
@@ -190,12 +166,5 @@ describe("the More menu", () => {
 
     expect(document.body.style.pointerEvents).not.toBe("none");
     await waitFor(() => expect(document.activeElement).toBe(trigger));
-  });
-
-  it("says draft for a draft", async () => {
-    renderHero("draft");
-    fireEvent.keyDown(screen.getByRole("button", { name: "More actions" }), { key: "Enter" });
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete draft" }));
-    expect(await screen.findByText("Delete this draft?")).toBeTruthy();
   });
 });

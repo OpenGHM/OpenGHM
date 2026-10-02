@@ -55,7 +55,8 @@ export function DeleteSimulationDialog({
   files: FilesState | null;
   /** Fixture data: there is no real job behind `jobId`. */
   preview?: boolean;
-  /** Called instead of going to `/workspace` once the simulation is gone. */
+  /** Called instead of going to `/workspace` once the simulation is gone,
+   *  before `onOpenChange(false)`. */
   onDeleted?: () => void;
   /** The session ended; the caller shows the sign-in banner. */
   onSessionExpired?: () => void;
@@ -86,13 +87,15 @@ export function DeleteSimulationDialog({
     setPending(true);
     try {
       const result = await deleteSimulation(jobId);
+      const gone = result.ok || result.reason === "not_found";
+      // A caller that tells "deleted" from "closed" hears about the delete first.
+      if (gone && onDeleted) onDeleted();
       onOpenChange(false);
-      if (result.ok || result.reason === "not_found") {
+      if (gone) {
         toast.success(
           result.ok ? (isDraft ? "Draft deleted." : "Simulation deleted.") : "This simulation was already deleted."
         );
-        if (onDeleted) onDeleted();
-        else router.push("/workspace");
+        if (!onDeleted) router.push("/workspace");
       } else if (result.reason === "session_expired") {
         onSessionExpired?.();
         toast.error("Your session has expired. Sign in to delete this simulation.");

@@ -868,6 +868,88 @@ describe("suspend", () => {
   });
 });
 
+describe("resume", () => {
+  it("saves again after a suspend, including what was edited meanwhile", async () => {
+    const server = fakeServer();
+    update.mockImplementation(server.impl);
+    const { result, name } = setup();
+    name("Run");
+    act(() => result.current.suspend());
+    await wait(10_000);
+    expect(update).not.toHaveBeenCalled();
+
+    act(() => result.current.resume());
+    expect(result.current.state).toEqual({ kind: "saving" });
+    await wait(799);
+    expect(update).not.toHaveBeenCalled();
+    await wait(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(patches()[0]).toEqual({ about: { name: "Run", description: null } });
+    expect(result.current.state.kind).toBe("saved");
+  });
+
+  it("goes back to saved when nothing changed while suspended", async () => {
+    const { result } = setup();
+    act(() => result.current.suspend());
+    expect(result.current.state).toEqual({ kind: "suspended" });
+    act(() => result.current.resume());
+    expect(result.current.state).toEqual({ kind: "saved", at: JOB.updated_at });
+    await wait(10_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("lets flush save again", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { result, name } = setup();
+    name("Run");
+    act(() => result.current.suspend());
+    act(() => result.current.resume());
+    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
+    await act(async () => {
+      flushed = await result.current.flush();
+    });
+    expect(flushed.ok).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when it was not suspended, so a pending pause is not restarted", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { result, name } = setup();
+    name("Run");
+    await wait(500);
+    act(() => result.current.resume());
+    await wait(300);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a request that was out when it was suspended finish first, then sends the rest", async () => {
+    const answer = deferred<ActionResult<Job>>();
+    update.mockReturnValueOnce(answer.promise);
+    update.mockImplementation(fakeServer().impl);
+    const { result, name, set, base } = setup();
+    name("Run");
+    await wait(800);
+    act(() => result.current.suspend());
+    set({ ...base, name: "Run 2" });
+    act(() => result.current.resume());
+    answer.resolve({ ok: true, data: { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" } });
+    await wait(1_000);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(patches()[1]).toEqual({ about: { name: "Run 2", description: null } });
+  });
+
+  it("does not undo a halt: a deleted draft stays deleted", async () => {
+    update.mockResolvedValue({ ok: false, reason: "not_found" });
+    const { result, name } = setup();
+    name("Run");
+    await wait(800);
+    expect(result.current.state).toEqual({ kind: "gone" });
+    act(() => result.current.suspend());
+    act(() => result.current.resume());
+    expect(result.current.state).toEqual({ kind: "gone" });
+  });
+});
+
 describe("disabled", () => {
   it("saves nothing while it is on, and the edits made meanwhile when it goes off", async () => {
     update.mockImplementation(fakeServer().impl);

@@ -62,9 +62,13 @@ export interface UseDraftAutosave {
    *  when the save failed or auto-save has stopped; `withheld` says what the
    *  `job` it returns does not hold. */
   flush: () => Promise<FlushResult>;
-  /** Stop saving for good, for a Delete or a Submit that takes over. A request
-   *  already out is let finish. */
+  /** Stop saving, for a Delete or a Submit that takes over. A request already
+   *  out is let finish. */
   suspend: () => void;
+  /** Start saving again after `suspend()`, for a Delete that was cancelled or a
+   *  Submit that did not go through. Whatever changed meanwhile is saved after
+   *  the usual pause. Does nothing when not suspended. */
+  resume: () => void;
   /** Try again after a failure or an expired session. */
   retry: () => void;
 }
@@ -354,6 +358,12 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
       clearRetry();
       host.commit({ suspended: true });
     },
+    resume() {
+      if (!host.engine().suspended) return;
+      failures = 0;
+      host.commit({ suspended: false });
+      changed();
+    },
     /** Unmounting: leave nothing behind, and send what is still owed. */
     dispose() {
       clearDebounce();
@@ -426,6 +436,7 @@ export function useDraftAutosave({
 
   const flush = useCallback(() => saver.flush(), [saver]);
   const suspend = useCallback(() => saver.suspend(), [saver]);
+  const resume = useCallback(() => saver.resume(), [saver]);
   const retry = useCallback(() => saver.retry(), [saver]);
 
   const { patch, withheld, errors } = useMemo(
@@ -488,5 +499,5 @@ export function useDraftAutosave({
       ? { message: start.message, suggestion: start.suggestion }
       : null;
 
-  return { state, saved: engine.saved, serverErrors: errors, startRefusal, withheld, flush, suspend, retry };
+  return { state, saved: engine.saved, serverErrors: errors, startRefusal, withheld, flush, suspend, resume, retry };
 }
