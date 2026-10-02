@@ -1,35 +1,33 @@
 import { describe, expect, it } from "vitest";
-import type { FailureCause, JobStatus, LogStream } from "@/lib/jobs/types";
+import type { FailureCause, LogStream } from "@/lib/jobs/types";
 import { appendText, EMPTY_LOG_TEXT } from "@/lib/workspace/log-lines";
 import { INITIAL_STREAM, type StreamState } from "@/lib/workspace/log-stream";
-import { blankStreams, defaultLogStream, logEmptyMessage, logsReadable } from "@/lib/workspace/log-view";
+import {
+  ALL_TAB,
+  blankStreams,
+  logEmptyMessage,
+  LOG_STREAMS,
+  logsReadable,
+  streamsForTab,
+} from "@/lib/workspace/log-view";
 
-describe("defaultLogStream", () => {
-  const ENDED: JobStatus[] = ["FAILED", "CANCELLED", "COMPLETED"];
-
-  it.each(ENDED)("opens the WBM log of a %s job, even before anything has been read", (status) => {
-    expect(defaultLogStream(status)).toBe("wbm");
-    expect(defaultLogStream(status, { wbm: false })).toBe("wbm");
-    expect(defaultLogStream(status, { wbm: false, stdout: true, stderr: false })).toBe("wbm");
+describe("the tabs", () => {
+  it("name the sources as the page does, each with a caption", () => {
+    expect(LOG_STREAMS.map((s) => [s.stream, s.label])).toEqual([
+      ["wbm", "WBM log"],
+      ["stdout", "Job output"],
+      ["stderr", "Messages"],
+    ]);
+    for (const s of LOG_STREAMS) expect(s.caption.length).toBeGreaterThan(20);
+    expect(LOG_STREAMS.find((s) => s.stream === "stderr")?.caption).toBe(
+      "Everything the job script wrote to stderr: setup messages and download progress appear here too. It is not a list of errors."
+    );
+    expect(ALL_TAB.caption).toContain("Shown by source, not by time");
   });
 
-  it.each(ENDED)("opens Output of a %s job whose WBM log is missing or empty", (status) => {
-    expect(defaultLogStream(status, { wbm: true })).toBe("stdout");
-    expect(defaultLogStream(status, { wbm: true, stdout: false })).toBe("stdout");
-  });
-
-  it.each(ENDED)("opens Errors of a %s job only when there is nothing else", (status) => {
-    expect(defaultLogStream(status, { wbm: true, stdout: true })).toBe("stderr");
-    expect(defaultLogStream(status, { wbm: true, stdout: true, stderr: true })).toBe("stderr");
-  });
-
-  it.each<JobStatus>(["RUNNING", "COMPLETING"])("keeps the WBM log for a %s job, whatever was read", (status) => {
-    expect(defaultLogStream(status)).toBe("wbm");
-    expect(defaultLogStream(status, { wbm: true, stdout: true })).toBe("wbm");
-  });
-
-  it.each<JobStatus>(["PENDING", "SUBMITTED", "DRAFT"])("keeps Output for a %s job", (status) => {
-    expect(defaultLogStream(status)).toBe("stdout");
+  it("read all three streams for All, and one for a source", () => {
+    expect(streamsForTab("all")).toEqual(["wbm", "stdout", "stderr"]);
+    expect(streamsForTab("stdout")).toEqual(["stdout"]);
   });
 });
 
@@ -98,13 +96,13 @@ describe("logEmptyMessage", () => {
 
   it("says what an ended job wrote no", () => {
     expect(logEmptyMessage({ ...base, status: "COMPLETED", stream: "stderr" })).toBe(
-      "This job wrote no error output."
+      "This job wrote no messages."
     );
     expect(logEmptyMessage({ ...base, status: "FAILED", stream: "stdout" })).toBe("This job wrote no output.");
     expect(logEmptyMessage({ ...base, status: "FAILED", stream: "wbm" })).toBe("This job wrote no WBM log.");
   });
 
-  describe("an empty Errors tab after SLURM stopped the job", () => {
+  describe("an empty Messages tab after SLURM stopped the job", () => {
     const stderr = { ...base, status: "FAILED", stream: "stderr" } as const;
     const stopped = (cause: FailureCause, excerpt: string | null = "x") => ({ cause, excerpt });
 
@@ -112,6 +110,13 @@ describe("logEmptyMessage", () => {
       expect(logEmptyMessage({ ...stderr, exists: true, failure: stopped(cause) })).toBe(
         "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
       );
+    });
+
+    it("says it was nothing after the setup messages when stderr holds only those", () => {
+      expect(logEmptyMessage({ ...stderr, exists: true, failure: stopped("out_of_memory"), afterSetup: true })).toBe(
+        "Nothing was written after the setup messages. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+      );
+      expect(logEmptyMessage({ ...stderr, exists: true, afterSetup: true })).toBe("This job wrote no messages.");
     });
 
     it("drops the pointer to the excerpt when the card has none", () => {
@@ -137,14 +142,14 @@ describe("logEmptyMessage", () => {
       "cancelled_by_user",
       "cancelled_by_system",
     ])("keeps today's words for %s", (cause) => {
-      expect(logEmptyMessage({ ...stderr, failure: stopped(cause) })).toBe("This job wrote no error output.");
+      expect(logEmptyMessage({ ...stderr, failure: stopped(cause) })).toBe("This job wrote no messages.");
     });
 
     it("keeps today's words for the other streams, and for a job with no verdict", () => {
       const failure = stopped("out_of_memory");
       expect(logEmptyMessage({ ...stderr, stream: "stdout", failure })).toBe("This job wrote no output.");
       expect(logEmptyMessage({ ...stderr, stream: "wbm", failure })).toBe("This job wrote no WBM log.");
-      expect(logEmptyMessage({ ...stderr, failure: null })).toBe("This job wrote no error output.");
+      expect(logEmptyMessage({ ...stderr, failure: null })).toBe("This job wrote no messages.");
     });
 
     it("still says Anvil purged the files", () => {
