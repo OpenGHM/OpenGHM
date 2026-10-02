@@ -8,6 +8,7 @@
 #   just db-reset         — wipe MongoDB volume and re-run init seed (init-mongo.js)
 #   just migrate-roles    — migrate legacy PascalCase user roles to lowercase, in place
 #   just migrate-sessions — migrate single-session refresh tokens to per-device sessions
+#   just migrate-seed-users — move the dev quick-login accounts off the mock-auth ids
 #   just logs             — tail backend logs
 #   just logs-all         — tail logs for all services
 #   just rebuild          — force-rebuild the backend image (no cache)
@@ -151,6 +152,15 @@ migrate-roles:
 # Idempotent.
 migrate-sessions:
     {{compose}} exec -T mongodb mongosh "mongodb://root:rootpassword@localhost:27017/admin?authSource=admin" --quiet < deploy/local/mongo/migrate_sessions.js
+
+# Move the two dev quick-login accounts (admin@/user@openghm.dev) from the
+# mock-auth ids (mock-admin-001, mock-user-001) to their own (dev-admin-001,
+# dev-user-001), mark them email-verified and the user as permitted to run
+# simulations, and carry their jobs and catalogue items over. Their sessions
+# are dropped: sign in again. Run once against a volume seeded before the
+# ids changed; a fresh `just db-reset` does not need it. Idempotent.
+migrate-seed-users:
+    {{compose}} exec -T mongodb mongosh "mongodb://root:rootpassword@localhost:27017/admin?authSource=admin" --quiet --file /dev/stdin < deploy/local/mongo/migrate_seed_users.js
 
 # Migrate `datasets`/`model_inputs` documents from the flat shape (the spec
 # document plus `_id`) to the envelope shape mission

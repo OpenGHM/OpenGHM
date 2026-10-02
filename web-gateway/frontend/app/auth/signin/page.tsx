@@ -8,7 +8,9 @@ import {
 import { SignInForm } from "./signin-form";
 
 // These log in via real email/password against seeded DB accounts (see
-// deploy/local/mongo/init-mongo.js) — not the X-Mock-Role bypass. Staff/guest
+// deploy/local/mongo/init-mongo.js) — not the X-Mock-Role bypass. The accounts
+// are ordinary ones: verified, and the User may run simulations. Their ids are
+// not the mock-auth identities' (the backend never lets those submit). Staff/guest
 // rows are omitted until seeded accounts exist for them.
 //
 // Read here, server-side, rather than in the client component: this array

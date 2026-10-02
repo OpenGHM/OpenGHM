@@ -58,7 +58,10 @@ CALLERS: dict[str, dict] = {
         "headers": token_for("admin", Role.ADMIN),
     },
     # The dev X-Mock-Role bypass, switched on the way local `.env` has it.
-    # Local dev signs in as these and their documents exist in local Mongo.
+    # The local seed gives its accounts ids of their own, so a real mock
+    # identity has no document; these two are given one to show that even a
+    # document does not let a mock id submit (the same caller without one is
+    # test_a_mock_identity_without_a_document_cannot_derive_a_draft).
     "mock": {
         "user": make_user("mock-user-001"),
         "headers": {"X-Mock-Role": "user"},

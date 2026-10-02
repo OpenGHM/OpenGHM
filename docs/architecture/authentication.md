@@ -49,8 +49,10 @@ not trust the token. They read the user's document at call time, through
     audited as `user_admin_updated`.
   - no more than `JOB_MAX_ACTIVE_PER_USER` active jobs. Admin and staff are
     exempt.
-- **A mock identity** (`security.py`'s `MOCK_USERS`) may create drafts but
-  never submit, in any environment.
+- **A mock identity** (`security.py`'s `MOCK_USERS`) never submits, in any
+  environment, even if a user document carries its id. It has no document
+  unless someone creates one, so it cannot create drafts either
+  (`account_not_found`).
 - **Refusals** carry `detail = {code, message}`:
   - 403: `mock_identity`, `account_not_found`, `account_inactive`,
     `email_not_verified`, `not_permitted_to_run`, `permission_required`;

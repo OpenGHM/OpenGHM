@@ -79,9 +79,11 @@ async def _load_account(user: TokenPayload) -> tuple[dict, Role]:
     """The caller's current user document and its role, or a refusal.
 
     Shared by both gates below, so a deleted account and a deactivated one
-    are refused the same way by each. A mock identity is not refused here:
-    local dev signs in as one with a real user document, and a draft spends
-    no allocation. Only `require_submitter` refuses it.
+    are refused the same way by each. A mock identity is not refused here by
+    id, but it has no user document unless someone creates one (the local
+    seed uses ids of its own, see deploy/local/mongo/init-mongo.js), so it
+    gets `account_not_found` like any caller without one. Only
+    `require_submitter` refuses it by id.
     """
     doc = await get_db().users.find_one({"_id": user.sub})
     if doc is None:
@@ -109,12 +111,12 @@ async def require_active_user(user: CurrentUser) -> TokenPayload:
     """Gate for creating a draft: the user's document exists and is active.
 
     No email or run-permission check (ADR 0024: a user who may not run can
-    still prepare drafts), and no mock-identity check: a mock identity that
-    has a user document (local dev) may prepare drafts. Without one it is
-    refused like any caller, `account_not_found`. `job:submit` stays the role-level gate, evaluated
-    on the role in the *database*, so a guest is still refused. Returns the
-    caller with the database role. Refusals are 403 with
-    `detail = {"code", "message"}` (see `_refuse`).
+    still prepare drafts), and no mock-identity check by id: a mock identity
+    has no user document unless someone creates one, so it is refused like
+    any caller without one, `account_not_found`. `job:submit` stays the
+    role-level gate, evaluated on the role in the *database*, so a guest is
+    still refused. Returns the caller with the database role. Refusals are
+    403 with `detail = {"code", "message"}` (see `_refuse`).
     """
     _, role = await _load_account(user)
     if not has_permission(role, Permission.JOB_SUBMIT):
