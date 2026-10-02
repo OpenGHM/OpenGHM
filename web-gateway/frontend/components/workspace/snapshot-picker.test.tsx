@@ -133,7 +133,7 @@ describe("the list", () => {
     expect(phoneTitle.getAttribute("title")).toBe(LONG_TITLE);
   });
 
-  it("is a list of cards below sm, with Select 40 px tall and filling the card's width", () => {
+  it("is a list of cards below sm, with Select 40 px tall", () => {
     renderPicker();
     const list = screen.getByRole("list", { name: "Model snapshots" });
     // `sm:hidden` is display:none from sm up, so exactly one layout is exposed.
@@ -144,8 +144,21 @@ describe("the list", () => {
     expect(items[0].textContent).toContain("5 arc-min");
     const select = within(items[0]).getByRole("button", { name: "Select" });
     expect(select.className).toContain("h-10");
-    expect(select.className).toContain("w-full");
     expect(within(items[0]).getByRole("button", { name: /^Details/ }).className).toContain("h-10");
+  });
+
+  it("selects on a click anywhere in a table row, and Details does not", () => {
+    const { onSelect } = renderPicker();
+    const table = screen.getByRole("table", { name: "Model snapshots" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    fireEvent.click(within(rows[1]).getByText(/WBM v2.0.0/, { selector: "div" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(TUTORIAL);
+    fireEvent.click(within(rows[0]).getByRole("button", { name: /^Details/, hidden: true }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    // Select on the row is one selection, not two.
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Select", hidden: true }));
+    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
   it("calls onSelect with the dataset from a row's Select, in either layout", () => {

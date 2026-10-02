@@ -1,5 +1,4 @@
-import { FileText, Mail } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Mail } from "lucide-react";
 import type { PartialAbout } from "@/lib/jobs/types";
 import { TagChips } from "@/components/repository/tag-chips";
 
@@ -10,16 +9,11 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
   if (!about || Object.keys(about).length === 0) return null;
 
   return (
-    <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <FileText className="size-4 text-primary" />
-          </div>
-          About
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-5 pb-6">
+    <section aria-labelledby="about-heading">
+      <h2 id="about-heading" className="mb-3 text-lg font-semibold text-foreground">
+        About
+      </h2>
+      <div className="space-y-4 rounded-xl border bg-card p-5 shadow-sm sm:p-6">
         {about.name && <p className="text-base font-semibold text-foreground">{about.name}</p>}
         {about.description && (
           <p className="text-sm leading-relaxed text-muted-foreground">{about.description}</p>
@@ -33,7 +27,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
             {about.keywords.map((kw) => (
               <span
                 key={kw}
-                className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
+                className="rounded-md bg-muted px-2 py-0.5 text-xs text-foreground"
               >
                 {kw}
               </span>
@@ -58,7 +52,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

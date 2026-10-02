@@ -115,6 +115,13 @@ export function describeWalltimeOverLimit(seconds: number): string {
   return `This model snapshot's reference run took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out).`;
 }
 
+/** `describeWalltimeOverLimit` in one line, for under the field: the facts, and
+ *  the way out. The reason it matters ("the run may be stopped") is the long
+ *  form's, offered beside it. */
+export function describeWalltimeOverLimitShort(seconds: number): string {
+  return `The reference run took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period or set a walltime.`;
+}
+
 /** A softer hint for a walltime the draft chose that is shorter than the
  *  reference run took, or null. It does not block anything: a shorter run
  *  period needs less time. */
@@ -175,6 +182,17 @@ export function describeCoresBelowRecommended(
     `and ${cores} ${cores === 1 ? "core" : "cores"} only about ${sharedMemoryGb(cores)} GB: ` +
     `the run may be stopped for running out of memory.`
   );
+}
+
+/** `describeCoresBelowRecommended` in one line, for under the field. Null in the
+ *  same cases. The arithmetic behind it is the long form's. */
+export function describeCoresBelowRecommendedShort(
+  config: SlurmConfig,
+  recommended: Recommended | null
+): string | null {
+  if (describeCoresBelowRecommended(config, recommended) === null || !recommended) return null;
+  const cores = config.cores as number;
+  return `${cores} ${cores === 1 ? "core is" : "cores are"} below the recommended ${recommended.cores}: the run may run out of memory.`;
 }
 
 /** What the automatic walltime is, in a few words after the value: the
@@ -269,18 +287,6 @@ export function submitBlockedReason(
   }
   return null;
 }
-
-/** Why a control is disabled: the submit route refuses these until the
- *  toolkit has an option for each (ADR 0025, open item 9). One line each, for
- *  the control's own explanation. */
-export const UNSUPPORTED_REASON = {
-  modelInput:
-    "Not available yet: the toolkit has no option for it, so every run uses the model snapshot's own model input.",
-  spatialSubset:
-    "Not available yet: the toolkit has no option for a subset, so every run covers the model snapshot's whole domain.",
-  customParams:
-    "Not available yet: the toolkit has no option for custom parameters.",
-} as const;
 
 /** The fields an `unsupported_fields` refusal names, as a user knows them. */
 export function describeUnsupportedField(field: string): string {

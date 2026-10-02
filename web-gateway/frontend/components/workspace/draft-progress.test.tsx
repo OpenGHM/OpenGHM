@@ -12,7 +12,6 @@ function strip(current: DraftStep, problemSteps: DraftStep[] = []) {
     <DraftProgress
       jobId="job-1"
       current={current}
-      snapshotTitle="Global WBM"
       problemSteps={problemSteps}
       onSelectStep={onSelectStep}
     />
@@ -21,15 +20,15 @@ function strip(current: DraftStep, problemSteps: DraftStep[] = []) {
 }
 
 describe("DraftProgress", () => {
-  it("shows step 1 as done and not clickable, with the snapshot it started from", () => {
+  it("shows step 1 as done and not clickable, and says nothing about what it was", () => {
     strip("run");
     expect(screen.getByText("Start from")).toBeTruthy();
-    expect(screen.getByText("Started from: Global WBM")).toBeTruthy();
-    // The only links are the three steps of the draft.
+    expect(screen.getByText("(done)")).toBeTruthy();
+    expect(screen.queryByText(/Started from/)).toBeNull();
+    // The only links are the two steps of the draft.
     expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual([
-      "2Model & input",
-      "3Run settings",
-      "4Review & submit",
+      "2Run settings",
+      "3Review & submit",
     ]);
     expect(screen.getByText("Start from").closest("a, button")).toBeNull();
   });
@@ -43,9 +42,6 @@ describe("DraftProgress", () => {
 
   it("links each step to its URL", () => {
     strip("review");
-    expect(screen.getByRole("link", { name: /Model & input/ }).getAttribute("href")).toBe(
-      "/workspace/job-1?step=model"
-    );
     expect(screen.getByRole("link", { name: /Run settings/ }).getAttribute("href")).toBe(
       "/workspace/job-1?step=run"
     );
@@ -69,15 +65,14 @@ describe("DraftProgress", () => {
   });
 
   it("puts a dot, and a spoken note, on each step with problems", () => {
-    strip("model", ["run", "review"]);
-    expect(screen.getByRole("link", { name: /Model & input/ }).textContent).not.toContain("needs attention");
-    expect(screen.getByRole("link", { name: /Run settings.*needs attention/ })).toBeTruthy();
+    strip("run", ["review"]);
+    expect(screen.getByRole("link", { name: /Run settings/ }).textContent).not.toContain("needs attention");
     expect(screen.getByRole("link", { name: /Review & submit.*needs attention/ })).toBeTruthy();
-    expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(2);
+    expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(1);
   });
 
   it("has no dot when nothing needs attention", () => {
-    strip("model");
+    strip("run");
     expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(0);
     expect(screen.queryByText(/needs attention/)).toBeNull();
   });
@@ -88,7 +83,7 @@ describe("StartProgress", () => {
     render(<StartProgress />);
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.getByText("Start from").closest("[aria-current]")?.getAttribute("aria-current")).toBe("step");
-    for (const label of ["Model & input", "Run settings", "Review & submit"]) {
+    for (const label of ["Run settings", "Review & submit"]) {
       expect(screen.getByText(label).closest("[aria-current]")).toBeNull();
     }
   });

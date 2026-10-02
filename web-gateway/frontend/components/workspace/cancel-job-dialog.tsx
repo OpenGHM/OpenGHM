@@ -19,7 +19,7 @@ import { isTerminalStatus } from "@/lib/jobs/types";
 
 /**
  * The confirmation before a cancel (ADR 0026), controlled so that any control
- * can open it: the status panel's button. It owns the request and its toasts
+ * can open it: the status summary's button. It owns the request and its toasts
  * and reports the outcome to the caller, which is the one that knows what to
  * refresh.
  *

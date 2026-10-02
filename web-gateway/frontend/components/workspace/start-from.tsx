@@ -3,8 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Boxes, Check, Copy, Database, Loader2 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { CopySimulationList, type CopyListPage } from "@/components/workspace/copy-simulation-list";
 import { RecentSnapshots } from "@/components/workspace/recent-snapshots";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -29,10 +28,11 @@ export interface PickerSeed {
 
 /**
  * Step 1 of the draft wizard (ADR 0028): where a new simulation starts from.
- * Three cards. "Model snapshot" shows the snapshots the user has used and the
+ * Two choices. "Model snapshot" shows the snapshots the user has used and the
  * repository's own search; choosing one creates the draft at once, and so does
  * Copy on a row of "Copy one of my simulations"; both open the new draft's
- * step 2. "Model input" is not available yet.
+ * Run settings. With nothing to copy there is nothing to choose between, so the
+ * choice is not shown.
  *
  * The card is in the URL as `?from=copy` (the default, snapshot, is not
  * written), changed with `history.pushState`, so back and forward walk through
@@ -115,56 +115,35 @@ export function StartFrom({
         </div>
       )}
 
-      <nav aria-label="Where to start from">
-        <ul className="grid gap-4 md:grid-cols-3">
-          <li>
-            <OptionCard
-              icon={<Boxes className="size-5" aria-hidden="true" />}
-              title="Model snapshot"
-              selected={active === "snapshot"}
-              onSelect={() => select("snapshot")}
-              href={modeHref("snapshot")}
-            >
-              Pick a published model snapshot and adjust its settings.
-            </OptionCard>
-          </li>
-          <li>
-            {canCopy ? (
+      {canCopy && (
+        <nav aria-label="Where to start from">
+          <ul className="grid gap-3 sm:grid-cols-2">
+            <li>
               <OptionCard
-                icon={<Copy className="size-5" aria-hidden="true" />}
+                title="Model snapshot"
+                selected={active === "snapshot"}
+                onSelect={() => select("snapshot")}
+                href={modeHref("snapshot")}
+              >
+                Pick a published model snapshot and adjust its settings.
+              </OptionCard>
+            </li>
+            <li>
+              <OptionCard
                 title="Copy one of my simulations"
                 selected={active === "copy"}
                 onSelect={() => select("copy")}
                 href={modeHref("copy")}
               >
-                Start a new draft with the settings of a simulation you already made.
+                Start with the settings of a simulation you already made.
               </OptionCard>
-            ) : (
-              <OptionCard
-                icon={<Copy className="size-5" aria-hidden="true" />}
-                title="Copy one of my simulations"
-                disabled
-              >
-                You have no simulations to copy yet
-              </OptionCard>
-            )}
-          </li>
-          <li>
-            <OptionCard
-              icon={<Database className="size-5" aria-hidden="true" />}
-              title="Model input"
-              badge="Coming soon"
-              disabled
-            >
-              Start from a published model input. Not available yet: a run needs a model
-              snapshot&apos;s code and settings.
-            </OptionCard>
-          </li>
-        </ul>
-      </nav>
+            </li>
+          </ul>
+        </nav>
+      )}
 
       {active === "snapshot" && (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {pending && attempt?.mode === "snapshot" && (
             <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
@@ -173,7 +152,7 @@ export function StartFrom({
           )}
           {recentSnapshots.length > 0 && (
             <section aria-labelledby="start-recent-heading">
-              <h2 id="start-recent-heading" className="mb-4 text-lg font-semibold text-foreground">
+              <h2 id="start-recent-heading" className="mb-3 text-base font-semibold text-foreground">
                 Model snapshots you&apos;ve used
               </h2>
               <RecentSnapshots
@@ -189,7 +168,7 @@ export function StartFrom({
             aria-busy={pending ? "true" : undefined}
             className={cn(pending && "pointer-events-none opacity-60")}
           >
-            <h2 id="start-browse-heading" className="mb-4 text-lg font-semibold text-foreground">
+            <h2 id="start-browse-heading" className="mb-3 text-base font-semibold text-foreground">
               Browse model snapshots
             </h2>
             <PickerHost seed={picker} onSelect={startFromSnapshot} />
@@ -199,7 +178,7 @@ export function StartFrom({
 
       {active === "copy" && (
         <section aria-labelledby="start-copy-heading">
-          <h2 id="start-copy-heading" className="mb-4 text-lg font-semibold text-foreground">
+          <h2 id="start-copy-heading" className="mb-3 text-base font-semibold text-foreground">
             Your simulations
           </h2>
           <CopySimulationList
@@ -264,71 +243,23 @@ function PickerHost({ seed, onSelect }: { seed: PickerSeed; onSelect: (dataset: 
 }
 
 /**
- * One of the three choices. Selectable: a link to the card's own URL, so a
- * middle click or a copied address works, and a plain click is handed to
- * `onSelect`. `disabled`: a plain box that is not in the tab order, with
- * `aria-disabled`.
+ * One of the two choices: a link to the card's own URL, so a middle click or a
+ * copied address works, and a plain click is handed to `onSelect`. The chosen
+ * one has a border in the primary colour and a check, and is `aria-current`.
  */
 function OptionCard({
-  icon,
   title,
   children,
-  badge,
-  selected = false,
-  disabled = false,
+  selected,
   href,
   onSelect,
 }: {
-  icon: ReactNode;
   title: string;
   children: ReactNode;
-  badge?: string;
-  selected?: boolean;
-  disabled?: boolean;
-  href?: string;
-  onSelect?: () => void;
+  selected: boolean;
+  href: string;
+  onSelect: () => void;
 }) {
-  const body = (
-    <Card
-      className={cn(
-        "h-full gap-0 py-0 transition-colors",
-        disabled && "border-dashed bg-muted/40",
-        !disabled && !selected && "hover:border-primary/40 hover:shadow-md",
-        selected && "border-primary ring-1 ring-primary"
-      )}
-    >
-      <CardContent className="flex h-full flex-col gap-2 p-4">
-        <div className="flex items-start gap-3">
-          <span
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg",
-              selected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}
-          >
-            {icon}
-          </span>
-          <p className={cn("min-w-0 flex-1 pt-1.5 text-sm font-semibold leading-snug", disabled && "text-muted-foreground")}>
-            {title}
-          </p>
-          {selected && <Check className="mt-2 size-4 shrink-0 text-primary" aria-hidden="true" />}
-          {badge && (
-            <span className="mt-1.5 shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {badge}
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">{children}</p>
-      </CardContent>
-    </Card>
-  );
-
-  if (disabled || !href) {
-    return (
-      <div aria-disabled="true" className="h-full cursor-not-allowed">
-        {body}
-      </div>
-    );
-  }
   return (
     <Link
       href={href}
@@ -338,11 +269,18 @@ function OptionCard({
         // A plain click changes card in place; the rest is the browser's.
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
         event.preventDefault();
-        onSelect?.();
+        onSelect();
       }}
-      className="block h-full min-h-10 rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className={cn(
+        "block h-full min-h-10 rounded-xl border bg-card px-4 py-3 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"
+      )}
     >
-      {body}
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        {selected && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+      </span>
+      <span className="mt-0.5 block text-sm text-muted-foreground">{children}</span>
     </Link>
   );
 }

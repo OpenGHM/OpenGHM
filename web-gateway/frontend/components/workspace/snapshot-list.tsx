@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, SearchX } from "lucide-react";
+import { SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -39,8 +39,9 @@ function MetaLine({ dataset }: { dataset: Dataset }) {
  * has the widest column and is clamped to two lines (the whole text is in its
  * `title` attribute, and in the Details sheet); the tags and a muted model
  * line sit under it, then the years it covers, its resolution and the two
- * actions: Details, which opens the sheet, and Select, which commits. A row is
- * not clickable as a whole, so the title is plain text.
+ * actions: Details, a text link that opens the sheet, and Select, which
+ * commits. A click anywhere else on a row selects it too (a convenience for the
+ * pointer: the Select button is the keyboard's and the screen reader's way).
  *
  * Two layouts, and CSS shows one: a real table from `sm` up, a list of compact
  * cards below it. The hidden one is `display: none`, so it is out of the
@@ -88,14 +89,18 @@ export function SnapshotList({
               <TableHead className="w-24 text-xs font-semibold text-muted-foreground lg:w-28">
                 Resolution
               </TableHead>
-              <TableHead className="w-52 pr-4">
+              <TableHead className="w-44 pr-4">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {datasets.map((dataset) => (
-              <TableRow key={dataset.id}>
+              <TableRow
+                key={dataset.id}
+                onClick={() => onSelect(dataset)}
+                className="cursor-pointer"
+              >
                 <TableCell className="px-4 py-3 whitespace-normal">
                   <div
                     title={dataset.about.name}
@@ -115,22 +120,29 @@ export function SnapshotList({
                   {resolutionText(dataset.simulation.resolution)}
                 </TableCell>
                 <TableCell className="py-2 pr-4 text-right">
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-end gap-3">
                     <Button
-                      variant="ghost"
+                      variant="link"
                       size="sm"
                       aria-label={detailsLabel(dataset)}
-                      onClick={() => onDetails(dataset)}
-                      className="text-muted-foreground"
+                      onClick={(event) => {
+                        // Details is not a selection.
+                        event.stopPropagation();
+                        onDetails(dataset);
+                      }}
+                      className="h-auto px-0 py-1 text-muted-foreground hover:text-primary"
                     >
                       Details
                     </Button>
                     <Button
+                      variant="outline"
                       size="sm"
-                      onClick={() => onSelect(dataset)}
-                      className="font-semibold"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelect(dataset);
+                      }}
+                      className="font-medium"
                     >
-                      <CheckCircle2 className="mr-1.5 size-4" aria-hidden="true" />
                       Select
                     </Button>
                   </div>
@@ -161,17 +173,16 @@ export function SnapshotList({
             <p className="mt-0.5">
               <MetaLine dataset={dataset} />
             </p>
-            <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
+            <div className="mt-2 flex items-center justify-between gap-3">
               <Button
-                variant="outline"
+                variant="link"
                 aria-label={detailsLabel(dataset)}
                 onClick={() => onDetails(dataset)}
-                className="h-10 px-4"
+                className="h-10 px-0 text-muted-foreground hover:text-primary"
               >
                 Details
               </Button>
-              <Button onClick={() => onSelect(dataset)} className="h-10 w-full font-semibold">
-                <CheckCircle2 className="mr-1.5 size-4" aria-hidden="true" />
+              <Button variant="outline" onClick={() => onSelect(dataset)} className="h-10 px-5 font-medium">
                 Select
               </Button>
             </div>

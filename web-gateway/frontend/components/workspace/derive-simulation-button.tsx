@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HERO_BUTTON, HeroError } from "@/components/workspace/hero-button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { deriveSimulation } from "@/lib/jobs/actions";
 import { stepHref } from "@/lib/workspace/draft-wizard";
@@ -23,14 +22,11 @@ export function DeriveSimulationButton({
   datasetId,
   label = "New simulation from this model snapshot",
   fullWidth = false,
-  tone = "default",
 }: {
   datasetId: string;
   label?: string;
   /** Fill the card it sits in (the detail page's cards). */
   fullWidth?: boolean;
-  /** `hero`: the page header's white button, full width on a phone. */
-  tone?: "default" | "hero";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -55,7 +51,7 @@ export function DeriveSimulationButton({
           }
           return;
         }
-        router.push(stepHref(result.data.id, "model"));
+        router.push(stepHref(result.data.id, "run"));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to create simulation";
         setError(msg);
@@ -64,41 +60,26 @@ export function DeriveSimulationButton({
     });
   };
 
-  const hero = tone === "hero";
-
   return (
     <div
-      className={`flex max-w-full flex-col gap-1.5 ${
-        hero ? "items-stretch sm:items-end" : fullWidth ? "items-stretch" : "items-end"
-      }`}
+      className={`flex max-w-full flex-col gap-1.5 ${fullWidth ? "items-stretch" : "items-end"}`}
     >
       <Button
-        size={hero ? "default" : "lg"}
-        variant={hero ? "default" : "outline"}
+        size="lg"
+        variant="outline"
         onClick={handleClick}
         disabled={pending}
-        className={
-          hero
-            ? `min-h-10 gap-2 px-4 font-semibold ${HERO_BUTTON.primary}`
-            : CARD_BUTTON
-        }
+        className={CARD_BUTTON}
       >
-        {pending ? (
-          <Loader2 className={hero ? "motion-safe:animate-spin" : "size-5 motion-safe:animate-spin"} />
-        ) : (
-          <FlaskConical className={hero ? undefined : "size-5"} />
-        )}
+        {pending ? <Loader2 className="size-5 motion-safe:animate-spin" /> : <FlaskConical className="size-5" />}
         {label}
       </Button>
       {sessionExpired && <SessionExpiredBanner className="w-full max-w-md" />}
-      {error &&
-        (hero ? (
-          <HeroError>{error}</HeroError>
-        ) : (
-          <p role="alert" className="text-xs text-status-failed">
-            {error}
-          </p>
-        ))}
+      {error && (
+        <p role="alert" className="text-xs text-status-failed">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

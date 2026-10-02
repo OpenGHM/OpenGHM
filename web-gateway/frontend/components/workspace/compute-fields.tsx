@@ -1,28 +1,61 @@
 "use client";
 
-import { useId } from "react";
-import { AlertTriangle, Info } from "lucide-react";
+import { useId, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { draftField } from "@/components/workspace/draft-field";
 import {
-  automaticWalltimeLabel,
   describeCoresBelowRecommended,
-  describeSlurmTime,
+  describeCoresBelowRecommendedShort,
+  describeDuration,
   describeWalltimeBelowReference,
   describeWalltimeOverLimit,
+  describeWalltimeOverLimitShort,
   effectiveCompute,
+  parseSlurmTime,
+  secondsToHms,
   validateSlurmConfig,
   walltimeOverLimit,
   type Recommended,
 } from "@/lib/jobs/compute";
-import { MAX_CORES, MAX_WALLTIME, type SlurmConfig } from "@/lib/jobs/types";
+import { MAX_CORES, type SlurmConfig } from "@/lib/jobs/types";
+
+/** A warning in one line, with the long explanation one click away. */
+function Warning({ id, short, why }: { id?: string; short: string; why: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div id={id} className="text-xs text-warning">
+      <p className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 break-words">
+          {short}{" "}
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex min-h-8 items-center rounded font-medium underline underline-offset-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {open ? "Hide" : "Why?"}
+          </button>
+        </span>
+      </p>
+      {open && <p className="ml-5 mt-1 break-words text-muted-foreground">{why}</p>}
+    </div>
+  );
+}
 
 /**
- * Cores and walltime for a draft — the two things a user may change about how
- * SLURM runs it. Left empty, a field means "the snapshot's recommendation",
- * which is shown as its placeholder. The account and partition are the
- * gateway's (one shared allocation, ADR 0024), so they are not fields.
+ * Cores and walltime for a draft: the two things a user may change about how
+ * SLURM runs it. Left empty, a field means the snapshot's recommendation, which
+ * is its placeholder and is said once in the line under the fields. The limits
+ * are the inputs' own (`max`) and are spoken of only when a value is over them.
+ * The account and partition are the gateway's (one shared allocation, ADR
+ * 0024), so they are not fields.
+ *
+ * Two warnings, each one line with the long reason behind "Why": cores below
+ * what the snapshot recommends (memory comes with cores), and a snapshot whose
+ * reference run is longer than one job may be, with no walltime set.
  */
 export function ComputeFields({
   config,
@@ -36,15 +69,22 @@ export function ComputeFields({
 }) {
   const id = useId();
   const errors = validateSlurmConfig(config);
-  // What an empty walltime means: the recommendation plus 50%, at most the
-  // limit for one job.
+  // What an empty field means: the recommended cores, and its walltime plus
+  // 50%, at most the limit for one job.
   const automatic = effectiveCompute({ cores: null, walltime: null }, recommended);
-  const defaultWalltime = automatic.walltime;
+  const automaticSeconds = automatic.walltime ? parseSlurmTime(automatic.walltime) : null;
   const overLimit = walltimeOverLimit(config, recommended);
   const belowReference = describeWalltimeBelowReference(config, recommended);
-  const coresWarning = describeCoresBelowRecommended(config, recommended);
+  const coresWarning = describeCoresBelowRecommendedShort(config, recommended);
   const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
   const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
+
+  const emptyMeans =
+    recommended && automaticSeconds !== null
+      ? `Empty = recommended: ${recommended.cores} ${recommended.cores === 1 ? "core" : "cores"}, ${describeDuration(automaticSeconds)}${
+          automatic.walltimeCapped ? " (the limit for one job)" : ""
+        }.`
+      : "Empty = the model snapshot's recommendation.";
 
   return (
     <div className="space-y-3">
@@ -62,17 +102,16 @@ export function ComputeFields({
             max={MAX_CORES}
             step={1}
             className="h-10 md:h-9"
-            placeholder={recommended ? `${recommended.cores} (recommended)` : "Recommended"}
+            placeholder={recommended ? String(recommended.cores) : "Recommended"}
             value={config.cores ?? ""}
             aria-invalid={errors.cores !== undefined}
             aria-describedby={
-              [errors.cores ? `${id}-cores-error` : null, coresWarningId].filter(Boolean).join(" ") || undefined
+              [`${id}-compute-hint`, errors.cores ? `${id}-cores-error` : null, coresWarningId]
+                .filter(Boolean)
+                .join(" ")
             }
             onChange={(e) =>
-              onChange({
-                ...config,
-                cores: e.target.value === "" ? null : Number(e.target.value),
-              })
+              onChange({ ...config, cores: e.target.value === "" ? null : Number(e.target.value) })
             }
           />
           {errors.cores && (
@@ -83,24 +122,20 @@ export function ComputeFields({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${id}-walltime`} className="text-xs text-muted-foreground">
-            Walltime
+            Walltime <span className="text-muted-foreground/80">(hh:mm:ss)</span>
           </Label>
           <Input
             id={`${id}-walltime`}
             {...draftField("walltime")}
             inputMode="numeric"
             className="h-10 md:h-9"
-            placeholder={
-              defaultWalltime
-                ? `${describeSlurmTime(defaultWalltime)} (${automaticWalltimeLabel(automatic.walltimeCapped, "placeholder")})`
-                : "HH:MM:SS"
-            }
+            placeholder={automaticSeconds !== null ? secondsToHms(automaticSeconds) : "HH:MM:SS"}
             value={config.walltime ?? ""}
             aria-invalid={errors.walltime !== undefined}
             aria-describedby={
-              [errors.walltime ? `${id}-walltime-error` : null, walltimeNoteId]
+              [`${id}-compute-hint`, errors.walltime ? `${id}-walltime-error` : null, walltimeNoteId]
                 .filter(Boolean)
-                .join(" ") || undefined
+                .join(" ")
             }
             onChange={(e) =>
               onChange({ ...config, walltime: e.target.value === "" ? null : e.target.value })
@@ -113,38 +148,28 @@ export function ComputeFields({
           )}
         </div>
       </div>
+      <p id={`${id}-compute-hint`} className="text-xs text-muted-foreground">
+        {emptyMeans}
+      </p>
       {coresWarning && (
-        <p id={coresWarningId} className="flex items-start gap-2 text-xs text-warning">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">{coresWarning}</span>
-        </p>
+        <Warning
+          id={coresWarningId}
+          short={coresWarning}
+          why={describeCoresBelowRecommended(config, recommended) as string}
+        />
       )}
       {overLimit !== null && (
-        <p
+        <Warning
           id={walltimeNoteId}
-          className="flex items-start gap-2 text-xs text-warning"
-        >
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">{describeWalltimeOverLimit(overLimit)}</span>
-        </p>
+          short={describeWalltimeOverLimitShort(overLimit)}
+          why={describeWalltimeOverLimit(overLimit)}
+        />
       )}
       {belowReference && (
-        <p id={walltimeNoteId} className="flex items-start gap-2 text-xs text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">{belowReference}</span>
+        <p id={walltimeNoteId} className="text-xs text-muted-foreground">
+          {belowReference}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
-        Leave a field empty to use the model snapshot&apos;s recommendation
-        {recommended && defaultWalltime
-          ? ` (${recommended.cores} cores, and ${describeSlurmTime(recommended.walltime)} plus 50%${
-              automatic.walltimeCapped
-                ? `, at most ${MAX_WALLTIME}, which is ${describeSlurmTime(defaultWalltime)}`
-                : `, which is ${describeSlurmTime(defaultWalltime)}`
-            })`
-          : ""}
-        . The most you can ask for is {MAX_CORES} cores and {MAX_WALLTIME}.
-      </p>
     </div>
   );
 }

@@ -42,7 +42,7 @@ describe("useCreateDraft", () => {
     await act(async () => result.current.deriveFrom("snap-1"));
     expect(derive).toHaveBeenCalledWith("snap-1");
     expect(duplicate).not.toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith("/workspace/new-draft?step=model");
+    expect(push).toHaveBeenCalledWith("/workspace/new-draft?step=run");
     expect(result.current.error).toBeNull();
   });
 
@@ -52,7 +52,7 @@ describe("useCreateDraft", () => {
     await act(async () => result.current.duplicateFrom("job-1"));
     expect(duplicate).toHaveBeenCalledWith("job-1");
     expect(derive).not.toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith("/workspace/new-draft?step=model");
+    expect(push).toHaveBeenCalledWith("/workspace/new-draft?step=run");
   });
 
   it("is pending while the request is out, and stays so after a success so a second click cannot make a second draft", async () => {

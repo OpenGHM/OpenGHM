@@ -5,7 +5,8 @@ import { Footer } from "@/components/landing/footer";
 import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
-import { fakeLive, fakeLogs, previewSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeLive, fakeLogs, previewSimulation } from "@/lib/workspace/fixtures";
+import { recommendedComputeFor } from "@/lib/workspace/draft-wizard";
 import { resolvePreview } from "@/lib/workspace/preview";
 
 // Built from the clock and the signed-in user on every request.
@@ -43,6 +44,7 @@ export default async function DevWorkspacePreviewPage({
       <JobDetail
         job={job}
         viewerEmail={viewerEmail}
+        recommended={recommendedComputeFor(fakeDataset())}
         preview
         previewLogs={fakeLogs(job.status)}
         previewLive={fakeLive(job)}

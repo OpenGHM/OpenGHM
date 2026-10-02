@@ -7,7 +7,6 @@ import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight } from "lucide-react
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { Button } from "@/components/ui/button";
 import { focusDraftField } from "@/components/workspace/draft-field";
-import { DraftModelStep } from "@/components/workspace/draft-model-step";
 import { DraftProgress } from "@/components/workspace/draft-progress";
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
@@ -32,6 +31,7 @@ import {
 import {
   DRAFT_STEPS,
   FIELD_STEP,
+  isRetiredStep,
   parseStep,
   recommendedComputeFor,
   stepHref,
@@ -71,11 +71,12 @@ function stepFromLocation(): DraftStep {
  *   different job later (after Reload), or the tab comes back into view with
  *   nothing unsaved and the server's copy has moved on, the wizard starts over
  *   from it.
- * - **Steps.** The URL says which one; Next, Back and the progress strip change
- *   it with `history.pushState`, so there is no server round trip. Each change
- *   saves what is waiting and moves focus to the step's heading. Nothing blocks
- *   a step: what stands in the way of a submit is flagged on the strip and listed
- *   on Review.
+ * - **Steps.** The URL says which one (Run settings or Review); Next, Back and
+ *   the progress strip change it with `history.pushState`, so there is no server
+ *   round trip. Each change saves what is waiting and moves focus to the step's
+ *   heading. Nothing blocks a step: what stands in the way of a submit is flagged
+ *   on the strip and listed beside the Submit button. An address that still says
+ *   `?step=model` (the step this replaced) is rewritten to `?step=run`.
  */
 export function DraftWizard({
   job,
@@ -216,6 +217,13 @@ function WizardBody({
     focusRequest.current = null;
     focusDraftField(field, step);
   }, [step, focusTick]);
+
+  // The retired "model" step opens Run settings; say so in the address bar.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!isRetiredStep(params.get("step"))) return;
+    window.history.replaceState(null, "", stepHref(jobId, "run"));
+  }, [jobId]);
 
   // ── Back in view ──────────────────────────────────────────────────────────
   // Another tab or a submit elsewhere may have moved the draft on while this
@@ -385,7 +393,6 @@ function WizardBody({
             <DraftProgress
               jobId={jobId}
               current={step}
-              snapshotTitle={source.title}
               problemSteps={problemSteps}
               onSelectStep={goTo}
             />
@@ -393,7 +400,7 @@ function WizardBody({
         </div>
       </div>
 
-      <div className="flex-1 bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
+      <div className="flex-1 bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
         <div className="mx-auto max-w-[1024px]">
           {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
           {state.kind === "conflict" && (
@@ -442,28 +449,21 @@ function WizardBody({
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void flush();
             }}
           >
-            {step === "model" && (
-              <DraftModelStep
-                datasetId={initialJob.dataset_id}
-                datasetTitle={initialJob.dataset_title}
-                ctx={ctx}
-                modelInputId={local.modelInputId}
-                resolvedModelInput={modelInput}
-                onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
-                error={autosave.serverErrors.modelInput}
-                disabled={submitting}
-              />
-            )}
             {step === "run" && (
               <DraftRunStep
+                datasetId={initialJob.dataset_id}
+                datasetTitle={initialJob.dataset_title}
                 ctx={ctx}
                 parameters={local.parameters}
                 slurm={local.slurm}
                 recommended={recommended}
+                modelInputId={local.modelInputId}
+                resolvedModelInput={modelInput}
                 serverErrors={autosave.serverErrors}
                 startRefusal={autosave.startRefusal}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
                 onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
+                onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
                 disabled={submitting}
               />
             )}
@@ -475,17 +475,16 @@ function WizardBody({
                 ctx={ctx}
                 local={local}
                 recommended={recommended}
-                modelInput={modelInput}
-                problems={problems}
                 serverErrors={autosave.serverErrors}
                 onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
                 onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
                 onEditStep={goTo}
                 disabled={submitting}
-                submitCard={
+                submitArea={
                   <DraftSubmitCard
                     jobId={jobId}
                     problems={problems}
+                    onFix={goTo}
                     lastSubmitError={lastSubmitError}
                     recommended={recommended}
                     flush={flush}
@@ -502,10 +501,11 @@ function WizardBody({
             )}
           </div>
 
-          {/* Never blocked: a step with problems says so on the strip. Step 2
-              has no Back (the browser's goes to Start from), step 4 no Next. */}
-          <div className="mt-8 flex items-center justify-between gap-3 border-t pt-6">
-            {step === "model" ? (
+          {/* Never blocked: a step with problems says so on the strip. Run
+              settings has no Back (the browser's goes to Start from), Review no
+              Next. */}
+          <div className="mt-6 flex items-center justify-between gap-3">
+            {step === "run" ? (
               <span />
             ) : (
               <Button

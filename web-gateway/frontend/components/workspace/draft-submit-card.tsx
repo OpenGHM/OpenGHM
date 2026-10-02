@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Lock, Rocket, Send } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,13 +13,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { DraftCard } from "@/components/workspace/draft-card";
+import { DraftSection } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
 import { describeCoresBelowRecommended, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
 import type { ActionResult, Job, SubmitError } from "@/lib/jobs/types";
-import type { SubmitProblem } from "@/lib/workspace/draft-state";
-import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
+import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
+import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
 import type { FlushResult } from "@/lib/workspace/use-draft-autosave";
 
 /** `checking` is the short stretch after a submit whose answer never came: the
@@ -27,7 +27,8 @@ import type { FlushResult } from "@/lib/workspace/use-draft-autosave";
 type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "done";
 
 /**
- * "Submit to Anvil" for the draft wizard's last step.
+ * The submit area of the draft wizard's last step: what stands in the way (each
+ * problem with a link that takes you to its field), and "Submit to Anvil".
  *
  * Submit does not submit what is on screen: it saves first (`flush`), and the
  * confirmation shows what the server then holds, which is what will run. A save
@@ -36,8 +37,9 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
  * the submit's claim is checked against, then calls `submit`.
  *
  * - `problems` is `submitProblems(...)`: while it is not empty the button is off
- *   and the list on the review step says why (a permission the user lacks is one
- *   of them).
+ *   and the list above it says why (a permission the user lacks is one of
+ *   them). A problem with a field has a link, which calls `onFix(step, field)`;
+ *   this is the only place the problems are listed.
  * - `lastSubmitError` is the stored reason the last submit did not reach Anvil,
  *   shown until a submit from here is confirmed: from then on only what this
  *   page's own attempt says is shown, and nothing at all once it succeeded.
@@ -59,6 +61,7 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
 export function DraftSubmitCard({
   jobId,
   problems,
+  onFix,
   lastSubmitError,
   recommended,
   flush,
@@ -72,6 +75,8 @@ export function DraftSubmitCard({
 }: {
   jobId: string;
   problems: readonly SubmitProblem[];
+  /** Take the person to the field a problem is about. */
+  onFix: (step: DraftStep, field?: DraftField) => void;
   lastSubmitError: SubmitError | null;
   /** The snapshot's own `recommendedCompute`, for what an unset field means. */
   recommended: Recommended | null;
@@ -195,25 +200,42 @@ export function DraftSubmitCard({
   const done = stage === "done";
 
   return (
-    <DraftCard title="Submit" icon={Rocket}>
-      {!done && (
-        <p className="text-sm text-muted-foreground">
-          Your draft saves automatically. Submitting runs it on Anvil and spends compute time.
-        </p>
-      )}
-
+    <DraftSection title="Submit">
       {blocked && !done && (
-        <p
-          id={noteId}
-          className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground"
-        >
-          <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>
+        <div id={noteId} className="space-y-2">
+          <p className="text-sm text-foreground">
             {problems.length === 1
-              ? "Fix the item under Needs attention to submit."
-              : `Fix the ${problems.length} items under Needs attention to submit.`}
-          </span>
-        </p>
+              ? "Fix this to submit:"
+              : `Fix these ${problems.length} things to submit:`}
+          </p>
+          <ul className="space-y-1.5">
+            {problems.map((problem, i) => (
+              <li
+                key={`${problem.field ?? "draft"}-${i}`}
+                className="flex flex-col gap-0.5 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+              >
+                <p className="flex min-w-0 items-start gap-2 text-warning">
+                  <AlertTriangle className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 break-words">
+                    {problem.field && <span className="font-medium">{FIELD_LABELS[problem.field]}: </span>}
+                    {problem.message}
+                  </span>
+                </p>
+                {problem.field && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => onFix(problem.step, problem.field)}
+                    aria-label={`Fix ${FIELD_LABELS[problem.field].toLowerCase()}`}
+                    className="ml-5 h-auto min-h-10 shrink-0 justify-start p-0 text-sm sm:ml-0 sm:min-h-8"
+                  >
+                    Fix
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {sessionExpired && !done && <SessionExpiredBanner />}
@@ -248,25 +270,30 @@ export function DraftSubmitCard({
           </p>
         )
       ) : (
-        <Button
-          type="button"
-          disabled={blocked || stage !== "idle"}
-          aria-describedby={blocked ? noteId : undefined}
-          onClick={() => void start()}
-          className="min-h-10 w-full font-semibold"
-        >
-          {stage === "flushing" ? (
-            <>
-              <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
-              Saving…
-            </>
-          ) : (
-            <>
-              <Send aria-hidden="true" />
-              Submit to Anvil
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <p className="text-xs text-muted-foreground">
+            Your draft saves automatically. Submitting runs it on Anvil and uses compute time.
+          </p>
+          <Button
+            type="button"
+            disabled={blocked || stage !== "idle"}
+            aria-describedby={blocked ? noteId : undefined}
+            onClick={() => void start()}
+            className="min-h-10 w-full shrink-0 px-6 font-semibold sm:w-auto"
+          >
+            {stage === "flushing" ? (
+              <>
+                <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
+                Saving…
+              </>
+            ) : (
+              <>
+                <Send aria-hidden="true" />
+                Submit to Anvil
+              </>
+            )}
+          </Button>
+        </div>
       )}
 
       <AlertDialog
@@ -328,6 +355,6 @@ export function DraftSubmitCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DraftCard>
+    </DraftSection>
   );
 }

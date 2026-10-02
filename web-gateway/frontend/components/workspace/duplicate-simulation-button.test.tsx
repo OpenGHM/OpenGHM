@@ -47,7 +47,7 @@ describe("DuplicateSimulationButton", () => {
     await act(async () => fireEvent.click(button()));
     expect(duplicate).toHaveBeenCalledWith("job-1");
     expect(derive).not.toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith("/workspace/copy-1?step=model");
+    expect(push).toHaveBeenCalledWith("/workspace/copy-1?step=run");
   });
 
   it("is off while the request is out and after it succeeds, so a double click makes one copy", async () => {

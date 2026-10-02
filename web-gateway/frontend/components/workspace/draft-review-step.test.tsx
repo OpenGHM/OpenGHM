@@ -1,15 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ModelInput } from "@/lib/repository/types";
 
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
-import { fromJob, type DraftLocal, type SubmitProblem } from "@/lib/workspace/draft-state";
+import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
 
 afterEach(cleanup);
 
 const dataset = fakeDataset({ id: "snap-1" });
-const catalogueEntry = { id: "fake-model-input-id", about: { name: "Global network" } } as ModelInput;
 
 const LOCAL: DraftLocal = fromJob(
   fakeSimulation("DRAFT", {
@@ -39,10 +37,8 @@ function review(props: Partial<React.ComponentProps<typeof DraftReviewStep>> = {
       ctx={{ dataset, snapshotState: "found" }}
       local={LOCAL}
       recommended={dataset.simulation.recommendedCompute}
-      modelInput={catalogueEntry}
-      problems={[]}
       serverErrors={{}}
-      submitCard={<div data-testid="submit-card">submit here</div>}
+      submitArea={<div data-testid="submit-area">submit here</div>}
       {...handlers}
       {...props}
     />
@@ -50,8 +46,8 @@ function review(props: Partial<React.ComponentProps<typeof DraftReviewStep>> = {
   return handlers;
 }
 
-/** The card whose title is `title`. */
-const card = (title: string) => screen.getByRole("heading", { name: title }).closest('[data-slot="card"]') as HTMLElement;
+/** The summary line whose label is `label`. */
+const row = (label: string) => screen.getByText(label, { selector: "dt" }).parentElement as HTMLElement;
 
 describe("DraftReviewStep: name and description", () => {
   it("has a focusable heading for the wizard to move focus to", () => {
@@ -61,16 +57,14 @@ describe("DraftReviewStep: name and description", () => {
     expect(heading.getAttribute("tabindex")).toBe("-1");
   });
 
-  it("shows the name and description, with the placeholder and the hint", () => {
+  it("shows the name and description, with the placeholder", () => {
     review();
     const name = screen.getByLabelText("Name") as HTMLInputElement;
     const description = screen.getByLabelText("Description") as HTMLTextAreaElement;
     expect(name.value).toBe("My run");
     expect(description.value).toBe("A test");
     expect(name.placeholder).toBe("Untitled (job-1)");
-    const hint = screen.getByText(/describe this simulation, not a published model snapshot/);
-    expect(name.getAttribute("aria-describedby")).toContain(hint.id);
-    expect(description.getAttribute("aria-describedby")).toContain(hint.id);
+    expect(screen.queryByText(/not a published model snapshot/)).toBeNull();
   });
 
   it("has what the draft is called with no name as the Name placeholder", () => {
@@ -105,40 +99,72 @@ describe("DraftReviewStep: name and description", () => {
   });
 });
 
-describe("DraftReviewStep: the summaries", () => {
+describe("DraftReviewStep: the summary", () => {
+  it("is one list: based on, run period, output variables, cores, walltime", () => {
+    review();
+    expect(screen.getAllByRole("term").map((t) => t.textContent)).toEqual([
+      "Based on",
+      "Run period",
+      "Output variables",
+      "Cores",
+      "Walltime",
+    ]);
+    // Nothing is repeated as a card of its own.
+    expect(screen.queryByRole("heading", { name: "Model snapshot" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Model input" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Compute" })).toBeNull();
+    expect(screen.queryByText("Needs attention")).toBeNull();
+  });
+
   it("links the snapshot to the repository and gives it no Edit", () => {
     review();
-    const snapshot = card("Model snapshot");
-    expect(within(snapshot).getByText("Fake Snapshot")).toBeTruthy();
-    expect(within(snapshot).getByRole("link", { name: /View in the repository/ }).getAttribute("href")).toBe(
+    const based = row("Based on");
+    expect(within(based).getByText("Fake Snapshot")).toBeTruthy();
+    expect(within(based).getByText("wbm 2.0.0 · 2001-01-01 → 2001-12-31 · 0.5 degree")).toBeTruthy();
+    expect(within(based).getByRole("link", { name: /View.*in the repository/ }).getAttribute("href")).toBe(
       "/repository/snap-1"
     );
-    expect(within(snapshot).queryByRole("button", { name: /Edit/ })).toBeNull();
+    expect(within(based).queryByRole("button", { name: /Edit/ })).toBeNull();
   });
 
-  it("sends each of the other summaries to the step that edits it", () => {
+  it("sends each editable line to its field on the run step", () => {
     const { onEditStep } = review();
-    fireEvent.click(within(card("Model input")).getByRole("button", { name: "Edit model input" }));
-    expect(onEditStep).toHaveBeenLastCalledWith("model", undefined);
-    fireEvent.click(within(card("Run settings")).getByRole("button", { name: "Edit run settings" }));
-    expect(onEditStep).toHaveBeenLastCalledWith("run", undefined);
-    fireEvent.click(within(card("Compute")).getByRole("button", { name: "Edit compute" }));
-    expect(onEditStep).toHaveBeenLastCalledWith("run", undefined);
+    const edits = [
+      ["Edit run period", "start"],
+      ["Edit output variables", "variables"],
+      ["Edit cores", "cores"],
+      ["Edit walltime", "walltime"],
+    ] as const;
+    for (const [name, field] of edits) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(onEditStep).toHaveBeenLastCalledWith("run", field);
+    }
   });
 
-  it("summarises the run settings", () => {
+  it("states the run period and the variables as a count with the first few", () => {
     review();
-    const run = card("Run settings");
-    expect(within(run).getByText("2001-03-01 → 2001-06-30")).toBeTruthy();
-    expect(within(run).getByText("Output variables (2)")).toBeTruthy();
-    expect(within(run).getByText("discharge")).toBeTruthy();
-    expect(within(run).getByText("runoff")).toBeTruthy();
-    expect(within(run).queryByText("Spatial subset")).toBeNull();
-    expect(within(run).queryByText("Custom parameters")).toBeNull();
+    expect(within(row("Run period")).getByText("2001-03-01 → 2001-06-30")).toBeTruthy();
+    expect(within(row("Output variables")).getByText("2 selected")).toBeTruthy();
+    expect(within(row("Output variables")).getByText(/discharge, runoff/)).toBeTruthy();
+    expect(within(row("Output variables")).queryByRole("button", { name: "show all" })).toBeNull();
+    expect(screen.queryByText("Spatial subset")).toBeNull();
+    expect(screen.queryByText("Custom parameters")).toBeNull();
+  });
+
+  it("shows only the first few of many variables, and all of them on request", () => {
+    const names = Array.from({ length: 51 }, (_, i) => `var${i}`);
+    review({ local: { ...LOCAL, parameters: { ...LOCAL.parameters, variables: names } } });
+    const line = row("Output variables");
+    expect(within(line).getByText("51 selected")).toBeTruthy();
+    expect(line.textContent).toContain("var0, var1, var2, var3 and 47 more");
+    expect(line.textContent).not.toContain("var10");
+    fireEvent.click(within(line).getByRole("button", { name: "show all" }));
+    expect(line.textContent).toContain("var50");
+    expect(within(line).getByRole("button", { name: "show fewer" }).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("shows a stored spatial subset and custom parameters, and an empty variable list", () => {
-    review({
+    const { onEditStep } = review({
       local: {
         ...LOCAL,
         parameters: {
@@ -149,47 +175,43 @@ describe("DraftReviewStep: the summaries", () => {
         },
       },
     });
-    const run = card("Run settings");
-    expect(within(run).getByText("N5 S-5 E5 W-5")).toBeTruthy();
-    expect(within(run).getByText("2 custom parameters")).toBeTruthy();
-    expect(within(run).getByText("None chosen")).toBeTruthy();
+    expect(within(row("Spatial subset")).getByText("N5 S-5 E5 W-5")).toBeTruthy();
+    expect(within(row("Custom parameters")).getByText("2 custom parameters")).toBeTruthy();
+    expect(within(row("Output variables")).getByText("None chosen")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit spatial subset" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "spatial");
+    fireEvent.click(screen.getByRole("button", { name: "Edit custom parameters" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "custom");
   });
 
   it("shows the compute it will ask for, and where an unset value comes from", () => {
     review();
-    const compute = card("Compute");
-    expect(within(compute).getByText("8")).toBeTruthy();
-    expect(within(compute).getByText("2 h")).toBeTruthy();
-    expect(within(compute).queryByText(/recommendation/)).toBeNull();
+    expect(within(row("Cores")).getByText("8")).toBeTruthy();
+    expect(within(row("Walltime")).getByText("2 h")).toBeTruthy();
+    expect(row("Cores").textContent).not.toContain("· recommended");
+    expect(row("Walltime").textContent).not.toContain("recommendation");
 
     cleanup();
     review({ local: { ...LOCAL, slurm: { cores: null, walltime: null } } });
-    const unset = card("Compute");
-    expect(within(unset).getByText("16")).toBeTruthy();
-    expect(within(unset).getByText("22 min 30 s")).toBeTruthy();
-    expect(within(unset).getByText("model snapshot's recommendation")).toBeTruthy();
-    expect(within(unset).getByText("model snapshot's recommendation + 50%")).toBeTruthy();
+    expect(row("Cores").textContent).toContain("16 · recommended");
+    expect(row("Walltime").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
   });
 
-  it("repeats the low-cores warning under Cores, and only then", () => {
+  it("says the low-cores warning once, under Cores, in one line, and only then", () => {
     const BIG = { cores: 64, walltime: "15:00" };
     review({ recommended: BIG, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
-    const compute = card("Compute");
-    const note = within(compute).getByText(/This model snapshot recommends 64 cores/);
-    expect(note.textContent).toContain("and 1 core only about 1.9 GB: the run may be stopped for running out of memory.");
-    expect(note.className).toContain("text-muted-foreground");
-    // Under the Cores value, not in the Needs attention list: it blocks nothing.
-    expect(note.closest("dd")?.previousElementSibling?.textContent).toBe("Cores");
-    expect(screen.queryByText("Needs attention")).toBeNull();
+    const note = within(row("Cores")).getByText("1 core is below the recommended 64: the run may run out of memory.");
+    expect(note.className).toContain("text-warning");
+    expect(screen.queryByText(/On Anvil's shared partition/)).toBeNull();
 
     for (const cores of [64, null]) {
       cleanup();
       review({ recommended: BIG, local: { ...LOCAL, slurm: { cores, walltime: null } } });
-      expect(screen.queryByText(/snapshot recommends/)).toBeNull();
+      expect(screen.queryByText(/below the recommended/)).toBeNull();
     }
     cleanup();
     review({ recommended: null, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
-    expect(screen.queryByText(/snapshot recommends/)).toBeNull();
+    expect(screen.queryByText(/below the recommended/)).toBeNull();
   });
 
   it("shows an automatic walltime cut to the limit as the limit", () => {
@@ -197,77 +219,35 @@ describe("DraftReviewStep: the summaries", () => {
       local: { ...LOCAL, slurm: { cores: null, walltime: null } },
       recommended: { cores: 16, walltime: "111:30:00" },
     });
-    const compute = card("Compute");
-    expect(within(compute).getByText("4 d")).toBeTruthy();
-    expect(within(compute).getByText("the limit for one job")).toBeTruthy();
-    expect(within(compute).queryByText("model snapshot's recommendation + 50%")).toBeNull();
+    expect(row("Walltime").textContent).toContain("4 d · the limit for one job");
   });
 
-  it("says what the model input is, from the catalogue lookup the wizard shares", () => {
-    review();
-    expect(within(card("Model input")).getByText("Inherited: Global network")).toBeTruthy();
-    cleanup();
-    review({ local: { ...LOCAL, modelInputId: "other" }, modelInput: null });
-    expect(within(card("Model input")).getByText(/Chosen:/)).toBeTruthy();
-    // No Revert here: that is step 2's.
-    expect(within(card("Model input")).queryByRole("button", { name: "Revert to inherit" })).toBeNull();
-  });
-
-  it("still summarises a draft whose snapshot is gone", () => {
-    review({ ctx: { dataset: null, snapshotState: "gone" }, recommended: null, modelInput: null });
-    expect(within(card("Model snapshot")).getByText("Stored title")).toBeTruthy();
-    expect(within(card("Compute")).getAllByText("8")).toHaveLength(1);
+  it("still summarises a draft whose snapshot is gone, with no link to it", () => {
+    review({ ctx: { dataset: null, snapshotState: "gone" }, recommended: null });
+    expect(within(row("Based on")).getByText("Stored title")).toBeTruthy();
+    expect(within(row("Based on")).queryByRole("link")).toBeNull();
+    expect(within(row("Cores")).getByText("8")).toBeTruthy();
   });
 
   it("shows a cleared date as missing", () => {
     review({ local: { ...LOCAL, parameters: { ...LOCAL.parameters, temporal_range_start: "" } } });
-    expect(within(card("Run settings")).getByText("No start date → 2001-06-30")).toBeTruthy();
-  });
-});
-
-describe("DraftReviewStep: needs attention", () => {
-  const problems: SubmitProblem[] = [
-    { step: "review", message: "You are not permitted to run simulations yet." },
-    { field: "start", step: "run", message: "Choose a start date that exists." },
-    { field: "modelInput", step: "model", message: "A different model input can't run yet." },
-  ];
-
-  it("is absent when nothing is in the way", () => {
-    review();
-    expect(screen.queryByRole("heading", { name: "Needs attention" })).toBeNull();
-  });
-
-  it("lists each problem and links the ones about a field to its step, with the field", () => {
-    const { onEditStep } = review({ problems });
-    const list = screen.getByRole("heading", { name: "Needs attention" }).closest("section") as HTMLElement;
-    const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(3);
-
-    // A problem of the whole draft has nothing to edit.
-    expect(items[0].textContent).toContain("You are not permitted to run simulations yet.");
-    expect(within(items[0]).queryByRole("button")).toBeNull();
-
-    expect(items[1].textContent).toContain("Start date: Choose a start date that exists.");
-    fireEvent.click(within(items[1]).getByRole("button", { name: "Edit start date" }));
-    expect(onEditStep).toHaveBeenLastCalledWith("run", "start");
-
-    fireEvent.click(within(items[2]).getByRole("button", { name: "Edit model input" }));
-    expect(onEditStep).toHaveBeenLastCalledWith("model", "modelInput");
+    expect(within(row("Run period")).getByText("No start date → 2001-06-30")).toBeTruthy();
   });
 });
 
 describe("DraftReviewStep: the rest", () => {
-  it("renders the submit card it is given", () => {
+  it("renders the submit area it is given, last", () => {
     review();
-    expect(screen.getByTestId("submit-card").textContent).toBe("submit here");
+    const area = screen.getByTestId("submit-area");
+    expect(area.textContent).toBe("submit here");
+    expect(area.previousElementSibling?.textContent).toContain("Name and description");
   });
 
   it("switches its inputs and Edit buttons off while a submit is under way", () => {
-    review({ disabled: true, problems: [{ field: "start", step: "run", message: "x" }] });
+    review({ disabled: true });
     const off = (el: Element) => el.matches(":disabled");
     expect(off(screen.getByLabelText("Name"))).toBe(true);
     expect(off(screen.getByLabelText("Description"))).toBe(true);
-    expect(off(screen.getByRole("button", { name: "Edit run settings" }))).toBe(true);
-    expect(off(screen.getByRole("button", { name: "Edit start date" }))).toBe(true);
+    expect(off(screen.getByRole("button", { name: "Edit run period" }))).toBe(true);
   });
 });

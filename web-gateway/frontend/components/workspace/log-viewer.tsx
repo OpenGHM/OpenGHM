@@ -2,9 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Download, FileText, Loader2, Terminal } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -92,18 +91,12 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
   };
 
   return (
-    <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-slate-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-slate-500/10">
-            <Terminal className="size-4 text-slate-600" aria-hidden="true" />
-          </div>
+    <section aria-labelledby="logs-heading" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 id="logs-heading" className="text-lg font-semibold text-foreground">
           Logs
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="space-y-3 pt-5 pb-6">
-        <div className="flex justify-end gap-2">
+        </h2>
+        <div className="flex gap-2">
           <CopyButton text={text} label="logs text" disabled={text === ""} />
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
@@ -137,6 +130,7 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
 
         {box.kind === "loading" && <LogSkeleton />}
         {box.kind === "empty" && (
@@ -148,7 +142,6 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
         {box.kind === "rows" && <LogBlock rows={box.rows} label="Job logs" onRetry={logs.retry} />}
 
         {sessionExpired && <SessionExpiredBanner />}
-      </CardContent>
-    </Card>
+    </section>
   );
 }

@@ -526,7 +526,7 @@ describe("submitProblems", () => {
           field: "walltime",
           step: "run",
           message:
-            "This model snapshot's reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out).",
+            "The reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period or set a walltime.",
         },
       ]);
       expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
@@ -553,7 +553,7 @@ describe("submitProblems", () => {
   it("the snapshot is gone", () => {
     const [problem, ...rest] = problems(fromJob(ok), GONE);
     expect(rest).toEqual([]);
-    expect(problem).toMatchObject({ step: "model" });
+    expect(problem).toMatchObject({ step: "run" });
     expect(problem.field).toBeUndefined();
     expect(problem.message).toMatch(/no longer in the repository/);
   });
@@ -614,7 +614,7 @@ describe("submitProblems", () => {
 
   it("a different model input", () => {
     const [problem] = problems(edited(ok, { modelInputId: "other" }));
-    expect(problem).toMatchObject({ field: "modelInput", step: "model" });
+    expect(problem).toMatchObject({ field: "modelInput", step: "run" });
   });
 
   it("a spatial subset, unless it is the snapshot's own domain", () => {

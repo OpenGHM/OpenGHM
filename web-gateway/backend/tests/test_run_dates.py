@@ -96,8 +96,7 @@ def test_the_run_that_failed_on_anvil_is_refused_on_its_end():
     assert violation.earliest_end == "2001-12-31"
     assert violation.message == (
         "This snapshot's model also aggregates its results over multi-year periods "
-        "that begin in 2001, so a run must end on or after 2001-12-31 "
-        "(allowed: 2001-12-31 to 2001-12-31)."
+        "that begin in 2001, so a run must end on 2001-12-31."
     )
 
 
@@ -153,6 +152,19 @@ def test_the_range_is_left_out_where_the_coverage_cannot_hold_it():
     sentences = run_start.aggregation_messages(2005, snapshot_start="2000-01-01", snapshot_end="2001-12-31")
     assert sentences["end"].endswith("a run must end on or after 2005-12-31.")
     assert "allowed" in sentences["start"]
+
+
+def test_a_one_date_range_is_said_as_a_date_not_as_x_to_x():
+    # The coverage ends on the window's last day: the only end is that day.
+    sentences = run_start.aggregation_messages(2001, snapshot_start="2000-01-01", snapshot_end="2001-12-31")
+    assert sentences["end"].endswith("a run must end on 2001-12-31.")
+    assert "to 2001-12-31 to" not in sentences["end"]
+    # A wider coverage keeps the range.
+    wide = run_start.aggregation_messages(2001, snapshot_start="2000-01-01", snapshot_end="2004-12-31")
+    assert wide["end"].endswith("a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).")
+    # The start's range is one date only when the coverage begins on the window's last day.
+    one = run_start.aggregation_messages(2001, snapshot_start="2001-12-31", snapshot_end="2004-12-31")
+    assert one["start"].endswith("a run must start on 2001-12-31.")
 
 
 def test_the_gateway_and_the_toolkit_agree_on_which_dates_are_refused():
@@ -266,7 +278,7 @@ def test_the_shortened_run_that_failed_on_anvil_is_a_422_before_anything_is_sent
     assert detail["fields"] == ["end"]
     assert detail["aggregation_start_year"] == 2001
     assert detail["earliest_end"] == "2001-12-31"
-    assert "must end on or after 2001-12-31 (allowed: 2001-12-31 to 2001-12-31)" in detail["message"]
+    assert detail["message"].endswith("so a run must end on 2001-12-31.")
     assert db.jobs.docs["job-1"]["status"] == "DRAFT"
     assert db.jobs.docs["job-1"].get("sim_id") is None
 

@@ -7,8 +7,8 @@ import { useLiveJob, type UseLiveJobResult } from "@/lib/workspace/use-live-job"
 const LiveJobContext = createContext<UseLiveJobResult | null>(null);
 
 /**
- * Holds the one `useLiveJob` of a job page, so that the status panel, the queue
- * and progress cards and the log viewer read the same answer and share one poll
+ * Holds the one `useLiveJob` of a job page, so that the header, the status summary
+ * and the log viewer read the same answer and share one poll
  * loop (ADR 0027). Put it around the cards once; it must not be remounted when
  * the status changes, or the loop restarts.
  */

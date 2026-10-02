@@ -62,45 +62,52 @@ function renderHero(key: string, { preview = true }: { preview?: boolean } = {})
 
 const button = (name: string) => screen.queryByRole("button", { name });
 
-describe("the header actions by status", () => {
-  it.each(["pending", "submitted", "running"])("offers only Cancel while %s", (key) => {
-    renderHero(key);
-    expect(button("Cancel")).not.toBeNull();
-    expect(button("More actions")).toBeNull();
-    expect(button("New from this model snapshot")).toBeNull();
-  });
-
-  it("offers nothing while COMPLETING", () => {
-    renderHero("completing");
-    expect(button("Cancel")).toBeNull();
-    expect(button("More actions")).toBeNull();
-    expect(button("New from this model snapshot")).toBeNull();
-  });
-
-  it("offers nothing once a cancel is waiting on SLURM", () => {
-    renderHero("cancelling");
-    expect(screen.getByText("Cancelling")).toBeTruthy();
-    expect(button("Cancel")).toBeNull();
-    expect(button("More actions")).toBeNull();
-  });
-
-  it.each(["completed", "failed:timeout", "cancelled:user"])(
-    "offers a new simulation and the More menu when %s",
-    (key) => {
+describe("the header", () => {
+  it("has no actions while the job is active: Cancel is in the status summary", () => {
+    for (const key of ["pending", "submitted", "running", "completing", "cancelling"]) {
       renderHero(key);
-      expect(button("New from this model snapshot")).not.toBeNull();
-      expect(button("More actions")).not.toBeNull();
       expect(button("Cancel")).toBeNull();
+      expect(button("More actions")).toBeNull();
+      cleanup();
     }
-  );
+  });
 
-  it("shows the status next to the title, and a link to the base model snapshot", () => {
+  it.each(["completed", "failed:timeout", "cancelled:user"])("offers only the More menu once %s", (key) => {
+    renderHero(key);
+    expect(button("More actions")).not.toBeNull();
+    // The menu's items are not on the page until it is opened.
+    expect(button("New from this model snapshot")).toBeNull();
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    expect(button("Cancel")).toBeNull();
+  });
+
+  it("titles the page with the simulation's name, with the status beside it and the snapshot under it", () => {
     renderHero("running");
     const job = previewSimulation("running");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.dataset_title);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
     expect(screen.getByText("Running")).toBeTruthy();
-    const link = screen.getByRole("link", { name: `Base model snapshot: ${job.dataset_title}` });
+    const link = screen.getByRole("link", { name: `Based on ${job.dataset_title}` });
     expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
+    expect(link.getAttribute("title")).toBe(`Based on ${job.dataset_title}`);
+    expect(screen.queryByText(`Slurm #${job.slurm_job_id}`)).toBeTruthy();
+  });
+
+  it("titles it with the name its owner gave it, and keeps the run id in the small line", () => {
+    const job = previewSimulation("completed", { overrides: { about: { name: "My CONUS run" } } });
+    render(
+      <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
+        <JobHero job={job} preview />
+      </LiveJobProvider>
+    );
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("My CONUS run");
+    expect(screen.getByText(new RegExp(job.sim_id))).toBeTruthy();
+  });
+
+  it("has the breadcrumb inside the hero", () => {
+    renderHero("completed");
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(nav.querySelector("a")?.getAttribute("href")).toBe("/workspace");
+    expect(screen.queryByText("Back to Simulations")).toBeNull();
   });
 });
 
@@ -130,19 +137,17 @@ function answer(status: JobStatus): JobStatusResponse {
 }
 
 describe("when the status moves on", () => {
-  it("swaps Cancel for the ended actions and announces it, without a reload", async () => {
+  it("gains the More menu and announces the new status, without a reload", async () => {
     pollJobStatus.mockResolvedValue({ ok: true, data: answer("CANCELLED") });
     renderHero("running", { preview: false });
 
-    // First render: Cancel, and nothing announced.
-    expect(button("Cancel")).not.toBeNull();
+    // First render: no menu, and nothing announced.
+    expect(button("More actions")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("");
 
-    await waitFor(() => expect(button("New from this model snapshot")).not.toBeNull());
-    expect(button("Cancel")).toBeNull();
-    expect(button("More actions")).not.toBeNull();
+    await waitFor(() => expect(button("More actions")).not.toBeNull());
     expect(screen.getByRole("status").textContent).toBe("Status: Cancelled");
-    // The page itself is asked for again, so the verdict cards follow.
+    // The page itself is asked for again, so the verdict follows.
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -152,7 +157,29 @@ describe("when the status moves on", () => {
   });
 });
 
+async function openMenu() {
+  const trigger = screen.getByRole("button", { name: "More actions" });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  await screen.findByRole("menuitem", { name: "Delete simulation" });
+}
+
 describe("the More menu", () => {
+  it("holds a new simulation from the snapshot, a retry for a failed run, and Delete", async () => {
+    renderHero("failed:timeout");
+    await openMenu();
+    expect(screen.getByRole("menuitem", { name: "New from this model snapshot" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Try again with these settings" })).toBeTruthy();
+  });
+
+  it("holds no retry for a completed run", async () => {
+    renderHero("completed");
+    await openMenu();
+    expect(screen.getByRole("menuitem", { name: "New from this model snapshot" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Try again with these settings" })).toBeNull();
+  });
+
+
   it("opens the delete dialog, and leaves the page usable and focus on the trigger when it closes", async () => {
     renderHero("failed:timeout");
     const trigger = screen.getByRole("button", { name: "More actions" });

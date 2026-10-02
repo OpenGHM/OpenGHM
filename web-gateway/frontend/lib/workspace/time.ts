@@ -126,3 +126,35 @@ export function formatDuration(totalSeconds: number, { withSeconds = true } = {}
   if (parts.length === 0) parts.push("0 min");
   return parts.join(" ");
 }
+
+/** `3:33 AM` in the viewer's zone, with the date (`Oct 4, 1:10 AM`) when
+ *  `sameDayAs` is given and the moment falls on another day. Only call in the
+ *  browser, after hydration. */
+export function formatLocalTime(iso: string, sameDayAs?: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (sameDayAs) {
+    const ref = new Date(sameDayAs);
+    if (!Number.isNaN(ref.getTime()) && ref.toDateString() !== d.toDateString()) {
+      const day = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      return `${day}, ${time}`;
+    }
+  }
+  return time;
+}
+
+/** `19:04 UTC`, or `1 Oct, 19:04 UTC` on another UTC day than `sameDayAs`:
+ *  what `formatLocalTime` falls back to before hydration. */
+export function formatUtcTime(iso: string, sameDayAs?: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  if (sameDayAs) {
+    const ref = new Date(sameDayAs);
+    if (!Number.isNaN(ref.getTime()) && ref.toISOString().slice(0, 10) !== d.toISOString().slice(0, 10)) {
+      return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${time}`;
+    }
+  }
+  return time;
+}

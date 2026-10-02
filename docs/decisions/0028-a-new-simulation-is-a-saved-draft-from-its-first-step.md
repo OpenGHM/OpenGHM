@@ -21,15 +21,20 @@ user typed.
 
 ## Decision
 
-**A simulation is a saved `DRAFT` from the end of step 1, and steps 2 to 4
-edit that draft and save it as they go.**
+**A simulation is a saved `DRAFT` from the end of step 1, and the steps after
+it (Run settings, then Review & submit) edit that draft and save it as they
+go.**
 
 - **Two ways to start.** Step 1 either derives a draft from a published
   snapshot (`POST /jobs/derive/{dataset_id}`, as now), or duplicates one of
   the caller's own simulations, in any status (`POST /jobs/{id}/duplicate`).
-  Either answer is a new `DRAFT`, and the user lands on step 2.
-- **Steps 2 to 4 edit the draft.** Model and input, run settings, then name,
-  description and submit. The draft saves itself after a pause, when the user
+  Either answer is a new `DRAFT`, and the user lands on Run settings.
+- **The steps after Start from edit the draft.** Run settings (what it is
+  based on, the run period, the output variables, cores and walltime), then
+  Review & submit (one summary, name and description, and the submit area). There
+  was a "Model & input" step between them; nothing on it could be changed, because
+  the toolkit has no option for a different model input, so it was dropped, and
+  `?step=model` opens Run settings. The draft saves itself after a pause, when the user
   changes step, and when the page is hidden or left. Opening a draft from the
   list opens the same wizard, at Review.
 - **The starting point cannot change.** A draft keeps the snapshot it was
@@ -64,7 +69,7 @@ edit that draft and save it as they go.**
   it must copy only what a draft is made of. A copy never carries the source's
   `sim_id`, SLURM ids, verdict, files or `orphan_sim_ids`.
 - The snapshot picker's Select now creates a draft, not a choice held in the
-  page. A user who goes Back from step 2 and picks again leaves the first
+  page. A user who goes Back from Run settings and picks again leaves the first
   draft behind. It is a draft like any other, shown in My Simulations and
   deletable there.
 - A save changes `updated_at`, which re-sorts My Simulations. That is

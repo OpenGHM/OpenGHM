@@ -13,7 +13,7 @@ const SHORT = fakeDataset({ id: "short", about: { ...fakeDataset().about, name: 
 describe("the snapshots you've used", () => {
   it("clamps a title to two lines, with the whole of it in the title attribute", () => {
     render(<RecentSnapshots snapshots={[LONG, SHORT]} onSelect={vi.fn()} />);
-    const title = screen.getByRole("heading", { name: LONG_TITLE });
+    const title = screen.getByText(LONG_TITLE);
     expect(title.className).toContain("line-clamp-2");
     expect(title.getAttribute("title")).toBe(LONG_TITLE);
   });
@@ -23,10 +23,9 @@ describe("the snapshots you've used", () => {
     const buttons = screen.getAllByRole("button");
     for (const button of buttons) {
       expect(button.className).toContain("h-full");
-      const card = button.firstElementChild as HTMLElement;
-      expect(card.className).toContain("h-full");
       const foot = button.querySelector(".mt-auto");
       expect(foot?.textContent).toContain("2001");
+      expect(foot?.textContent).toContain("·");
     }
   });
 

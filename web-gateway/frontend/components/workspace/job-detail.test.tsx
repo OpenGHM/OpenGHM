@@ -46,26 +46,37 @@ function before(a: HTMLElement, b: HTMLElement) {
 }
 
 describe("the detail page", () => {
-  it("copies the failed simulation's settings from the card, and starts over from its snapshot in the header", () => {
-    renderDetail("failed:wbm_error");
-    expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "New from this model snapshot" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start a new draft" })).toBeNull();
-  });
-
-
-  it("has no Back button; the breadcrumb is the way back", () => {
+  it("titles the page with the simulation's name and puts the breadcrumb in the hero", () => {
     renderDetail("completed");
-    expect(screen.queryByText("Back to Simulations")).toBeNull();
+    const job = previewSimulation("completed");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
     expect(screen.getByRole("link", { name: "My Simulations" }).getAttribute("href")).toBe("/workspace");
+    expect(screen.queryByText("Back to Simulations")).toBeNull();
   });
 
-  it("puts the status column before the parameters in reading order", () => {
+  it("reads status, then logs, then details", () => {
     renderDetail("completed");
-    const status = screen.getByText("Job Status");
-    const parameters = screen.getByText("Simulation Parameters");
-    const hpc = screen.getByText("HPC Configuration");
-    expect(before(status, parameters)).toBe(true);
-    expect(before(status, hpc)).toBe(true);
+    const status = screen.getByRole("region", { name: "Status" });
+    const logs = screen.getByRole("heading", { name: "Logs" });
+    const details = screen.getByRole("heading", { name: "Details" });
+    expect(before(status, logs)).toBe(true);
+    expect(before(logs, details)).toBe(true);
+    // The old layout's sidebar cards and icon-tile headers are gone.
+    expect(screen.queryByText("Job Status")).toBeNull();
+    expect(screen.queryByText("Simulation Parameters")).toBeNull();
+    expect(screen.queryByText("HPC Configuration")).toBeNull();
+  });
+
+  it("keeps the retry in one place on a failed run: the summary has the button, the menu the menu item", () => {
+    renderDetail("failed:wbm_error");
+    expect(screen.getAllByRole("button", { name: "Try again with these settings" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "New from this model snapshot" })).toBeNull();
+    expect(screen.getByRole("button", { name: "More actions" })).toBeTruthy();
+  });
+
+  it("puts Cancel in the summary while it runs, and nothing in the header", () => {
+    renderDetail("running");
+    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
   });
 });

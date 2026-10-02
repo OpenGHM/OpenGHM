@@ -122,28 +122,19 @@ describe("the cards", () => {
     expect(screen.queryByText("Model snapshots you've used")).toBeNull();
   });
 
-  it("make the model input card disabled: no link, no button, no handler", () => {
+  it("offer no model input card: nothing that cannot be chosen is shown", () => {
     start();
-    const text = screen.getByText(/Start from a published model input/);
-    const box = text.closest("[aria-disabled]") as HTMLElement;
-    expect(box.getAttribute("aria-disabled")).toBe("true");
-    expect(within(box).getByText("Coming soon")).toBeTruthy();
-    expect(within(box).queryByRole("link")).toBeNull();
-    expect(within(box).queryByRole("button")).toBeNull();
-    expect(box.getAttribute("tabindex")).toBeNull();
-    fireEvent.click(box);
-    expect(window.location.search).toBe("");
-    expect(screen.getByText(/Not available yet: a run needs a model snapshot's code and settings/)).toBeTruthy();
+    expect(screen.queryByText(/Start from a published model input/)).toBeNull();
+    expect(screen.queryByText(/Coming soon/)).toBeNull();
+    expect(screen.queryByText(/Not available yet/)).toBeNull();
   });
 
-  it("disable the copy card, with the reason, when there is nothing to copy", () => {
+  it("show no choice at all when there is nothing to copy, and the picker is what is left", () => {
     window.history.replaceState(null, "", "/workspace/new?from=copy");
     start({ initialMode: "copy", copyInitial: { items: [], page: 1, totalPages: 1 } });
-    expect(screen.queryByRole("link", { name: /Copy one of my simulations/ })).toBeNull();
-    const box = screen.getByText("You have no simulations to copy yet").closest("[aria-disabled]");
-    expect(box?.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("navigation", { name: "Where to start from" })).toBeNull();
+    expect(screen.queryByText("You have no simulations to copy yet")).toBeNull();
     // The URL asked for the copy card, but there is nothing in it: the default shows.
-    expect(card(/^Model snapshot/).getAttribute("aria-current")).toBe("true");
     expect(pickerMounted()).toBe(true);
   });
 
@@ -154,11 +145,11 @@ describe("the cards", () => {
 });
 
 describe("a model snapshot", () => {
-  it("is derived at once from the recent snapshots, and opens step 2", async () => {
+  it("is derived at once from the recent snapshots, and opens Run settings", async () => {
     deriveSimulation.mockResolvedValue(created("d1"));
     start();
     fireEvent.click(screen.getByRole("button", { name: "Start from Recent Snapshot" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d1?step=model"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d1?step=run"));
     expect(deriveSimulation).toHaveBeenCalledWith("snap-recent");
   });
 
@@ -166,7 +157,7 @@ describe("a model snapshot", () => {
     deriveSimulation.mockResolvedValue(created("d2"));
     start();
     fireEvent.click(screen.getAllByRole("button", { name: /select/i })[0]);
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d2?step=model"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d2?step=run"));
     expect(deriveSimulation).toHaveBeenCalledWith("snap-listed");
   });
 
@@ -176,7 +167,7 @@ describe("a model snapshot", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /^Details: Listed Snapshot/ })[0]);
     const sheet = await screen.findByRole("dialog");
     fireEvent.click(within(sheet).getByRole("button", { name: /select/i }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d4?step=model"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d4?step=run"));
     expect(deriveSimulation).toHaveBeenCalledWith("snap-listed");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
@@ -196,7 +187,7 @@ describe("a model snapshot", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /select/i })[0]);
     expect(deriveSimulation).toHaveBeenCalledTimes(1);
     await act(async () => resolve(created("d3")));
-    expect(push).toHaveBeenCalledWith("/workspace/d3?step=model");
+    expect(push).toHaveBeenCalledWith("/workspace/d3?step=run");
   });
 
   it("shows a missing snapshot in an alert and lets the user try again", async () => {
@@ -225,11 +216,11 @@ describe("a model snapshot", () => {
 describe("copying a simulation", () => {
   beforeEach(() => window.history.replaceState(null, "", "/workspace/new?from=copy"));
 
-  it("duplicates the row and opens step 2 of the new draft", async () => {
+  it("duplicates the row and opens Run settings of the new draft", async () => {
     duplicateSimulation.mockResolvedValue(created("c1"));
     start({ initialMode: "copy" });
     fireEvent.click(screen.getByRole("button", { name: "Copy sim-1" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/c1?step=model"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/c1?step=run"));
     expect(duplicateSimulation).toHaveBeenCalledWith("job-1");
   });
 

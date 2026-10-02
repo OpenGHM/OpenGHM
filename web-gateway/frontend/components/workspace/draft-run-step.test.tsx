@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { JobParameters } from "@/lib/jobs/types";
 
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
-import { UNSUPPORTED_REASON } from "@/lib/jobs/compute";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import { fakeDataset } from "@/lib/workspace/fixtures";
 
@@ -21,6 +20,20 @@ const dataset = fakeDataset({
     ],
   },
 });
+/** A snapshot with more variables than a flat list holds: runoff, runoff_ps, ... */
+function manyVariables() {
+  const names = ["runoff", "runoff_ps", "runoff_pu", "discharge", "discharge_ps", "soilMoist", "soilMoist_ps",
+    "glMelt", "irrRunoff", "etIrrCrops", "grndWater", "grndWater_pu", "streamAge"];
+  return fakeDataset({
+    simulation: {
+      ...fakeDataset().simulation,
+      outputVariables: names.map((name) => ({ name, fullName: name.toUpperCase(), unit: "mm" })) as [
+        { name: string; fullName: string; unit: string },
+        ...{ name: string; fullName: string; unit: string }[],
+      ],
+    },
+  });
+}
 const FOUND: DraftContext = { dataset, snapshotState: "found" };
 const NO_SNAPSHOT: DraftContext = { dataset: null, snapshotState: "unavailable" };
 
@@ -37,14 +50,19 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
   const onSlurmChange = vi.fn();
   const view = render(
     <DraftRunStep
+      datasetId="snap-1"
+      datasetTitle="Kept title"
       ctx={FOUND}
       parameters={PARAMETERS}
       slurm={{ cores: null, walltime: null }}
       recommended={dataset.simulation.recommendedCompute}
+      modelInputId={null}
+      resolvedModelInput={undefined}
       serverErrors={{}}
       startRefusal={null}
       onParametersChange={onParametersChange}
       onSlurmChange={onSlurmChange}
+      onRevertModelInput={vi.fn()}
       {...props}
     />
   );
@@ -68,12 +86,23 @@ describe("the draft run step: fields the wizard can focus", () => {
     expect(marked("start")).toBe(start());
     expect(marked("end")).toBe(end());
     expect(marked("cores")).toBe(screen.getByLabelText("Cores"));
-    expect(marked("walltime")).toBe(screen.getByLabelText("Walltime"));
-    expect(marked("spatial")).toBe(screen.getByRole("checkbox", { name: /Restrict to a spatial subset/ }));
-    expect(marked("custom")).toBe(screen.getByRole("button", { name: "Remove" }));
-    // The group: focus goes to its first checkbox.
-    expect(marked("variables").tagName).toBe("FIELDSET");
+    expect(marked("walltime")).toBe(screen.getByLabelText(/^Walltime/));
+    const removes = screen.getAllByRole("button", { name: "Remove" });
+    expect(marked("spatial")).toBe(removes[0]);
+    expect(marked("custom")).toBe(removes[1]);
+    // A short list: focus goes to its first checkbox.
     expect(marked("variables").querySelector("input")).toBe(checkbox("discharge"));
+  });
+
+  it("sends focus to the search box of a long list, and to Revert for a model input of its own", () => {
+    step({
+      modelInputId: "mi-9",
+      ctx: { dataset: manyVariables(), snapshotState: "found" },
+      parameters: { ...PARAMETERS, variables: [] },
+    });
+    const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
+    expect(marked("variables")).toBe(screen.getByRole("searchbox", { name: "Search output variables" }));
+    expect(marked("modelInput")).toBe(screen.getByRole("button", { name: "Revert" }));
   });
 });
 
@@ -90,9 +119,11 @@ describe("the draft run step: dates", () => {
     expect(start().min).toBe("2001-01-01");
     expect(start().max).toBe("2001-12-31");
     expect(end().min).toBe("2001-01-01");
-    expect(screen.getByText("2001-01-01 → 2001-12-31")).toBeTruthy();
-    expect(screen.getByText(/one file per year, so a run must start on January 1/)).toBeTruthy();
+    // The limits are said once, in one line under the two dates.
+    expect(screen.getByText("Start on January 1 · Coverage 2001-01-01 → 2001-12-31")).toBeTruthy();
+    expect(screen.queryByText(/one file per year/)).toBeNull();
     expect(start().getAttribute("aria-invalid")).toBeNull();
+    expect(start().getAttribute("aria-describedby")).toBe(end().getAttribute("aria-describedby"));
   });
 
   it("passes an edited date on, and nothing else of the parameters", () => {
@@ -106,9 +137,9 @@ describe("the draft run step: dates", () => {
       parameters: { ...PARAMETERS, temporal_range_start: "2001-03-15" },
     });
     expect(start().getAttribute("aria-invalid")).toBe("true");
-    const note = document.getElementById(start().getAttribute("aria-describedby")!.split(" ")[0]);
-    expect(note?.textContent).toContain("a run must start on January 1");
-    fireEvent.click(screen.getByRole("button", { name: "Start on 2001-01-01 instead" }));
+    const error = document.getElementById(start().getAttribute("aria-describedby")!.split(" ")[1]);
+    expect(error?.textContent).toContain("Start on January 1.");
+    fireEvent.click(screen.getByRole("button", { name: "Use 2001-01-01" }));
     expect(onParametersChange).toHaveBeenCalledWith({
       ...PARAMETERS,
       temporal_range_start: "2001-01-01",
@@ -127,8 +158,8 @@ describe("the draft run step: dates", () => {
     });
     expect(start().getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByText("This model's runs start on January 1.")).toBeTruthy();
-    expect(screen.getAllByText(/Start on 2001-01-01 instead/)).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Start on 2001-01-01 instead" })).toBeTruthy();
+    expect(screen.queryAllByText(/Start on 2001-01-01 instead/)).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Use 2001-01-01" })).toBeTruthy();
   });
 
   it("keeps a refusal's text whole when it does not end with the suggestion", () => {
@@ -137,7 +168,7 @@ describe("the draft run step: dates", () => {
       startRefusal: { message: "Not a valid start.", suggestion: null },
     });
     expect(screen.getByText("Not a valid start.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /instead/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
   });
 
   it("offers no fix when no allowed start is inside the coverage", () => {
@@ -153,7 +184,7 @@ describe("the draft run step: dates", () => {
       parameters: { ...PARAMETERS, temporal_range_start: "2001-05-01" },
     });
     expect(start().getAttribute("aria-invalid")).toBe("true");
-    expect(screen.queryByRole("button", { name: /instead/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
   });
 
   it("says it could not check a model whose rule is unknown, and flags nothing", () => {
@@ -161,7 +192,7 @@ describe("the draft run step: dates", () => {
       ctx: { dataset: fakeDataset({ runStartAlignment: null }), snapshotState: "found" },
       parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
     });
-    expect(screen.getByText(/couldn't check where this model's runs may start/)).toBeTruthy();
+    expect(screen.getByText(/Start date not checked here/)).toBeTruthy();
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });
 
@@ -170,8 +201,8 @@ describe("the draft run step: dates", () => {
       ctx: { dataset: fakeDataset({ runStartAlignment: "none" }), snapshotState: "found" },
       parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
     });
-    expect(screen.queryByText(/couldn't check/)).toBeNull();
-    expect(screen.queryByText(/one file per/)).toBeNull();
+    expect(screen.queryByText(/not checked here/)).toBeNull();
+    expect(screen.queryByText(/Start on/)).toBeNull();
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });
 
@@ -190,8 +221,11 @@ describe("the draft run step: dates", () => {
       parameters: { ...PARAMETERS, temporal_range_start: "2000-01-01", temporal_range_end: "2000-12-31" },
     });
     expect(end().getAttribute("aria-invalid")).toBe("true");
-    const message = document.getElementById(end().getAttribute("aria-describedby")!)?.textContent;
-    expect(message).toContain("a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2001-12-31).");
+    // Red under the field, short; the line under the dates says the limit once.
+    const message = document.getElementById(end().getAttribute("aria-describedby")!.split(" ")[1])?.textContent;
+    expect(message).toBe("End on 2001-12-31.");
+    expect(screen.getByText("Start on January 1 · End on 2001-12-31 · Coverage 2000-01-01 → 2001-12-31")).toBeTruthy();
+    expect(screen.queryByText(/allowed:/)).toBeNull();
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });
 
@@ -210,7 +244,7 @@ describe("the draft run step: dates", () => {
       parameters: { ...PARAMETERS, temporal_range_start: "2002-01-01", temporal_range_end: "2003-12-31" },
     });
     expect(start().getAttribute("aria-invalid")).toBe("true");
-    expect(screen.getByText(/a run can start no later than 2001-12-31 \(allowed: 2000-01-01 to 2001-12-31\)/)).toBeTruthy();
+    expect(screen.getByText("Start no later than 2001-12-31.")).toBeTruthy();
     unmount();
     step({
       ctx,
@@ -234,7 +268,9 @@ describe("the draft run step: dates", () => {
     expect(screen.getByText("Start is not a date.")).toBeTruthy();
     expect(screen.getByText("End is too late.")).toBeTruthy();
     expect(end().getAttribute("aria-invalid")).toBe("true");
-    expect(document.getElementById(end().getAttribute("aria-describedby")!)?.textContent).toBe("End is too late.");
+    expect(document.getElementById(end().getAttribute("aria-describedby")!.split(" ")[1])?.textContent).toBe(
+      "End is too late."
+    );
   });
 });
 
@@ -249,9 +285,9 @@ describe("the draft run step: without a snapshot", () => {
     expect(start().max).toBe("");
     expect(end().max).toBe("");
     expect(screen.getByText(/isn't available, so the dates aren't checked/)).toBeTruthy();
-    expect(screen.getAllByRole("checkbox").map((c) => (c as HTMLInputElement).checked)).toEqual([true, false]);
+    expect(screen.getAllByRole("checkbox").map((c) => (c as HTMLInputElement).checked)).toEqual([true]);
     expect(screen.getByRole("checkbox", { name: "discharge" })).toBeTruthy();
-    expect(screen.getByText(/Output variables \(1\/1\)/)).toBeTruthy();
+    expect(screen.getByText("1 of 1 selected")).toBeTruthy();
     expect(screen.getByText(/own list isn't\s+available/)).toBeTruthy();
     expect(screen.queryByText("not in this snapshot")).toBeNull();
     // The compute fields have no recommendation to show.
@@ -262,7 +298,7 @@ describe("the draft run step: without a snapshot", () => {
 describe("the draft run step: output variables", () => {
   it("lists the snapshot's variables and keeps the stored order when one is ticked", () => {
     const { onParametersChange } = step({ parameters: { ...PARAMETERS, variables: ["runoff", "streamAge"] } });
-    expect(screen.getByText(/Output variables \(2\/3\)/)).toBeTruthy();
+    expect(screen.getByText("2 of 3 selected")).toBeTruthy();
     expect(checkbox("discharge").checked).toBe(false);
     fireEvent.click(checkbox("discharge"));
     // Stored in the snapshot's own order, not in the order they were ticked.
@@ -282,7 +318,7 @@ describe("the draft run step: output variables", () => {
     const { onParametersChange } = step({
       parameters: { ...PARAMETERS, variables: ["discharge", "legacyVar"] },
     });
-    expect(screen.getByText(/Output variables \(2\/4\)/)).toBeTruthy();
+    expect(screen.getByText("2 of 4 selected")).toBeTruthy();
     // The mark is part of the checkbox's name, so a screen reader hears it too.
     expect(checkbox("legacyVar not in this snapshot").checked).toBe(true);
     expect(screen.getByText("not in this snapshot")).toBeTruthy();
@@ -321,22 +357,20 @@ describe("the draft run step: output variables", () => {
 describe("the draft run step: what a submit refuses", () => {
   const subset = { north: 5, south: -5, east: 5, west: -5 };
 
-  it("offers a spatial subset only as switched off", () => {
+  it("shows nothing about a spatial subset, or a custom parameter, a draft does not have", () => {
     step();
-    const box = screen.getByRole("checkbox", { name: "Restrict to a spatial subset" }) as HTMLInputElement;
-    expect(box.checked).toBe(false);
-    expect(box.disabled).toBe(true);
-    expect(screen.getByText(UNSUPPORTED_REASON.spatialSubset)).toBeTruthy();
+    expect(screen.queryByText(/spatial subset/i)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /spatial/i })).toBeNull();
+    expect(screen.queryByText(/Not available yet/)).toBeNull();
+    expect(screen.queryByText(/\.init/)).toBeNull();
+    expect(screen.queryByText(/Settings that can't run yet/)).toBeNull();
   });
 
-  it("switches off a stored spatial subset", () => {
+  it("removes a stored spatial subset", () => {
     const { onParametersChange } = step({ parameters: { ...PARAMETERS, spatial_domain: subset } });
-    const box = screen.getByRole("checkbox", { name: "Restrict to a spatial subset" }) as HTMLInputElement;
-    expect(box.checked).toBe(true);
-    expect(box.disabled).toBe(false);
-    expect(screen.getByText(/switch it off to submit/)).toBeTruthy();
+    expect(screen.getByText(/remove it to submit/)).toBeTruthy();
     expect(screen.getByText("N5 S-5 E5 W-5")).toBeTruthy();
-    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, spatial_domain: null });
   });
 
@@ -362,7 +396,7 @@ describe("the draft run step: compute", () => {
     const { onSlurmChange } = step({ slurm: { cores: null, walltime: "02:00:00" } });
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "4" } });
     expect(onSlurmChange).toHaveBeenCalledWith({ cores: 4, walltime: "02:00:00" });
-    expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16 (recommended)");
+    expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16");
   });
 
   it("shows what the server said about cores and walltime", () => {
@@ -378,9 +412,15 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   it("explains it next to the Walltime field, and shows the automatic one as the limit", () => {
     step({ recommended: long });
     const notice = screen.getByText(/reference run took about 111 h 30 min, more than the 96 h/);
-    expect(notice.textContent).toMatch(/Shorten the run period, or set a walltime yourself/);
-    expect(screen.getByLabelText("Walltime").getAttribute("aria-describedby")).toBe(notice.parentElement?.id);
-    expect(screen.getByLabelText("Walltime").getAttribute("placeholder")).toBe("4 d (the limit for one job)");
+    expect(notice.textContent).toMatch(/Shorten the run period or set a walltime\./);
+    // One line, with the long reason behind a button.
+    expect(screen.queryByText(/the run may be stopped when time runs out/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Why?" }));
+    expect(screen.getByText(/the run may be stopped when time runs out/)).toBeTruthy();
+    const walltime = screen.getByLabelText(/^Walltime/);
+    expect(walltime.getAttribute("aria-describedby")).toContain(notice.closest("div")!.id);
+    expect(walltime.getAttribute("placeholder")).toBe("96:00:00");
+    expect(screen.getByText("Empty = recommended: 16 cores, 4 d (the limit for one job).")).toBeTruthy();
   });
 
   it("is gone once the draft sets a walltime of its own", () => {
@@ -391,33 +431,36 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   it("says nothing for a recommendation that fits", () => {
     step();
     expect(screen.queryByText(/reference run took/)).toBeNull();
-    expect(screen.getByLabelText("Walltime").getAttribute("placeholder")).toBe(
-      "22 min 30 s (recommended + 50%)"
-    );
+    expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("00:22:30");
+    expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
   });
 
   it("only hints, without an error, at a walltime shorter than the reference run", () => {
     step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
     expect(screen.getByText(/reference run took about 4 h 30 min/)).toBeTruthy();
-    expect(screen.getByLabelText("Walltime").getAttribute("aria-invalid")).not.toBe("true");
+    expect(screen.getByLabelText(/^Walltime/).getAttribute("aria-invalid")).not.toBe("true");
   });
 });
 
 describe("the draft run step: cores below the recommended count", () => {
   const BIG = { cores: 64, walltime: "15:00" };
-  const warning = () => screen.queryByText(/This model snapshot recommends 64 cores/);
+  const warning = () => screen.queryByText(/1 core is below the recommended 64/);
 
   it("warns next to the Cores field, with the numbers, and does not make it an error", () => {
     step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
     const note = warning()!;
-    expect(note.textContent).toBe(
-"This model snapshot recommends 64 cores, enough memory for its run. " +
+    expect(note.textContent).toContain("1 core is below the recommended 64: the run may run out of memory.");
+    // The arithmetic is behind "Why?".
+    expect(screen.queryByText(/enough memory for its run/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Why?" }));
+    expect(screen.getByText(/On Anvil's shared partition memory comes with cores/).textContent).toBe(
+      "This model snapshot recommends 64 cores, enough memory for its run. " +
         "On Anvil's shared partition memory comes with cores, about 1.9 GB each, " +
         "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
         "the run may be stopped for running out of memory."
     );
     const cores = screen.getByLabelText("Cores");
-    expect(cores.getAttribute("aria-describedby")).toBe(note.parentElement?.id);
+    expect(cores.getAttribute("aria-describedby")).toContain(note.closest("div")!.id);
     expect(cores.getAttribute("aria-invalid")).not.toBe("true");
   });
 
@@ -429,14 +472,19 @@ describe("the draft run step: cores below the recommended count", () => {
 
     const props = (cores: number | null) => (
       <DraftRunStep
+        datasetId="snap-1"
+        datasetTitle="Kept title"
         ctx={FOUND}
         parameters={PARAMETERS}
         slurm={{ cores, walltime: null }}
         recommended={BIG}
+        modelInputId={null}
+        resolvedModelInput={undefined}
         serverErrors={{}}
         startRefusal={null}
         onParametersChange={vi.fn()}
         onSlurmChange={vi.fn()}
+        onRevertModelInput={vi.fn()}
       />
     );
     rerender(props(1));
@@ -463,9 +511,123 @@ describe("the draft run step: disabled", () => {
     expect(off(start())).toBe(true);
     expect(off(end())).toBe(true);
     expect(off(checkbox("discharge"))).toBe(true);
-    expect(off(checkbox("Restrict to a spatial subset"))).toBe(true);
     expect(off(screen.getByLabelText("Cores"))).toBe(true);
-    expect(off(screen.getByLabelText("Walltime"))).toBe(true);
-    expect(off(screen.getByRole("button", { name: "Remove" }))).toBe(true);
+    expect(off(screen.getByLabelText(/^Walltime/))).toBe(true);
+    for (const remove of screen.getAllByRole("button", { name: "Remove" })) expect(off(remove)).toBe(true);
+  });
+});
+
+describe("the draft run step: a long list of output variables", () => {
+  const all = () => manyVariables().simulation.outputVariables.map((v) => v.name);
+  const long = (variables = all()) => ({
+    ctx: { dataset: manyVariables(), snapshotState: "found" } as DraftContext,
+    parameters: { ...PARAMETERS, variables },
+  });
+
+  it("has a search box, Select all and Clear, and the count of what is selected", () => {
+    step(long());
+    expect(screen.getByRole("searchbox", { name: "Search output variables" })).toBeTruthy();
+    expect(screen.getByText("13 of 13 selected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Select all" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+  });
+
+  it("has none of them for a short list, which is just the checkboxes", () => {
+    step();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByText("Other variables")).toBeNull();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  });
+
+  it("groups the names that share a base, and the rest follow as other variables", () => {
+    step(long());
+    const group = (name: RegExp) => screen.getByRole("checkbox", { name });
+    expect(group(/^runoff: all 3 variables/)).toBeTruthy();
+    expect(group(/^discharge: all 2 variables/)).toBeTruthy();
+    expect(group(/^soilMoist: all 2 variables/)).toBeTruthy();
+    expect(group(/^grndWater: all 2 variables/)).toBeTruthy();
+    expect(screen.getByText("Other variables")).toBeTruthy();
+  });
+
+  it("ticks and unticks a whole group, in the snapshot's order", () => {
+    const { onParametersChange } = step(long(["discharge"]));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^runoff: all 3 variables/ }));
+    expect(onParametersChange).toHaveBeenLastCalledWith({
+      ...PARAMETERS,
+      variables: ["runoff", "runoff_ps", "runoff_pu", "discharge"],
+    });
+  });
+
+  it("clears everything, and selects everything", () => {
+    const { onParametersChange } = step(long(["discharge"]));
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, variables: all() });
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, variables: [] });
+  });
+
+  it("filters by name or title, and then Select and Clear act on the matches only", () => {
+    const { onParametersChange } = step(long(["streamAge"]));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search output variables" }), {
+      target: { value: "soil" },
+    });
+    expect(screen.queryByRole("checkbox", { name: "runoff" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "soilMoist_ps" })).toBeTruthy();
+    // The count is of the draft, not of the matches.
+    expect(screen.getByText("1 of 13 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Select shown" }));
+    expect(onParametersChange).toHaveBeenLastCalledWith({
+      ...PARAMETERS,
+      variables: ["soilMoist", "soilMoist_ps", "streamAge"],
+    });
+  });
+
+  it("says when nothing matches", () => {
+    step(long());
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search output variables" }), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText(/No variable matches/)).toBeTruthy();
+  });
+});
+
+describe("the draft run step: what the draft is based on", () => {
+  it("is one compact summary: title, model and version, coverage, resolution, model input, and a link", () => {
+    step({ resolvedModelInput: { about: { name: "WBM Inputs [CONUS]" } } as never });
+    expect(screen.getByText("Fake Snapshot")).toBeTruthy();
+    expect(screen.getByText(/wbm 2\.0\.0 · 2001-01-01 → 2001-12-31 · 0\.5 degree/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "WBM Inputs [CONUS]" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /View in repository/ }).getAttribute("href")).toBe("/repository/snap-1");
+  });
+
+  it("says a snapshot that left the repository is gone, and keeps its title", () => {
+    step({ ctx: { dataset: null, snapshotState: "gone" } });
+    expect(screen.getByText("Kept title")).toBeTruthy();
+    expect(screen.getByText(/no longer in the repository/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /View in repository/ })).toBeNull();
+  });
+
+  it("says it could not load a snapshot it could not fetch, and links to it", () => {
+    step({ ctx: NO_SNAPSHOT });
+    expect(screen.getByText(/couldn't load this model snapshot/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /View in repository/ })).toBeTruthy();
+  });
+
+  it("offers to revert a model input of the draft's own, and says what the server said about it", () => {
+    const onRevertModelInput = vi.fn();
+    step({
+      modelInputId: "mi-9",
+      onRevertModelInput,
+      serverErrors: { modelInput: "No such model input." },
+    });
+    expect(screen.getByText(/uses a different model input/)).toBeTruthy();
+    expect(screen.getByText("No such model input.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Revert" }));
+    expect(onRevertModelInput).toHaveBeenCalled();
+  });
+
+  it("has no revert when the draft inherits the snapshot's model input", () => {
+    step();
+    expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
   });
 });

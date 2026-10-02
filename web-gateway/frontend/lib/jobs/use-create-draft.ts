@@ -38,7 +38,7 @@ export function useCreateDraft() {
       try {
         const result = await call();
         if (result.ok) {
-          router.push(stepHref(result.data.id, "model"));
+          router.push(stepHref(result.data.id, "run"));
           return;
         }
         busy.current = false;

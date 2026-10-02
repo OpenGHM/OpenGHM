@@ -23,13 +23,21 @@ const RULE_TEXT = {
   month: "This model snapshot's model writes one file per month, so a run must start on the first day of a month.",
 } as const;
 
-/** What the rule is, in plain words; null when there is none to state. */
-export function runStartRuleText(alignment: RunStartAlignment): string | null {
-  return alignment === "year" || alignment === "month" ? RULE_TEXT[alignment] : null;
-}
+/** The rule in a few words, for under the Start field. */
+const RULE_SHORT = {
+  year: "Start on January 1.",
+  month: "Start on the first day of a month.",
+} as const;
 
-export const RUN_START_UNCHECKED =
-  "We couldn't check where this model's runs may start. A start that doesn't suit it is refused once the job runs.";
+/** What the rule says a start must be, as one phrase for a line of constraints:
+ *  "start on January 1". Null when there is no rule to state. */
+export function runStartRulePhrase(alignment: RunStartAlignment): string | null {
+  return alignment === "year"
+    ? "start on January 1"
+    : alignment === "month"
+      ? "start on the 1st of a month"
+      : null;
+}
 
 const iso = (y: number, m: number, d: number) =>
   `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -72,8 +80,10 @@ export function nearestValidStart(
 }
 
 export interface RunStartProblem {
-  /** The rule, and the way out when there is one. */
+  /** The rule, in full: for a list of problems. */
   message: string;
+  /** The same, short enough to sit under the Start field. */
+  short: string;
   /** The nearest start the rule allows, or null. */
   suggestion: string | null;
 }
@@ -97,6 +107,7 @@ export function checkRunStart(
   if (day === 1 && (alignment === "month" || month === 1)) return null;
   return {
     message: RULE_TEXT[alignment],
+    short: RULE_SHORT[alignment],
     suggestion: nearestValidStart(alignment, start, snapshotStart, snapshotEnd),
   };
 }

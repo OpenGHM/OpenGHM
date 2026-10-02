@@ -234,12 +234,24 @@ def aggregation_messages(
         "This snapshot's model also aggregates its results over multi-year "
         f"periods that begin in {year}, so"
     )
-    start_range = f" (allowed: {snapshot_start} to {edge})" if snapshot_start and snapshot_start <= edge else ""
-    end_range = f" (allowed: {edge} to {snapshot_end})" if snapshot_end and edge <= snapshot_end else ""
-    return {
-        "start": f"{lead} a run can start no later than {edge}{start_range}.",
-        "end": f"{lead} a run must end on or after {edge}{end_range}.",
-    }
+    # When the range is one date, say that date rather than "X to X".
+    if snapshot_start and snapshot_start <= edge:
+        start_text = (
+            f"a run must start on {edge}"
+            if snapshot_start == edge
+            else f"a run can start no later than {edge} (allowed: {snapshot_start} to {edge})"
+        )
+    else:
+        start_text = f"a run can start no later than {edge}"
+    if snapshot_end and edge <= snapshot_end:
+        end_text = (
+            f"a run must end on {edge}"
+            if snapshot_end == edge
+            else f"a run must end on or after {edge} (allowed: {edge} to {snapshot_end})"
+        )
+    else:
+        end_text = f"a run must end on or after {edge}"
+    return {"start": f"{lead} {start_text}.", "end": f"{lead} {end_text}."}
 
 
 def check_run_dates(

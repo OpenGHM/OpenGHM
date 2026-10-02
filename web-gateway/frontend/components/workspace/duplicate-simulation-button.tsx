@@ -4,7 +4,6 @@ import { useEffect, useId } from "react";
 import { toast } from "sonner";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CARD_BUTTON } from "@/components/workspace/derive-simulation-button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
 
@@ -33,9 +32,12 @@ function errorMessage(error: CreateError): string {
 export function DuplicateSimulationButton({
   jobId,
   label = "Try again with these settings",
+  variant = "default",
 }: {
   jobId: string;
   label?: string;
+  /** `default`: the page's one emphasised action (a failed run). `outline`: a quieter one. */
+  variant?: "default" | "outline";
 }) {
   const { pending, error, duplicateFrom } = useCreateDraft();
   const noteId = useId();
@@ -47,24 +49,23 @@ export function DuplicateSimulationButton({
   }, [error]);
 
   return (
-    <div className="flex max-w-full flex-col items-stretch gap-1.5">
+    <div className="flex max-w-full shrink-0 flex-col items-stretch gap-1.5 sm:items-end">
       <Button
         type="button"
-        size="lg"
-        variant="outline"
+        variant={variant}
         disabled={pending}
         aria-describedby={noteId}
         onClick={() => void duplicateFrom(jobId)}
-        className={CARD_BUTTON}
+        className="min-h-10 gap-2 font-semibold"
       >
         {pending ? (
-          <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden="true" />
+          <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
         ) : (
-          <RotateCcw className="size-5" aria-hidden="true" />
+          <RotateCcw aria-hidden="true" />
         )}
         {label}
       </Button>
-      <p id={noteId} className="text-xs text-muted-foreground">
+      <p id={noteId} className="sr-only">
         Copies this simulation&apos;s run settings into a new draft.
       </p>
       {error?.kind === "session-expired" && <SessionExpiredBanner className="w-full max-w-md" />}

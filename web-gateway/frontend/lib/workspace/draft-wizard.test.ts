@@ -7,17 +7,17 @@ import {
   FIELD_STEP,
   START_STEP_LABEL,
   STEP_LABELS,
+  isRetiredStep,
   parseStep,
   recommendedComputeFor,
   stepHref,
 } from "@/lib/workspace/draft-wizard";
 
 describe("the steps", () => {
-  it("are model, run and review, in that order, with the words a person reads", () => {
-    expect(DRAFT_STEPS).toEqual(["model", "run", "review"]);
+  it("are run and review, in that order, with the words a person reads", () => {
+    expect(DRAFT_STEPS).toEqual(["run", "review"]);
     expect(START_STEP_LABEL).toBe("Start from");
     expect(STEP_LABELS).toEqual({
-      model: "Model & input",
       run: "Run settings",
       review: "Review & submit",
     });
@@ -25,8 +25,17 @@ describe("the steps", () => {
 });
 
 describe("parseStep", () => {
-  it.each(["model", "run", "review"] as const)("reads %s", (step) => {
+  it.each(["run", "review"] as const)("reads %s", (step) => {
     expect(parseStep(step)).toBe(step);
+  });
+
+  it("reads the retired model step as Run settings", () => {
+    expect(parseStep("model")).toBe("run");
+    expect(parseStep(["model", "review"])).toBe("run");
+    expect(isRetiredStep("model")).toBe(true);
+    expect(isRetiredStep(["model"])).toBe(true);
+    expect(isRetiredStep("run")).toBe(false);
+    expect(isRetiredStep(null)).toBe(false);
   });
 
   it("opens at Review when the step is missing or not one of ours", () => {
@@ -36,7 +45,7 @@ describe("parseStep", () => {
   });
 
   it("reads the first of a repeated key", () => {
-    expect(parseStep(["run", "model"])).toBe("run");
+    expect(parseStep(["run", "review"])).toBe("run");
     expect(parseStep(["nope", "run"])).toBe("review");
     expect(parseStep([])).toBe("review");
   });
@@ -44,7 +53,11 @@ describe("parseStep", () => {
 
 describe("stepHref", () => {
   it("names the draft and the step", () => {
-    expect(stepHref("abc-123", "model")).toBe("/workspace/abc-123?step=model");
+    expect(stepHref("abc-123", "run")).toBe("/workspace/abc-123?step=run");
+  });
+
+  it("points a caller that still says model at Run settings", () => {
+    expect(stepHref("abc-123", "model")).toBe("/workspace/abc-123?step=run");
   });
 
   it("round-trips through parseStep", () => {
@@ -78,8 +91,8 @@ describe("the fields", () => {
   });
 
   it("are edited where the wizard puts them", () => {
-    expect(FIELD_STEP.modelInput).toBe("model");
-    for (const field of ["start", "end", "variables", "spatial", "custom", "cores", "walltime"] as const) {
+    expect(FIELD_STEP.modelInput).toBe("run");
+    for (const field of ["modelInput", "start", "end", "variables", "spatial", "custom", "cores", "walltime"] as const) {
       expect(FIELD_STEP[field]).toBe("run");
     }
     expect(FIELD_STEP.name).toBe("review");

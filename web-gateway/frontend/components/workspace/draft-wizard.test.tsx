@@ -23,7 +23,6 @@ vi.mock("@/lib/jobs/actions", () => ({
 }));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
-  fetchModelInputs: vi.fn(() => new Promise(() => {})),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 // The address bar is the router: what a test pushes is what `useSearchParams` reads.
@@ -200,7 +199,6 @@ describe("the page", () => {
 
 describe("the step", () => {
   it.each([
-    ["model", "Model & input"],
     ["run", "Run settings"],
     ["review", "Review & submit"],
   ] as const)("opens at %s when the server says so", (step, title) => {
@@ -209,20 +207,31 @@ describe("the step", () => {
     expect(stepLink(title).getAttribute("aria-current")).toBe("step");
   });
 
+  it("has only two steps after Start from: there is no Model & input", () => {
+    wizard({ step: "run" });
+    expect(screen.queryByRole("link", { name: /Model & input/ })).toBeNull();
+    expect(screen.getAllByRole("link", { name: /^\d/ })).toHaveLength(2);
+  });
+
+  it("opens Run settings for the retired ?step=model, and rewrites the address", () => {
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    window.history.replaceState(null, "", "/workspace/job-1?step=model");
+    // What the server page passes: parseStep("model") is "run".
+    render(<DraftWizard job={JOB} ctx={FOUND} blockedReason={null} initialStep="run" />);
+    expect(heading()).toBe("Run settings");
+    expect(search()).toBe("?step=run");
+    replaceState.mockRestore();
+  });
+
   it("saves nothing just by being opened", async () => {
     wizard({ step: "run" });
     await pause(1_000);
     expect(updateSimulation).not.toHaveBeenCalled();
   });
 
-  it("has no Back on step 2, both on step 3 and no Next on step 4", () => {
-    const { unmount } = wizard({ step: "model" });
-    expect(button("Back")).toBeNull();
-    expect(button("Next")).not.toBeNull();
-    unmount();
-
+  it("has no Back on Run settings (the draft's start cannot change) and no Next on Review", () => {
     const run = wizard({ step: "run" });
-    expect(button("Back")).not.toBeNull();
+    expect(button("Back")).toBeNull();
     expect(button("Next")).not.toBeNull();
     run.unmount();
 
@@ -233,23 +242,19 @@ describe("the step", () => {
 
   it("goes forward and back with pushState, without asking the server for anything", () => {
     const pushState = vi.spyOn(window.history, "pushState");
-    wizard({ step: "model" });
+    wizard({ step: "run" });
     const entries = window.history.length;
-
-    fireEvent.click(button("Next")!);
-    expect(heading()).toBe("Run settings");
-    expect(search()).toBe("?step=run");
-    expect(window.history.length).toBe(entries + 1);
 
     fireEvent.click(button("Next")!);
     expect(heading()).toBe("Review & submit");
     expect(search()).toBe("?step=review");
+    expect(window.history.length).toBe(entries + 1);
 
     fireEvent.click(button("Back")!);
     expect(heading()).toBe("Run settings");
     expect(search()).toBe("?step=run");
 
-    expect(pushState).toHaveBeenCalledTimes(3);
+    expect(pushState).toHaveBeenCalledTimes(2);
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
@@ -263,30 +268,30 @@ describe("the step", () => {
     fireEvent.click(stepLink("Run settings"));
     expect(pushState).not.toHaveBeenCalled();
 
-    fireEvent.click(stepLink("Model & input"));
+    fireEvent.click(stepLink("Review & submit"));
     expect(pushState).toHaveBeenCalledTimes(1);
-    expect(heading()).toBe("Model & input");
-    expect(search()).toBe("?step=model");
+    expect(heading()).toBe("Review & submit");
+    expect(search()).toBe("?step=review");
     pushState.mockRestore();
   });
 
   it("follows the browser's back and forward", async () => {
-    wizard({ step: "model" });
+    wizard({ step: "run" });
     fireEvent.click(button("Next")!);
-    expect(heading()).toBe("Run settings");
+    expect(heading()).toBe("Review & submit");
 
     // Back: the address bar goes first, then the event.
-    act(() => {
-      window.history.replaceState(null, "", "/workspace/job-1?step=model");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-    expect(heading()).toBe("Model & input");
-
     act(() => {
       window.history.replaceState(null, "", "/workspace/job-1?step=run");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     expect(heading()).toBe("Run settings");
+
+    act(() => {
+      window.history.replaceState(null, "", "/workspace/job-1?step=review");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(heading()).toBe("Review & submit");
     // Nothing was pushed or fetched for it.
     expect(push).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
@@ -299,36 +304,35 @@ describe("the step", () => {
   });
 
   it("moves focus to the step's heading, and does not on the first render", async () => {
-    wizard({ step: "model" });
+    wizard({ step: "run" });
     expect(document.activeElement).toBe(document.body);
     fireEvent.click(button("Next")!);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2 })));
-    expect(document.activeElement?.id).toBe("draft-step-run-heading");
+    expect(document.activeElement?.id).toBe("draft-step-review-heading");
   });
 
-  describe("an Edit link in Needs attention", () => {
+  describe("a Fix link in the submit area", () => {
     const badStart = { ...JOB, parameters: { ...JOB.parameters, temporal_range_start: "2001-03-15" } };
-    // The one in "Needs attention", which carries the field: after a summary card's own.
-    const editLink = (name: string) => screen.getAllByRole("button", { name }).at(-1)!;
+    const fix = (name: string) => screen.getByRole("button", { name });
 
     it("goes to the step and focuses the field's control", async () => {
       wizard({ ctx: { dataset: yearly, snapshotState: "found" }, job: badStart });
-      fireEvent.click(editLink("Edit start date"));
+      fireEvent.click(fix("Fix start date"));
       expect(heading()).toBe("Run settings");
       expect(search()).toBe("?step=run");
       await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Start")));
     });
 
-    it("focuses the first checkbox of the variables, and the Revert button of a chosen model input", async () => {
+    it("focuses the first checkbox of a short list of variables, and the Revert button of a chosen model input", async () => {
       const { unmount } = wizard({ job: { ...JOB, parameters: { ...JOB.parameters, variables: [] } } });
-      fireEvent.click(editLink("Edit output variables"));
+      fireEvent.click(fix("Fix output variables"));
       await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole("checkbox")[0]));
       unmount();
 
       wizard({ job: { ...JOB, model_input_id: "other-input" } });
-      fireEvent.click(editLink("Edit model input"));
-      expect(heading()).toBe("Model & input");
-      await waitFor(() => expect(document.activeElement).toBe(button("Revert to inherit")));
+      fireEvent.click(fix("Fix model input"));
+      expect(heading()).toBe("Run settings");
+      await waitFor(() => expect(document.activeElement).toBe(button("Revert")));
     });
 
     it("falls back to the step's heading when the step has no such control", async () => {
@@ -337,13 +341,13 @@ describe("the step", () => {
         ctx: { dataset: null, snapshotState: "unavailable" },
         job: { ...JOB, parameters: { ...JOB.parameters, variables: [] } },
       });
-      fireEvent.click(editLink("Edit output variables"));
+      fireEvent.click(fix("Fix output variables"));
       await waitFor(() => expect(document.activeElement?.id).toBe("draft-step-run-heading"));
     });
 
     it("focuses once: later steps go to their heading again", async () => {
       wizard({ ctx: { dataset: yearly, snapshotState: "found" }, job: badStart });
-      fireEvent.click(editLink("Edit start date"));
+      fireEvent.click(fix("Fix start date"));
       await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Start")));
       fireEvent.click(button("Next")!);
       await waitFor(() => expect(document.activeElement?.id).toBe("draft-step-review-heading"));
@@ -352,18 +356,24 @@ describe("the step", () => {
     });
   });
 
+  it("goes from an Edit line on Review to the field on Run settings", async () => {
+    wizard({ step: "review" });
+    fireEvent.click(button("Edit cores")!);
+    expect(heading()).toBe("Run settings");
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Cores")));
+  });
+
   it("marks the step that has a problem, and nothing is blocked by it", () => {
-    wizard({ step: "model", ctx: { dataset: yearly, snapshotState: "found" }, job: {
+    wizard({ step: "run", ctx: { dataset: yearly, snapshotState: "found" }, job: {
       ...JOB,
       parameters: { ...JOB.parameters, temporal_range_start: "2001-03-15" },
     } });
     expect(stepLink("Run settings").textContent).toContain("(needs attention)");
-    expect(stepLink("Model & input").textContent).not.toContain("(needs attention)");
-    fireEvent.click(button("Next")!);
-    expect(heading()).toBe("Run settings");
+    expect(stepLink("Review & submit").textContent).not.toContain("(needs attention)");
     fireEvent.click(button("Next")!);
     expect(heading()).toBe("Review & submit");
-    expect(screen.getByText("Needs attention")).toBeTruthy();
+    // The list of what is in the way is beside the Submit button.
+    expect(screen.getByText("Fix this to submit:")).toBeTruthy();
   });
 });
 

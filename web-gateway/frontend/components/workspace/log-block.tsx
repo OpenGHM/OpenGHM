@@ -124,7 +124,7 @@ export function LogBlock({
   return (
     <div className="relative">
       {/* `aria-live="off"`: a log is polite by default, and this one grows
-          every few seconds. The status panel is the one announcement point. */}
+          every few seconds. The header is the one announcement point. */}
       <div
         ref={scrollRef}
         role="log"
@@ -132,7 +132,7 @@ export function LogBlock({
         aria-label={label}
         tabIndex={0}
         onScroll={onScroll}
-        className="max-h-[560px] min-h-24 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="relative max-h-[560px] min-h-24 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         {rows.map((row, i) => (
           <LogRowView

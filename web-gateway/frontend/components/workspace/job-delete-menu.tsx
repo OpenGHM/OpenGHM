@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { HERO_BUTTON } from "@/components/workspace/hero-button";
@@ -14,8 +15,8 @@ import { DeleteSimulationDialog } from "@/components/workspace/delete-simulation
 import type { FilesState } from "@/lib/jobs/types";
 
 /**
- * The hero's "More actions" menu, whose one item deletes the simulation (a
- * draft, or a job that has ended; the backend refuses an active one). The item
+ * The hero's "More actions" menu: whatever items the caller passes, and Delete
+ * (a draft, or a job that has ended; the backend refuses an active one). The item
  * opens `DeleteSimulationDialog`, which says what goes.
  *
  * The menu is non-modal, so it never leaves `pointer-events: none` on the body
@@ -34,6 +35,7 @@ export function JobDeleteMenu({
   onDeleted,
   onError,
   onSessionExpired,
+  children,
 }: {
   jobId: string;
   isDraft: boolean;
@@ -54,6 +56,8 @@ export function JobDeleteMenu({
   /** The delete failed and the simulation still exists. */
   onError?: (message: string) => void;
   onSessionExpired?: () => void;
+  /** Other items for the menu, above Delete: `DropdownMenuItem`s. */
+  children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -74,6 +78,8 @@ export function JobDeleteMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {children}
+          {children && <DropdownMenuSeparator />}
           {/* Open the dialog from state, not from inside the item, so the menu
               has closed by the time the dialog mounts. */}
           <DropdownMenuItem

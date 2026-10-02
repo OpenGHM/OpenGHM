@@ -19,23 +19,50 @@ export interface AggregationProblems {
   start: string | null;
   /** Why the end is too early, or null. */
   end: string | null;
+  /** The same two, short enough to sit under their date field (the sentence
+   *  above belongs in a list of problems, and on the 422). */
+  startShort: string | null;
+  endShort: string | null;
 }
 
-const NONE: AggregationProblems = { start: null, end: null };
+const NONE: AggregationProblems = { start: null, end: null, startShort: null, endShort: null };
 
-/** The sentence for each date; the same words as `aggregation_messages` in the backend. */
+const edgeOf = (year: number) => `${String(year).padStart(4, "0")}-12-31`;
+
+/** The sentence for each date; the same words as `aggregation_messages` in the
+ *  backend. Where the range the coverage leaves is one date, it says "on" that
+ *  date instead of "(allowed: X to X)". */
 export function aggregationMessages(
   year: number,
   snapshotStart?: string,
   snapshotEnd?: string
 ): { start: string; end: string } {
-  const edge = `${String(year).padStart(4, "0")}-12-31`;
+  const edge = edgeOf(year);
   const lead = `This snapshot's model also aggregates its results over multi-year periods that begin in ${year}, so`;
-  const startRange = snapshotStart && snapshotStart <= edge ? ` (allowed: ${snapshotStart} to ${edge})` : "";
-  const endRange = snapshotEnd && edge <= snapshotEnd ? ` (allowed: ${edge} to ${snapshotEnd})` : "";
+  const start =
+    snapshotStart && snapshotStart <= edge
+      ? snapshotStart === edge
+        ? `a run must start on ${edge}`
+        : `a run can start no later than ${edge} (allowed: ${snapshotStart} to ${edge})`
+      : `a run can start no later than ${edge}`;
+  const end =
+    snapshotEnd && edge <= snapshotEnd
+      ? snapshotEnd === edge
+        ? `a run must end on ${edge}`
+        : `a run must end on or after ${edge} (allowed: ${edge} to ${snapshotEnd})`
+      : `a run must end on or after ${edge}`;
+  return { start: `${lead} ${start}.`, end: `${lead} ${end}.` };
+}
+
+/** The short form, for under the field. */
+export function aggregationFieldMessages(
+  year: number,
+  snapshotEnd?: string
+): { start: string; end: string } {
+  const edge = edgeOf(year);
   return {
-    start: `${lead} a run can start no later than ${edge}${startRange}.`,
-    end: `${lead} a run must end on or after ${edge}${endRange}.`,
+    start: `Start no later than ${edge}.`,
+    end: snapshotEnd === edge ? `End on ${edge}.` : `End on or after ${edge}.`,
   };
 }
 
@@ -55,13 +82,16 @@ export function checkAggregationWindow(
 ): AggregationProblems {
   if (year === null || year === undefined) return NONE;
   const messages = aggregationMessages(year, snapshotStart, snapshotEnd);
+  const short = aggregationFieldMessages(year, snapshotEnd);
   const lastDecember = `${String(year).padStart(4, "0")}-12-30`;
+  const startBreaks =
+    isRealDate(start) && start !== snapshotStart && Number(start.slice(0, 4)) > year;
+  const endBreaks = isRealDate(end) && end !== snapshotEnd && end < lastDecember;
   return {
-    start:
-      isRealDate(start) && start !== snapshotStart && Number(start.slice(0, 4)) > year
-        ? messages.start
-        : null,
-    end: isRealDate(end) && end !== snapshotEnd && end < lastDecember ? messages.end : null,
+    start: startBreaks ? messages.start : null,
+    end: endBreaks ? messages.end : null,
+    startShort: startBreaks ? short.start : null,
+    endShort: endBreaks ? short.end : null,
   };
 }
 

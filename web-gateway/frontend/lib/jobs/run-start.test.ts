@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { checkRunStart, nearestValidStart, runStartRuleText } from "@/lib/jobs/run-start";
+import { checkRunStart, nearestValidStart, runStartRulePhrase } from "@/lib/jobs/run-start";
 
 describe("the run-start rule", () => {
-  it("says the rule in plain words, and nothing when there is none", () => {
-    expect(runStartRuleText("year")).toBe(
-      "This model snapshot's model writes one file per year, so a run must start on January 1."
-    );
-    expect(runStartRuleText("month")).toContain("one file per month");
-    expect(runStartRuleText("none")).toBeNull();
-    expect(runStartRuleText(null)).toBeNull();
+  it("says the rule as a phrase, and nothing when there is none", () => {
+    expect(runStartRulePhrase("year")).toBe("start on January 1");
+    expect(runStartRulePhrase("month")).toBe("start on the 1st of a month");
+    expect(runStartRulePhrase("none")).toBeNull();
+    expect(runStartRulePhrase(null)).toBeNull();
   });
 
   it("wants January 1 for a year, and the first of a month for a month", () => {
     expect(checkRunStart("year", "2001-01-01")).toBeNull();
     for (const bad of ["2001-03-01", "2001-01-02", "2001-12-31"]) {
       expect(checkRunStart("year", bad)?.message).toContain("one file per year");
+      expect(checkRunStart("year", bad)?.short).toBe("Start on January 1.");
     }
     expect(checkRunStart("month", "2001-03-01")).toBeNull();
     expect(checkRunStart("month", "2001-03-02")?.suggestion).toBe("2001-03-01");

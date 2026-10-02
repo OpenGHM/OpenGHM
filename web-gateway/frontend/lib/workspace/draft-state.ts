@@ -12,7 +12,7 @@
  * server normalises never makes the two differ for ever.
  */
 import {
-  describeWalltimeOverLimit,
+  describeWalltimeOverLimitShort,
   validateSlurmConfig,
   walltimeOverLimit,
 } from "@/lib/jobs/compute";
@@ -184,7 +184,7 @@ function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown
  * The PATCH that brings the server's copy (`saved`) to the local one, or null
  * when there is nothing to send. Groups, each sent whole when it differs:
  *
- * - Model & input: `model_input_id`.
+ * - Model input: `model_input_id`.
  * - Run settings: `parameters` (the full object), and `slurm_config`.
  * - Review: `about` as `{ name, description }` and nothing else, so the
  *   citation fields the wizard never shows are not touched. Empty becomes
@@ -423,7 +423,7 @@ export function submitProblems(
   if (blockedReason) whole.push({ step: "review", message: blockedReason });
   if (ctx.snapshotState === "gone") {
     whole.push({
-      step: "model",
+      step: "run",
       message:
         "The model snapshot this draft is based on is no longer in the repository, so it can't be submitted.",
     });
@@ -465,7 +465,7 @@ export function submitProblems(
   // The snapshot's reference run is longer than one job may be: a submit
   // refuses it (`walltime_over_limit`) unless the draft sets a walltime.
   const over = walltimeOverLimit(local.slurm, ctx.dataset?.simulation.recommendedCompute ?? null);
-  if (over !== null) add("walltime", describeWalltimeOverLimit(over));
+  if (over !== null) add("walltime", describeWalltimeOverLimitShort(over));
 
   // Not saved: a submit would run the saved value, not this one.
   for (const field of save.withheld) {

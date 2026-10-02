@@ -195,9 +195,12 @@ result as `runStartAlignment` (`year`, `month`, `none` for `File_Size 'day'`,
 another value, or no `File_Size` beside a `Time_Series` key, or `null` when the
 init could not be read). The browser holds the same rule in
 `web-gateway/frontend/lib/jobs/run-start.ts` (`checkRunStartFor`). The draft
-wizard's Run settings step says it beside the Start date, flags a start that
-breaks it and offers the nearest valid one; auto-save does not send such a
-start, and Review lists it under "Needs attention", which keeps Submit off.
+wizard's Run settings step says it once, in one line under the two dates
+("Start on January 1 · End on 2001-12-31 · Coverage 2000-01-01 → 2001-12-31",
+`web-gateway/frontend/lib/jobs/run-period.ts`); a start that breaks it is flagged in red under the
+Start field with the nearest valid one as a one-click "Use …"; auto-save does
+not send such a start, and the submit area on Review lists it with a link to the
+field, which keeps Submit off.
 `PATCH /jobs/{id}` (when the start changes) and the submit (every start) answer
 `422 run_start_not_aligned` for the same start. A rule that cannot be read
 blocks nothing, and the toolkit's own check stays as the last line.
@@ -215,8 +218,12 @@ metadata does not hold `PostProcessing`, so the gateway reads the year from the
 same init read, once per snapshot id, and sends it as `aggregationStartYear` on
 `GET /api/v1/repository/datasets/{id}` (`null` when none is set or the init
 could not be read). The browser mirrors the rule in
-`web-gateway/frontend/lib/jobs/aggregation-window.ts`, says it on the Start or
-End field with the allowed range, and Review lists it. The save is not refused:
+`web-gateway/frontend/lib/jobs/aggregation-window.ts`, flags it in red under
+the Start or End field (a short form: "End on or after 2001-12-31."), and the
+submit area on Review lists it in full. The full sentence names the allowed
+range, and says "must end on 2001-12-31" rather than "(allowed: X to X)" when the
+coverage leaves one date; the gateway words it the same way
+(`aggregation_messages`). The save is not refused:
 an edit stores whatever the person is part-way through typing. A date equal to
 the snapshot's own is not held to it (the published run passed), and December 30
 is let through, as a 360-day calendar's last day that the init does not
@@ -231,9 +238,12 @@ names; set, it overrides that. `_resolve_effective_model_input()` in
 `web-gateway/backend/app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
 or `inherited-missing` (the base snapshot cites an id the `model_inputs`
 catalogue does not hold, which is the common case among the shipped
-examples, not an edge case) — and the draft wizard's Model & input step and
-its Review summary render all three distinctly, so an override never looks
-identical to an inheritance. The override changes nothing about how a
+examples, not an edge case) — and the draft wizard's Run settings summary shows the
+inherited model input by name (a link to its catalogue page when the catalogue
+holds it, its short id when not). An override can be set only through the API,
+and Run settings shows one as a warning with a Revert button, so it never looks
+identical to an inheritance. The wizard has no step for choosing a model input:
+nothing there could be changed until the toolkit has an option for it. The override changes nothing about how a
 run would be invoked: nothing mints a real `apptainer` command yet ([open
 item 9](../reference/open-items.md)), so this is recorded and displayed, not
 yet consumed.
@@ -426,9 +436,9 @@ SLURM is asked for `--cpus-per-task` and `--time`:
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
 (`MaxMemPerCPU`, read from Anvil on 2026-10-02), and WBM itself uses about one
 CPU: the snapshot's recommended core count is there for the memory. A run given
-fewer cores than that may be killed for running out of memory. The wizard shows a warning for that
-(`describeCoresBelowRecommended`), not an error: Submit stays on and the backend
-does not check it.
+fewer cores than that may be killed for running out of memory. The wizard shows a one-line warning for that
+(`describeCoresBelowRecommendedShort`, with the arithmetic behind "Why?"), not an
+error: Submit stays on and the backend does not check it.
 
 The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 `work_dir` (`ANVIL_OUTPUT_BASE/<sim_id>`) and slurmly's `remote_job_dir`
@@ -450,8 +460,8 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
   before any SSH or SLURM call. Its message gives the reference run's time and
   says to shorten the run period or set a walltime. A walltime the draft set is
   sent as given and is not refused here. The frontend mirrors both rules
-  (`withHeadroom`, `submitProblems`), so Review lists the problem and keeps
-  Submit off.
+  (`withHeadroom`, `submitProblems`): Run settings shows a one-line warning with a
+  "Why?", and the submit area on Review lists the problem and keeps Submit off.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name
@@ -511,6 +521,23 @@ list, colour only), plus a failed job's reason as the failure card quotes it.
 A job that ran before the toolkit went quiet shows its module notices and
 counter lines as they were written. The three streams are polled one after another,
 never at once.
+
+**The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
+reads top to bottom in the order a person asks: the header (breadcrumb, the
+simulation's own name with its status, the snapshot it is based on, and a "More
+actions" menu once the job has ended), one full-width status summary
+(`job-status-summary.tsx`) that changes with the live status, the Logs, and a
+compact Details section. The summary is the only place with a state's main
+action: Cancel while it is queued or running, "Try again with these settings"
+after a failure. A completed job's results (scratch path, file counts, when
+Anvil may delete them) sit in it, a failed job's cause and log excerpt, and
+the times are short (`Submitted 3:33 AM · Waited 3 min · Ran 14 min`, the full
+date and zone on hover). Details shows the cores and walltime the job asked
+for: its own choice, else the base snapshot's `recommendedCompute` worked out
+as the submit does it (`effectiveCompute`, marked as recommended), and while
+SLURM has the job the limit it enforces. The job document stores no resolved
+cores or walltime, so the page reads the snapshot for them; with no snapshot it
+shows a dash. The page is as wide as the Workspace list and the draft wizard.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

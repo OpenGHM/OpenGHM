@@ -10,11 +10,11 @@ import { fetchJob } from "@/lib/jobs/actions";
 import { submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { DraftContext } from "@/lib/workspace/draft-state";
-import { parseStep } from "@/lib/workspace/draft-wizard";
+import { parseStep, recommendedComputeFor } from "@/lib/workspace/draft-wizard";
 
 /**
  * A job of the signed-in user, as the backend has it. A DRAFT opens the draft
- * wizard (`?step=model|run|review`, Review when absent); every other status
+ * wizard (`?step=run|review`, Review when absent); every other status
  * is the status page. The dev-only design preview (`app/dev/workspace/[state]`)
  * renders the same `JobDetail` for the statuses.
  */
@@ -69,10 +69,21 @@ export default async function JobDetailPage({
   // "You cancelled this" needs to know who is looking.
   const viewerEmail = job.status === "CANCELLED" ? ((await fetchMe())?.email ?? null) : null;
 
+  // What the job asked for when it chose no cores or walltime of its own: its
+  // base snapshot's recommendation. Snapshots never change, so reading it now
+  // gives what the submit read. Null when the snapshot cannot be read just now:
+  // the page then shows a dash rather than a guess.
+  let recommended = null;
+  try {
+    recommended = recommendedComputeFor(await fetchDatasetById(job.dataset_id));
+  } catch {
+    recommended = null;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <JobDetail job={job} viewerEmail={viewerEmail} />
+      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} />
       <Footer />
     </div>
   );

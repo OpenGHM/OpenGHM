@@ -29,6 +29,7 @@ const flush = vi.fn<() => Promise<FlushResult>>();
 const suspend = vi.fn();
 const submit = vi.fn<(jobId: string) => Promise<ActionResult<Job>>>();
 const onSubmitted = vi.fn();
+const onFix = vi.fn();
 const onSubmitFailed = vi.fn();
 const onSubmittingChange = vi.fn();
 /** The order the effects happened in. */
@@ -57,6 +58,7 @@ function card(props: Partial<React.ComponentProps<typeof DraftSubmitCard>> = {})
     <DraftSubmitCard
       jobId="job-1"
       problems={[]}
+      onFix={onFix}
       lastSubmitError={null}
       recommended={RECOMMENDED}
       flush={flush}
@@ -87,22 +89,37 @@ describe("DraftSubmitCard: what it says", () => {
     expect(submitButton().disabled).toBe(false);
   });
 
-  it("is off while something needs attention, and points at the list", () => {
+  it("is off while something is in the way, lists it, and takes you to the field", () => {
     const problems: SubmitProblem[] = [
       { step: "review", message: "You are not permitted to run simulations yet." },
       { field: "start", step: "run", message: "Choose a start date that exists." },
     ];
     card({ problems });
     expect(submitButton().disabled).toBe(true);
-    expect(screen.getByText("Fix the 2 items under Needs attention to submit.")).toBeTruthy();
+    expect(screen.getByText("Fix these 2 things to submit:")).toBeTruthy();
     expect(submitButton().getAttribute("aria-describedby")).toBeTruthy();
     fireEvent.click(submitButton());
     expect(flush).not.toHaveBeenCalled();
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    // A problem of the whole draft has no field to go to.
+    expect(items[0].textContent).toContain("You are not permitted to run simulations yet.");
+    expect(within(items[0]).queryByRole("button")).toBeNull();
+    expect(items[1].textContent).toContain("Start date: Choose a start date that exists.");
+    fireEvent.click(within(items[1]).getByRole("button", { name: "Fix start date" }));
+    expect(onFix).toHaveBeenCalledWith("run", "start");
   });
 
-  it("uses the singular for one item", () => {
+  it("lists nothing when nothing is in the way", () => {
+    card();
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.queryByText(/to submit:/)).toBeNull();
+  });
+
+  it("uses the singular for one thing", () => {
     card({ problems: [{ step: "review", message: "x" }] });
-    expect(screen.getByText("Fix the item under Needs attention to submit.")).toBeTruthy();
+    expect(screen.getByText("Fix this to submit:")).toBeTruthy();
   });
 
   it("shows why the last submit did not reach Anvil, until this page tries again", async () => {
@@ -228,6 +245,7 @@ describe("DraftSubmitCard: after it went through", () => {
       <DraftSubmitCard
         jobId="job-1"
         problems={[]}
+        onFix={onFix}
         lastSubmitError={null}
         recommended={RECOMMENDED}
         flush={flush}
