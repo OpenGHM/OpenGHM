@@ -402,7 +402,7 @@ export function fakeLive(job: Job): JobLive | null {
 
 /**
  * A `Dataset` (published snapshot) for component tests — e.g.
- * `snapshot-list.test.tsx`, `snapshot-picker.test.tsx`. This is the one
+ * `snapshot-grid.test.tsx`, `snapshot-picker.test.tsx`. This is the one
  * place fake data lives in this frontend (spec.md, `2026-09-23-pick-a-snapshot`),
  * so a test fixture belongs here too rather than as a second hand-built
  * literal that drifts from the spec the next time `just codegen` runs.

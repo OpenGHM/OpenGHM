@@ -68,13 +68,26 @@ describe("DraftProgress", () => {
     strip("run", ["review"]);
     expect(screen.getByRole("link", { name: /Run settings/ }).textContent).not.toContain("needs attention");
     expect(screen.getByRole("link", { name: /Review & submit.*needs attention/ })).toBeTruthy();
-    expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(1);
+    expect(document.querySelectorAll(".bg-amber-500")).toHaveLength(1);
   });
 
   it("has no dot when nothing needs attention", () => {
     strip("run");
-    expect(document.querySelectorAll(".bg-amber-300")).toHaveLength(0);
+    expect(document.querySelectorAll(".bg-amber-500")).toHaveLength(0);
     expect(screen.queryByText(/needs attention/)).toBeNull();
+  });
+});
+
+describe("the strip's look", () => {
+  it("is light: done steps are checked, the current one is filled, and nothing assumes a dark header", () => {
+    const { container } = render(
+      <DraftProgress jobId="job-1" current="run" problemSteps={[]} onSelectStep={vi.fn()} />
+    );
+    expect(container.querySelector("svg.lucide-check")).not.toBeNull();
+    expect(screen.getByRole("link", { name: /Run settings/ }).querySelector(".bg-primary")).not.toBeNull();
+    expect(screen.getByRole("link", { name: /Review & submit/ }).querySelector(".bg-primary")).toBeNull();
+    expect(container.innerHTML).not.toContain("text-white");
+    expect(container.innerHTML).not.toContain("bg-white");
   });
 });
 

@@ -44,7 +44,7 @@ export function SessionExpiredBanner({ className }: { className?: string }) {
           </p>
         </div>
       </div>
-      <Button asChild size="sm" variant="outline" className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8">
+      <Button asChild size="sm" variant="outline" className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8">
         <Link href={href}>Sign in</Link>
       </Button>
     </div>

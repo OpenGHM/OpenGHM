@@ -6,6 +6,7 @@ import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher"
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
 import { fakeDataset, fakeLive, fakeLogs, previewSimulation } from "@/lib/workspace/fixtures";
+import { basedOnLabel } from "@/lib/jobs/based-on";
 import { recommendedComputeFor } from "@/lib/workspace/draft-wizard";
 import { resolvePreview } from "@/lib/workspace/preview";
 
@@ -45,6 +46,7 @@ export default async function DevWorkspacePreviewPage({
         job={job}
         viewerEmail={viewerEmail}
         recommended={recommendedComputeFor(fakeDataset())}
+        basedOn={basedOnLabel(fakeDataset())}
         preview
         previewLogs={fakeLogs(job.status)}
         previewLive={fakeLive(job)}

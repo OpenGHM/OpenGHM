@@ -3,20 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { Button } from "@/components/ui/button";
+import { ActionError } from "@/components/workspace/action-error";
 import { focusDraftField } from "@/components/workspace/draft-field";
 import { DraftProgress } from "@/components/workspace/draft-progress";
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import { stepHeadingId } from "@/components/workspace/draft-step-heading";
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
-import { HeroError } from "@/components/workspace/hero-button";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
+import { PageHeader, SimulationBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
+import { basedOnLabel } from "@/lib/jobs/based-on";
 import { displayName } from "@/lib/jobs/display-name";
 import { simulationSource } from "@/lib/jobs/simulation-source";
 import type { Job, SubmitError } from "@/lib/jobs/types";
@@ -62,7 +64,7 @@ function stepFromLocation(): DraftStep {
 /**
  * A draft, edited in place: the wizard behind `/workspace/<id>?step=...` (ADR
  * 0028). It owns the local copy of the draft, which step is showing, and the
- * auto-save (`useDraftAutosave`), and lays out the page: the hero (name, status,
+ * auto-save (`useDraftAutosave`), and lays out the page: the header (name, status,
  * save status, Delete, the steps) over the content of the current step.
  *
  * - **Starting point.** The job the server rendered, or the copy of it this tab
@@ -309,98 +311,66 @@ function WizardBody({
   const state = autosave.state;
 
   return (
-    <main className="flex flex-1 flex-col">
-      <div className="bg-gradient-to-br from-hero to-primary px-4 pt-6 pb-5 sm:px-6 sm:pt-8 lg:px-10">
-        <div className="mx-auto max-w-[1024px]">
-          <nav aria-label="Breadcrumb" className="text-sm text-white/70">
-            <ol className="flex min-w-0 items-center gap-1.5">
-              <li className="shrink-0">
-                <Link
-                  href="/workspace"
-                  className="rounded outline-none transition-colors hover:text-white focus-visible:ring-[3px] focus-visible:ring-white/70"
-                >
-                  My Simulations
-                </Link>
-              </li>
-              <li aria-hidden="true" className="shrink-0">
-                <ChevronRight className="size-3.5" />
-              </li>
-              <li aria-current="page" className="min-w-0 truncate text-white">
-                {name}
-              </li>
-            </ol>
-          </nav>
-
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="min-w-0 break-words text-2xl font-bold text-white">{name}</h1>
-                {/* The badge's text is dark-on-tint, for a white card: give it one. */}
-                <span className="shrink-0 rounded-full bg-white">
-                  <JobStatusBadge status="DRAFT" />
-                </span>
-              </div>
-              <p className="mt-2 min-w-0 text-sm">
-                <Link
-                  href={source.href}
-                  title={`Based on ${source.title}`}
-                  className="block max-w-full truncate rounded text-white/90 underline-offset-2 outline-none transition-colors hover:text-white hover:underline focus-visible:ring-[3px] focus-visible:ring-white/70"
-                >
-                  Based on {source.title}
-                </Link>
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
-              <SaveStatus
-                state={state}
-                onRetry={autosave.retry}
-                onGoToField={(field) => goTo(FIELD_STEP[field], field)}
-              />
-              <JobDeleteButton
-                jobId={jobId}
-                isDraft
-                workDir={null}
-                remoteJobDir={null}
-                files={null}
-                onOpen={() => {
-                  setDeleteError(null);
-                  setDeleteExpired(false);
-                }}
-                onOpenChange={(open) => {
-                  // Nothing is saved behind a Delete that may go through. A
-                  // dialog that closes without deleting gives saving back.
-                  if (open) suspend();
-                  else if (!deleted.current) resume();
-                }}
-                onDeleted={() => {
-                  deleted.current = true;
-                  suspend();
-                  router.push("/workspace");
-                }}
-                onError={setDeleteError}
-                onSessionExpired={() => setDeleteExpired(true)}
-              />
-            </div>
-          </div>
-          {deleteExpired && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
-          {deleteError && (
-            <div className="mt-4">
-              <HeroError>{deleteError}</HeroError>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <DraftProgress
+    <main className={WORKSPACE_MAIN}>
+      <PageHeader
+        top={<SimulationBreadcrumb current={name} />}
+        title={name}
+        badge={<JobStatusBadge status="DRAFT" />}
+        meta={
+          <p className="mt-2.5 min-w-0 text-sm text-muted-foreground">
+            <Link
+              href={source.href}
+              title={`Based on ${source.title}`}
+              className="block max-w-full truncate rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              Based on {ctx.dataset ? basedOnLabel(ctx.dataset) : source.title}
+            </Link>
+          </p>
+        }
+        aside={
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            <SaveStatus
+              state={state}
+              onRetry={autosave.retry}
+              onGoToField={(field) => goTo(FIELD_STEP[field], field)}
+            />
+            <JobDeleteButton
               jobId={jobId}
-              current={step}
-              problemSteps={problemSteps}
-              onSelectStep={goTo}
+              isDraft
+              workDir={null}
+              remoteJobDir={null}
+              files={null}
+              onOpen={() => {
+                setDeleteError(null);
+                setDeleteExpired(false);
+              }}
+              onOpenChange={(open) => {
+                // Nothing is saved behind a Delete that may go through. A
+                // dialog that closes without deleting gives saving back.
+                if (open) suspend();
+                else if (!deleted.current) resume();
+              }}
+              onDeleted={() => {
+                deleted.current = true;
+                suspend();
+                router.push("/workspace");
+              }}
+              onError={setDeleteError}
+              onSessionExpired={() => setDeleteExpired(true)}
             />
           </div>
-        </div>
-      </div>
+        }
+      >
+        {deleteExpired && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
+        {deleteError && (
+          <div className="mt-4">
+            <ActionError>{deleteError}</ActionError>
+          </div>
+        )}
+        <DraftProgress jobId={jobId} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
+      </PageHeader>
 
-      <div className="flex-1 bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
+      <div className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
         <div className="mx-auto max-w-[1024px]">
           {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
           {state.kind === "conflict" && (
@@ -417,7 +387,7 @@ function WizardBody({
                 size="sm"
                 variant="outline"
                 onClick={() => router.refresh()}
-                className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8"
+                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
               >
                 Reload
               </Button>
@@ -436,7 +406,7 @@ function WizardBody({
                 asChild
                 size="sm"
                 variant="outline"
-                className="min-h-10 shrink-0 border-warning/30 bg-white text-warning hover:bg-warning/10 sm:min-h-8"
+                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
               >
                 <Link href="/workspace">Go to My Simulations</Link>
               </Button>
@@ -504,7 +474,7 @@ function WizardBody({
           {/* Never blocked: a step with problems says so on the strip. Run
               settings has no Back (the browser's goes to Start from), Review no
               Next. */}
-          <div className="mt-6 flex items-center justify-between gap-3">
+          <div className="mt-8 flex items-center justify-between gap-3">
             {step === "run" ? (
               <span />
             ) : (

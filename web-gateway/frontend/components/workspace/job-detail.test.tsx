@@ -46,7 +46,7 @@ function before(a: HTMLElement, b: HTMLElement) {
 }
 
 describe("the detail page", () => {
-  it("titles the page with the simulation's name and puts the breadcrumb in the hero", () => {
+  it("titles the page with the simulation's name and puts the breadcrumb in the header", () => {
     renderDetail("completed");
     const job = previewSimulation("completed");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);

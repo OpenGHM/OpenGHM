@@ -6,7 +6,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { snapshotFacts, snapshotHref } from "@/components/workspace/draft-basis";
+import { basisName, snapshotFacts, snapshotHref } from "@/components/workspace/draft-basis";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
@@ -150,11 +150,11 @@ export function DraftReviewStep({
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const title = found?.about.name ?? datasetTitle;
+  const { name: basedOn, title } = basisName(ctx, datasetTitle);
   const facts = snapshotFacts(ctx);
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
+    <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
       <DraftStepHeading step="review">
         Check what will run, name your simulation, then submit it to Anvil.
       </DraftStepHeading>
@@ -172,15 +172,15 @@ export function DraftReviewStep({
                   >
                     View
                     <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                    <span className="sr-only"> {title} in the repository</span>
+                    <span className="sr-only"> {basedOn} in the repository</span>
                   </Link>
                 ) : undefined
               }
             >
               <span title={title} className="line-clamp-2 font-medium">
-                {title}
+                {basedOn}
               </span>
-              {facts.length > 0 && <span className="block text-xs text-muted-foreground">{facts.join(" · ")}</span>}
+              {facts.length > 0 && <span className="block text-[13px] text-muted-foreground">{facts.join(" · ")}</span>}
             </Row>
             <Row
               label="Run period"

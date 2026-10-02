@@ -7,13 +7,16 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { LinkPending } from "@/components/ui/link-pending";
-import { Card, CardContent } from "@/components/ui/card";
+import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { SimulationListSkeleton } from "@/components/workspace/simulation-list-skeleton";
 import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
+import { SimulationSearchInput, SimulationSearchProvider } from "@/components/workspace/simulation-search";
 import { SimulationTable } from "@/components/workspace/simulation-table";
-import { WorkspaceHero } from "@/components/workspace/workspace-hero";
+import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
+import { simulationMetaLines } from "@/lib/jobs/meta-lines";
 import { listHref, tabForStatus } from "@/lib/jobs/filters";
+import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
 
 export default async function WorkspacePage({
@@ -32,20 +35,17 @@ export default async function WorkspacePage({
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main className="flex-1">
-        <WorkspaceHero section="simulations" />
+      <main className={WORKSPACE_MAIN}>
+        <WorkspaceHeader section="simulations" />
 
-        {/* Content */}
-        <div className="bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
-          <div className="mx-auto max-w-[1024px]">
-            {/* Not keyed by the URL: a click on a tab or a page link is a
-                transition, so the list on screen stays until the next one is
-                ready, and the link that was clicked shows a spinner if that
-                takes a while. The skeleton is only for the first load. */}
-            <Suspense fallback={<SimulationListSkeleton />}>
-              <SimulationList here={here} page={page} statusFilter={statusFilter} />
-            </Suspense>
-          </div>
+        <div className={cn(WORKSPACE_CONTAINER, "flex-1 py-6 sm:py-8")}>
+          {/* Not keyed by the URL: a click on a tab or a page link is a
+              transition, so the list on screen stays until the next one is
+              ready, and the link that was clicked shows a spinner if that
+              takes a while. The skeleton is only for the first load. */}
+          <Suspense fallback={<SimulationListSkeleton />}>
+            <SimulationList here={here} page={page} statusFilter={statusFilter} />
+          </Suspense>
         </div>
       </main>
       <Footer />
@@ -86,14 +86,22 @@ async function SimulationList({
     redirect(listHref(statusFilter, jobData.total_pages));
   }
 
+  // What each row says under its name comes from its snapshot's metadata,
+  // which the job does not carry: read here, once per distinct snapshot.
+  const metaLines = jobData ? await simulationMetaLines(jobData.items) : {};
+  const hasRows = !!jobData && jobData.items.length > 0;
+
   return (
-    <>
-      <SimulationListTabs active={tab} stats={statsData} />
+    <SimulationSearchProvider>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SimulationListTabs active={tab} stats={statsData} />
+        {hasRows && <SimulationSearchInput className="sm:w-72" />}
+      </div>
 
       {!jobData ? (
         <div
           role="alert"
-          className="mt-6 flex items-start gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+          className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="space-y-1">
@@ -106,48 +114,42 @@ async function SimulationList({
             </p>
           </div>
         </div>
-      ) : jobData.items.length === 0 ? (
-        <Card className="mt-6 border-dashed">
-          <CardContent className="py-16 text-center sm:py-20">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-              <Play className="size-7 text-primary" />
-            </div>
-            <p className="mb-1 text-sm font-medium text-foreground">
-              {tab ? tab.empty.title : "No simulations found"}
-            </p>
-            <p className="mx-auto mb-6 max-w-sm text-sm text-muted-foreground">
-              {tab ? tab.empty.hint : "This filter matches nothing. Pick one of the tabs above."}
-            </p>
-            <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
-              <Button asChild size="sm" className="min-h-10 sm:min-h-8">
-                <Link href="/workspace/new">
-                  <Plus className="mr-1.5 size-4" />
-                  New Simulation
-                </Link>
+      ) : !hasRows ? (
+        <div className="mt-4 rounded-xl border border-dashed bg-card px-4 py-16 text-center sm:py-20">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
+            <Play className="size-6 text-muted-foreground" aria-hidden="true" />
+          </div>
+          <p className="mb-1 text-sm font-medium text-foreground">
+            {tab ? tab.empty.title : "No simulations found"}
+          </p>
+          <p className="mx-auto mb-6 max-w-sm text-sm text-muted-foreground">
+            {tab ? tab.empty.hint : "This filter matches nothing. Pick one of the tabs above."}
+          </p>
+          <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
+            <Button asChild size="sm" className="min-h-10 sm:min-h-8">
+              <Link href="/workspace/new">
+                <Plus className="mr-1.5 size-4" />
+                New simulation
+              </Link>
+            </Button>
+            {statusFilter && (
+              <Button asChild size="sm" variant="ghost" className="min-h-10 sm:min-h-8">
+                <Link href={listHref(undefined)}>Show all simulations</Link>
               </Button>
-              {statusFilter && (
-                <Button asChild size="sm" variant="ghost" className="min-h-10 sm:min-h-8">
-                  <Link href={listHref(undefined)}>Show all simulations</Link>
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            )}
+          </div>
+        </div>
       ) : (
-        <div className="mt-4 space-y-3">
-          <p className="text-xs text-muted-foreground">Sorted by last update</p>
-          <Card className="py-0">
-            <CardContent className="p-0">
-              <SimulationTable jobs={jobData.items} />
-            </CardContent>
-          </Card>
+        <div className="mt-4">
+          <SimulationTable
+            jobs={jobData.items}
+            metaLines={metaLines}
+            moreThanOnePage={jobData.total_pages > 1}
+          />
 
           {/* Pagination: an end of the list is a disabled button, not a gap. */}
           {jobData.total_pages > 1 && (
-            <nav
-              aria-label="Pages"
-              className="flex items-center justify-center gap-4 pt-4"
-            >
+            <nav aria-label="Pages" className="flex items-center justify-center gap-4 pt-6">
               {page > 1 ? (
                 <Button asChild variant="ghost" size="sm" className="relative min-h-10 sm:min-h-8">
                   <Link href={listHref(statusFilter, page - 1)}>
@@ -197,6 +199,6 @@ async function SimulationList({
           )}
         </div>
       )}
-    </>
+    </SimulationSearchProvider>
   );
 }

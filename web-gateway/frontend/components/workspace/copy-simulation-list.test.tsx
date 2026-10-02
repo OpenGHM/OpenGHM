@@ -17,14 +17,22 @@ const FAILED = fakeSimulation("FAILED", {
   dataset_title: "Global WBM",
   about: { name: "Calibration run" } as Job["about"],
 });
-const DRAFT = fakeSimulation("DRAFT", { id: "job-draft-12345678", sim_id: "", dataset_title: "Global WBM" });
+const DRAFT = fakeSimulation("DRAFT", {
+  id: "job-draft-12345678",
+  sim_id: "",
+  dataset_id: "another-snapshot",
+  dataset_title: "Global WBM",
+});
 const PAGE1: CopyListPage = { items: [FAILED, DRAFT], page: 1, totalPages: 1 };
+/** FAILED's snapshot is known by its short name; DRAFT's is not. */
+const NAMES = { [FAILED.dataset_id]: "WBM 1.0.0 · 2000–2009" };
 
 function list(over: Partial<React.ComponentProps<typeof CopySimulationList>> = {}) {
   const onCopy = vi.fn();
   const view = render(
     <CopySimulationList
       initial={PAGE1}
+      snapshotNames={NAMES}
       onCopy={onCopy}
       pendingId={null}
       disabled={false}
@@ -36,29 +44,48 @@ function list(over: Partial<React.ComponentProps<typeof CopySimulationList>> = {
 }
 
 describe("the rows", () => {
-  it("show the name the list uses, the status, what it is based on and when it changed", () => {
+  it("are one plain list: the name, a status dot and word, the snapshot in short, and when it changed", () => {
     list();
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     const first = within(rows[0]);
     expect(first.getByText("Calibration run")).toBeTruthy();
     expect(first.getByText("Failed")).toBeTruthy();
-    expect(first.getByText("Model Snapshot")).toBeTruthy();
-    expect(first.getByText("Global WBM")).toBeTruthy();
+    expect(first.getByText("WBM 1.0.0 · 2000–2009")).toBeTruthy();
     expect(first.getByText(/Updated/)).toBeTruthy();
+    // The official title is not the headline: only the short name is shown.
+    expect(first.queryByText("Global WBM")).toBeNull();
     // A draft has no run id: the same Untitled (<id8>) as the list.
     expect(within(rows[1]).getByText("Untitled (job-draf)")).toBeTruthy();
     expect(within(rows[1]).getByText("Draft")).toBeTruthy();
   });
 
-  it("copies the row whose button was pressed", () => {
+  it("falls back to the title a simulation was made with when its snapshot has no short name", () => {
+    list();
+    const second = within(screen.getAllByRole("listitem")[1]);
+    expect(second.getByText("Global WBM")).toBeTruthy();
+  });
+
+  it("have no boxes inside the box: no badges, no buttons inside a row", () => {
+    list();
+    const rows = screen.getAllByRole("listitem");
+    for (const row of rows) {
+      expect(within(row).getAllByRole("button")).toHaveLength(1);
+      expect(row.querySelector(".rounded-full.border")).toBeNull();
+    }
+  });
+
+  it("copy on a click anywhere in the row: the row is the button", () => {
     const { onCopy } = list();
-    fireEvent.click(screen.getByRole("button", { name: "Copy Calibration run" }));
+    const button = screen.getByRole("button", { name: "Copy Calibration run" });
+    expect(button.textContent).toContain("Calibration run");
+    expect(button.textContent).toContain("Failed");
+    fireEvent.click(button);
     expect(onCopy).toHaveBeenCalledTimes(1);
     expect(onCopy.mock.calls[0][0].id).toBe("job-failed");
   });
 
-  it("turns every Copy off while one is being made, with a spinner on that row", () => {
+  it("turn every row off while one is being copied, with a spinner on that row", () => {
     list({ disabled: true, pendingId: "job-failed" });
     const buttons = screen.getAllByRole("button", { name: /^Copy / });
     expect(buttons.every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
@@ -66,13 +93,13 @@ describe("the rows", () => {
     expect(screen.getByRole("button", { name: /^Copy Untitled/ }).getAttribute("aria-busy")).toBeNull();
   });
 
-  it("shows a row's own error on that row only", () => {
+  it("show a row's own error under that row only", () => {
     list({ rowError: { jobId: "job-failed", message: "The snapshot is gone." } });
     expect(within(screen.getAllByRole("listitem")[0]).getByRole("alert").textContent).toBe("The snapshot is gone.");
     expect(within(screen.getAllByRole("listitem")[1]).queryByRole("alert")).toBeNull();
   });
 
-  it("says so when there is nothing to copy", () => {
+  it("say so when there is nothing to copy", () => {
     list({ initial: { items: [], page: 1, totalPages: 1 } });
     expect(screen.getByText("You have no simulations to copy yet")).toBeTruthy();
     expect(screen.queryByRole("list")).toBeNull();

@@ -3,12 +3,11 @@
 import { useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HERO_BUTTON } from "@/components/workspace/hero-button";
 import { DeleteSimulationDialog } from "@/components/workspace/delete-simulation-dialog";
 import type { FilesState } from "@/lib/jobs/types";
 
 /**
- * The hero's Delete button (a draft, or a job that has ended; the backend
+ * The header's Delete button (a draft, or a job that has ended; the backend
  * refuses an active one). It opens `DeleteSimulationDialog`, which says what
  * goes, and the dialog hands focus back to the button when it closes without
  * a delete.
@@ -60,7 +59,7 @@ export function JobDeleteButton({
           setOpen(true);
           onOpenChange?.(true);
         }}
-        className={`min-h-10 shrink-0 gap-2 font-semibold ${HERO_BUTTON.destructive}`}
+        className="min-h-10 shrink-0 gap-2 border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
       >
         <Trash2 aria-hidden="true" />
         {isDraft ? "Delete draft" : "Delete simulation"}

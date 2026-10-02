@@ -142,8 +142,18 @@ describe("the header", () => {
     expect(h1()).toBe("Typed");
   });
 
-  it("keeps the Based on line to one truncated line, with the full text on hover and underline only on hover", () => {
+  it("says what it is based on in short, from the snapshot's own metadata, with the full title on hover", () => {
     wizard({ job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) } });
+    const link = screen.getByRole("link", { name: "Based on WBM 2.0.0 · 2001 · Regional" });
+    expect(link.getAttribute("title")).toBe(`Based on ${"A very long model snapshot title ".repeat(6)}`);
+    expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
+  });
+
+  it("keeps the Based on line to one truncated line when only the long title is left", () => {
+    wizard({
+      job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) },
+      ctx: { dataset: null, snapshotState: "gone" },
+    });
     const link = screen.getByRole("link", { name: /^Based on A very long/ });
     expect(link.className).toContain("truncate");
     expect(link.className).toContain("block");
@@ -151,6 +161,13 @@ describe("the header", () => {
     expect(link.className).not.toMatch(/(^|\s)underline(\s|$)/);
     expect(link.getAttribute("title")).toBe(`Based on ${"A very long model snapshot title ".repeat(6)}`);
     expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
+  });
+
+  it("is a light header, with no dark gradient and nothing white on it", () => {
+    const { container } = wizard();
+    const header = container.querySelector("header")!;
+    expect(header.innerHTML).not.toContain("gradient");
+    expect(header.innerHTML).not.toContain("text-white");
   });
 });
 
@@ -162,7 +179,7 @@ describe("the page", () => {
     expect(h1.textContent).toBe("Untitled (job-1)");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Untitled (job-1)");
     expect(screen.getByText("Draft")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Based on Fake Snapshot" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Based on WBM 2.0.0 · 2001 · Regional" }).getAttribute("href")).toBe(
       `/repository/${dataset.id}`
     );
     expect(screen.getByRole("navigation", { name: "Steps" })).toBeTruthy();
@@ -361,6 +378,21 @@ describe("the step", () => {
     fireEvent.click(button("Edit cores")!);
     expect(heading()).toBe("Run settings");
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Cores")));
+  });
+
+  it("opens the closed part of Run settings that holds the field an Edit line names", async () => {
+    wizard({ step: "review" });
+    fireEvent.click(button("Edit walltime")!);
+    // Compute is a line and a button until asked for; the Edit link asks.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Walltime/)));
+    expect(screen.getByRole("button", { name: "Done with compute" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+
+    fireEvent.click(button("Next")!);
+    fireEvent.click(button("Edit output variables")!);
+    await waitFor(() => expect(document.activeElement?.closest("[data-draft-field]")?.getAttribute("data-draft-field")).toBe("variables"));
+    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Done with output variables" })).toBeTruthy();
   });
 
   it("marks the step that has a problem, and nothing is blocked by it", () => {

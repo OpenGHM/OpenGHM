@@ -1,4 +1,5 @@
-import { JobHero } from "@/components/workspace/job-hero";
+import { JobHeader } from "@/components/workspace/job-header";
+import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
 import { JobDetails } from "@/components/workspace/job-details";
 import { LogViewer } from "@/components/workspace/log-viewer";
@@ -8,15 +9,15 @@ import type { Recommended } from "@/lib/jobs/compute";
 import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
 
 /**
- * The job detail page below the site header: the hero (breadcrumb, the
- * simulation's name and status, a menu of actions) and, in the order a person
+ * The job detail page below the site header: the header (breadcrumb, the
+ * simulation's name and status, the snapshot it is based on, the actions) and, in the order a person
  * reads it, the status summary (is it running, did it work, why not, where are
  * the results), the logs, and the details of the run. One view for two routes:
  * the real page (`app/workspace/[id]`) renders it from the backend, and the
  * dev-only design preview (`app/dev/workspace/[state]`) from the fixtures,
  * with `preview` set. Fetching stays in the pages; nothing here reads a fixture.
  *
- * Every status sits inside one `LiveJobProvider`, hero included, so the header,
+ * Every status sits inside one `LiveJobProvider`, header included, so the header,
  * the summary and the logs read the same poll. A DRAFT is not shown here: it is
  * the draft wizard's (`draft-wizard.tsx`).
  */
@@ -24,6 +25,7 @@ export function JobDetail({
   job,
   viewerEmail,
   recommended = null,
+  basedOn = null,
   preview = false,
   previewLogs,
   previewLive = null,
@@ -34,6 +36,10 @@ export function JobDetail({
   /** The base snapshot's `recommendedCompute`, for the cores and walltime a
    *  job asked for by default; null when the snapshot could not be read. */
   recommended?: Recommended | null;
+  /** The base snapshot in short (`basedOnLabel`), for the header's line; null
+   *  when the snapshot could not be read, and the header then says the title
+   *  the job was derived under. */
+  basedOn?: string | null;
   /** Fixture data: nothing is polled and the dialogs send nothing. */
   preview?: boolean;
   /** The logs to show instead of fetching them. Preview only. */
@@ -67,15 +73,13 @@ export function JobDetail({
       }}
       preview={preview}
     >
-      <main className="flex flex-1 flex-col">
-        <JobHero job={job} preview={preview} />
-        <div className="flex-1 bg-slate-50 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
-          <div className="mx-auto max-w-[1024px] space-y-8">
-            <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
-            <LogViewer previewLogs={previewLogs} />
-            <JobDetails job={job} recommended={recommended} />
-            <AboutSummaryCard about={job.about} />
-          </div>
+      <main className={WORKSPACE_MAIN}>
+        <JobHeader job={job} basedOn={basedOn} preview={preview} />
+        <div className={`${WORKSPACE_CONTAINER} flex-1 space-y-8 py-6 sm:py-8`}>
+          <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
+          <LogViewer previewLogs={previewLogs} />
+          <JobDetails job={job} recommended={recommended} />
+          <AboutSummaryCard about={job.about} />
         </div>
       </main>
     </LiveJobProvider>

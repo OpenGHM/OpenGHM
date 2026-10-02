@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 const { fetchMine, redirectToSignIn, search } = vi.hoisted(() => ({
   fetchMine: vi.fn(),
@@ -36,106 +36,86 @@ const SNAP = mineItem(snapshotItem({ id: "0123456789abcdef0123456789abcdef" }));
 const PRIVATE_INPUT = mineItem(modelInputItem(), { visibility: "private" });
 const SNAP2 = mineItem(snapshotItem({ id: "snap-2", about: { ...snapshotItem().about, name: "Second Run" } }));
 
-/** The table's rows (the header excluded); both the table and the stacked list are in the DOM. */
-function tableRows() {
-  return within(screen.getByRole("table")).getAllByRole("row").slice(1);
-}
-function stackedRows() {
+/** The rows of the list (the header is not one). */
+function rows() {
   return within(screen.getByRole("list", { name: "Snapshots and inputs" })).getAllByRole("listitem");
 }
 
-describe("the table", () => {
-  it("has the five columns", () => {
+describe("the list", () => {
+  it("is one card of rows, not a table, with a small header for the columns", () => {
     render(<MyDataTable items={[SNAP]} />);
-    expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      "Name",
-      "Type",
-      "Visibility",
-      "Coverage",
-      "Published",
-    ]);
+    expect(screen.queryByRole("table")).toBeNull();
+    const card = screen.getByRole("list", { name: "Snapshots and inputs" }).parentElement!;
+    expect(card.className).toContain("rounded-xl");
+    expect(card.className).toContain("bg-card");
+    expect(within(card).getByText("Visibility").parentElement?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("shows one row per item, in the order given", () => {
+  it("shows one row per item, in the order given, and no 'Sorted by' note", () => {
     render(<MyDataTable items={[PRIVATE_INPUT, SNAP]} />);
-    expect(tableRows()).toHaveLength(2);
-    expect(within(tableRows()[0]).getByRole("link").textContent).toBe("Ancillary Data v1");
-    expect(within(tableRows()[1]).getByRole("link").textContent).toBe("Global Storage Run");
+    expect(rows()).toHaveLength(2);
+    expect(within(rows()[0]).getByRole("link").textContent).toBe("Ancillary Data v1");
+    expect(within(rows()[1]).getByRole("link").textContent).toBe("Global Storage Run");
+    expect(screen.queryByText(/Sorted by/)).toBeNull();
   });
 
-  it("links each title to its detail page, as the repository card does", () => {
+  it("makes each row one link to its detail page, as the repository card does", () => {
     render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
-    const [snap, input] = tableRows();
-    expect(within(snap).getByRole("link", { name: "Global Storage Run" }).getAttribute("href")).toBe(
-      "/repository/0123456789abcdef0123456789abcdef"
-    );
+    const [snap, input] = rows();
+    const link = within(snap).getByRole("link", { name: "Global Storage Run" });
+    expect(link.getAttribute("href")).toBe("/repository/0123456789abcdef0123456789abcdef");
+    expect(link.className).toContain("after:inset-0");
+    expect(snap.className).toContain("relative");
     expect(within(input).getByRole("link", { name: "Ancillary Data v1" }).getAttribute("href")).toBe(
       "/repository/model-inputs/mi-1"
     );
+    expect(within(snap).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("shows the first 8 characters of the id, with an ellipsis, in mono", () => {
-    render(<MyDataTable items={[SNAP]} />);
-    const id = within(tableRows()[0]).getByText("01234567…");
-    expect(id.className).toContain("font-mono");
-    expect(id.className).toContain("text-muted-foreground");
-    expect(screen.queryByText("0123456789abcdef0123456789abcdef")).toBeNull();
-  });
-
-  it("labels each row's type with the repository's outlined badge and its dot", () => {
+  it("puts the first 8 characters of the id and the coverage in one mono line under the title", () => {
     render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
-    const [snap, input] = tableRows();
-    const snapBadge = within(snap).getByText("Model Snapshot");
-    expect(snapBadge.className).toContain("border-border");
-    expect(snapBadge.querySelector(".bg-primary")).not.toBeNull();
+    const [snap, input] = rows();
+    const line = within(snap).getByText("01234567… · 2000–2009 · 5 arc-min");
+    expect(line.className).toContain("font-mono");
+    expect(line.className).toContain("text-muted-foreground");
+    expect(screen.queryByText("0123456789abcdef0123456789abcdef")).toBeNull();
+    expect(within(input).getByText(/Climatological · 5 arc-min, 30 arc-sec/).className).toContain("font-mono");
+  });
+
+  it("labels each row's type with a dot in the kind's hue and a word, with no box", () => {
+    render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
+    const [snap, input] = rows();
+    const snapKind = within(snap).getByText("Model Snapshot");
+    expect(snapKind.className).not.toContain("border");
+    expect(snapKind.querySelector(".bg-primary")).not.toBeNull();
     expect(within(input).getByText("Model Input").querySelector(".bg-compute")).not.toBeNull();
   });
 
-  it("shows each row's visibility, Public with a globe and Private with a lock", () => {
+  it("shows each row's visibility as quiet text, Public with a globe and Private with a lock", () => {
     render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
-    const [snap, input] = tableRows();
+    const [snap, input] = rows();
     const pub = within(snap).getByText("Public");
     const priv = within(input).getByText("Private");
     expect(pub.querySelector("svg.lucide-globe")).not.toBeNull();
     expect(priv.querySelector("svg.lucide-lock")).not.toBeNull();
-    // Neutral: the same slate styling for both, no colour coding.
+    // Neutral: the same styling for both, no colour coding and no box.
     expect(pub.className).toBe(priv.className);
-    expect(pub.className).toContain("slate");
+    expect(pub.className).not.toContain("border");
   });
 
-  it("shows the coverage the way a repository card does, and the date published", () => {
+  it("shows the date published", () => {
     render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
-    const [snap, input] = tableRows();
-    expect(within(snap).getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
+    const [snap, input] = rows();
     expect(within(snap).getByText("Mar 14, 2026")).toBeTruthy();
-    expect(within(input).getByText("Climatological · 5 arc-min, 30 arc-sec")).toBeTruthy();
     expect(within(input).getByText("Nov 2, 2025")).toBeTruthy();
   });
 
-  it("hides the secondary columns on a narrow screen and keeps the name, type and visibility", () => {
+  it("is a grid that stacks below sm, with the same markup, and joins Published at md", () => {
     render(<MyDataTable items={[SNAP]} />);
-    const headers = within(screen.getByRole("table")).getAllByRole("columnheader");
-    expect(headers.map((h) => h.className.includes("hidden md:table-cell"))).toEqual([
-      false,
-      false,
-      false,
-      true,
-      true,
-    ]);
-  });
-
-  it("stacks the rows below sm: title, badges, coverage, short id and date", () => {
-    render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
-    expect(screen.getByRole("table").closest("div.hidden")?.className).toContain("sm:block");
-    expect(screen.getByRole("list", { name: "Snapshots and inputs" }).className).toContain("sm:hidden");
-    const [snap] = stackedRows();
-    expect(within(snap).getByRole("link", { name: "Global Storage Run" }).getAttribute("href")).toBe(
-      "/repository/0123456789abcdef0123456789abcdef"
-    );
-    expect(within(snap).getByText("Model Snapshot")).toBeTruthy();
-    expect(within(snap).getByText("Public")).toBeTruthy();
-    expect(within(snap).getByText("2000–2009 · 5 arc-min")).toBeTruthy();
-    expect(within(snap).getByText("01234567…")).toBeTruthy();
+    const row = rows()[0];
+    expect(row.className).toContain("grid-cols-1");
+    expect(row.className).toContain("sm:grid-cols-[");
+    expect(row.className).toContain("md:grid-cols-[");
   });
 
   it("has no row actions: no menu, no buttons", () => {
@@ -146,13 +126,43 @@ describe("the table", () => {
   });
 });
 
+describe("the search", () => {
+  const type = (text: string) =>
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search snapshots and inputs by name" }), {
+      target: { value: text },
+    });
+
+  it("filters the rows by title as you type, and Clear search brings them back", () => {
+    render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
+    type("ancillary");
+    expect(rows().map((r) => within(r).getByRole("link").textContent)).toEqual(["Ancillary Data v1"]);
+    type("nothing like it");
+    expect(screen.queryByRole("list", { name: "Snapshots and inputs" })).toBeNull();
+    expect(screen.getByText(/Nothing matches/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+    expect(rows()).toHaveLength(2);
+  });
+
+  it("finds a row by the start of its id", () => {
+    render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
+    type("01234567");
+    expect(rows()).toHaveLength(1);
+  });
+
+  it("is not offered when the selected kind has no rows", () => {
+    search.params = new URLSearchParams("kind=model-input");
+    render(<MyDataTable items={[SNAP]} />);
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+});
+
 describe("the kind tabs", () => {
   const ITEMS = [SNAP, PRIVATE_INPUT, SNAP2];
 
   function tab(name: RegExp) {
     return within(screen.getByRole("navigation", { name: "Filter by type" })).getByRole("link", { name });
   }
-  const titles = () => tableRows().map((r) => within(r).getAllByRole("link")[0].textContent);
+  const titles = () => rows().map((r) => within(r).getAllByRole("link")[0].textContent);
 
   it("count each kind and all", () => {
     render(<MyDataTable items={ITEMS} />);
@@ -173,7 +183,7 @@ describe("the kind tabs", () => {
     expect(titles()).toEqual(["Global Storage Run", "Second Run"]);
     expect(tab(/^Model Snapshots/).getAttribute("aria-current")).toBe("page");
     expect(tab(/^All/).getAttribute("aria-current")).toBeNull();
-    expect(stackedRows()).toHaveLength(2);
+    expect(rows()).toHaveLength(2);
   });
 
   it("read ?kind=model-input: only model inputs", () => {
@@ -193,7 +203,7 @@ describe("the kind tabs", () => {
   it("say so, and offer all, when the selected kind has no rows", () => {
     search.params = new URLSearchParams("kind=model-input");
     render(<MyDataTable items={[SNAP]} />);
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Snapshots and inputs" })).toBeNull();
     expect(screen.getByText("No model inputs yet")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Show all" }).getAttribute("href")).toBe("/workspace/data");
     // The tabs stay, with their counts, to switch from.
@@ -226,7 +236,7 @@ describe("the loading state", () => {
     expect(screen.getByRole("status").className).toContain("reveal-delayed");
   });
 
-  it("is a table's shape: the tab bar and five rows", () => {
+  it("is the list's shape: the toolbar, the header and five rows", () => {
     const { container } = render(<MyDataSkeleton />);
     expect(container.querySelectorAll(".divide-y > div")).toHaveLength(5);
   });
@@ -244,14 +254,14 @@ describe("the section", () => {
   it("lists what the backend returned", async () => {
     fetchMine.mockResolvedValue({ items: [SNAP, PRIVATE_INPUT] });
     render(await MyDataSection({ here: "/workspace/data" }));
-    expect(tableRows()).toHaveLength(2);
+    expect(rows()).toHaveLength(2);
   });
 
   it("shows the empty state for an empty answer", async () => {
     fetchMine.mockResolvedValue({ items: [] });
     render(await MyDataSection({ here: "/workspace/data" }));
     expect(screen.getByText("Nothing published yet")).toBeTruthy();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Snapshots and inputs" })).toBeNull();
   });
 
   it("shows the error state, not an empty list, when the backend fails", async () => {

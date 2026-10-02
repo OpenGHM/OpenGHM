@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { WorkspaceHero } from "@/components/workspace/workspace-hero";
+import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { WorkspaceSections } from "@/components/workspace/workspace-sections";
 
 const status = { pending: false };
@@ -52,28 +52,26 @@ describe("the Workspace section switch while a section loads", () => {
   });
 });
 
-describe("the Workspace hero", () => {
-  it("says what the Simulations section says today, with its action", () => {
-    render(<WorkspaceHero section="simulations" />);
-    expect(screen.getByText("Workspace · Private & unpublished")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1, name: "My Simulations" })).toBeTruthy();
-    expect(
-      screen.getByText("Working configurations only you can see. Nothing here is a published model snapshot.")
-    ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New Simulation" }).getAttribute("href")).toBe("/workspace/new");
+describe("the Workspace header", () => {
+  it("is the Data Repository's light header: eyebrow, title, and the section's action", () => {
+    render(<WorkspaceHeader section="simulations" />);
+    expect(screen.getByText("Workspace")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Simulations" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "New simulation" }).getAttribute("href")).toBe("/workspace/new");
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Simulations");
   });
 
-  it("says what the Snapshots & Inputs section says, with no action", () => {
-    render(<WorkspaceHero section="data" />);
-    expect(screen.getByText("Workspace · Immutable records")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1, name: "My Snapshots & Inputs" })).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Snapshots and model inputs you published. Their contents never change, and a correction is a new version; visibility decides who can find them."
-      )
-    ).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "New Simulation" })).toBeNull();
+  it("says one short line for Snapshots & Inputs, and has no action there", () => {
+    render(<WorkspaceHeader section="data" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Snapshots & Inputs" })).toBeTruthy();
+    expect(screen.getByText(/What you published/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "New simulation" })).toBeNull();
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshots & Inputs");
+  });
+
+  it("has no dark gradient", () => {
+    const { container } = render(<WorkspaceHeader section="simulations" />);
+    expect(container.innerHTML).not.toContain("gradient");
+    expect(container.innerHTML).not.toContain("text-white");
   });
 });

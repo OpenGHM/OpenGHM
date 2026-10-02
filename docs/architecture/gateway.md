@@ -524,8 +524,9 @@ never at once.
 
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
-simulation's own name with its status, the snapshot it is based on, and a "More
-actions" menu once the job has ended), one full-width status summary
+simulation's own name with its status, the snapshot it is based on in short, and
+once the job has ended the buttons "New from this model snapshot" and "Delete
+simulation"; a light header like the Data Repository's), one full-width status summary
 (`job-status-summary.tsx`) that changes with the live status, the Logs, and a
 compact Details section. The summary is the only place with a state's main
 action: Cancel while it is queued or running, "Try again with these settings"

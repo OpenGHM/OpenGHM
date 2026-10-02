@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, Search, X } from "lucide-react";
 import { draftField } from "@/components/workspace/draft-field";
+import { DraftCollapsible } from "@/components/workspace/draft-section";
 import {
   FLAT_LIST_LIMIT,
   groupVariables,
@@ -83,19 +84,66 @@ function GroupToggle({
   );
 }
 
+/** How many names the summary gives before "and N more". */
+const SUMMARY_NAMES = 3;
+/** A list this short has its names in the summary even when all are chosen. */
+const SHORT_LIST = 6;
+
+/** What is chosen, in one line: "All 51 variables", or "12 of 51 variables"
+ *  with the first few names. */
+function VariablesSummary({
+  selected,
+  total,
+  hasSnapshot,
+}: {
+  selected: readonly string[];
+  total: number;
+  /** False when the snapshot's own list is unknown: there is no "all" to compare with. */
+  hasSnapshot: boolean;
+}) {
+  if (selected.length === 0) return <span className="font-medium text-warning">None selected</span>;
+  const all = hasSnapshot && selected.length >= total;
+  const noun = (hasSnapshot ? total : selected.length) === 1 ? "variable" : "variables";
+  const names =
+    !all || total <= SHORT_LIST
+      ? selected.slice(0, SUMMARY_NAMES).join(", ") +
+        (selected.length > SUMMARY_NAMES ? ` and ${selected.length - SUMMARY_NAMES} more` : "")
+      : null;
+  return (
+    <>
+      <span className="font-medium">
+        {all
+          ? `All ${total} ${noun}`
+          : hasSnapshot
+            ? `${selected.length} of ${total} ${noun}`
+            : `${selected.length} ${noun}`}
+      </span>
+      {names && <span className="text-muted-foreground"> · {names}</span>}
+    </>
+  );
+}
+
 /**
- * The output variables of a draft, as a list to tick. A short list (up to
- * `FLAT_LIST_LIMIT`) is just the checkboxes. A longer one adds a search box,
- * and groups the names that share a base (`variable-groups.ts`: `runoff`,
- * `runoff_ps`, `runoff_pu`) under a heading that ticks the whole group; the
- * names that share nothing follow as "Other variables". "Select all" and
- * "Clear" act on what is shown, so with a search typed they act on the matches.
+ * The output variables of a draft, as a part of Run settings that most people
+ * leave alone: a line saying what is chosen (`VariablesSummary`) and a
+ * "Choose…" button that opens the list to tick. What is wrong stays in view
+ * with the list closed: none chosen, a message from the server. A variable the
+ * snapshot does not list (stored in the draft, so it can be unticked) keeps the
+ * list open, where it is marked.
+ *
+ * The list: a short one (up to `FLAT_LIST_LIMIT`) is just the checkboxes. A
+ * longer one adds a search box, and groups the names that share a base
+ * (`variable-groups.ts`: `runoff`, `runoff_ps`, `runoff_pu`) under a heading
+ * that ticks the whole group; the names that share nothing follow as "Other
+ * variables". "Select all" and "Clear" act on what is shown, so with a search
+ * typed they act on the matches.
  *
  * `onChange` receives the whole new selection; the caller stores it in the
- * snapshot's order. An Edit link on Review sends focus to the search box of a
- * long list, and to the first checkbox of a short one (`draftField("variables")`).
+ * snapshot's order. An Edit link on Review opens the list and sends focus to the
+ * search box of a long one, and to the first checkbox of a short one
+ * (`draftField("variables")`).
  */
-export function OutputVariablesField({
+export function OutputVariablesSection({
   options,
   selected,
   hasSnapshot,
@@ -132,129 +180,135 @@ export function OutputVariablesField({
   const grouped = long && groups.some((g) => g.base !== null);
 
   return (
-    <fieldset className="min-w-0 space-y-3" aria-describedby={describedBy}>
-      <legend className="sr-only">Output variables</legend>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 aria-hidden="true" className="text-sm font-semibold text-foreground">
-          Output variables
-        </h3>
-        <p aria-live="polite" className="text-xs text-muted-foreground">
-          {selected.length} of {options.length} selected
-        </p>
-        {options.length > 1 && (
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              className={TEXT_BUTTON}
-              disabled={shownChosen === shown.length}
-              onClick={() => setMany(shown.map((o) => o.name), true)}
-            >
-              {searching ? "Select shown" : "Select all"}
-            </button>
-            <button
-              type="button"
-              className={TEXT_BUTTON}
-              disabled={shownChosen === 0}
-              onClick={() => setMany(shown.map((o) => o.name), false)}
-            >
-              {searching ? "Clear shown" : "Clear"}
-            </button>
+    <DraftCollapsible
+      title="Output variables"
+      fields={["variables"]}
+      openLabel="Choose…"
+      forceOpen={hasSnapshot && options.some((o) => !o.listed)}
+      summary={<VariablesSummary selected={selected} total={options.length} hasSnapshot={hasSnapshot} />}
+      notes={
+        <>
+          {selected.length === 0 && (
+            <p className="flex items-start gap-2 text-xs text-warning">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              Choose at least one output variable. A simulation with none can&apos;t be submitted.
+            </p>
+          )}
+          {!hasSnapshot && selected.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Only the variables already chosen are listed: the model snapshot&apos;s own list isn&apos;t
+              available.
+            </p>
+          )}
+          {error && (
+            <p id={errorId} className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
+        </>
+      }
+    >
+      <fieldset className="min-w-0 space-y-3" aria-describedby={describedBy}>
+        <legend className="sr-only">Output variables</legend>
+        {(long || options.length > 1) && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {long && (
+              <div className="flex h-10 min-w-0 flex-1 basis-60 items-center gap-2 rounded-lg border bg-background px-3 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:h-9">
+                <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                <input
+                  id={`${id}-search`}
+                  {...draftField("variables")}
+                  type="search"
+                  aria-label="Search output variables"
+                  placeholder="Search variables…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none"
+                />
+                {query !== "" && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setQuery("")}
+                    className="-mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:size-8"
+                  >
+                    <X aria-hidden="true" className="size-4" />
+                  </button>
+                )}
+              </div>
+            )}
+            {options.length > 1 && (
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  className={TEXT_BUTTON}
+                  disabled={shownChosen === shown.length}
+                  onClick={() => setMany(shown.map((o) => o.name), true)}
+                >
+                  {searching ? "Select shown" : "Select all"}
+                </button>
+                <button
+                  type="button"
+                  className={TEXT_BUTTON}
+                  disabled={shownChosen === 0}
+                  onClick={() => setMany(shown.map((o) => o.name), false)}
+                >
+                  {searching ? "Clear shown" : "Clear"}
+                </button>
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      {long && (
-        <div className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:h-9">
-          <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          <input
-            id={`${id}-search`}
-            {...draftField("variables")}
-            type="search"
-            aria-label="Search output variables"
-            placeholder="Search variables…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none"
-          />
-          {query !== "" && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setQuery("")}
-              className="-mr-2 inline-flex size-10 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:size-8"
-            >
-              <X aria-hidden="true" className="size-4" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {options.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No output variables are known for this draft.</p>
-      ) : shown.length === 0 ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          No variable matches &lsquo;{query.trim()}&rsquo;.
-        </p>
-      ) : (
-        <div
-          {...(long ? {} : draftField("variables"))}
-          className={
-            long
-              ? "max-h-80 space-y-3 overflow-y-auto rounded-lg border p-3"
-              : "rounded-lg border px-3 py-1"
-          }
-        >
-          {groups.map((group) => {
-            const names = group.items.map((o) => o.name);
-            return (
-              <div key={group.base ?? "other"} className={grouped ? "space-y-0.5" : undefined}>
-                {grouped &&
-                  (group.base === null ? (
-                    <p className="flex min-h-8 items-center text-sm font-medium text-foreground">
-                      Other variables
-                    </p>
-                  ) : (
-                    <GroupToggle
-                      base={group.base}
-                      total={group.items.length}
-                      chosen={names.filter((n) => chosen.has(n)).length}
-                      onChange={(on) => setMany(names, on)}
-                    />
-                  ))}
-                <div className={`${GRID} ${grouped ? "pl-6" : ""}`}>
-                  {group.items.map((o) => (
-                    <Option
-                      key={o.name}
-                      option={o}
-                      checked={chosen.has(o.name)}
-                      onToggle={toggle}
-                      showUnlisted={hasSnapshot}
-                    />
-                  ))}
+        {options.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No output variables are known for this draft.</p>
+        ) : shown.length === 0 ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            No variable matches &lsquo;{query.trim()}&rsquo;.
+          </p>
+        ) : (
+          <div
+            {...(long ? {} : draftField("variables"))}
+            className={
+              long
+                ? "max-h-80 space-y-3 overflow-y-auto rounded-lg border p-3"
+                : "rounded-lg border px-3 py-1"
+            }
+          >
+            {groups.map((group) => {
+              const names = group.items.map((o) => o.name);
+              return (
+                <div key={group.base ?? "other"} className={grouped ? "space-y-0.5" : undefined}>
+                  {grouped &&
+                    (group.base === null ? (
+                      <p className="flex min-h-8 items-center text-sm font-medium text-foreground">
+                        Other variables
+                      </p>
+                    ) : (
+                      <GroupToggle
+                        base={group.base}
+                        total={group.items.length}
+                        chosen={names.filter((n) => chosen.has(n)).length}
+                        onChange={(on) => setMany(names, on)}
+                      />
+                    ))}
+                  <div className={`${GRID} ${grouped ? "pl-6" : ""}`}>
+                    {group.items.map((o) => (
+                      <Option
+                        key={o.name}
+                        option={o}
+                        checked={chosen.has(o.name)}
+                        onToggle={toggle}
+                        showUnlisted={hasSnapshot}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {selected.length === 0 && (
-        <p className="flex items-start gap-2 text-xs text-warning">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          Choose at least one output variable. A simulation with none can&apos;t be submitted.
-        </p>
-      )}
-      {!hasSnapshot && selected.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Only the variables already chosen are listed: the model snapshot&apos;s own list isn&apos;t
-          available.
-        </p>
-      )}
-      {error && (
-        <p id={errorId} className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-    </fieldset>
+              );
+            })}
+          </div>
+        )}
+      </fieldset>
+    </DraftCollapsible>
   );
 }

@@ -72,6 +72,9 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
 const start = () => screen.getByLabelText("Start") as HTMLInputElement;
 const end = () => screen.getByLabelText("End") as HTMLInputElement;
 const checkbox = (name: string | RegExp) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
+/** Output variables and Compute are closed until asked for. */
+const openVariables = () => fireEvent.click(screen.getByRole("button", { name: "Choose output variables" }));
+const openCompute = () => fireEvent.click(screen.getByRole("button", { name: "Change compute" }));
 
 describe("the draft run step: fields the wizard can focus", () => {
   it("marks each control an Edit link can send focus to", () => {
@@ -82,6 +85,8 @@ describe("the draft run step: fields the wizard can focus", () => {
         custom_params: { a: "1" },
       },
     });
+    openVariables();
+    openCompute();
     const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
     expect(marked("start")).toBe(start());
     expect(marked("end")).toBe(end());
@@ -100,9 +105,116 @@ describe("the draft run step: fields the wizard can focus", () => {
       ctx: { dataset: manyVariables(), snapshotState: "found" },
       parameters: { ...PARAMETERS, variables: [] },
     });
+    openVariables();
     const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
     expect(marked("variables")).toBe(screen.getByRole("searchbox", { name: "Search output variables" }));
     expect(marked("modelInput")).toBe(screen.getByRole("button", { name: "Revert" }));
+  });
+});
+
+describe("the draft run step: the quiet path", () => {
+  const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`);
+
+  it("shows the run period, and only a line and a button for the variables and the compute", () => {
+    step();
+    expect(start()).toBeTruthy();
+    expect(end()).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryByLabelText("Cores")).toBeNull();
+    expect(screen.queryByLabelText(/^Walltime/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose output variables" }).textContent).toBe("Choose…");
+    expect(screen.getByRole("button", { name: "Change compute" }).textContent).toBe("Change");
+  });
+
+  it("is one card of three parts, with no tinted band", () => {
+    const { container } = step();
+    const panel = container.querySelector(".divide-y") as HTMLElement;
+    expect(panel.querySelectorAll(":scope > section")).toHaveLength(3);
+    expect(panel.className).toContain("rounded-xl");
+    expect(container.innerHTML).not.toContain("bg-muted/40");
+  });
+
+  it("says in one line what the variables are", () => {
+    const { unmount } = step();
+    expect(screen.getByText("All 3 variables")).toBeTruthy();
+    unmount();
+    step({ parameters: { ...PARAMETERS, variables: ["runoff", "streamAge"] } });
+    expect(screen.getByText("2 of 3 variables")).toBeTruthy();
+    expect(screen.getByText(/runoff, streamAge/)).toBeTruthy();
+  });
+
+  it("names the first few variables when not all are chosen, and counts the rest", () => {
+    const names = manyVariables().simulation.outputVariables.map((v) => v.name);
+    step({
+      ctx: { dataset: manyVariables(), snapshotState: "found" },
+      parameters: { ...PARAMETERS, variables: names.slice(0, 5) },
+    });
+    expect(screen.getByText("5 of 13 variables")).toBeTruthy();
+    expect(screen.getByText(/runoff, runoff_ps, runoff_pu and 2 more/)).toBeTruthy();
+  });
+
+  it("says All N and nothing more for a long list that is all chosen", () => {
+    const names = manyVariables().simulation.outputVariables.map((v) => v.name);
+    step({ ctx: { dataset: manyVariables(), snapshotState: "found" }, parameters: { ...PARAMETERS, variables: names } });
+    expect(screen.getByText("All 13 variables")).toBeTruthy();
+    expect(screen.queryByText(/runoff, runoff_ps/)).toBeNull();
+  });
+
+  it("opens the variables with Choose… and closes them with Done, keeping the summary", () => {
+    step();
+    const toggle = screen.getByRole("button", { name: "Choose output variables" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("Done");
+    expect(document.getElementById(toggle.getAttribute("aria-controls")!)).toBeTruthy();
+    expect(screen.getByText("All 3 variables")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("says what the compute is in one line: the recommendation, or the draft's own values", () => {
+    const { unmount } = step();
+    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
+    unmount();
+    step({ slurm: { cores: 8, walltime: "12:00:00" } });
+    expect(screen.getByText("Custom: 8 cores · 12 h")).toBeTruthy();
+    // Still reachable.
+    openCompute();
+    expect((screen.getByLabelText("Cores") as HTMLInputElement).value).toBe("8");
+  });
+
+  it("keeps a variables problem in view with the list closed", () => {
+    const { unmount } = step({ parameters: { ...PARAMETERS, variables: [] } });
+    expect(screen.getByText("None selected")).toBeTruthy();
+    expect(screen.getByText(/Choose at least one output variable/)).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    unmount();
+    step({ serverErrors: { variables: "Unknown variable." } });
+    expect(screen.getByText("Unknown variable.")).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("keeps the list open, with no way to close it, while a variable is not in the snapshot", () => {
+    step({ parameters: { ...PARAMETERS, variables: ["discharge", "legacyVar"] } });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: /output variables/ })).toBeNull();
+  });
+
+  it("keeps the compute fields open, with their message, for a value that is refused", () => {
+    step({ slurm: { cores: 0, walltime: null } });
+    expect(screen.getByText("Use a whole number from 1 to 128.")).toBeTruthy();
+    expect(screen.getByLabelText("Cores").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByRole("button", { name: /compute/ })).toBeNull();
+  });
+
+  it("marks the two buttons so that an Edit link can open them", () => {
+    step();
+    expect(screen.getByRole("button", { name: "Choose output variables" }).getAttribute("data-draft-reveals")).toBe("variables");
+    expect(screen.getByRole("button", { name: "Change compute" }).getAttribute("data-draft-reveals")).toBe("cores walltime");
+    expect(marked("variables")).toBeNull();
+    expect(marked("cores")).toBeNull();
   });
 });
 
@@ -285,12 +397,16 @@ describe("the draft run step: without a snapshot", () => {
     expect(start().max).toBe("");
     expect(end().max).toBe("");
     expect(screen.getByText(/isn't available, so the dates aren't checked/)).toBeTruthy();
+    // Nothing to compare with, so no "All" and no "of": the stored variables, as they are.
+    expect(screen.getByText("1 variable")).toBeTruthy();
+    expect(screen.getByText(/own list isn't\s+available/)).toBeTruthy();
+    expect(screen.getByText("Recommended: set by the model snapshot")).toBeTruthy();
+    openVariables();
     expect(screen.getAllByRole("checkbox").map((c) => (c as HTMLInputElement).checked)).toEqual([true]);
     expect(screen.getByRole("checkbox", { name: "discharge" })).toBeTruthy();
-    expect(screen.getByText("1 of 1 selected")).toBeTruthy();
-    expect(screen.getByText(/own list isn't\s+available/)).toBeTruthy();
     expect(screen.queryByText("not in this snapshot")).toBeNull();
     // The compute fields have no recommendation to show.
+    openCompute();
     expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("Recommended");
   });
 });
@@ -298,7 +414,8 @@ describe("the draft run step: without a snapshot", () => {
 describe("the draft run step: output variables", () => {
   it("lists the snapshot's variables and keeps the stored order when one is ticked", () => {
     const { onParametersChange } = step({ parameters: { ...PARAMETERS, variables: ["runoff", "streamAge"] } });
-    expect(screen.getByText("2 of 3 selected")).toBeTruthy();
+    openVariables();
+    expect(screen.getByText("2 of 3 variables")).toBeTruthy();
     expect(checkbox("discharge").checked).toBe(false);
     fireEvent.click(checkbox("discharge"));
     // Stored in the snapshot's own order, not in the order they were ticked.
@@ -310,6 +427,7 @@ describe("the draft run step: output variables", () => {
 
   it("unticks a variable", () => {
     const { onParametersChange } = step();
+    openVariables();
     fireEvent.click(checkbox("runoff"));
     expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, variables: ["discharge", "streamAge"] });
   });
@@ -318,7 +436,7 @@ describe("the draft run step: output variables", () => {
     const { onParametersChange } = step({
       parameters: { ...PARAMETERS, variables: ["discharge", "legacyVar"] },
     });
-    expect(screen.getByText("2 of 4 selected")).toBeTruthy();
+    expect(screen.getByText("2 of 4 variables")).toBeTruthy();
     // The mark is part of the checkbox's name, so a screen reader hears it too.
     expect(checkbox("legacyVar not in this snapshot").checked).toBe(true);
     expect(screen.getByText("not in this snapshot")).toBeTruthy();
@@ -345,6 +463,7 @@ describe("the draft run step: output variables", () => {
 
   it("titles each variable with its full name and unit", () => {
     step();
+    openVariables();
     expect(screen.getByText("discharge").getAttribute("title")).toBe("Discharge (m3/s)");
   });
 
@@ -394,6 +513,7 @@ describe("the draft run step: what a submit refuses", () => {
 describe("the draft run step: compute", () => {
   it("passes cores and walltime on", () => {
     const { onSlurmChange } = step({ slurm: { cores: null, walltime: "02:00:00" } });
+    openCompute();
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "4" } });
     expect(onSlurmChange).toHaveBeenCalledWith({ cores: 4, walltime: "02:00:00" });
     expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16");
@@ -401,8 +521,9 @@ describe("the draft run step: compute", () => {
 
   it("shows what the server said about cores and walltime", () => {
     step({ serverErrors: { cores: "Too many cores.", walltime: "Too long." } });
-    expect(screen.getByText("Cores: Too many cores.")).toBeTruthy();
-    expect(screen.getByText("Walltime: Too long.")).toBeTruthy();
+    // Refused values keep the fields open, the message under its own field.
+    expect(screen.getByText("Too many cores.").previousElementSibling).toBe(screen.getByLabelText("Cores"));
+    expect(screen.getByText("Too long.").previousElementSibling).toBe(screen.getByLabelText(/^Walltime/));
   });
 });
 
@@ -411,7 +532,10 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
 
   it("explains it next to the Walltime field, and shows the automatic one as the limit", () => {
     step({ recommended: long });
+    // Visible with the fields closed.
     const notice = screen.getByText(/reference run took about 111 h 30 min, more than the 96 h/);
+    expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
+    openCompute();
     expect(notice.textContent).toMatch(/Shorten the run period or set a walltime\./);
     // One line, with the long reason behind a button.
     expect(screen.queryByText(/the run may be stopped when time runs out/)).toBeNull();
@@ -426,11 +550,13 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   it("is gone once the draft sets a walltime of its own", () => {
     step({ recommended: long, slurm: { cores: null, walltime: "96:00:00" } });
     expect(screen.queryByText(/more than the 96 h/)).toBeNull();
+    expect(screen.getByText("Custom: 16 cores (recommended) · 4 d")).toBeTruthy();
   });
 
   it("says nothing for a recommendation that fits", () => {
     step();
     expect(screen.queryByText(/reference run took/)).toBeNull();
+    openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("00:22:30");
     expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
   });
@@ -438,6 +564,7 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   it("only hints, without an error, at a walltime shorter than the reference run", () => {
     step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
     expect(screen.getByText(/reference run took about 4 h 30 min/)).toBeTruthy();
+    openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("aria-invalid")).not.toBe("true");
   });
 });
@@ -448,6 +575,7 @@ describe("the draft run step: cores below the recommended count", () => {
 
   it("warns next to the Cores field, with the numbers, and does not make it an error", () => {
     step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
+    // In view with the fields closed.
     const note = warning()!;
     expect(note.textContent).toContain("1 core is below the recommended 64: the run may run out of memory.");
     // The arithmetic is behind "Why?".
@@ -459,6 +587,7 @@ describe("the draft run step: cores below the recommended count", () => {
         "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
         "the run may be stopped for running out of memory."
     );
+    openCompute();
     const cores = screen.getByLabelText("Cores");
     expect(cores.getAttribute("aria-describedby")).toContain(note.closest("div")!.id);
     expect(cores.getAttribute("aria-invalid")).not.toBe("true");
@@ -467,6 +596,7 @@ describe("the draft run step: cores below the recommended count", () => {
   it("appears and goes as the value is typed", () => {
     const { onSlurmChange, rerender } = step({ recommended: BIG });
     expect(warning()).toBeNull();
+    openCompute();
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "1" } });
     expect(onSlurmChange).toHaveBeenLastCalledWith({ cores: 1, walltime: null });
 
@@ -510,9 +640,8 @@ describe("the draft run step: disabled", () => {
     const off = (el: Element) => el.matches(":disabled");
     expect(off(start())).toBe(true);
     expect(off(end())).toBe(true);
-    expect(off(checkbox("discharge"))).toBe(true);
-    expect(off(screen.getByLabelText("Cores"))).toBe(true);
-    expect(off(screen.getByLabelText(/^Walltime/))).toBe(true);
+    expect(off(screen.getByRole("button", { name: "Choose output variables" }))).toBe(true);
+    expect(off(screen.getByRole("button", { name: "Change compute" }))).toBe(true);
     for (const remove of screen.getAllByRole("button", { name: "Remove" })) expect(off(remove)).toBe(true);
   });
 });
@@ -524,16 +653,18 @@ describe("the draft run step: a long list of output variables", () => {
     parameters: { ...PARAMETERS, variables },
   });
 
-  it("has a search box, Select all and Clear, and the count of what is selected", () => {
+  it("has a search box, Select all and Clear, and the summary says how much is selected", () => {
     step(long());
+    openVariables();
     expect(screen.getByRole("searchbox", { name: "Search output variables" })).toBeTruthy();
-    expect(screen.getByText("13 of 13 selected")).toBeTruthy();
+    expect(screen.getByText("All 13 variables")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Select all" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
   });
 
   it("has none of them for a short list, which is just the checkboxes", () => {
     step();
+    openVariables();
     expect(screen.queryByRole("searchbox")).toBeNull();
     expect(screen.queryByText("Other variables")).toBeNull();
     expect(screen.getAllByRole("checkbox")).toHaveLength(3);
@@ -541,6 +672,7 @@ describe("the draft run step: a long list of output variables", () => {
 
   it("groups the names that share a base, and the rest follow as other variables", () => {
     step(long());
+    openVariables();
     const group = (name: RegExp) => screen.getByRole("checkbox", { name });
     expect(group(/^runoff: all 3 variables/)).toBeTruthy();
     expect(group(/^discharge: all 2 variables/)).toBeTruthy();
@@ -551,6 +683,7 @@ describe("the draft run step: a long list of output variables", () => {
 
   it("ticks and unticks a whole group, in the snapshot's order", () => {
     const { onParametersChange } = step(long(["discharge"]));
+    openVariables();
     fireEvent.click(screen.getByRole("checkbox", { name: /^runoff: all 3 variables/ }));
     expect(onParametersChange).toHaveBeenLastCalledWith({
       ...PARAMETERS,
@@ -560,6 +693,7 @@ describe("the draft run step: a long list of output variables", () => {
 
   it("clears everything, and selects everything", () => {
     const { onParametersChange } = step(long(["discharge"]));
+    openVariables();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     expect(onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, variables: all() });
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
@@ -568,13 +702,14 @@ describe("the draft run step: a long list of output variables", () => {
 
   it("filters by name or title, and then Select and Clear act on the matches only", () => {
     const { onParametersChange } = step(long(["streamAge"]));
+    openVariables();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search output variables" }), {
       target: { value: "soil" },
     });
     expect(screen.queryByRole("checkbox", { name: "runoff" })).toBeNull();
     expect(screen.getByRole("checkbox", { name: "soilMoist_ps" })).toBeTruthy();
     // The count is of the draft, not of the matches.
-    expect(screen.getByText("1 of 13 selected")).toBeTruthy();
+    expect(screen.getByText("1 of 13 variables")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select shown" }));
     expect(onParametersChange).toHaveBeenLastCalledWith({
       ...PARAMETERS,
@@ -584,6 +719,7 @@ describe("the draft run step: a long list of output variables", () => {
 
   it("says when nothing matches", () => {
     step(long());
+    openVariables();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search output variables" }), {
       target: { value: "zzz" },
     });
@@ -592,10 +728,16 @@ describe("the draft run step: a long list of output variables", () => {
 });
 
 describe("the draft run step: what the draft is based on", () => {
-  it("is one compact summary: title, model and version, coverage, resolution, model input, and a link", () => {
+  it("is one small card: map, short name, one line of facts with the model input, and a link", () => {
     step({ resolvedModelInput: { about: { name: "WBM Inputs [CONUS]" } } as never });
-    expect(screen.getByText("Fake Snapshot")).toBeTruthy();
-    expect(screen.getByText(/wbm 2\.0\.0 · 2001-01-01 → 2001-12-31 · 0\.5 degree/)).toBeTruthy();
+    // The short name is the headline; the official title is on hover, not a wall of text.
+    const name = screen.getByText("WBM 2.0.0 · 2001");
+    expect(name.getAttribute("title")).toBe("Fake Snapshot");
+    expect(screen.queryByText("Fake Snapshot")).toBeNull();
+    expect(screen.getByRole("img", { name: /^Coverage: north 10°/ })).toBeTruthy();
+    expect(
+      screen.getByText((_, el) => el?.tagName === "P" && /^Regional · wbm 2\.0\.0 · 0\.5° · Model input:/.test(el.textContent ?? ""))
+    ).toBeTruthy();
     expect(screen.getByRole("link", { name: "WBM Inputs [CONUS]" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /View in repository/ }).getAttribute("href")).toBe("/repository/snap-1");
   });

@@ -5,7 +5,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/repository/pagination";
 import { SnapshotDetailSheet } from "./snapshot-detail-sheet";
-import { SnapshotList } from "./snapshot-list";
+import { SnapshotGrid } from "./snapshot-grid";
 import {
   CLEARED_PICKER_FILTERS,
   hasPickerFilters,
@@ -25,29 +25,43 @@ const EMPTY_RESULT: RepositoryListResponse = {
   page: 1,
 };
 
+/** Search and Filters are for a catalogue that has outgrown a glance: with this
+ *  many snapshots or fewer they are not shown (unless something is already
+ *  narrowing the list, or there is a second page). */
+export const CONTROLS_THRESHOLD = 9;
+
 /**
- * The Start screen's model snapshot picker (step 1 of the draft wizard): the
- * Data Repository's search and filters (`useUrlSyncedFilters`, the year and
- * resolution controls) over a full-width list of snapshots, in "pick" mode: a
- * `Select` per row, and a Details sheet in place of navigation (spec.md's
- * table: browse gets the detail page, the picker gets a sheet and a commit
- * control). Selecting hands the chosen dataset to `onSelect`; nothing is
- * created here.
+ * The Start screen's model snapshot picker (step 1 of the draft wizard): a grid
+ * of cards (`SnapshotGrid`) in which a click selects, and a Details sheet in
+ * place of navigation (spec.md's table: browse gets the detail page, the picker
+ * gets a sheet and a commit control). Selecting hands the chosen dataset to
+ * `onSelect`; nothing is created here.
+ *
+ * The Data Repository's search and filters (`useUrlSyncedFilters`, the year and
+ * resolution controls) sit above the grid, but only once the catalogue has more
+ * than `CONTROLS_THRESHOLD` snapshots, or a search or filter is already in the
+ * URL, or there is more than one page: a short list is a list to look at, not
+ * to search.
  */
 export function SnapshotPicker({
   initialFilters,
   initialData,
   initialModelInputIds,
+  usedIds,
   onSelect,
-  embedded = false,
+  pendingId = null,
+  disabled = false,
 }: {
   initialFilters: FilterState;
   initialData: RepositoryListResponse;
   initialModelInputIds: Set<string> | null;
+  /** Ids of the snapshots the caller has used: marked, and listed first. */
+  usedIds: ReadonlySet<string>;
   onSelect: (dataset: Dataset) => void;
-  /** Inside a page that already sets the width and the gutters (the Start
-   *  screen): drop the picker's own. */
-  embedded?: boolean;
+  /** The snapshot whose draft is being created, if any. */
+  pendingId?: string | null;
+  /** Every card is off while a draft is being created. */
+  disabled?: boolean;
 }) {
   const { filters, setFilters, result, isPending } = useUrlSyncedFilters<
     FilterState,
@@ -96,6 +110,7 @@ export function SnapshotPicker({
   };
 
   const filtered = hasPickerFilters(filters);
+  const showControls = filtered || result.totalCount > CONTROLS_THRESHOLD || result.totalPages > 1;
   const query = filters.searchQuery.trim();
   const reset = () => setFilters(CLEARED_PICKER_FILTERS);
   const resetButton = (
@@ -109,44 +124,46 @@ export function SnapshotPicker({
   );
 
   return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col gap-4",
-        embedded ? "" : "mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10"
-      )}
-    >
-      <SnapshotPickerFilters filters={filters} onChange={setFilters} />
+    <div className="flex min-w-0 flex-col gap-4">
+      {showControls && (
+        <>
+          <SnapshotPickerFilters filters={filters} onChange={setFilters} />
 
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3">
-        <p
-          aria-live="polite"
-          aria-atomic="true"
-          className={cn(
-            "text-[13.5px] text-muted-foreground transition-opacity duration-200",
-            busy && "opacity-60"
-          )}
-        >
-          <strong className="font-semibold text-highlight">{result.totalCount}</strong> model snapshot
-          {result.totalCount !== 1 ? "s" : ""}
-          {query && (
-            <>
-              {" "}
-              for <span className="font-medium text-foreground">‘{query}’</span>
-            </>
-          )}
-          {busy && <span className="sr-only"> Loading results</span>}
-        </p>
-        {filtered && resetButton}
-      </div>
+          <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-3">
+            <p
+              aria-live="polite"
+              aria-atomic="true"
+              className={cn(
+                "text-[13.5px] text-muted-foreground transition-opacity duration-200",
+                busy && "opacity-60"
+              )}
+            >
+              <strong className="font-semibold text-highlight">{result.totalCount}</strong> model snapshot
+              {result.totalCount !== 1 ? "s" : ""}
+              {query && (
+                <>
+                  {" "}
+                  for <span className="font-medium text-foreground">‘{query}’</span>
+                </>
+              )}
+              {busy && <span className="sr-only"> Loading results</span>}
+            </p>
+            {filtered && resetButton}
+          </div>
+        </>
+      )}
 
       <div
         aria-busy={busy ? "true" : undefined}
         className={cn("min-w-0 transition-opacity duration-200", busy && "opacity-60")}
       >
-        <SnapshotList
+        <SnapshotGrid
           datasets={result.items}
+          usedIds={usedIds}
           onDetails={openDetails}
           onSelect={onSelect}
+          pendingId={pendingId}
+          disabled={disabled}
           emptyAction={filtered ? resetButton : undefined}
         />
         <Pagination

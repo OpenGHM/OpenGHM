@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayName } from "@/lib/jobs/display-name";
+import { displayName, listName } from "@/lib/jobs/display-name";
 import { fakeSimulation } from "@/lib/workspace/fixtures";
 
 const job = (overrides: Parameters<typeof fakeSimulation>[1]) =>
@@ -21,5 +21,17 @@ describe("displayName", () => {
 
   it("treats an empty name as no name", () => {
     expect(displayName(job({ about: { name: "" }, slug: "run-a" }))).toBe("run-a");
+  });
+});
+
+describe("listName", () => {
+  it("is the display name for anything that has a name, a slug or a run id", () => {
+    expect(listName(job({ about: { name: "Run A" } }))).toEqual({ text: "Run A", id: null });
+    expect(listName(job({ slug: "run-a" }))).toEqual({ text: "run-a", id: null });
+    expect(listName(job({ sim_id: "sim-1" }))).toEqual({ text: "sim-1", id: null });
+  });
+
+  it("splits a draft nobody named into 'Untitled draft' and the start of its id", () => {
+    expect(listName(job({}))).toEqual({ text: "Untitled draft", id: "01234567" });
   });
 });

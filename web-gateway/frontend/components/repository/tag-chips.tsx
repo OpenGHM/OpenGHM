@@ -6,6 +6,8 @@ const TONES = {
   primary: "bg-primary/10 text-primary",
   /** On the dark detail-page hero. */
   hero: "bg-white/20 text-white",
+  /** The catalogue card's own chip, outlined and square-cornered, for a card that only shows the tags. */
+  outline: "rounded-md border border-border text-foreground",
 } as const;
 
 const SIZES = {

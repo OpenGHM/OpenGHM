@@ -23,15 +23,18 @@ import { KindBadge } from "./kind-badge";
 export const CARD_GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
 
 /**
- * A card the whole surface of which is one link (see TitleLink). It is
- * `relative` for the link's overlay and the `group/card` the hover effects
+ * The surface of a card the whole of which is one control (a link here, a
+ * button in the Start screen's snapshot picker, which borrows it). It is
+ * `relative` for the control's overlay and the `group/card` the hover effects
  * hang from: on hover it lifts 2px, its shadow deepens and its border takes a
  * tint of the brand (the lift is `motion-safe:`; colour and shadow still
- * change under reduced motion). When the title link has keyboard focus the
- * card wears the focus ring itself, and the same effects apply.
+ * change under reduced motion).
  */
-const CARD =
-  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-foreground/20 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50";
+export const CARD_SURFACE =
+  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-foreground/20 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5";
+
+/** `CARD_SURFACE`, and the focus ring on the card itself when the title link has keyboard focus. */
+const CARD = `${CARD_SURFACE} has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50`;
 
 /**
  * The corner mark of a map panel: a round chip with an arrow that fades in

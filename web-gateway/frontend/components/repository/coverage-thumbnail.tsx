@@ -156,11 +156,14 @@ export function CoverageThumbnail({
   box,
   aspect,
   className,
+  showLabel = true,
 }: {
   box: CoverageBox;
   /** The shape of the panel it fills, which sets how the map is framed around the box. */
   aspect: ThumbnailAspect;
   className?: string;
+  /** The "Global" / "Regional" chip in the corner; off for a thumbnail too small to carry it. */
+  showLabel?: boolean;
 }) {
   const label = coverageLabel(box);
   const rects = boxRects(box);
@@ -225,13 +228,15 @@ export function CoverageThumbnail({
           />
         ))}
       </svg>
-      <span
-        aria-hidden="true"
-        className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm"
-      >
-        <span className="size-1.5 shrink-0 rounded-full bg-highlight" />
-        {label}
-      </span>
+      {showLabel && (
+        <span
+          aria-hidden="true"
+          className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm"
+        >
+          <span className="size-1.5 shrink-0 rounded-full bg-highlight" />
+          {label}
+        </span>
+      )}
     </div>
   );
 }

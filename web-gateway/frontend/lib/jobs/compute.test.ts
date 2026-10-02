@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANVIL_SHARED_MB_PER_CORE,
   automaticWalltimeLabel,
+  describeComputeSummary,
   describeCoresBelowRecommended,
   describeHours,
   describeSlurmTime,
@@ -268,5 +269,45 @@ describe("describeCoresBelowRecommended", () => {
     expect(describeCoresBelowRecommended(cores(0), rec)).toBeNull();
     expect(describeCoresBelowRecommended(cores(-2), rec)).toBeNull();
     expect(describeCoresBelowRecommended(cores(1.5), rec)).toBeNull();
+  });
+});
+
+describe("describeComputeSummary", () => {
+  it("says what the snapshot recommends when the draft sets nothing", () => {
+    expect(describeComputeSummary({ cores: null, walltime: null }, { cores: 2, walltime: "15:00" })).toEqual({
+      custom: false,
+      text: "Recommended: 2 cores · 22 min 30 s",
+    });
+  });
+
+  it("says when the automatic walltime is the limit for one job", () => {
+    expect(describeComputeSummary({ cores: null, walltime: null }, { cores: 26, walltime: "111:30:00" })).toEqual({
+      custom: false,
+      text: "Recommended: 26 cores · 4 d (limit for one job)",
+    });
+  });
+
+  it("says Custom when either value is the draft's own, and marks the part it left to the snapshot", () => {
+    const recommended = { cores: 26, walltime: "111:30:00" };
+    expect(describeComputeSummary({ cores: 8, walltime: "12:00:00" }, recommended)).toEqual({
+      custom: true,
+      text: "Custom: 8 cores · 12 h",
+    });
+    expect(describeComputeSummary({ cores: 8, walltime: null }, recommended).text).toBe(
+      "Custom: 8 cores · 4 d (limit for one job)"
+    );
+    expect(describeComputeSummary({ cores: null, walltime: "02:00:00" }, { cores: 1, walltime: "15:00" }).text).toBe(
+      "Custom: 1 core (recommended) · 2 h"
+    );
+    expect(describeComputeSummary({ cores: 4, walltime: null }, { cores: 26, walltime: "15:00" }).text).toBe(
+      "Custom: 4 cores · 22 min 30 s (recommended + 50%)"
+    );
+  });
+
+  it("does not guess what it cannot know without a snapshot", () => {
+    expect(describeComputeSummary({ cores: null, walltime: null }, null).text).toBe(
+      "Recommended: set by the model snapshot"
+    );
+    expect(describeComputeSummary({ cores: 8, walltime: null }, null).text).toBe("Custom: 8 cores");
   });
 });

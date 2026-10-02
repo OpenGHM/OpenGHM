@@ -14,7 +14,7 @@ export default function JobDetailLoading() {
     <div className="flex min-h-screen flex-col">
       <Header />
 
-      <main className="reveal-delayed flex flex-1 items-center justify-center bg-slate-50 px-4 py-24">
+      <main className="reveal-delayed flex flex-1 items-center justify-center bg-muted/30 px-4 py-24">
         <div role="status" aria-label="Loading simulation" className="flex items-center gap-3 text-sm text-muted-foreground">
           <Loader2 className="size-5 motion-safe:animate-spin" aria-hidden="true" />
           Loading simulation…

@@ -66,6 +66,16 @@ describe("the list's tab bar", () => {
     ]);
   });
 
+  it("is the quiet segmented control of the repository's List / Grid switch, with the selected segment on the card colour", () => {
+    render(<SimulationListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
+    const nav = screen.getByRole("navigation", { name: "Filter simulations" });
+    expect(nav.className).toContain("bg-muted");
+    expect(nav.className).not.toContain("border");
+    const selected = links().find((a) => a.getAttribute("aria-current") === "page")!;
+    expect(selected.className).toContain("bg-card");
+    expect(links().filter((a) => a !== selected).every((a) => !a.className.includes("bg-primary"))).toBe(true);
+  });
+
   it("scrolls inside itself on a narrow screen and keeps every target 40 px tall", () => {
     render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
     const nav = screen.getByRole("navigation", { name: "Filter simulations" });

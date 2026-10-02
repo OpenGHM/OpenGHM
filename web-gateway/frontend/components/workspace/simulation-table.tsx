@@ -2,131 +2,130 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { SimulationDeleteButton } from "@/components/workspace/simulation-delete-button";
+import { JobStatusDot } from "@/components/jobs/job-status-badge";
 import { TimeStamp } from "@/components/common/time-stamp";
-import { KindBadge } from "@/components/repository/kind-badge";
+import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
+import { COLUMNS } from "@/components/workspace/simulation-columns";
+import { SimulationDeleteButton } from "@/components/workspace/simulation-delete-button";
+import { matchesQuery } from "@/components/workspace/search-field";
+import { useSimulationSearch } from "@/components/workspace/simulation-search";
 import { displayStatus } from "@/lib/jobs/display-status";
-import { simulationSource } from "@/lib/jobs/simulation-source";
-import { displayName } from "@/lib/jobs/display-name";
+import { displayName, listName } from "@/lib/jobs/display-name";
 import type { Job } from "@/lib/jobs/types";
 
 /**
- * The simulations as a table from `sm` up, and as stacked rows below it (name
- * and status on one line, then what it is based on and the time), so a phone never
- * scrolls sideways. Both are rendered and CSS shows one; the delete button is
- * the same component in each.
+ * The simulations as one card of rows, each row a link to the simulation: its
+ * name with what it is based on and when it ran under it, its status, when it
+ * was last updated, and a visible Delete once it can be deleted. From `sm` up
+ * the rows sit in columns under a small header; on a phone each row stacks (name
+ * and meta, then status and time, Delete beside them), so nothing scrolls
+ * sideways.
  *
- * It is a client component because it owns the sign-in banner that a row's
- * Delete shows when the session has ended.
+ * The row is one link by way of its name's stretched `::after`, with Delete
+ * above it. It filters on what the list's search box says
+ * (`SimulationSearchProvider`), over the rows it is given. A client component,
+ * because it owns the sign-in banner that a row's Delete shows when the session
+ * has ended, and reads the search box.
  */
-export function SimulationTable({ jobs }: { jobs: Job[] }) {
+export function SimulationTable({
+  jobs,
+  metaLines = {},
+  moreThanOnePage = false,
+}: {
+  jobs: Job[];
+  /** The line under each name, by job id: what it is based on and when it ran
+   *  (`simulationMetaLines`, built on the server from the snapshots' metadata,
+   *  and the title the job was derived under for one that could not be read). */
+  metaLines?: Record<string, string>;
+  /** The list continues on other pages; a search says it only looked at this one. */
+  moreThanOnePage?: boolean;
+}) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const expire = () => setSessionExpired(true);
+  const { query, setQuery } = useSimulationSearch();
+
+  const rows = jobs.filter((job) => matchesQuery(displayName(job), query));
 
   return (
-    <div>
+    <div className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
       {sessionExpired && (
         <div className="border-b p-3">
           <SessionExpiredBanner />
         </div>
       )}
 
-      <div className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Based on</TableHead>
-              <TableHead>Updated</TableHead>
-              <TableHead className="w-14">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobs.map((job) => {
-              const name = displayName(job);
-              const source = simulationSource(job);
-              return (
-                <TableRow key={job.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/workspace/${job.id}`}
-                      className="text-foreground hover:text-primary hover:underline"
-                    >
-                      {name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <JobStatusBadge status={displayStatus(job)} />
-                  </TableCell>
-                  <TableCell className="max-w-72 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <KindBadge kind={source.kind} />
-                      <Link href={source.href} className="min-w-0 truncate hover:text-primary hover:underline">
-                        {source.title}
-                      </Link>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
-                  </TableCell>
-                  <TableCell className="py-1 text-right">
-                    <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+      <div
+        aria-hidden="true"
+        className={`hidden gap-x-4 border-b bg-muted/40 px-5 py-2.5 font-mono text-[11px] tracking-wider text-muted-foreground uppercase sm:grid ${COLUMNS}`}
+      >
+        <span>Name</span>
+        <span>Status</span>
+        <span>Updated</span>
+        <span />
       </div>
 
-      <ul aria-label="Simulations" className="divide-y sm:hidden">
-        {jobs.map((job) => {
-          const name = displayName(job);
-          const source = simulationSource(job);
-          return (
-            <li key={job.id} className="flex items-start gap-1 py-1.5 pr-2 pl-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2">
-                  <Link
-                    href={`/workspace/${job.id}`}
-                    className="min-w-0 py-2.5 font-medium break-words text-foreground hover:text-primary hover:underline"
-                  >
-                    {name}
-                  </Link>
-                  <JobStatusBadge status={displayStatus(job)} />
+      {rows.length === 0 ? (
+        <div className="px-4 py-12 text-center">
+          <p className="text-sm font-medium text-foreground">No simulation matches &ldquo;{query.trim()}&rdquo;</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {moreThanOnePage ? "Only the simulations on this page were searched." : "Check the spelling, or clear the search."}
+          </p>
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="mt-3 inline-flex min-h-10 items-center rounded-md px-2 text-sm font-medium text-primary underline underline-offset-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            Clear search
+          </button>
+        </div>
+      ) : (
+        <ul aria-label="Simulations" className="divide-y">
+          {rows.map((job) => {
+            const name = displayName(job);
+            const shown = listName(job);
+            const meta = metaLines[job.id];
+            return (
+              <li
+                key={job.id}
+                className={`relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-x-4 sm:px-5 sm:py-3.5 ${COLUMNS}`}
+              >
+                <div className="min-w-0">
+                  <p className="flex min-w-0 items-baseline gap-2">
+                    <Link
+                      href={`/workspace/${job.id}`}
+                      className="min-w-0 truncate text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+                    >
+                      {shown.text}
+                    </Link>
+                    {shown.id && <span className="shrink-0 font-mono text-xs text-muted-foreground">{shown.id}</span>}
+                  </p>
+                  {meta && (
+                    <p className="mt-0.5 font-mono text-xs break-words text-muted-foreground sm:truncate">{meta}</p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <KindBadge kind={source.kind} />
-                  <Link
-                    href={source.href}
-                    className="min-w-0 truncate py-2.5 hover:text-primary hover:underline"
-                  >
-                    {source.title}
-                  </Link>
+
+                <div className="col-start-1 flex items-center gap-2 sm:contents">
+                  <span>
+                    <span className="sr-only">Status: </span>
+                    <JobStatusDot status={displayStatus(job)} />
+                  </span>
+                  <span aria-hidden="true" className="text-muted-foreground sm:hidden">
+                    ·
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">
+                    <span className="sr-only">Updated </span>
+                    <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
+                  </span>
                 </div>
-                <p className="pb-2.5 text-xs text-muted-foreground">
-                  Updated{" "}
-                  <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
-                </p>
-              </div>
-              <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
-            </li>
-          );
-        })}
-      </ul>
+
+                <div className="col-start-2 row-span-2 row-start-1 justify-self-end sm:col-auto sm:row-auto sm:row-span-1">
+                  <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

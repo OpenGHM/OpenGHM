@@ -10,9 +10,11 @@ import { isTerminalStatus } from "@/lib/jobs/types";
 
 /**
  * A list row's one action: delete the simulation, once it is a draft or has
- * ended. The button opens `DeleteSimulationDialog`, which asks, then refreshes
- * the list. Opening a simulation is the name link's job, and cancelling one is
- * the simulation page's.
+ * ended. A visible, muted icon button that turns red on hover and on focus
+ * (never a hidden menu), above the row's stretched link. It opens
+ * `DeleteSimulationDialog`, which asks, then refreshes the list. Opening a
+ * simulation is the name link's job, and cancelling one is the simulation
+ * page's.
  *
  * For an active job the backend would answer 409 `job_active`, so there is no
  * button; an empty placeholder of the same size stays, so the column and the
@@ -50,7 +52,7 @@ export function SimulationDeleteButton({
         variant="ghost"
         size="icon-lg"
         aria-label={isDraft ? `Delete draft ${name}` : `Delete ${name}`}
-        className="shrink-0 text-muted-foreground hover:text-destructive focus-visible:text-destructive"
+        className="relative z-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive"
         onClick={() => setOpen(true)}
       >
         <Trash2 aria-hidden="true" />

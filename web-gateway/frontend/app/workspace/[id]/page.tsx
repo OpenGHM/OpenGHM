@@ -7,6 +7,7 @@ import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
+import { basedOnLabel } from "@/lib/jobs/based-on";
 import { submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { DraftContext } from "@/lib/workspace/draft-state";
@@ -69,21 +70,26 @@ export default async function JobDetailPage({
   // "You cancelled this" needs to know who is looking.
   const viewerEmail = job.status === "CANCELLED" ? ((await fetchMe())?.email ?? null) : null;
 
-  // What the job asked for when it chose no cores or walltime of its own: its
-  // base snapshot's recommendation. Snapshots never change, so reading it now
-  // gives what the submit read. Null when the snapshot cannot be read just now:
-  // the page then shows a dash rather than a guess.
+  // The base snapshot, for what the job asked for when it chose no cores or
+  // walltime of its own (its recommendation; snapshots never change, so reading
+  // it now gives what the submit read) and for the header's short name. Null
+  // when it cannot be read just now: the page then shows a dash rather than a
+  // guess, and the header the title the job was derived under.
   let recommended = null;
+  let basedOn: string | null = null;
   try {
-    recommended = recommendedComputeFor(await fetchDatasetById(job.dataset_id));
+    const snapshot = await fetchDatasetById(job.dataset_id);
+    recommended = recommendedComputeFor(snapshot);
+    basedOn = snapshot ? basedOnLabel(snapshot) : null;
   } catch {
     recommended = null;
+    basedOn = null;
   }
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} />
+      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} basedOn={basedOn} />
       <Footer />
     </div>
   );

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { CopySimulationList, type CopyListPage } from "@/components/workspace/copy-simulation-list";
-import { RecentSnapshots } from "@/components/workspace/recent-snapshots";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { SnapshotPicker } from "@/components/workspace/snapshot-picker";
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
@@ -19,7 +18,7 @@ import { cn } from "@/lib/utils";
 const EMPTY_RESULT: RepositoryListResponse = { items: [], totalCount: 0, totalPages: 1, page: 1 };
 
 /** What the server read for the picker, which is the default one when the page
- *  was opened on another card. */
+ *  was opened in the other mode. */
 export interface PickerSeed {
   filters: FilterState;
   data: RepositoryListResponse;
@@ -28,35 +27,41 @@ export interface PickerSeed {
 
 /**
  * Step 1 of the draft wizard (ADR 0028): where a new simulation starts from.
- * Two choices. "Model snapshot" shows the snapshots the user has used and the
- * repository's own search; choosing one creates the draft at once, and so does
- * Copy on a row of "Copy one of my simulations"; both open the new draft's
- * Run settings. With nothing to copy there is nothing to choose between, so the
- * choice is not shown.
+ * One choice, made on one screen: a switch between "Model snapshot" (a grid of
+ * the repository's snapshots, the ones the user has used first and marked)
+ * and "Copy a simulation" (a plain list of their own). Choosing a snapshot
+ * creates the draft at once, and so does a row of the list; both open the new
+ * draft's Run settings. With nothing to copy there is nothing to switch
+ * between, so the switch is not shown.
  *
- * The card is in the URL as `?from=copy` (the default, snapshot, is not
+ * The mode is in the URL as `?from=copy` (the default, snapshot, is not
  * written), changed with `history.pushState`, so back and forward walk through
- * them. The picker keeps its own filters in the URL, so it is mounted only on
- * its own card: the two never write the same query string.
+ * them. The picker keeps its own filters in the URL, so it is mounted only in
+ * its own mode: the two never write the same query string.
  */
 export function StartFrom({
   initialMode,
-  recentSnapshots,
+  usedIds,
+  snapshotNames,
   copyInitial,
   picker,
 }: {
   initialMode: StartMode;
-  recentSnapshots: Dataset[];
+  /** The snapshots the caller has based a simulation on. */
+  usedIds: readonly string[];
+  /** Short name by snapshot id (`snapshotName`), for the copy list. */
+  snapshotNames: Readonly<Record<string, string>>;
   /** The first page of the caller's simulations; null when it could not be read. */
   copyInitial: CopyListPage | null;
   picker: PickerSeed;
 }) {
   const searchParams = useSearchParams();
   const { pending, error, deriveFrom, duplicateFrom } = useCreateDraft();
-  // What was last tried, so an error shows only on the card it belongs to.
+  const used = useMemo(() => new Set(usedIds), [usedIds]);
+  // What was last tried, so an error shows only in the mode it belongs to.
   const [attempt, setAttempt] = useState<{ mode: StartMode; id: string } | null>(null);
 
-  // Nothing to copy: the card is off, whatever the URL says.
+  // Nothing to copy: the mode is off, whatever the URL says.
   const canCopy = copyInitial === null || copyInitial.items.length > 0;
   const [mode, setModeState] = useState<StartMode>(initialMode);
   const urlMode = parseFrom(searchParams.get("from"));
@@ -65,7 +70,7 @@ export function StartFrom({
     setSeenUrlMode(urlMode);
     setModeState(urlMode);
   }
-  // Back/forward is also heard directly, so the card does not wait for Next.
+  // Back/forward is also heard directly, so the mode does not wait for Next.
   useEffect(() => {
     const onPopState = () =>
       setModeState(parseFrom(new URLSearchParams(window.location.search).get("from")));
@@ -115,80 +120,58 @@ export function StartFrom({
         </div>
       )}
 
-      {canCopy && (
-        <nav aria-label="Where to start from">
-          <ul className="grid gap-3 sm:grid-cols-2">
-            <li>
-              <OptionCard
-                title="Model snapshot"
-                selected={active === "snapshot"}
-                onSelect={() => select("snapshot")}
-                href={modeHref("snapshot")}
-              >
-                Pick a published model snapshot and adjust its settings.
-              </OptionCard>
-            </li>
-            <li>
-              <OptionCard
-                title="Copy one of my simulations"
-                selected={active === "copy"}
-                onSelect={() => select("copy")}
-                href={modeHref("copy")}
-              >
-                Start with the settings of a simulation you already made.
-              </OptionCard>
-            </li>
-          </ul>
-        </nav>
-      )}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-foreground">
+            {active === "snapshot" ? "Choose a model snapshot" : "Choose a simulation to copy"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {active === "snapshot"
+              ? "Your simulation starts from it. You can change its settings next."
+              : "The new draft starts with its settings. You can change them next."}
+          </p>
+        </div>
+        {canCopy && (
+          <nav aria-label="Where to start from" className="shrink-0">
+            <ul className="flex h-11 gap-0.5 rounded-xl bg-muted p-0.5">
+              <li>
+                <ModeLink
+                  href={modeHref("snapshot")}
+                  selected={active === "snapshot"}
+                  onSelect={() => select("snapshot")}
+                >
+                  Model snapshot
+                </ModeLink>
+              </li>
+              <li>
+                <ModeLink href={modeHref("copy")} selected={active === "copy"} onSelect={() => select("copy")}>
+                  Copy a simulation
+                </ModeLink>
+              </li>
+            </ul>
+          </nav>
+        )}
+      </header>
 
       {active === "snapshot" && (
-        <div className="space-y-6">
-          {pending && attempt?.mode === "snapshot" && (
-            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
-              Creating your draft…
-            </p>
-          )}
-          {recentSnapshots.length > 0 && (
-            <section aria-labelledby="start-recent-heading">
-              <h2 id="start-recent-heading" className="mb-3 text-base font-semibold text-foreground">
-                Model snapshots you&apos;ve used
-              </h2>
-              <RecentSnapshots
-                snapshots={recentSnapshots}
-                onSelect={startFromSnapshot}
-                pendingId={pendingId}
-                disabled={pending}
-              />
-            </section>
-          )}
-          <section
-            aria-labelledby="start-browse-heading"
-            aria-busy={pending ? "true" : undefined}
-            className={cn(pending && "pointer-events-none opacity-60")}
-          >
-            <h2 id="start-browse-heading" className="mb-3 text-base font-semibold text-foreground">
-              Browse model snapshots
-            </h2>
-            <PickerHost seed={picker} onSelect={startFromSnapshot} />
-          </section>
-        </div>
+        <PickerHost
+          seed={picker}
+          usedIds={used}
+          onSelect={startFromSnapshot}
+          pendingId={pendingId}
+          disabled={pending}
+        />
       )}
 
       {active === "copy" && (
-        <section aria-labelledby="start-copy-heading">
-          <h2 id="start-copy-heading" className="mb-3 text-base font-semibold text-foreground">
-            Your simulations
-          </h2>
-          <CopySimulationList
-            initial={copyInitial}
-            onCopy={startFromCopy}
-            pendingId={pendingId}
-            disabled={pending}
-            rowError={rowError}
-          />
-        </section>
+        <CopySimulationList
+          initial={copyInitial}
+          snapshotNames={snapshotNames}
+          onCopy={startFromCopy}
+          pendingId={pendingId}
+          disabled={pending}
+          rowError={rowError}
+        />
       )}
     </div>
   );
@@ -200,7 +183,19 @@ export function StartFrom({
  * after the page loaded, or by back/forward, onto other filters). The filters
  * are taken once, when the card opens: from then on the picker owns them.
  */
-function PickerHost({ seed, onSelect }: { seed: PickerSeed; onSelect: (dataset: Dataset) => void }) {
+function PickerHost({
+  seed,
+  usedIds,
+  onSelect,
+  pendingId,
+  disabled,
+}: {
+  seed: PickerSeed;
+  usedIds: ReadonlySet<string>;
+  onSelect: (dataset: Dataset) => void;
+  pendingId: string | null;
+  disabled: boolean;
+}) {
   const searchParams = useSearchParams();
   const [filters] = useState(() => parseDatasetFilters(searchParams));
   const matches =
@@ -233,29 +228,29 @@ function PickerHost({ seed, onSelect }: { seed: PickerSeed; onSelect: (dataset: 
   }
   return (
     <SnapshotPicker
-      embedded
       initialFilters={filters}
       initialData={data}
       initialModelInputIds={seed.modelInputIds}
+      usedIds={usedIds}
       onSelect={onSelect}
+      pendingId={pendingId}
+      disabled={disabled}
     />
   );
 }
 
 /**
- * One of the two choices: a link to the card's own URL, so a middle click or a
+ * One side of the switch: a link to the mode's own URL, so a middle click or a
  * copied address works, and a plain click is handed to `onSelect`. The chosen
- * one has a border in the primary colour and a check, and is `aria-current`.
+ * one is raised on the track and is `aria-current`.
  */
-function OptionCard({
-  title,
+function ModeLink({
   children,
   selected,
   href,
   onSelect,
 }: {
-  title: string;
-  children: ReactNode;
+  children: string;
   selected: boolean;
   href: string;
   onSelect: () => void;
@@ -266,21 +261,17 @@ function OptionCard({
       prefetch={false}
       aria-current={selected ? "true" : undefined}
       onClick={(event) => {
-        // A plain click changes card in place; the rest is the browser's.
+        // A plain click changes mode in place; the rest is the browser's.
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
         event.preventDefault();
         onSelect();
       }}
       className={cn(
-        "block h-full min-h-10 rounded-xl border bg-card px-4 py-3 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40"
+        "inline-flex h-10 items-center rounded-[10px] px-4 text-[13px] font-medium whitespace-nowrap text-foreground outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none",
+        selected ? "bg-card shadow-sm" : "text-muted-foreground hover:bg-card/60 hover:text-foreground"
       )}
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-        {selected && <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />}
-      </span>
-      <span className="mt-0.5 block text-sm text-muted-foreground">{children}</span>
+      {children}
     </Link>
   );
 }

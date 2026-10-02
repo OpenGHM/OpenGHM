@@ -5,7 +5,7 @@ import { MyDataTable } from "./my-data-table";
 import { MyDataEmpty, MyDataLoadError } from "./my-data-states";
 
 /**
- * What the Snapshots & Inputs page shows below its hero. Async, so the page
+ * What the Snapshots & Inputs page shows below its header. Async, so the page
  * around it (and the skeleton) is on screen while the backend answers.
  */
 export async function MyDataSection({ here }: { here: string }) {

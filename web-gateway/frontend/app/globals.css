@@ -110,7 +110,7 @@
      Never interaction or selection, which stays --primary. AA as text on a
      10% tint of itself. */
   --highlight: #ac4b07;
-  /* The navy the page heroes start from, ending in --primary. */
+  /* The navy of the landing hero and the footer. */
   --hero: #0a192f;
   --sidebar: #f8fafc;
   --sidebar-foreground: #0f172a;

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SEGMENTED_TRACK, segmentClass, segmentCountClass } from "@/components/workspace/segmented";
 import { KIND_TABS, kindHref, type KindFilter } from "@/lib/workspace/my-data";
 
 /**
@@ -28,7 +29,8 @@ export function pushOnPlainClick(href: string) {
  * nothing. Next's router follows a native pushState, so `useSearchParams`
  * sees the new URL, and back and forward step through the selections.
  *
- * On a phone the bar scrolls inside itself; the page never does.
+ * Drawn as the simulation list's filter is (`segmented.ts`). On a phone the
+ * control scrolls inside itself; the page never does.
  */
 export function MyDataKindTabs({
   active,
@@ -38,11 +40,8 @@ export function MyDataKindTabs({
   counts: Record<KindFilter, number>;
 }) {
   return (
-    <nav
-      aria-label="Filter by type"
-      className="w-fit max-w-full overflow-x-auto rounded-lg border bg-white p-1 shadow-xs"
-    >
-      <ul className="flex gap-1">
+    <nav aria-label="Filter by type" className={SEGMENTED_TRACK}>
+      <ul className="flex gap-0.5">
         {KIND_TABS.map((tab) => {
           const selected = tab.value === active;
           const href = kindHref(tab.value);
@@ -53,20 +52,10 @@ export function MyDataKindTabs({
                 prefetch={false}
                 aria-current={selected ? "page" : undefined}
                 onClick={pushOnPlainClick(href)}
-                className={`flex min-h-10 items-center gap-2 rounded-md px-3.5 text-sm font-semibold whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
-                  selected
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-slate-100 hover:text-foreground"
-                }`}
+                className={segmentClass(selected)}
               >
                 {tab.label}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-xs leading-none tabular-nums ${
-                    selected ? "bg-white/20" : "bg-slate-100"
-                  }`}
-                >
-                  {counts[tab.value]}
-                </span>
+                <span className={segmentCountClass(selected)}>{counts[tab.value]}</span>
               </Link>
             </li>
           );

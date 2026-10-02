@@ -5,13 +5,13 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ComputeFields } from "@/components/workspace/compute-fields";
+import { ComputeSection } from "@/components/workspace/compute-fields";
 import { DraftBasis } from "@/components/workspace/draft-basis";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import {
-  OutputVariablesField,
+  OutputVariablesSection,
   type VariableOption,
 } from "@/components/workspace/output-variables-field";
 import type { Recommended } from "@/lib/jobs/compute";
@@ -26,7 +26,6 @@ import {
   type DraftContext,
   type DraftField,
 } from "@/lib/workspace/draft-state";
-import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
 
 /**
  * The server refused this start. Its message ends with "Start on X instead."
@@ -40,8 +39,11 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
 }
 
 /**
- * Step 2, "Run settings": what the draft is based on, then the run period, the
- * output variables, and cores and walltime.
+ * Step 2, "Run settings": what the draft is based on (a small card), then one
+ * card of three parts: the run period, the output variables, and cores and
+ * walltime. Most people keep the defaults, so the last two are a line saying
+ * what they hold and a button that opens them (`DraftCollapsible`); what is
+ * wrong with them stays in view either way.
  *
  * The run period states what the snapshot allows once, in the line under the
  * two dates (`describeRunPeriodLimits`); a date that breaks it says so in red
@@ -139,32 +141,27 @@ export function DraftRunStep({
   const spatial = parameters.spatial_domain;
   const custom = parameters.custom_params;
   const customEntries = custom ? Object.entries(custom) : [];
-  const computeErrors = (["cores", "walltime"] as const).flatMap((field) =>
-    serverErrors[field] ? [{ field, message: serverErrors[field] as string }] : []
-  );
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
+    <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
       <DraftStepHeading step="run">
         The run period, the output variables, and how much compute to ask Anvil for.
       </DraftStepHeading>
 
-      <DraftPanel>
-        <DraftSection className="bg-muted/40">
-          <DraftBasis
-            ctx={ctx}
-            datasetId={datasetId}
-            fallbackTitle={datasetTitle}
-            modelInput={{
-              id: modelInputId,
-              resolved: resolvedModelInput,
-              onRevert: onRevertModelInput,
-              error: serverErrors.modelInput,
-            }}
-            disabled={disabled}
-          />
-        </DraftSection>
+      <DraftBasis
+        ctx={ctx}
+        datasetId={datasetId}
+        fallbackTitle={datasetTitle}
+        modelInput={{
+          id: modelInputId,
+          resolved: resolvedModelInput,
+          onRevert: onRevertModelInput,
+          error: serverErrors.modelInput,
+        }}
+        disabled={disabled}
+      />
 
+      <DraftPanel>
         <DraftSection title="Run period">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -235,17 +232,15 @@ export function DraftRunStep({
           </p>
         </DraftSection>
 
-        <DraftSection>
-          <OutputVariablesField
-            options={options}
-            selected={parameters.variables}
-            hasSnapshot={dataset !== null}
-            onChange={(names) => set({ variables: orderVariables(names, snapshotVariableOrder(ctx)) })}
-            error={serverErrors.variables ?? null}
-            errorId={`${id}-variables-error`}
-            describedBy={serverErrors.variables ? `${id}-variables-error` : undefined}
-          />
-        </DraftSection>
+        <OutputVariablesSection
+          options={options}
+          selected={parameters.variables}
+          hasSnapshot={dataset !== null}
+          onChange={(names) => set({ variables: orderVariables(names, snapshotVariableOrder(ctx)) })}
+          error={serverErrors.variables ?? null}
+          errorId={`${id}-variables-error`}
+          describedBy={serverErrors.variables ? `${id}-variables-error` : undefined}
+        />
 
         {(spatial !== null || customEntries.length > 0) && (
           <DraftSection title="Settings that can't run yet">
@@ -307,14 +302,12 @@ export function DraftRunStep({
 
         {/* What SLURM is asked for. Account and partition are the gateway's, so
             only cores and walltime are here. */}
-        <DraftSection title="Compute">
-          <ComputeFields config={slurm} recommended={recommended} onChange={onSlurmChange} />
-          {computeErrors.map(({ field, message }) => (
-            <p key={field} className="text-xs text-destructive">
-              {FIELD_LABELS[field]}: {message}
-            </p>
-          ))}
-        </DraftSection>
+        <ComputeSection
+          config={slurm}
+          recommended={recommended}
+          serverErrors={{ cores: serverErrors.cores, walltime: serverErrors.walltime }}
+          onChange={onSlurmChange}
+        />
       </DraftPanel>
     </fieldset>
   );

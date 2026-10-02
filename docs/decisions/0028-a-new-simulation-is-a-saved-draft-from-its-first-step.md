@@ -68,9 +68,10 @@ go.**
 - Derive is no longer the only creation path: duplicate is the second, and
   it must copy only what a draft is made of. A copy never carries the source's
   `sim_id`, SLURM ids, verdict, files or `orphan_sim_ids`.
-- The snapshot picker's Select now creates a draft, not a choice held in the
-  page. A user who goes Back from Run settings and picks again leaves the first
-  draft behind. It is a draft like any other, shown in My Simulations and
+- Choosing a snapshot on the Start screen (a click on its card, or Select in
+  its Details sheet) now creates a draft, not a choice held in the page. A user
+  who goes Back from Run settings and picks again leaves the first draft
+  behind. It is a draft like any other, shown in My Simulations and
   deletable there.
 - A save changes `updated_at`, which re-sorts My Simulations. That is
   intended.

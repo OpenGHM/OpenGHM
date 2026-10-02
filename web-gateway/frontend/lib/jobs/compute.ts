@@ -236,6 +236,38 @@ export function effectiveCompute(
   };
 }
 
+/**
+ * What a draft asks SLURM for, in one line for a person: `Recommended: 26 cores
+ * · 4 d (limit for one job)` when it leaves both to the snapshot, `Custom: 8
+ * cores · 12 h` when it sets either. In a custom line a part it did not set is
+ * marked (`4 d (recommended + 50%)`), so the line reads as what will be asked.
+ * `custom` says which. The numbers are `effectiveCompute`'s, the backend's own.
+ */
+export function describeComputeSummary(
+  config: SlurmConfig,
+  recommended: Recommended | null
+): { custom: boolean; text: string } {
+  const effective = effectiveCompute(config, recommended);
+  const custom = config.cores !== null || config.walltime !== null;
+  const cores =
+    effective.cores === null ? null : `${effective.cores} ${effective.cores === 1 ? "core" : "cores"}`;
+  const walltime = effective.walltime === null ? null : describeSlurmTime(effective.walltime);
+  const automaticWalltime = effective.walltimeCapped ? "limit for one job" : "recommended + 50%";
+
+  if (!custom) {
+    if (cores === null || walltime === null) return { custom, text: "Recommended: set by the model snapshot" };
+    return {
+      custom,
+      text: `Recommended: ${cores} · ${walltime}${effective.walltimeCapped ? " (limit for one job)" : ""}`,
+    };
+  }
+  const parts = [
+    cores === null ? null : effective.coresSource === "draft" ? cores : `${cores} (recommended)`,
+    walltime === null ? null : effective.walltimeSource === "draft" ? walltime : `${walltime} (${automaticWalltime})`,
+  ].filter((part): part is string => part !== null);
+  return { custom, text: `Custom: ${parts.join(" · ")}` };
+}
+
 export interface ComputeErrors {
   cores?: string;
   walltime?: string;

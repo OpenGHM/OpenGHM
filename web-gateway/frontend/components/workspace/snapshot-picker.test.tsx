@@ -53,18 +53,28 @@ const FILTERS: FilterState = {
 const LONG_TITLE =
   "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
 
-const named = (id: string, name: string, over: Partial<Dataset> = {}) =>
-  fakeDataset({ id, about: { ...fakeDataset().about, name }, ...over });
-const GLOBAL = named("global", LONG_TITLE, {
-  simulation: {
-    ...fakeDataset().simulation,
-    temporalCoverage: { start: "2000-01-01", end: "2009-12-31" },
-    resolution: { value: 5, unit: "arc-minute" },
-  },
-});
-const TUTORIAL = named("tutorial", "WBM v2.0.0 simulation as tutorial", {
-  about: { ...fakeDataset().about, name: "WBM v2.0.0 simulation as tutorial", tags: ["tutorial"] },
-});
+/** A snapshot of model `version`, covering `start`–`end` (years). */
+const named = (id: string, name: string, version: string, years: [string, string], tags: Dataset["about"]["tags"] = ["test"]) => {
+  const base = fakeDataset();
+  return fakeDataset({
+    id,
+    about: { ...base.about, name, tags },
+    uses: { ...base.uses, container: { ...base.uses.container, version } },
+    simulation: {
+      ...base.simulation,
+      temporalCoverage: { start: `${years[0]}-01-01`, end: `${years[1]}-12-31` },
+      resolution: { value: 5, unit: "arc-minute" },
+    },
+  });
+};
+const GLOBAL = named("global", LONG_TITLE, "1.0.0", ["2000", "2009"]);
+const TUTORIAL = named("tutorial", "WBM v2.0.0 simulation as tutorial", "2.0.0", ["2000", "2001"], ["tutorial"]);
+/** A catalogue past `CONTROLS_THRESHOLD`: the first two are the ones above. */
+const BIG = [
+  GLOBAL,
+  TUTORIAL,
+  ...Array.from({ length: 8 }, (_, i) => named(`more-${i}`, `Snapshot ${i}`, `3.${i}.0`, ["2001", "2001"])),
+];
 
 const page = (items: Dataset[], totalPages = 1): RepositoryListResponse => ({
   items,
@@ -75,15 +85,15 @@ const page = (items: Dataset[], totalPages = 1): RepositoryListResponse => ({
 
 function renderPicker(
   over: Partial<React.ComponentProps<typeof SnapshotPicker>> = {},
-  data: RepositoryListResponse = page([GLOBAL, TUTORIAL])
+  data: RepositoryListResponse = page(BIG)
 ) {
   const onSelect = vi.fn();
   const view = render(
     <SnapshotPicker
-      embedded
       initialFilters={FILTERS}
       initialData={data}
       initialModelInputIds={new Set()}
+      usedIds={new Set()}
       onSelect={onSelect}
       {...over}
     />
@@ -96,99 +106,85 @@ const settle = (ms = 300) => act(() => vi.advanceTimersByTimeAsync(ms));
 
 const filtersToggle = () => screen.getByRole("button", { name: /^Filters/ });
 
+const snapshotCard = (name: string) =>
+  within(screen.getByRole("list", { name: "Model snapshots" }))
+    .getByRole("button", { name })
+    .closest("li") as HTMLElement;
+
 describe("the list", () => {
-  it("is a table with a Name, a Coverage and a Resolution column, and no sidebar", () => {
+  it("is a grid of cards, not a table, with no sidebar", () => {
     renderPicker();
-    const table = screen.getByRole("table", { name: "Model snapshots" });
-    const rows = within(table).getAllByRole("row");
-    expect(rows).toHaveLength(3);
-    expect(within(rows[0]).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      "Name",
-      "Coverage",
-      "Resolution",
-      "Actions",
-    ]);
-    const cells = within(rows[1]).getAllByRole("cell");
-    expect(cells[0].textContent).toContain(LONG_TITLE);
-    expect(cells[0].textContent).toContain("WBM 2.0.0"); // the model line
-    expect(cells[0].textContent).toContain("Test"); // the tag chip
-    expect(cells[1].textContent).toBe("2000–2009");
-    expect(cells[2].textContent).toBe("5 arc-min");
+    expect(screen.queryByRole("table")).toBeNull();
+    const items = within(screen.getByRole("list", { name: "Model snapshots" })).getAllByRole("listitem");
+    expect(items).toHaveLength(10);
+    expect(items[0].textContent).toContain("WBM 1.0.0 · 2000–2009");
+    expect(items[0].textContent).toContain(LONG_TITLE);
+    expect(items[0].textContent).toContain("5 arc-min");
+    expect(items[1].textContent).toContain("Tutorial");
     expect(screen.queryByRole("complementary")).toBeNull();
   });
 
-  it("clamps a title to two lines and keeps the whole of it in its title attribute", () => {
-    renderPicker();
-    const table = screen.getByRole("table", { name: "Model snapshots" });
-    const title = within(table).getByText(LONG_TITLE);
-    expect(title.className).toContain("line-clamp-2");
-    expect(title.getAttribute("title")).toBe(LONG_TITLE);
-    // The title is text, not a control: nothing in the row is clickable but its buttons.
-    expect(within(table).queryByRole("link")).toBeNull();
-    expect(within(table).queryByRole("button", { name: LONG_TITLE })).toBeNull();
-
-    const list = screen.getByRole("list", { name: "Model snapshots" });
-    const phoneTitle = within(list).getByText(LONG_TITLE);
-    expect(phoneTitle.className).toContain("line-clamp-2");
-    expect(phoneTitle.getAttribute("title")).toBe(LONG_TITLE);
-  });
-
-  it("is a list of cards below sm, with Select 40 px tall", () => {
-    renderPicker();
-    const list = screen.getByRole("list", { name: "Model snapshots" });
-    // `sm:hidden` is display:none from sm up, so exactly one layout is exposed.
-    expect(list.className).toContain("sm:hidden");
-    const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(2);
-    expect(items[0].textContent).toContain("2000–2009");
-    expect(items[0].textContent).toContain("5 arc-min");
-    const select = within(items[0]).getByRole("button", { name: "Select" });
-    expect(select.className).toContain("h-10");
-    expect(within(items[0]).getByRole("button", { name: /^Details/ }).className).toContain("h-10");
-  });
-
-  it("selects on a click anywhere in a table row, and Details does not", () => {
+  it("selects from a card's name, and Details does not select", () => {
     const { onSelect } = renderPicker();
-    const table = screen.getByRole("table", { name: "Model snapshots" });
-    const rows = within(table).getAllByRole("row").slice(1);
-    fireEvent.click(within(rows[1]).getByText(/WBM v2.0.0/, { selector: "div" }));
+    fireEvent.click(within(snapshotCard("WBM 2.0.0 · 2000–2001")).getByRole("button", { name: "WBM 2.0.0 · 2000–2001" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(TUTORIAL);
-    fireEvent.click(within(rows[0]).getByRole("button", { name: /^Details/, hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: `Details: ${LONG_TITLE}` }));
     expect(onSelect).toHaveBeenCalledTimes(1);
-    // Select on the row is one selection, not two.
-    fireEvent.click(within(rows[0]).getByRole("button", { name: "Select", hidden: true }));
-    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
-  it("calls onSelect with the dataset from a row's Select, in either layout", () => {
-    const { onSelect } = renderPicker();
-    // One per layout, per row; CSS hides one of each pair.
-    const selects = screen.getAllByRole("button", { name: "Select" });
-    expect(selects).toHaveLength(4);
-    fireEvent.click(selects[0]);
-    fireEvent.click(selects[3]);
-    expect(onSelect).toHaveBeenNthCalledWith(1, GLOBAL);
-    expect(onSelect).toHaveBeenNthCalledWith(2, TUTORIAL);
+  it("marks the snapshots in usedIds and lists them first", () => {
+    renderPicker({ usedIds: new Set(["more-3"]) });
+    const items = within(screen.getByRole("list", { name: "Model snapshots" })).getAllByRole("listitem");
+    expect(items[0].textContent).toContain("Used before");
+    expect(items[0].textContent).toContain("WBM 3.3.0 · 2001");
+    expect(screen.getAllByText("Used before")).toHaveLength(1);
+  });
+
+  it("turns the cards off and covers the clicked one while a draft is being made", () => {
+    renderPicker({ pendingId: "global", disabled: true });
+    expect(screen.getByRole("status").textContent).toContain("Creating your draft");
+    expect((screen.getAllByRole("button", { name: /^WBM / })[0] as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("colours the chips with tokens, not raw palette classes", () => {
     const { container } = renderPicker();
-    expect(container.innerHTML).not.toMatch(/#006994|emerald|amber|(?<![a-z])slate-/);
+    expect(container.innerHTML).not.toMatch(/#006994|emerald|amber/);
+  });
+});
+
+describe("search and Filters", () => {
+  const controls = () => ({
+    search: screen.queryByRole("searchbox", { name: "Search model snapshots" }),
+    filters: screen.queryByRole("button", { name: /^Filters/ }),
+    count: screen.queryByText(/model snapshots?$/),
   });
 
-  it("keeps the layout without the Start screen's width and gutters off when it is not embedded", () => {
-    const { container, rerender } = renderPicker();
-    expect(container.firstElementChild?.className).not.toContain("max-w-[1280px]");
-    rerender(
-      <SnapshotPicker
-        initialFilters={FILTERS}
-        initialData={page([GLOBAL])}
-        initialModelInputIds={new Set()}
-        onSelect={vi.fn()}
-      />
-    );
-    expect(container.firstElementChild?.className).toContain("max-w-[1280px]");
+  it("are not shown for a short catalogue: three snapshots are looked at, not searched", () => {
+    renderPicker({}, page([GLOBAL, TUTORIAL, named("third", "Third", "1.0.0", ["2000", "2009"])]));
+    expect(controls()).toEqual({ search: null, filters: null, count: null });
+    expect(within(screen.getByRole("list", { name: "Model snapshots" })).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("appear when there are more than nine, and not at nine", () => {
+    const { unmount } = renderPicker({}, page(BIG.slice(0, 9)));
+    expect(controls().search).toBeNull();
+    unmount();
+    renderPicker({}, page(BIG));
+    expect(controls().search).not.toBeNull();
+    expect(controls().filters).not.toBeNull();
+  });
+
+  it("stay when a search or filter is already narrowing a short list, so it can be undone", () => {
+    renderPicker({ initialFilters: { ...FILTERS, searchQuery: "tutorial" } }, page([TUTORIAL]));
+    expect(controls().search).not.toBeNull();
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("tutorial");
+    expect(screen.getByRole("button", { name: "Reset" })).toBeTruthy();
+  });
+
+  it("appear when there is a second page", () => {
+    renderPicker({}, page([GLOBAL, TUTORIAL], 2));
+    expect(controls().search).not.toBeNull();
   });
 });
 
@@ -270,7 +266,7 @@ describe("filtering", () => {
   });
 
   it("clears the search box with its own button", async () => {
-    fetchDatasets.mockResolvedValue(page([GLOBAL, TUTORIAL]));
+    fetchDatasets.mockResolvedValue(page(BIG));
     renderPicker({ initialFilters: { ...FILTERS, searchQuery: "wyo" } });
     fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
     expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
@@ -279,7 +275,7 @@ describe("filtering", () => {
   });
 
   it("offers Reset only while something narrows the list, and Reset clears the search and every filter", async () => {
-    fetchDatasets.mockResolvedValue(page([GLOBAL, TUTORIAL]));
+    fetchDatasets.mockResolvedValue(page(BIG));
     const { unmount } = renderPicker();
     expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
     unmount();
@@ -338,7 +334,7 @@ describe("paging and loading", () => {
     await settle(); // the debounce: the request is on its way
 
     const busy = () => document.querySelector("[aria-busy='true']");
-    expect(screen.getByRole("table", { name: "Model snapshots" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Model snapshots" })).toBeTruthy();
     expect(busy()).toBeNull();
 
     await settle(300);
@@ -364,8 +360,7 @@ describe("paging and loading", () => {
 
 describe("the Details sheet", () => {
   const openGlobal = async () => {
-    const table = screen.getByRole("table", { name: "Model snapshots" });
-    fireEvent.click(within(table).getByRole("button", { name: `Details: ${LONG_TITLE}` }));
+    fireEvent.click(screen.getByRole("button", { name: `Details: ${LONG_TITLE}` }));
     return screen.findByRole("dialog");
   };
 
@@ -381,8 +376,8 @@ describe("the Details sheet", () => {
     const full = within(dialog).getByRole("link", { name: /Full details/ });
     expect(full.getAttribute("href")).toBe("/repository/global");
     expect(full.getAttribute("target")).toBe("_blank");
-    // The list is still there, in the same one-column layout.
-    expect(screen.getByRole("table", { name: "Model snapshots", hidden: true })).toBeTruthy();
+    // The grid is still there behind it.
+    expect(screen.getByRole("list", { name: "Model snapshots", hidden: true })).toBeTruthy();
   });
 
   it("selects from inside the sheet, and closes it", async () => {

@@ -34,3 +34,22 @@ export function JobStatusBadge({ status }: { status: DisplayStatus }) {
     </span>
   );
 }
+
+/**
+ * The status as a dot and a word in the status's colour, with no box around
+ * it: for a list row, where a badge on every line is heavier than the status
+ * deserves. Takes the status to *show*, like `JobStatusBadge`. A running or
+ * cancelling job's dot pulses (not under reduced motion).
+ */
+export function JobStatusDot({ status, className }: { status: DisplayStatus; className?: string }) {
+  const active = status === "RUNNING" || status === "CANCELLING";
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[13px] font-medium ${HUE[status].icon} ${className ?? ""}`}>
+      <span
+        aria-hidden="true"
+        className={`size-1.5 shrink-0 rounded-full bg-current ${active ? "motion-safe:animate-pulse" : ""}`}
+      />
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}

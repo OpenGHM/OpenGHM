@@ -119,8 +119,11 @@ describe("DraftReviewStep: the summary", () => {
   it("links the snapshot to the repository and gives it no Edit", () => {
     review();
     const based = row("Based on");
-    expect(within(based).getByText("Fake Snapshot")).toBeTruthy();
-    expect(within(based).getByText("wbm 2.0.0 · 2001-01-01 → 2001-12-31 · 0.5 degree")).toBeTruthy();
+    // The short name, not the title's wall of text, which is on hover.
+    const name = within(based).getByText("WBM 2.0.0 · 2001");
+    expect(name.getAttribute("title")).toBe("Fake Snapshot");
+    expect(within(based).queryByText("Fake Snapshot")).toBeNull();
+    expect(within(based).getByText("Regional · wbm 2.0.0 · 0.5°")).toBeTruthy();
     expect(within(based).getByRole("link", { name: /View.*in the repository/ }).getAttribute("href")).toBe(
       "/repository/snap-1"
     );

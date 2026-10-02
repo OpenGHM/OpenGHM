@@ -120,9 +120,11 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
 
 ### Actions
 
-- On the detail page each action has one home, in the hero, and follows the
-  live status: Submit for a draft, Cancel for an active job, New from this
-  model snapshot for an ended one, Delete in the More menu.
+- On the detail page each action has one home and follows the live status:
+  Submit for a draft (on Review & submit), Cancel for an active job (in the
+  status summary), and New from this model snapshot and Delete, as visible
+  buttons in the page header, for an ended one. A list row's Delete is a
+  visible icon button too; there are no hidden "…" menus on the Workspace pages.
 - A disabled action says why, both in a tooltip and in visible text.
 - Submit spends allocation, and Cancel and Delete cannot be undone, so each
   one confirms in an AlertDialog that says what will happen. The dialogs are

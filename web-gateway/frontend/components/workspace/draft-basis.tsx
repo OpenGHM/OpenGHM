@@ -1,21 +1,39 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowUpRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { draftField } from "@/components/workspace/draft-field";
+import {
+  snapshotBox,
+  snapshotExtent,
+  snapshotName,
+  snapshotResolution,
+} from "@/components/workspace/snapshot-label";
 import type { ModelInput } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
 const shortId = (id: string) => `${id.slice(0, 12)}…`;
 
-/** The facts about a found snapshot, as the short phrases of one line: model and
- *  version, coverage, resolution. */
+/** What to call the snapshot a draft is based on, and the whole title behind
+ *  it: the short name (`snapshotName`) and the official title when the
+ *  snapshot was found; the title the draft was made with, alone, when not. */
+export function basisName(
+  ctx: DraftContext,
+  fallbackTitle: string
+): { name: string; title: string } {
+  const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
+  return dataset
+    ? { name: snapshotName(dataset), title: dataset.about.name }
+    : { name: fallbackTitle, title: fallbackTitle };
+}
+
+/** The facts about a found snapshot, as the short phrases of one muted line:
+ *  how far it reaches (Global or Regional), model and version, resolution. */
 export function snapshotFacts(ctx: DraftContext): string[] {
   const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
   if (!dataset) return [];
-  const { start, end } = dataset.simulation.temporalCoverage;
-  const { value, unit } = dataset.simulation.resolution;
   const { image, version } = dataset.uses.container;
-  return [`${image} ${version}`, `${start} → ${end}`, `${value} ${unit}`];
+  return [snapshotExtent(dataset), `${image} ${version}`, snapshotResolution(dataset)];
 }
 
 /** The repository page of the snapshot a draft was made from. */
@@ -23,9 +41,10 @@ export const snapshotHref = (datasetId: string) => `/repository/${encodeURICompo
 
 /**
  * What the draft is based on, read-only (a draft's starting point cannot
- * change), as one compact block: the snapshot's title (two lines at most, the
- * whole of it on hover), one line of facts, and a link to its repository page.
- * Three states, as `DraftContext.snapshotState` says:
+ * change), as a small card at the top of Run settings: the snapshot's map
+ * thumbnail, its short name (`snapshotName`; the official title is on hover),
+ * one muted line of facts, and a link to its repository page. Three states, as
+ * `DraftContext.snapshotState` says:
  * - `found`: the above.
  * - `gone`: it left the repository. The draft keeps the title it was made
  *   with, and cannot be submitted.
@@ -64,7 +83,7 @@ export function DraftBasis({
 }) {
   const href = snapshotHref(datasetId);
   const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const title = dataset?.about.name ?? fallbackTitle;
+  const { name, title } = basisName(ctx, fallbackTitle);
   const inheritedId = dataset?.uses.modelInput.id ?? null;
   const chosen = modelInput?.id ?? null;
   const shownId = chosen ?? inheritedId;
@@ -93,29 +112,48 @@ export function DraftBasis({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <p title={title} className="line-clamp-2 min-w-0 break-words text-sm font-medium text-foreground">
-          {title}
-        </p>
+    <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm sm:px-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {dataset && (
+            <div className="relative h-12 w-24 shrink-0 overflow-hidden rounded-lg border bg-muted">
+              <CoverageThumbnail
+                box={snapshotBox(dataset)}
+                aspect="wide"
+                showLabel={false}
+                className="absolute inset-0 aspect-auto rounded-none border-0"
+              />
+            </div>
+          )}
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Based on</p>
+            <p title={title} className="truncate text-base font-semibold text-foreground">
+              {name}
+            </p>
+            {(facts.length > 0 || modelInputText) && (
+              <p className="text-[13px] break-words text-muted-foreground">
+                {facts.map((fact, i) => (
+                  <span key={fact}>
+                    {i > 0 && " · "}
+                    <span className="whitespace-nowrap">{fact}</span>
+                  </span>
+                ))}
+                {facts.length > 0 && modelInputText && " · "}
+                {modelInputText}
+              </p>
+            )}
+          </div>
+        </div>
         {dataset || ctx.snapshotState === "unavailable" ? (
           <Link
             href={href}
-            className="inline-flex shrink-0 items-center gap-1 rounded text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="inline-flex min-h-10 shrink-0 items-center gap-1 self-start rounded text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8 sm:self-center"
           >
             View in repository
             <ArrowUpRight className="size-3.5" aria-hidden="true" />
           </Link>
         ) : null}
       </div>
-
-      {(facts.length > 0 || modelInputText) && (
-        <p className="break-words text-xs text-muted-foreground">
-          {facts.join(" · ")}
-          {facts.length > 0 && modelInputText && " · "}
-          {modelInputText}
-        </p>
-      )}
 
       {ctx.snapshotState === "gone" && (
         <p className="flex items-start gap-2 text-xs text-warning">
@@ -132,7 +170,7 @@ export function DraftBasis({
       )}
 
       {modelInput && chosen !== null && (
-        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex min-w-0 items-start gap-2 text-xs text-warning">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 break-words">
