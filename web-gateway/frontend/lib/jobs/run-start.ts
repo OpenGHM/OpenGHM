@@ -40,7 +40,7 @@ const dayNumber = (value: string) => {
 };
 
 /** A full ISO date that exists: 2000-02-30 does not. */
-function isRealDate(value: string): boolean {
+export function isRealDate(value: string): boolean {
   const m = ISO.exec(value);
   if (!m) return false;
   const date = new Date(dayNumber(value) * 86_400_000);

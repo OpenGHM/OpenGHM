@@ -136,6 +136,10 @@ export interface SubmitError {
 
 export type PartialAbout = Partial<OpenGHMCitationBlock>;
 
+/** What a PATCH may send for `about`: the backend merges it key by key, and a
+ *  key sent as `null` removes that key (app/api/v1/jobs.py, `update_simulation`). */
+export type AboutUpdate = { [K in keyof PartialAbout]?: PartialAbout[K] | null };
+
 // ─── API models ──────────────────────────────────────────────────────────────
 
 /** GET /jobs/stats: one count per tab of the simulation list, and the admin
@@ -205,7 +209,9 @@ export interface SimulationDeriveRequest {
  * Refused (409) once the simulation has moved past DRAFT. */
 export interface SimulationUpdateRequest {
   slug?: string | null;
-  about?: PartialAbout | null;
+  /** Merged key by key into the stored block; `null` for the whole block
+   *  clears it. */
+  about?: AboutUpdate | null;
   parameters?: JobParameters | null;
   /** Cores and walltime. Only the fields sent change; `null` goes back to
    *  the snapshot's recommended compute. */
@@ -297,8 +303,12 @@ export type ActionFailure =
       message: string;
       status?: number;
       code?: string;
-      /** The field names of an `unsupported_fields` refusal. */
+      /** The fields a refusal names: those of an `unsupported_fields` answer
+       *  (`parameters.spatial_domain`), or the dotted paths of a validation
+       *  error (`slurm_config.walltime`). */
       fields?: string[];
+      /** A `run_start_not_aligned` refusal's nearest allowed start. */
+      suggestedStart?: string | null;
     };
 
 export type ActionResult<T> = { ok: true; data: T } | ActionFailure;

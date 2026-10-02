@@ -10,14 +10,11 @@ import { RecentSnapshots } from "@/components/workspace/recent-snapshots";
 import { fetchJobs } from "@/lib/jobs/actions";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { Dataset } from "@/lib/repository/types";
+import { displayName } from "@/lib/jobs/display-name";
 import type { Job } from "@/lib/jobs/types";
 import { Compass, Play } from "lucide-react";
 
 const RECENTS_LIMIT = 5;
-
-function displayName(job: Job): string {
-  return job.about?.name || job.slug || job.sim_id || `Untitled (${job.id.slice(0, 8)})`;
-}
 
 /**
  * The new-simulation entry screen: not an empty search box (spec.md's

@@ -31,25 +31,58 @@ function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFail
   // submit gates' 403 and 429 (mock_identity, email_not_verified,
   // not_permitted_to_run, active_job_limit, ...) and on the submit route's own
   // answers (not_a_draft, unsupported_fields with `fields`, anvil_unreachable,
-  // sbatch_rejected, ...).
+  // sbatch_rejected, ...), and the PATCH's run_start_not_aligned with
+  // `suggested_start`. A request body that fails validation is a 422 whose
+  // `detail` is pydantic's array of `{ loc, msg, type }`.
   const detail = response?.data?.detail;
   let message: string | null = null;
   let code: string | undefined;
   let fields: string[] | undefined;
+  let suggestedStart: string | null | undefined;
   if (typeof detail === "string") {
     message = detail;
+  } else if (Array.isArray(detail)) {
+    const items = detail.filter(
+      (item): item is { loc?: unknown; msg?: unknown } => !!item && typeof item === "object"
+    );
+    const first = items.find((item) => typeof item.msg === "string");
+    if (first) message = first.msg as string;
+    const paths = items
+      .map((item) => validationPath(item.loc))
+      .filter((path): path is string => path !== null);
+    if (paths.length > 0) fields = [...new Set(paths)];
   } else if (detail && typeof detail === "object") {
-    const d = detail as { code?: unknown; message?: unknown; fields?: unknown };
+    const d = detail as {
+      code?: unknown;
+      message?: unknown;
+      fields?: unknown;
+      suggested_start?: unknown;
+    };
     if (typeof d.message === "string") message = d.message;
     if (typeof d.code === "string") code = d.code;
     if (Array.isArray(d.fields) && d.fields.every((f) => typeof f === "string")) {
       fields = d.fields as string[];
     }
+    if (typeof d.suggested_start === "string" || d.suggested_start === null) {
+      suggestedStart = d.suggested_start;
+    }
   }
   if (message === null) {
     message = error instanceof Error ? error.message : "Request failed.";
   }
-  return { ok: false, reason: "error", message, status, code, fields };
+  return { ok: false, reason: "error", message, status, code, fields, suggestedStart };
+}
+
+/** A pydantic error's `loc` as a dotted path without the leading "body":
+ *  `["body", "slurm_config", "walltime"]` is `slurm_config.walltime`. Null when
+ *  it names nothing. */
+function validationPath(loc: unknown): string | null {
+  if (!Array.isArray(loc)) return null;
+  const parts = loc
+    .filter((part): part is string | number => typeof part === "string" || typeof part === "number")
+    .map(String);
+  if (parts[0] === "body") parts.shift();
+  return parts.length > 0 ? parts.join(".") : null;
 }
 
 /**
@@ -128,6 +161,22 @@ export async function deriveSimulation(
     const res = await client.post<Job>(
       `/api/v1/jobs/derive/${encodeURIComponent(datasetId)}`,
       request
+    );
+    return res.data;
+  });
+}
+
+/**
+ * Create a new DRAFT from one of the caller's own simulations, whatever its
+ * status: the second creation path. The source is only ever read. A source
+ * whose model snapshot has left the repository answers
+ * `{ reason: "error", code: "snapshot_not_found" }` and nothing is created;
+ * `not_found` means the source is missing or not the caller's.
+ */
+export async function duplicateSimulation(jobId: string): Promise<ActionResult<Job>> {
+  return run(async (client) => {
+    const res = await client.post<Job>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/duplicate`
     );
     return res.data;
   });

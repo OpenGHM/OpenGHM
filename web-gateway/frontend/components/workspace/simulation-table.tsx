@@ -17,11 +17,8 @@ import { TimeStamp } from "@/components/common/time-stamp";
 import { KindBadge } from "@/components/repository/kind-badge";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { simulationSource } from "@/lib/jobs/simulation-source";
+import { displayName } from "@/lib/jobs/display-name";
 import type { Job } from "@/lib/jobs/types";
-
-function displayName(job: Job): string {
-  return job.about?.name || job.slug || job.sim_id || `Untitled (${job.id.slice(0, 8)})`;
-}
 
 /**
  * The simulations as a table from `sm` up, and as stacked rows below it (name
