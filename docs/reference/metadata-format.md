@@ -153,10 +153,12 @@ re-runs the simulation, not an observation. The observation is
 partition memory comes only with cores (at most 1896 MiB each). It is the
 snapshot's observed peak memory (`sacct` MaxRSS) times 1.25, rounded up to
 whole cores, and rounded up further where only one run was measured. The
-published Global (26 cores, a peak of about 35 GiB over the 4 d 15 h run) and
-Wyoming (4 cores, a peak of about 3.3 GiB) snapshots were set this way on
-2026-10-02; they had carried the 64 cores that the lab's original submit
-script asked for. `walltime` is how long the reference run took.
+published Global (26 cores, a peak of about 35 GiB over the 4 d 15 h run),
+Wyoming (4 cores, a peak of about 3.3 GiB) and v2 CONUS tutorial (2 cores, a
+peak of about 0.8 GiB) snapshots were set this way on 2026-10-02 and
+2026-10-03; Global and Wyoming had carried the 64 cores that the lab's
+original submit script asked for, the tutorial 16.
+`walltime` is how long the reference run took.
 
 Two gaps in the variable dictionary a generator has to handle: `Units` is a list
 per aggregation depth (`['mm/day','mm/month','mm/year']`) so the native
