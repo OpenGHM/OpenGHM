@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { DraftCard } from "@/components/workspace/draft-card";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
-import { describeCoresBelowReference, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
+import { describeCoresBelowRecommended, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
 import type { ActionResult, Job, SubmitError } from "@/lib/jobs/types";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
@@ -298,7 +298,7 @@ export function DraftSubmitCard({
               walltime={compute.walltime}
               walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
               walltimeCapped={compute.walltimeCapped}
-              coresWarning={describeCoresBelowReference(saved.slurm_config, recommended)}
+              coresWarning={describeCoresBelowRecommended(saved.slurm_config, recommended)}
             />
           )}
 

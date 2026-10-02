@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANVIL_SHARED_MB_PER_CORE,
   automaticWalltimeLabel,
-  describeCoresBelowReference,
+  describeCoresBelowRecommended,
   describeHours,
   describeSlurmTime,
   describeWalltimeBelowReference,
@@ -230,42 +230,43 @@ describe("shared-partition memory", () => {
   });
 });
 
-describe("describeCoresBelowReference", () => {
+describe("describeCoresBelowRecommended", () => {
   const rec = { cores: 64, walltime: "15:00" };
   const cores = (n: number | null) => ({ cores: n, walltime: null });
 
-  it("warns, with the numbers, when cores are below the reference run's", () => {
-    expect(describeCoresBelowReference(cores(1), rec)).toBe(
-      "This model snapshot's reference run used 64 cores (about 121.3 GB of memory). " +
-        "Anvil's shared partition gives about 1.9 GB of memory per core, " +
-        "so with 1 core (about 1.9 GB) the run may be stopped for running out of memory."
+  it("warns, with the numbers, when cores are below the recommended count", () => {
+    expect(describeCoresBelowRecommended(cores(1), rec)).toBe(
+      "This model snapshot recommends 64 cores, enough memory for its run. " +
+        "On Anvil's shared partition memory comes with cores, about 1.9 GB each, " +
+        "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
+        "the run may be stopped for running out of memory."
     );
   });
 
   it("builds the numbers from the values, and says cores in the plural", () => {
-    const text = describeCoresBelowReference(cores(3), { cores: 16, walltime: "15:00" });
-    expect(text).toContain("reference run used 16 cores (about 30.3 GB");
-    expect(text).toContain("with 3 cores (about 5.7 GB)");
+    const text = describeCoresBelowRecommended(cores(3), { cores: 16, walltime: "15:00" });
+    expect(text).toContain("recommends 16 cores, enough memory for its run");
+    expect(text).toContain("so 16 cores gives about 30.3 GB and 3 cores only about 5.7 GB:");
   });
 
   it("warns one core below, and never when at or above", () => {
-    expect(describeCoresBelowReference(cores(63), rec)).toContain("with 63 cores (about 119.4 GB)");
-    expect(describeCoresBelowReference(cores(64), rec)).toBeNull();
-    expect(describeCoresBelowReference(cores(65), rec)).toBeNull();
-    expect(describeCoresBelowReference(cores(128), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(63), rec)).toContain("and 63 cores only about 119.4 GB:");
+    expect(describeCoresBelowRecommended(cores(64), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(65), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(128), rec)).toBeNull();
   });
 
   it("says nothing when cores are unset: the recommendation is used", () => {
-    expect(describeCoresBelowReference(cores(null), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(null), rec)).toBeNull();
   });
 
   it("says nothing when the snapshot has no recommendation", () => {
-    expect(describeCoresBelowReference(cores(1), null)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(1), null)).toBeNull();
   });
 
   it("leaves a value that is not a valid number of cores to the field's own error", () => {
-    expect(describeCoresBelowReference(cores(0), rec)).toBeNull();
-    expect(describeCoresBelowReference(cores(-2), rec)).toBeNull();
-    expect(describeCoresBelowReference(cores(1.5), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(0), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(-2), rec)).toBeNull();
+    expect(describeCoresBelowRecommended(cores(1.5), rec)).toBeNull();
   });
 });

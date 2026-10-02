@@ -400,10 +400,11 @@ SLURM is asked for `--cpus-per-task` and `--time`:
   value with seconds up to the minute);
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
-Memory on the `shared` partition comes at 1896 MB per core (`MaxMemPerCPU`,
-read from Anvil on 2026-10-02), so a run given fewer cores than the snapshot's
-reference run may be killed for memory. The wizard shows a warning for that
-(`describeCoresBelowReference`), not an error: Submit stays on and the backend
+Memory on the `shared` partition comes with the cores, at most 1896 MB per core
+(`MaxMemPerCPU`, read from Anvil on 2026-10-02), and WBM itself uses about one
+CPU: the snapshot's recommended core count is there for the memory. A run given
+fewer cores than that may be killed for running out of memory. The wizard shows a warning for that
+(`describeCoresBelowRecommended`), not an error: Submit stays on and the backend
 does not check it.
 
 The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),

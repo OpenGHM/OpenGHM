@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { draftField } from "@/components/workspace/draft-field";
 import {
   automaticWalltimeLabel,
-  describeCoresBelowReference,
+  describeCoresBelowRecommended,
   describeSlurmTime,
   describeWalltimeBelowReference,
   describeWalltimeOverLimit,
@@ -42,7 +42,7 @@ export function ComputeFields({
   const defaultWalltime = automatic.walltime;
   const overLimit = walltimeOverLimit(config, recommended);
   const belowReference = describeWalltimeBelowReference(config, recommended);
-  const coresWarning = describeCoresBelowReference(config, recommended);
+  const coresWarning = describeCoresBelowRecommended(config, recommended);
   const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
   const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
 

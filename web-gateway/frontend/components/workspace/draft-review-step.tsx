@@ -12,7 +12,7 @@ import { ModelInputStatus } from "@/components/workspace/model-input-panel";
 import { SnapshotSummaryCard } from "@/components/workspace/snapshot-summary-card";
 import {
   automaticWalltimeLabel,
-  describeCoresBelowReference,
+  describeCoresBelowRecommended,
   describeSlurmTime,
   effectiveCompute,
   type Recommended,
@@ -145,7 +145,7 @@ export function DraftReviewStep({
   const id = useId();
   const { parameters, slurm } = local;
   const compute = effectiveCompute(slurm, recommended);
-  const coresWarning = describeCoresBelowReference(slurm, recommended);
+  const coresWarning = describeCoresBelowRecommended(slurm, recommended);
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
 

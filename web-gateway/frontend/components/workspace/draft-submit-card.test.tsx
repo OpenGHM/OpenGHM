@@ -119,8 +119,8 @@ describe("DraftSubmitCard: what it says", () => {
   });
 });
 
-describe("DraftSubmitCard: cores below the reference run's", () => {
-  const warning = /This model snapshot's reference run used 64 cores/;
+describe("DraftSubmitCard: cores below the recommended count", () => {
+  const warning = /This model snapshot recommends 64 cores/;
   const withCores = (cores: number | null) => ({
     ...SAVED,
     slurm_config: { cores, walltime: "02:00:00" },
@@ -132,7 +132,7 @@ describe("DraftSubmitCard: cores below the reference run's", () => {
     expect(screen.queryByText(warning)).toBeNull(); // not before the dialog
     await openDialog();
     const note = within(dialog()).getByText(warning);
-    expect(note.textContent).toContain("with 1 core (about 1.9 GB)");
+    expect(note.textContent).toContain("and 1 core only about 1.9 GB:");
     expect(note.closest("dd")?.previousElementSibling?.textContent).toBe("Cores");
     expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(confirmButton());
@@ -150,7 +150,7 @@ describe("DraftSubmitCard: cores below the reference run's", () => {
     flush.mockResolvedValue({ ok: true, job: withCores(1), withheld: [] });
     card({ recommended: null });
     await openDialog();
-    expect(within(dialog()).queryByText(/reference run used/)).toBeNull();
+    expect(within(dialog()).queryByText(/snapshot recommends/)).toBeNull();
   });
 });
 

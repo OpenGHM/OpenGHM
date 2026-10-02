@@ -104,7 +104,7 @@
       { "name": "runoffMsk", "fullName": "Water from _NAME_ (ID= _ID_) in runoff", "unit": "fraction" },
       { "name": "grndWtMsk", "fullName": "Water from _NAME_ (ID= _ID_) in shallow groundwater", "unit": "fraction" }
     ],
-    "recommendedCompute": { "cores": 64, "walltime": "4:30:00" }
+    "recommendedCompute": { "cores": 4, "walltime": "4:30:00" }
   },
 
   "uses": {

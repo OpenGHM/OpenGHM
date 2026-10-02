@@ -79,7 +79,7 @@ export function SubmitSummary({
   walltimeFromSnapshot: boolean;
   /** The automatic walltime was cut to the limit for one job. */
   walltimeCapped?: boolean;
-  /** `describeCoresBelowReference`: shown under Cores, because the dialog is
+  /** `describeCoresBelowRecommended`: shown under Cores, because the dialog is
    *  the last place to notice it. A hint; Submit stays on. */
   coresWarning?: string | null;
 }) {

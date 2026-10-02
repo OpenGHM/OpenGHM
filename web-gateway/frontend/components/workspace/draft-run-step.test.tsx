@@ -358,17 +358,18 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
   });
 });
 
-describe("the draft run step: cores below the reference run's", () => {
+describe("the draft run step: cores below the recommended count", () => {
   const BIG = { cores: 64, walltime: "15:00" };
-  const warning = () => screen.queryByText(/This model snapshot's reference run used 64 cores/);
+  const warning = () => screen.queryByText(/This model snapshot recommends 64 cores/);
 
   it("warns next to the Cores field, with the numbers, and does not make it an error", () => {
     step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
     const note = warning()!;
     expect(note.textContent).toBe(
-      "This model snapshot's reference run used 64 cores (about 121.3 GB of memory). " +
-        "Anvil's shared partition gives about 1.9 GB of memory per core, " +
-        "so with 1 core (about 1.9 GB) the run may be stopped for running out of memory."
+"This model snapshot recommends 64 cores, enough memory for its run. " +
+        "On Anvil's shared partition memory comes with cores, about 1.9 GB each, " +
+        "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
+        "the run may be stopped for running out of memory."
     );
     const cores = screen.getByLabelText("Cores");
     expect(cores.getAttribute("aria-describedby")).toBe(note.parentElement?.id);
@@ -403,7 +404,7 @@ describe("the draft run step: cores below the reference run's", () => {
 
   it("says nothing without a recommendation", () => {
     step({ recommended: null, slurm: { cores: 1, walltime: null } });
-    expect(screen.queryByText(/reference run used/)).toBeNull();
+    expect(screen.queryByText(/snapshot recommends/)).toBeNull();
   });
 });
 

@@ -81,7 +81,7 @@ maps to ids for browsing.
       { "name": "runoff", "fullName": "Runoff", "unit": "mm/day" },
       { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" }
     ],
-    "recommendedCompute": { "cores": 64, "walltime": "4:30:00" }
+    "recommendedCompute": { "cores": 4, "walltime": "4:30:00" }
   },
 
   "uses": {
@@ -146,9 +146,17 @@ Every field in it except `recommendedCompute` is derived mechanically from the
 | `outputVariables` | `Output_vars`, looked up in `model/WBM_dataCube_expand.csv` for `Full_name` and `Org_units` |
 | `activeProcesses` | which optional keys carry a value (`Reservoirs`, `Glaciers`, `Irrigation`, `Runoff_mask`, …), plus the suffixes present in `Output_vars`: `*_ps`/`_pg`/`_pr`/`_pu` mean primary water source tracking, `*_irr`/`_pst`/`_rlt` mean irrigation water re-use tracking |
 
-`recommendedCompute` is the exception: a person's a priori estimate for whoever
+`recommendedCompute` is the exception: a person's estimate for whoever
 re-runs the simulation, not an observation. The observation is
-`runtime.execution`, written after a run finishes.
+`runtime.execution`, written after a run finishes. `cores` is chosen for
+**memory**, not speed: WBM uses about one CPU, and on Anvil's `shared`
+partition memory comes only with cores (at most 1896 MiB each). It is the
+snapshot's observed peak memory (`sacct` MaxRSS) times 1.25, rounded up to
+whole cores, and rounded up further where only one run was measured. The
+published Global (26 cores, a peak of about 35 GiB over the 4 d 15 h run) and
+Wyoming (4 cores, a peak of about 3.3 GiB) snapshots were set this way on
+2026-10-02; they had carried the 64 cores that the lab's original submit
+script asked for. `walltime` is how long the reference run took.
 
 Two gaps in the variable dictionary a generator has to handle: `Units` is a list
 per aggregation depth (`['mm/day','mm/month','mm/year']`) so the native
