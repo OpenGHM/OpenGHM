@@ -9,7 +9,6 @@ import {
   SHORT_EXCERPT_LINES,
   isEmptyText,
   isShortExcerpt,
-  toPlainText,
 } from "@/lib/workspace/log-lines";
 
 describe("collapseCr", () => {
@@ -88,11 +87,7 @@ describe("appendText", () => {
   });
 });
 
-describe("toPlainText / isEmptyText", () => {
-  it("joins what the reader sees, unfinished line included", () => {
-    expect(toPlainText(appendText(EMPTY_LOG_TEXT, "a\nb"))).toBe("a\nb");
-    expect(toPlainText(EMPTY_LOG_TEXT)).toBe("");
-  });
+describe("isEmptyText", () => {
   it("is empty only with no lines and no partial", () => {
     expect(isEmptyText(EMPTY_LOG_TEXT)).toBe(true);
     expect(isEmptyText(appendText(EMPTY_LOG_TEXT, "x"))).toBe(false);

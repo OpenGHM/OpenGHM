@@ -47,11 +47,6 @@ export function displayLines(text: LogText): string[] {
   return text.partial === "" ? text.lines : [...text.lines, tail];
 }
 
-/** The text as the reader sees it, for Copy. */
-export function toPlainText(text: LogText): string {
-  return displayLines(text).join("\n");
-}
-
 /** Whether there is anything to show. */
 export function isEmptyText(text: LogText): boolean {
   return text.lines.length === 0 && text.partial === "";

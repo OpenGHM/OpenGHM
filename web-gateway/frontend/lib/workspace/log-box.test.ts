@@ -1,0 +1,213 @@
+import { describe, expect, it } from "vitest";
+import type { FailureCause, JobStatus, LogStream } from "@/lib/jobs/types";
+import { buildLogBox, LOG_SOURCES, type LogBox } from "@/lib/workspace/log-box";
+import { JOB_BODY_MARKER, type LogRow } from "@/lib/workspace/log-sections";
+import { INITIAL_STREAM, previewStreamState, type StreamState } from "@/lib/workspace/log-stream";
+
+const PREAMBLE = [
+  "The following modules were not unloaded:",
+  "  1) xalt/2.10.45 (sticky)",
+  "Currently Loaded Modules:",
+  "  1) xalt/2.10.45",
+];
+
+const HEALTHY: Record<LogStream, string> = {
+  stdout: "openghm 0.2.0 commit 8c3077b\ndownloaded 34, skipped 32960, failed 0 (488.8 MB downloaded)\n",
+  wbm: "Spinup 1/12 (1991-01-01)\nSpinup 2/12 (1991-01-02)\n",
+  stderr: [...PREAMBLE, JOB_BODY_MARKER, "  1000/32959 files", "  32000/32959 files", ""].join("\n"),
+};
+
+type Over = Partial<Record<LogStream, StreamState | string | undefined>>;
+const states = (over: Over = {}): Record<LogStream, StreamState> => {
+  const pick = (s: LogStream) => {
+    const v = s in over ? over[s] : HEALTHY[s];
+    return typeof v === "object" ? v : previewStreamState(v);
+  };
+  return { wbm: pick("wbm"), stdout: pick("stdout"), stderr: pick("stderr") };
+};
+
+interface Opts {
+  status?: JobStatus;
+  files?: "purged" | null;
+  failure?: { cause: FailureCause; excerpt: string | null } | null;
+}
+const build = (over: Over = {}, { status = "COMPLETED", files = null, failure = null }: Opts = {}): LogBox =>
+  buildLogBox({ states: states(over), status, files, failure });
+const rowsOf = (box: LogBox): LogRow[] => {
+  if (box.kind !== "rows") throw new Error(`expected rows, got ${box.kind}`);
+  return box.rows;
+};
+const texts = (box: LogBox) => rowsOf(box).map((r) => r.text);
+
+describe("LOG_SOURCES", () => {
+  it("names the sources as the download menu lists them", () => {
+    expect(LOG_SOURCES.map((s) => [s.stream, s.label])).toEqual([
+      ["stdout", "Job output"],
+      ["wbm", "WBM log"],
+      ["stderr", "Messages"],
+    ]);
+  });
+});
+
+describe("buildLogBox", () => {
+  it("lays the sources end to end: setup, job output, WBM log, messages, each after a separator", () => {
+    expect(texts(build())).toEqual([
+      "──── Setup messages ────",
+      ...PREAMBLE,
+      "──── Job output ────",
+      "openghm 0.2.0 commit 8c3077b",
+      "downloaded 34, skipped 32960, failed 0 (488.8 MB downloaded)",
+      "──── WBM log ────",
+      "Spinup 1/12 (1991-01-01)",
+      "Spinup 2/12 (1991-01-02)",
+      "──── Messages ────",
+      "Downloaded 32959 files",
+    ]);
+  });
+
+  it("never shows the delimiter line", () => {
+    expect(texts(build()).join("\n")).not.toContain(JOB_BODY_MARKER);
+  });
+
+  it("shows the setup messages dimmed, and plain: they are not errors", () => {
+    const setup = rowsOf(build()).filter((r) => r.kind === "line" && r.dim);
+    expect(setup).toHaveLength(PREAMBLE.length);
+    expect(setup.every((r) => r.kind === "line" && r.severity === null)).toBe(true);
+  });
+
+  it("keeps the other lines at their file line numbers", () => {
+    const messages = rowsOf(build()).filter((r) => r.kind === "summary");
+    expect(messages).toEqual([{ kind: "summary", number: PREAMBLE.length + 2, lines: 2, text: "Downloaded 32959 files" }]);
+  });
+
+  it("has no setup block when stderr has no marker: all of it is messages", () => {
+    const out = texts(build({ stderr: "module: command not found\n" }));
+    expect(out).not.toContain("──── Setup messages ────");
+    expect(out.slice(-2)).toEqual(["──── Messages ────", "module: command not found"]);
+  });
+
+  it("marks error and warning lines in every source", () => {
+    const out = rowsOf(
+      build({
+        stdout: "outcome: fail\n",
+        wbm: "ValueError: boom\nUserWarning: x\n",
+        stderr: "slurmstepd: error: Detected 1 oom_kill event\n",
+      })
+    ).filter((r) => r.kind === "line");
+    expect(out.map((r) => r.kind === "line" && r.severity)).toEqual(["error", "error", "warning", "error"]);
+  });
+
+  it("marks a failed job's reason, as the failure card quotes it", () => {
+    const stderr = `${JOB_BODY_MARKER}\nAggregation multi-year start is outside of the run dates...\n`;
+    const failure = { cause: "wbm_error" as const, excerpt: "Aggregation multi-year start is outside of the run dates..." };
+    const line = (box: LogBox) => rowsOf(box).find((r) => r.kind === "line" && r.text.startsWith("Aggregation"));
+    expect(line(build({ stderr }, { status: "FAILED", failure }))).toMatchObject({ severity: "error" });
+    expect(line(build({ stderr }, { status: "COMPLETED", failure }))).toMatchObject({ severity: null });
+  });
+
+  it("says Downloading while a live job's counter is the last thing written and stdout has no summary", () => {
+    const stderr = [JOB_BODY_MARKER, "  5000/32959 files"].join("\n");
+    expect(texts(build({ stderr, stdout: "openghm 0.2.0\n" }, { status: "RUNNING" })).at(-1)).toBe(
+      "Downloading: 5000/32959 files"
+    );
+  });
+});
+
+describe("a source with nothing to show", () => {
+  it("says (no output yet) for a missing or empty file while the job runs, (no output) once it ended", () => {
+    const missing = { ...INITIAL_STREAM, loaded: true };
+    const live = texts(build({ wbm: missing, stdout: "" }, { status: "RUNNING" }));
+    expect(live.filter((t) => t === "(no output yet)")).toHaveLength(2);
+    const ended = texts(build({ wbm: missing, stdout: "" }));
+    expect(ended.filter((t) => t === "(no output)")).toHaveLength(2);
+  });
+
+  it("says (loading…) in the place of a stream not read yet while another has answered", () => {
+    const out = texts(build({ wbm: INITIAL_STREAM }, { status: "RUNNING" }));
+    expect(out[out.indexOf("──── WBM log ────") + 1]).toBe("(loading…)");
+  });
+
+  it("puts a failed read in its own place, with Retry for that stream, and keeps the lines read", () => {
+    const failed = { ...previewStreamState("kept\n"), error: "Anvil did not answer." };
+    const rows = rowsOf(build({ wbm: failed }));
+    const at = rows.findIndex((r) => r.text === "──── WBM log ────");
+    expect(rows[at + 1]).toMatchObject({ kind: "line", text: "kept" });
+    expect(rows[at + 2]).toEqual({
+      kind: "note",
+      text: "The WBM log could not be read: Anvil did not answer.",
+      retry: "wbm",
+    });
+    expect(rows.filter((r) => r.kind === "note" && r.retry)).toHaveLength(1);
+  });
+
+  it("says one muted line when a read failed and nothing was read", () => {
+    const failed = { ...INITIAL_STREAM, loaded: true, error: "Couldn't reach the gateway." };
+    const rows = rowsOf(build({ stdout: failed }));
+    const at = rows.findIndex((r) => r.text === "──── Job output ────");
+    expect(rows[at + 1]).toMatchObject({ kind: "note", retry: "stdout" });
+    expect(rows[at + 2]).toMatchObject({ kind: "separator" });
+  });
+
+  it("says when only the end of a long log is shown", () => {
+    const st = states();
+    st.wbm = { ...st.wbm, startedMidway: true, size: 3_000_000 };
+    const out = buildLogBox({ states: st, status: "COMPLETED", files: null, failure: null });
+    expect(texts(out)).toContain("(showing the end of a 2.9 MB log; Download has the whole file)");
+  });
+});
+
+describe("the box before there is anything", () => {
+  const blank = { wbm: INITIAL_STREAM, stdout: INITIAL_STREAM, stderr: INITIAL_STREAM };
+
+  it("is loading until a stream has answered", () => {
+    expect(buildLogBox({ states: blank, status: "RUNNING", files: null, failure: null })).toEqual({ kind: "loading" });
+  });
+
+  it("waits for SLURM while the job is queued", () => {
+    expect(buildLogBox({ states: blank, status: "PENDING", files: null, failure: null })).toEqual({
+      kind: "empty",
+      message: "Logs appear here once SLURM starts the job.",
+    });
+  });
+
+  it("says once that Anvil purged the files", () => {
+    const gone = { ...INITIAL_STREAM, loaded: true };
+    expect(buildLogBox({ states: { wbm: gone, stdout: gone, stderr: gone }, status: "COMPLETED", files: "purged", failure: null })).toEqual({
+      kind: "empty",
+      message: "Anvil purged this job's files after 30 days untouched.",
+    });
+  });
+});
+
+describe("an empty Messages after SLURM stopped the job", () => {
+  const oom = { cause: "out_of_memory" as const, excerpt: "error: Detected 1 oom_kill event" };
+  const messagesNote = (box: LogBox) => {
+    const out = texts(box);
+    return out[out.indexOf("──── Messages ────") + 1];
+  };
+
+  it("explains itself in one line under the Messages separator", () => {
+    expect(messagesNote(build({ stderr: "" }, { status: "FAILED", failure: oom }))).toBe(
+      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+    );
+  });
+
+  it("says it was nothing after the setup messages when stderr holds only those", () => {
+    const stderr = [...PREAMBLE, JOB_BODY_MARKER].join("\n");
+    expect(messagesNote(build({ stderr }, { status: "FAILED", failure: oom }))).toContain(
+      "Nothing was written after the setup messages."
+    );
+  });
+
+  it("does not point to a WBM log that is missing", () => {
+    expect(messagesNote(build({ stderr: "", wbm: undefined }, { status: "FAILED", failure: oom }))).toBe(
+      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card)."
+    );
+  });
+
+  it("leaves an ordinary failure at (no output), and says nothing when there is text", () => {
+    const wbmError = { cause: "wbm_error" as const, excerpt: null };
+    expect(messagesNote(build({ stderr: "" }, { status: "FAILED", failure: wbmError }))).toBe("(no output)");
+    expect(messagesNote(build({ stderr: `${JOB_BODY_MARKER}\nboom\n` }, { status: "FAILED", failure: oom }))).toBe("boom");
+  });
+});

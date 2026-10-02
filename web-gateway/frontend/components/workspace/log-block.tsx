@@ -1,14 +1,12 @@
 "use client";
 
 import { memo, useLayoutEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, Info, RefreshCw } from "lucide-react";
+import { ArrowDown, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatBytes } from "@/lib/workspace/format";
-import { MAX_LOG_LINES } from "@/lib/workspace/log-lines";
+import type { LogStream } from "@/lib/jobs/types";
 import type { LogRow } from "@/lib/workspace/log-sections";
 import type { LineSeverity } from "@/lib/workspace/log-severity";
-import type { StreamState } from "@/lib/workspace/log-stream";
 
 /** How close to the bottom counts as "at the bottom", in px. */
 const BOTTOM_SLACK = 24;
@@ -29,35 +27,45 @@ interface RowProps {
   number: number;
   text: string;
   severity: LineSeverity | null;
+  dim: boolean;
+  /** Lines a summary stands for. */
+  count: number;
+  /** The stream a note's Retry button reads, when it has one. */
+  retry?: LogStream;
+  onRetry: (stream: LogStream) => void;
   /** The digits of the widest line number. */
   digits: number;
-  /** The error "Next error" stopped at. */
-  current: boolean;
-  /** The id a jump scrolls to. */
-  domId?: string;
-  /** Lines a summary stands for, or lines a gap leaves out. */
-  count: number;
 }
 
-const LogRowView = memo(function LogRowView({ kind, number, text, severity, digits, current, domId, count }: RowProps) {
-  if (kind === "gap") {
+const LogRowView = memo(function LogRowView({ kind, number, text, severity, dim, count, retry, onRetry, digits }: RowProps) {
+  if (kind === "separator") {
+    return <div className="mt-3 mb-1 font-semibold text-slate-300 first:mt-0">{text}</div>;
+  }
+  if (kind === "note") {
     return (
-      <div className="flex gap-3 py-0.5 text-slate-400 italic">
-        <span aria-hidden="true" className="w-[1ch] shrink-0" />
-        <span aria-hidden="true" className="shrink-0" style={{ minWidth: `${digits}ch` }} />
-        <span className="min-w-0 flex-1">
-          {count.toLocaleString("en-US")} {count === 1 ? "line" : "lines"} without errors hidden
-        </span>
+      <div className="flex flex-wrap items-center gap-x-3 text-slate-400 italic">
+        <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
+        {retry && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onRetry(retry)}
+            className="my-1 min-h-10 bg-transparent text-xs text-slate-200 not-italic hover:bg-slate-800 hover:text-white sm:min-h-8"
+          >
+            <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
   const tone = severity ? SEVERITY[severity] : null;
   return (
     <div
-      id={domId}
       data-severity={severity ?? undefined}
-      data-current={current ? "true" : undefined}
-      className={`-mx-3 flex gap-3 px-3 ${tone?.row ?? ""} ${current ? "ring-2 ring-red-300 ring-inset" : ""}`}
+      data-dim={dim && !tone ? "true" : undefined}
+      className={`-mx-3 flex gap-3 px-3 ${tone?.row ?? (dim ? "text-slate-400" : "")}`}
     >
       <span aria-hidden="true" data-marker className="w-[1ch] shrink-0 text-center font-bold select-none">
         {tone?.mark}
@@ -65,7 +73,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, digi
       <span
         aria-hidden="true"
         data-line-number
-        className="shrink-0 select-none text-right text-slate-400"
+        className="shrink-0 select-none text-right text-slate-500"
         style={{ minWidth: `${digits}ch` }}
       >
         {number}
@@ -73,12 +81,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, digi
       <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
         {tone && <span className="sr-only">{tone.word}</span>}
         {text || " "}
-        {kind === "summary" && (
-          <span className="text-slate-400">
-            {" "}
-            ({count.toLocaleString("en-US")} progress lines)
-          </span>
-        )}
+        {kind === "summary" && <span className="text-slate-400"> ({count.toLocaleString("en-US")} progress lines)</span>}
       </span>
     </div>
   );
@@ -87,36 +90,27 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, digi
 /**
  * The rows, dark and monospace, with a line-number gutter. It follows the end
  * of the log while the reader is at the bottom; scrolling up pauses that, and
- * "Jump to latest" (with how many lines came since) resumes it. `total` is the
- * number of the last line, so a filtered view still counts what came in.
+ * "Jump to latest" (with how many rows came since) resumes it.
  */
 export function LogBlock({
   rows,
-  total,
   label,
-  className = "max-h-[480px]",
-  idPrefix,
-  currentNumber = null,
+  onRetry,
 }: {
   rows: LogRow[];
-  total: number;
   label: string;
-  className?: string;
-  /** Gives each error line an id, `${idPrefix}-${number}`, to scroll to. */
-  idPrefix?: string;
-  /** The number of the error line to mark as the current one. */
-  currentNumber?: number | null;
+  onRetry: (stream: LogStream) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  // The total line count when following was paused; null while following.
+  // The row count when following was paused; null while following.
   const [pausedAt, setPausedAt] = useState<number | null>(null);
-  const totalRef = useRef(total);
+  const totalRef = useRef(rows.length);
 
   useLayoutEffect(() => {
-    totalRef.current = total;
+    totalRef.current = rows.length;
     const el = scrollRef.current;
     if (el && pausedAt === null) el.scrollTop = el.scrollHeight;
-  }, [rows, total, pausedAt]);
+  }, [rows, pausedAt]);
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -125,8 +119,13 @@ export function LogBlock({
     setPausedAt((paused) => (atBottom ? null : (paused ?? totalRef.current)));
   };
 
-  const digits = String(total).length;
-  const newLines = pausedAt === null ? 0 : Math.max(0, total - pausedAt);
+  let widest = 0;
+  for (const row of rows) {
+    if (row.kind === "line") widest = Math.max(widest, row.number);
+    else if (row.kind === "summary") widest = Math.max(widest, row.number + row.lines - 1);
+  }
+  const digits = String(widest).length;
+  const newRows = pausedAt === null ? 0 : Math.max(0, rows.length - pausedAt);
 
   return (
     <div className="relative">
@@ -139,24 +138,22 @@ export function LogBlock({
         aria-label={label}
         tabIndex={0}
         onScroll={onScroll}
-        className={`${className} min-h-24 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50`}
+        className="max-h-[560px] min-h-24 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        {rows.map((row, i) => {
-          const number = row.kind === "gap" ? 0 : row.number;
-          return (
-            <LogRowView
-              key={row.kind === "gap" ? `gap-${i}` : `${row.kind}-${number}`}
-              kind={row.kind}
-              number={number}
-              text={row.kind === "gap" ? "" : row.text}
-              severity={row.kind === "line" ? row.severity : null}
-              digits={digits}
-              current={row.kind === "line" && row.severity === "error" && row.number === currentNumber}
-              domId={idPrefix && row.kind === "line" && row.severity === "error" ? `${idPrefix}-${row.number}` : undefined}
-              count={row.kind === "gap" ? row.hidden : row.kind === "summary" ? row.lines : 0}
-            />
-          );
-        })}
+        {rows.map((row, i) => (
+          <LogRowView
+            key={i}
+            kind={row.kind}
+            number={row.kind === "line" || row.kind === "summary" ? row.number : 0}
+            text={row.text}
+            severity={row.kind === "line" ? row.severity : null}
+            dim={row.kind === "line" && row.dim === true}
+            count={row.kind === "summary" ? row.lines : 0}
+            retry={row.kind === "note" ? row.retry : undefined}
+            onRetry={onRetry}
+            digits={digits}
+          />
+        ))}
       </div>
       {pausedAt !== null && (
         <Button
@@ -167,82 +164,21 @@ export function LogBlock({
         >
           <ArrowDown className="size-4" aria-hidden="true" />
           Jump to latest
-          {newLines > 0 && <span className="tabular-nums">({newLines.toLocaleString("en-US")} new)</span>}
+          {newRows > 0 && <span className="tabular-nums">({newRows.toLocaleString("en-US")} new)</span>}
         </Button>
       )}
     </div>
   );
 }
 
-/** Stand-in lines while a log's first read is out. The wrapper fades in after
+/** Stand-in lines while the first reads are out. The wrapper fades in after
  *  300 ms (`reveal-delayed`), so a read that answers quickly shows none. */
-export function LogSkeleton({ label = "Loading the log" }: { label?: string }) {
+export function LogSkeleton() {
   return (
-    <div
-      aria-busy="true"
-      aria-label={label}
-      className="reveal-delayed space-y-2.5 rounded-lg bg-slate-900 p-4"
-    >
+    <div aria-busy="true" aria-label="Loading the log" className="reveal-delayed space-y-2.5 rounded-lg bg-slate-900 p-4">
       {["w-4/5", "w-3/5", "w-11/12", "w-2/5", "w-3/4", "w-1/2"].map((w, i) => (
         <Skeleton key={i} className={`h-3 ${w} animate-none bg-slate-700 motion-safe:animate-pulse`} />
       ))}
     </div>
-  );
-}
-
-/**
- * What to say above a stream's lines: that only the end of a long file is
- * shown (with a way to the whole file), and that the last read failed (with
- * Retry; the lines read so far stay).
- */
-export function LogNotices({
-  state,
-  onRetry,
-  onDownload,
-}: {
-  state: StreamState;
-  onRetry: () => void;
-  onDownload: () => void;
-}) {
-  return (
-    <>
-      {(state.startedMidway || state.text.dropped > 0) && (
-        <div className="flex items-start gap-2 rounded-lg border bg-muted/50 p-2.5 text-xs text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <p className="min-w-0">
-            {state.text.dropped > 0
-              ? `Showing the last ${MAX_LOG_LINES.toLocaleString("en-US")} lines of a ${formatBytes(state.size)} log. `
-              : `Showing the end of a ${formatBytes(state.size)} log. `}
-            <button
-              type="button"
-              onClick={onDownload}
-              className="rounded-sm font-medium text-foreground underline underline-offset-2 outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              Download it
-            </button>{" "}
-            for the whole file.
-          </p>
-        </div>
-      )}
-
-      {state.error && (
-        <div className="flex flex-col gap-2 rounded-lg border border-status-failed/25 bg-status-failed/5 p-3 text-sm text-status-failed sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 break-words">{state.error}</span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onRetry}
-            className="min-h-10 shrink-0 bg-background sm:min-h-8"
-          >
-            <RefreshCw className="mr-1.5 size-4" aria-hidden="true" />
-            Retry
-          </Button>
-        </div>
-      )}
-    </>
   );
 }

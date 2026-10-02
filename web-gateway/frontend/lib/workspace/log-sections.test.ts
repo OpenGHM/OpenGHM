@@ -2,16 +2,11 @@ import { describe, expect, it } from "vitest";
 import { appendText, EMPTY_LOG_TEXT } from "@/lib/workspace/log-lines";
 import {
   collapseProgress,
-  errorCount,
-  errorKeys,
   failureReasonLines,
   fetchesDone,
   JOB_BODY_MARKER,
-  lineCount,
   lineRows,
   markReason,
-  nextErrorIndex,
-  onlyErrorRows,
   rowsToText,
   splitStderr,
   type LineRow,
@@ -19,7 +14,7 @@ import {
 } from "@/lib/workspace/log-sections";
 
 const rows = (...lines: string[]): LineRow[] => lineRows(appendText(EMPTY_LOG_TEXT, lines.join("\n") + "\n"));
-const texts = (list: LogRow[]) => list.map((r) => (r.kind === "gap" ? `gap ${r.hidden}` : r.text));
+const texts = (list: LogRow[]) => list.map((r) => r.text);
 
 describe("JOB_BODY_MARKER", () => {
   it("is the line the job script writes", () => {
@@ -123,7 +118,6 @@ describe("collapseProgress", () => {
       "Download stopped at 2000/9000 files",
     ]);
     expect(texts(collapseProgress(log, { live: false, fetches: 2 }))[2]).toBe("Downloaded 9000 files");
-    expect(lineCount(collapseProgress(log, ended))).toBe(5);
   });
 
   it("only matches a counter that is the whole line", () => {
@@ -145,62 +139,14 @@ describe("fetchesDone", () => {
   });
 });
 
-describe("onlyErrorRows", () => {
-  const log = rows("a", "b", "c", "d", "ERROR one", "e", "f", "g", "h", "i", "j", "failed two", "k");
-
-  it("keeps each error with two lines around it and counts what it left out", () => {
-    expect(texts(onlyErrorRows(log))).toEqual([
-      "gap 2",
-      "c",
-      "d",
-      "ERROR one",
-      "e",
-      "f",
-      "gap 2",
-      "i",
-      "j",
-      "failed two",
-      "k",
-    ]);
-  });
-
-  it("has nothing for a log without errors", () => {
-    expect(onlyErrorRows(rows("a", "b", "warning: x"))).toEqual([]);
-  });
-
-  it("counts a collapsed counter as the lines it stands for", () => {
-    const folded = collapseProgress(rows("  1/2 files", "  2/2 files", "a", "b", "c", "bad failure"), { live: false });
-    expect(texts(onlyErrorRows(folded, 1))).toEqual(["gap 4", "c", "bad failure"]);
-  });
-});
-
-describe("errors", () => {
-  const sections = [
-    { id: "setup" as const, rows: rows("a") },
-    { id: "stdout" as const, rows: rows("fine", "failed here") },
-    { id: "wbm" as const, rows: rows("Traceback", "warning: x", "KeyError: y") },
-  ];
-
-  it("counts error lines, not warnings", () => {
-    expect(errorCount(sections[2].rows)).toBe(2);
-  });
-
-  it("lists them across sections in the order shown", () => {
-    expect(errorKeys(sections)).toEqual(["stdout:2", "wbm:1", "wbm:3"]);
-  });
-
-  it("steps to the first, then on, then round again", () => {
-    expect(nextErrorIndex(null, 3)).toBe(0);
-    expect(nextErrorIndex(0, 3)).toBe(1);
-    expect(nextErrorIndex(2, 3)).toBe(0);
-    expect(nextErrorIndex(null, 0)).toBe(-1);
-  });
-});
-
 describe("rowsToText", () => {
-  it("joins the lines, a counter as its summary, a gap as a note", () => {
-    const out: LogRow[] = [{ kind: "gap", hidden: 2 }, ...collapseProgress(rows("  1/1 files", "x"), { live: false })];
-    expect(rowsToText(out)).toBe("... 2 lines hidden ...\nDownloaded 1 files\nx");
+  it("joins the rows, a counter as its summary, a separator as it is", () => {
+    const out: LogRow[] = [
+      { kind: "separator", text: "──── Messages ────" },
+      ...collapseProgress(rows("  1/1 files", "x"), { live: false }),
+      { kind: "note", text: "(no output yet)" },
+    ];
+    expect(rowsToText(out)).toBe("──── Messages ────\nDownloaded 1 files\nx\n(no output yet)");
   });
 });
 

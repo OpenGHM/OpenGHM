@@ -5,7 +5,7 @@ import { fetchJobLog } from "@/lib/jobs/actions";
 import type { JobLogChunk, JobStatus, LogStream } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import { nextPollDelay } from "@/lib/workspace/live-poll";
-import { logsReadable, streamsForTab, type LogTab } from "@/lib/workspace/log-view";
+import { logsReadable } from "@/lib/workspace/log-view";
 import {
   INITIAL_STREAM,
   LOG_POLL_MS,
@@ -14,7 +14,7 @@ import {
   type StreamState,
 } from "@/lib/workspace/log-stream";
 
-export type LogStates = Record<LogStream, StreamState>;
+type LogStates = Record<LogStream, StreamState>;
 
 const INITIAL_STATES: LogStates = {
   wbm: INITIAL_STREAM,
@@ -37,6 +37,10 @@ function reducer(states: LogStates, action: Action): LogStates {
   };
 }
 
+/** The streams are read in this order, one after another: the model's own log
+ *  first, since that is what a running job is waited on for. */
+const READ_ORDER: readonly LogStream[] = ["wbm", "stdout", "stderr"];
+
 type ReadOutcome = "more" | "idle" | "error" | "stop";
 
 /** When a stream is next read, and whether it is finished. */
@@ -50,37 +54,31 @@ interface Plan {
 }
 
 /**
- * Reads the logs of a job on show (ADR 0027): the one stream of a source tab,
- * or all three for the All tab. Only the streams on show are read; another
- * loads the first time it is shown. The first read of a stream is a tail; then
- * it appends from `next_offset`, at once while there is more, every 5 s once
- * caught up. Several streams are read one after another, never at once, so the
- * request rate does not grow with the tab. It reads only while the job is not
+ * Reads the three logs of a job (ADR 0027), one after another, never at once,
+ * so the request rate does not grow with the number of files. The first read
+ * of a stream is a tail; then it appends from `next_offset`, at once while
+ * there is more, every 5 s once caught up. It reads only while the job is not
  * over and the tab is visible; when the job ends it reads each stream to the
  * end of its file once more and stops. Not before the job has started: there
  * is nothing on Anvil to read.
  */
 export function useJobLogs({
   jobId,
-  tab,
   status,
   disabled,
 }: {
   jobId: string;
-  /** The tab on show. */
-  tab: LogTab;
   status: JobStatus;
   /** Fixture data: never read. */
   disabled: boolean;
 }): {
   states: LogStates;
   sessionExpired: boolean;
-  /** Read again now, after a failure: one stream, or all on show. */
+  /** Read again now, after a failure: one stream, or all. */
   retry: (stream?: LogStream) => void;
 } {
   const [states, dispatch] = useReducer(reducer, INITIAL_STATES);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const streamsKey = streamsForTab(tab).join(",");
 
   const offsetsRef = useRef<Record<LogStream, number | null>>({ wbm: null, stdout: null, stderr: null });
   const inFlightRef = useRef<Partial<Record<LogStream, Promise<ReadOutcome>>>>({});
@@ -145,7 +143,7 @@ export function useJobLogs({
   useEffect(() => {
     if (disabled || !readable) return;
 
-    const active = streamsKey.split(",") as LogStream[];
+    const active = READ_ORDER;
     const plans = new Map<LogStream, Plan>(active.map((s) => [s, { due: 0, done: false, failures: 0 }]));
     let stopped = false;
     let running = false;
@@ -238,7 +236,7 @@ export function useJobLogs({
       retryRef.current = null;
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [disabled, readable, streamsKey, read]);
+  }, [disabled, readable, read]);
 
   // The job ended: read what is left, once.
   useEffect(() => {

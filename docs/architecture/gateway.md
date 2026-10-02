@@ -466,19 +466,17 @@ server actions, and not at all while its tab is hidden; the download goes
 through the one Next route handler for jobs,
 `web-gateway/frontend/app/api/jobs/[id]/logs/[stream]/route.ts`. The three
 streams are three files: `wbm` is the model's own log, `stdout` is the job
-script's output (toolkit version, snapshot and image paths, download counts),
-and `stderr` is everything the script wrote to stderr, not only errors:
-slurmly's module preamble, then the delimiter line `BODY_MARKER`
+script's output, and `stderr` is everything the script wrote to stderr, not
+only errors: slurmly's module preamble, then the delimiter line `BODY_MARKER`
 (`job_script.py`; the frontend mirrors it as `JOB_BODY_MARKER`), then the
-toolkit's download counter, then any real errors. The Logs panel opens on
-All, which stacks the three by source (they share no timestamps): the setup
-messages (stderr before the delimiter, folded), Job output, the WBM log, and
-Messages (stderr after it, the counter as one line); the WBM log, Job output
-and Messages tabs show one file each, unchanged. Lines that look like errors
-are red in every view (`log-severity.ts`, a word list, plus a failed job's
-reason as the failure card quotes it), with a count and a Next error button
-above the All view. A reader polls the three streams one after another, never
-at once.
+toolkit's download counter, then any real errors. The Logs panel is one box
+that lays them end to end in the order they happen (they share no
+timestamps): the setup messages (stderr before the delimiter, dimmed), the job
+output, the WBM log, the messages (stderr after it, the counter as one line),
+each block opened by a `──── Job output ────` separator line. Lines that look
+like errors are red (`log-severity.ts`, a word list, plus a failed job's reason
+as the failure card quotes it). The three streams are polled one after another,
+never at once.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`
