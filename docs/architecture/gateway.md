@@ -450,7 +450,8 @@ asyncio task started in the lifespan handler runs a sweep every
 every `JOB_BACKGROUND_SYNC_INTERVAL` (60) when none is: one batched
 `get_jobs` for every non-terminal job, then the end-time backfill (below),
 then the orphan `scancel` retries, then the daily purge check. A lookup that
-fails skips the tick. The status route settles one job the same way (`update_job_status()`).
+fails skips the tick, and a job it did not report is only counted absent after a
+`sacct` of the gateway's own shows it gone (`confirm_absent`). The status route settles one job the same way (`update_job_status()`).
 
 **Watching a job.** `web-gateway/backend/app/services/job_live.py` shares SLURM's answers
 in process for `JOB_LIVE_TTL_SECONDS` (5): the sweep and every viewer's
@@ -492,7 +493,8 @@ names one cause: SLURM's `CANCELLED` first, then SLURM's kills (`TIMEOUT`,
 `status`, `failure {cause, phase, message, excerpt}`, the record, the raw
 `slurm_state` and `slurm_exit_code`, and SLURM's own `slurm_start` and
 `slurm_end`. A job absent from every lookup for `JOB_LOST_AFTER_SECONDS`
-(600) is judged from its record, or is `lost`. Every status write is
+(600), each time confirmed by that `sacct`, is judged from its record, or is
+`lost`. Every status write is
 conditional on the status it read.
 
 A squeue row carries no start time, end time or exit code (slurmly's squeue

@@ -161,6 +161,8 @@ class Anvil:
                 if isinstance(result, Exception):
                     raise result
                 return result
+        if command.startswith("sacct "):  # a working sacct that knows no such job
+            return (0, '{"jobs": [], "errors": []}', "")
         words = shlex.split(command) if command.startswith(("[ -f", "test -f")) else []
         if words[:2] in (["[", "-f"], ["test", "-f"]):
             path = words[2]

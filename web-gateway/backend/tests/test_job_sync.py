@@ -263,7 +263,7 @@ def test_the_first_miss_is_only_noted(db, anvil, job):
     stored = db.jobs.docs["job-1"]
     assert stored["status"] == "SUBMITTED"
     assert stored["missing_since"] is not None
-    assert anvil.commands == []  # nothing is read for a first miss
+    assert [c for c in anvil.commands if not c.startswith("sacct ")] == []  # no record is read
 
 
 def test_a_miss_is_not_repeated_while_it_lasts(db, anvil, job):
@@ -287,7 +287,7 @@ def test_a_job_missing_for_less_than_the_window_is_left_alone(db, anvil, job):
     job["missing_since"] = mongo_time(-timedelta(seconds=settings.JOB_LOST_AFTER_SECONDS - 60))
     sweep()
     assert db.jobs.docs["job-1"]["status"] == "SUBMITTED"
-    assert anvil.commands == []
+    assert [c for c in anvil.commands if not c.startswith("sacct ")] == []
 
 
 def test_a_job_missing_for_a_while_is_judged_by_its_record(db, anvil, job):
@@ -322,6 +322,129 @@ def test_an_ssh_failure_reading_the_record_of_a_missing_job_does_nothing(db, anv
     before = dict(job)
     sweep()
     assert db.jobs.docs["job-1"] == before
+
+
+# ---- absence counts only when the lookup worked -------------------------------
+# slurmly answers a failed squeue and a failed sacct with the same empty result
+# as a job that is not there, so the sweep asks sacct again itself, where the
+# exit status and the output can be seen (open item 23, ADR 0026 rule 4).
+
+
+def broken_sacct(anvil, answer=(1, "", "slurm_load_jobs error: Unable to contact slurm controller")):
+    anvil.results.append((lambda c: c.startswith("sacct "), answer))
+
+
+def lost_clock(db, seconds_ago: float):
+    stored = db.jobs.docs["job-1"]
+    stored["missing_since"] = mongo_time(-timedelta(seconds=seconds_ago))
+    return stored["missing_since"]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (1, "", "slurm_load_jobs error: Unable to contact slurm controller"),
+        (0, "", ""),  # exit 0 and no output: no JSON document at all
+        (0, "not json", ""),
+        (0, '{"errors": [{"error": "x"}], "jobs": []}', ""),
+        (0, '{"errors": []}', ""),  # a document, but not a list of jobs
+        SSHTransportError("down"),
+    ],
+)
+def test_a_failed_lookup_tick_records_no_miss(db, anvil, job, answer):
+    broken_sacct(anvil, answer)
+    before = dict(job)
+    sweep()
+    assert db.jobs.docs["job-1"] == before  # no missing_since
+    assert any(c.startswith("sacct ") for c in anvil.commands)
+
+
+@pytest.mark.parametrize("answer", [(1, "", "unreachable"), (0, "", "")])
+def test_a_failed_lookup_tick_does_not_advance_the_lost_clock(db, anvil, job, answer):
+    since = lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    broken_sacct(anvil, answer)
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "SUBMITTED"
+    assert stored["missing_since"] == since
+    assert not [e for e in db.audit_events.docs.values() if e["action"] == "job_status_changed"]
+
+
+def test_the_next_tick_that_works_judges_the_job(db, anvil, job):
+    lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    anvil.results.append((lambda c: c.startswith("sacct "), (1, "", "down")))
+    sweep()
+    assert db.jobs.docs["job-1"]["status"] == "SUBMITTED"
+    anvil.results.clear()
+    sweep()
+    assert db.jobs.docs["job-1"]["status"] == "FAILED"
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "lost"
+
+
+def test_a_real_absence_on_a_working_tick_counts(db, anvil, job):
+    sweep()
+    assert db.jobs.docs["job-1"]["missing_since"] is not None  # first miss, sacct answered
+    lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    sweep()
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "lost"
+
+
+def test_a_single_tracked_job_that_is_gone_can_still_be_lost(db, anvil, job):
+    # One job, absent from the batch: "every job absent" cannot tell a failed
+    # lookup from a vanished job, which is why the second sacct is the judge.
+    assert len(anvil.lookups) == 0
+    lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    sweep()
+    assert anvil.lookups == [["12345"]]
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "lost"
+
+
+def test_every_job_absent_on_a_tick_where_sacct_failed_is_nobody_lost(db, anvil, job):
+    db.jobs.docs["job-2"] = make_sent_job("job-2", "owner", "RUNNING", slurm_job_id="12346")
+    for stored in db.jobs.docs.values():
+        stored["missing_since"] = mongo_time(-timedelta(hours=1))
+    broken_sacct(anvil)
+    sweep()
+    assert {d["status"] for d in db.jobs.docs.values()} == {"SUBMITTED", "RUNNING"}
+
+
+def test_some_jobs_absent_are_judged_while_others_are_found(db, anvil, job):
+    db.jobs.docs["job-2"] = make_sent_job("job-2", "owner", "SUBMITTED", slurm_job_id="12346")
+    lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    anvil.found["12346"] = info("RUNNING", "running", slurm_id="12346")
+    sweep()
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "lost"
+    assert db.jobs.docs["job-2"]["status"] == "RUNNING"
+
+
+def test_a_job_the_second_sacct_finds_is_not_absent(db, anvil, job):
+    lost_clock(db, settings.JOB_LOST_AFTER_SECONDS + 5)
+    row = {"job_id": 12345, "name": "x", "state": {"current": ["RUNNING"], "reason": "None"},
+           "time": {"start": 1790000000, "end": 0}}
+    anvil.results.append((lambda c: c.startswith("sacct "), (0, json.dumps({"jobs": [row], "errors": []}), "")))
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "RUNNING"
+    assert "missing_since" not in stored
+
+
+def test_nothing_absent_costs_no_extra_command(db, anvil, job):
+    anvil.found["12345"] = info("RUNNING", "running")
+    sweep()
+    assert anvil.commands == []
+
+
+def test_the_status_poll_of_an_unchecked_absence_records_nothing(db, anvil, job):
+    broken_sacct(anvil)
+    before = dict(job)
+    doc = asyncio.run(REAL_UPDATE_JOB_STATUS("job-1"))
+    assert doc["status"] == "SUBMITTED"
+    assert db.jobs.docs["job-1"] == before
+
+
+def test_the_status_poll_of_a_checked_absence_notes_the_miss(db, anvil, job):
+    asyncio.run(REAL_UPDATE_JOB_STATUS("job-1"))
+    assert db.jobs.docs["job-1"]["missing_since"] is not None
 
 
 # ---- the status poll shares the same path ------------------------------------

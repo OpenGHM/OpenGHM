@@ -30,6 +30,8 @@ from slurmly import (
 from slurmly.cleanup import assert_safe_to_remove
 from slurmly.exceptions import InvalidConfig
 from slurmly.models import JobInfo
+from slurmly.slurm.commands import build_sacct_json_many
+from slurmly.slurm.parser import parse_sacct_json_all
 
 from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
@@ -324,6 +326,8 @@ _ACTIVE = ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"]
 # slurmly's `submit_grace_window_seconds` for the `purdue_anvil` preset: for
 # this long after sbatch, "not found" is a lookup that is too early.
 _SUBMIT_GRACE_SECONDS = 120
+# How many ids one `sacct` check carries (slurmly's own batches are 50).
+_PROBE_CHUNK = 50
 
 
 # ---------------------------------------------------------------------------
@@ -439,16 +443,104 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
     )
 
 
-async def _settle(doc: dict, info: JobInfo | None) -> None:
+async def confirm_absent(ids: list[str]) -> tuple[dict[str, JobInfo], set[str]]:
+    """Check that "SLURM did not report these jobs" was an answer.
+
+    slurmly's batched `get_jobs` answers a `squeue` that failed and a `sacct`
+    that failed with an empty result, the same as a job that is not there
+    (`client.py`, `_batch_lookup_chunk`: a non-zero exit, empty output and
+    unparseable output are all skipped silently). So for the ids it did not
+    report, this runs the `sacct` once more, itself, where the outcome is
+    visible: exit status 0 and a JSON document with a `jobs` list and no
+    `errors`. Returns `(found, confirmed)`: the rows that retry did find (the
+    first lookup missed them) and the ids it showed to be absent from SLURM's
+    accounting. An id in neither could not be checked and says nothing about
+    the job. `sacct` is the authority, not `squeue`: it records a job from
+    submission until `sacct_lookback_days` after it ends, and a job that is
+    not there is gone."""
+    client = await get_slurm_client()
+    profile = client.cluster_profile
+    if not profile.supports_sacct_json:
+        return {}, set()
+    found: dict[str, JobInfo] = {}
+    confirmed: set[str] = set()
+    for start in range(0, len(ids), _PROBE_CHUNK):
+        chunk = ids[start : start + _PROBE_CHUNK]
+        command = build_sacct_json_many(chunk, lookback_days=profile.sacct_lookback_days)
+        try:
+            result = await run_remote(command, operation="sacct_probe", retry_safe=True)
+        except Exception as exc:
+            logger.warning("sacct check of %d absent jobs failed: %s", len(chunk), exc)
+            continue
+        try:
+            payload = json.loads(result.stdout) if result.exit_status == 0 else None
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list) or payload.get("errors"):
+            logger.warning(
+                "sacct check of %d absent jobs gave no usable answer (exit %s): %s",
+                len(chunk),
+                result.exit_status,
+                (result.stderr or "").strip()[:200],
+            )
+            continue
+        rows = parse_sacct_json_all(payload)
+        for jid in chunk:
+            if jid in rows:
+                found[jid] = rows[jid]
+            else:
+                confirmed.add(jid)
+    return found, confirmed
+
+
+async def _resolve_absent(
+    found: dict[str, JobInfo | None], ids: list[str], *, share: bool = False
+) -> set[str]:
+    """For the ids `get_jobs` did not report: put in `found` any row a second
+    `sacct` finds, and return the ids that `sacct` showed to be absent. Only
+    those may count toward `lost` (ADR 0026, rule 4); the others are warned
+    about and left alone. `share` reuses one check for the TTL, for the status
+    route."""
+    absent = [i for i in ids if found.get(i) is None]
+    if not absent:
+        return set()
+    try:
+        if share:
+            rescued, confirmed = await job_live.shared(
+                ("confirm_absent", tuple(absent)), lambda: confirm_absent(absent)
+            )
+        else:
+            rescued, confirmed = await confirm_absent(absent)
+    except Exception as exc:
+        logger.warning("Could not check %d absent jobs, recording no misses: %s", len(absent), exc)
+        return set()
+    found.update(rescued)
+    unchecked = len(absent) - len(rescued) - len(confirmed)
+    if unchecked:
+        logger.warning(
+            "SLURM did not report %d of %d jobs and the check of that failed too; "
+            "no misses recorded for them",
+            unchecked,
+            len(ids),
+        )
+    return confirmed
+
+
+async def _settle(doc: dict, info: JobInfo | None, *, absent_confirmed: bool = False) -> None:
     """Bring one non-terminal job in line with what SLURM reported for it
-    (`info`), or with SLURM not reporting it (None)."""
+    (`info`), or with SLURM not reporting it (None). `absent_confirmed` says
+    that None was checked (`confirm_absent`); an unchecked None is a lookup
+    that may have failed and changes nothing."""
     now = datetime.now(timezone.utc)
 
     if info is None:
         # Not in squeue or sacct. That is a fact about one lookup, not about
         # the job: slurmly also answers "absent" when both commands failed.
-        # Only a job that stays absent for a while, past slurmly's submit
-        # grace window, is judged (ADR 0026, rule 4).
+        # So absence counts only when `sacct` was seen to work, and then only
+        # when it lasts, past slurmly's submit grace window (ADR 0026,
+        # rule 4).
+        if not absent_confirmed:
+            return
         missing_since = _as_utc(doc.get("missing_since"))
         if missing_since is None:
             await _move(doc, {"missing_since": now})
@@ -489,16 +581,19 @@ async def _settle(doc: dict, info: JobInfo | None) -> None:
         await _move(doc, fields, unset=unset)
 
 
-async def _settle_once(doc: dict, info: JobInfo | None) -> None:
+async def _settle_once(doc: dict, info: JobInfo | None, *, absent_confirmed: bool = False) -> None:
     """`_settle`, run by one caller at a time per job: the sweep and every
     viewer's status poll that find a job over together reach one verdict."""
-    await job_live.single_flight(("settle", doc["_id"]), lambda: _settle(doc, info))
+    await job_live.single_flight(
+        ("settle", doc["_id"]), lambda: _settle(doc, info, absent_confirmed=absent_confirmed)
+    )
 
 
 async def sync_active_jobs() -> None:
     """One sweep: look up every job that has a SLURM id and no verdict, in one
     batched call, and settle each. If the lookup itself fails the whole tick
-    is skipped, so a broken connection records no misses. The answers are kept
+    is skipped, so a broken connection records no misses; and a job SLURM did
+    not report is only absent once a second `sacct` shows it (`confirm_absent`). The answers are kept
     for the status route (`job_live`), so a poll soon after asks SLURM nothing."""
     db = get_db()
     docs = [
@@ -515,10 +610,11 @@ async def sync_active_jobs() -> None:
     except Exception as exc:
         logger.warning("Sweep: batched lookup of %d jobs failed, skipping this tick: %s", len(ids), exc)
         return
+    confirmed = await _resolve_absent(found, ids)
 
     for doc, slurm_id in zip(docs, ids):
         try:
-            await _settle_once(doc, found.get(slurm_id))
+            await _settle_once(doc, found.get(slurm_id), absent_confirmed=slurm_id in confirmed)
         except Exception as exc:
             logger.warning("Sweep: job %s failed: %s", doc["_id"], exc)
 
@@ -612,7 +708,10 @@ async def update_job_status(job_id: str) -> dict[str, Any]:
     doc = await db.jobs.find_one({"_id": job_id}) or doc
     if doc.get("status") in TERMINAL_STATUSES:
         return doc
-    await _settle_once(doc, found.get(str(slurm_job_id)))
+    confirmed = await _resolve_absent(found, [str(slurm_job_id)], share=True)
+    await _settle_once(
+        doc, found.get(str(slurm_job_id)), absent_confirmed=str(slurm_job_id) in confirmed
+    )
     return await db.jobs.find_one({"_id": job_id}) or doc
 
 

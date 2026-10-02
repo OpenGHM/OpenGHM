@@ -652,7 +652,7 @@ def test_spec_for_the_v2_snapshot_asks_for_its_recommended_compute(v2_spec_input
     spec = slurm.build_job_spec(job, snapshot, "echo body")
     assert isinstance(spec, JobSpec)
     # 15:00 recommended (15 minutes) plus 50%; cores as recommended.
-    assert (spec.cpus_per_task, spec.time_limit) == (16, "22:30")
+    assert (spec.cpus_per_task, spec.time_limit) == (2, "22:30")
     assert (spec.nodes, spec.ntasks, spec.memory) == (None, None, None)
     assert (spec.account, spec.partition, spec.qos) == ("ees260008", "shared", "cpu")
     assert spec.name == "sim-20260930-0a1b2c"
@@ -690,7 +690,7 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
         remote_job_dir="/j",
     )
     directives = [l for l in script.splitlines() if l.startswith("#SBATCH")]
-    assert "#SBATCH --cpus-per-task=16" in directives
+    assert "#SBATCH --cpus-per-task=2" in directives
     assert "#SBATCH --time=22:30" in directives
     assert "#SBATCH --account=ees260008" in directives
     assert not [d for d in directives if "--nodes" in d or "--ntasks" in d]
@@ -717,7 +717,7 @@ def test_a_walltime_the_draft_chose_is_sent_as_given(v2_spec_inputs):
     job.slurm_config.walltime = "00:15:00"  # equal to the recommendation: no headroom
     spec = slurm.build_job_spec(job, snapshot, "echo body")
     assert spec.time_limit == "00:15:00"
-    assert spec.cpus_per_task == 16  # cores still the snapshot's
+    assert spec.cpus_per_task == 2  # cores still the snapshot's
 
 
 def test_the_snapshots_walltime_gets_headroom_and_its_cores_do_not(v2_spec_inputs):

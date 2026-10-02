@@ -98,7 +98,16 @@ that matches wins:
    at least `JOB_LOST_AFTER_SECONDS` (default 600) since the first miss,
    and past slurmly's submit grace window, is judged from its record by
    rule 3. With no record it is `lost` (FAILED). An SSH error or a failed
-   lookup is never a miss.
+   lookup is never a miss. slurmly's batched `get_jobs` cannot say which an
+   empty answer was (`client.py`, `_batch_lookup_chunk` skips a non-zero
+   exit, empty output and unparseable output alike), so the gateway checks
+   every job it reports absent with one `sacct` of its own, where the exit
+   status and the output are visible. Only a `sacct` that exited 0 with a
+   JSON `jobs` list and no `errors`, and does not list the job, counts as
+   a miss. A row it does find is the job's answer. A `sacct` that fails
+   changes nothing, the miss clock included, and is logged as a warning, so
+   a tick where every job is absent never loses one, and a single tracked
+   job that is truly gone is still lost.
 
 A cause carries a phase, a message for the owner, and an excerpt. The
 excerpt is the WBM log tail for the WBM causes, and the stderr tail for the
