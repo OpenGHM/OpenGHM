@@ -379,6 +379,88 @@ describe("filtering", () => {
   });
 });
 
+describe("the More filters dialog", () => {
+  // Behind the open dialog the page is aria-hidden: look past it for the buttons under it.
+  const moreButton = () => screen.getByRole("button", { name: /^More filters/, hidden: true });
+  const toggle = () => screen.getByRole("button", { name: /^Filters/, hidden: true });
+  const openDialog = () => {
+    if (toggle().getAttribute("aria-expanded") !== "true") fireEvent.click(toggle());
+    fireEvent.click(moreButton());
+    return screen.getByRole("dialog", { name: "Filters" });
+  };
+
+  it("opens from the panel with every filter group of the repository but the type, and Escape closes it", () => {
+    renderPicker();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const dialog = openDialog();
+    for (const title of ["Tags", "Keyword", "Temporal coverage", "Spatial resolution", "Output variable", "License"]) {
+      expect(within(dialog).getByRole("button", { name: title })).toBeTruthy();
+    }
+    expect(within(dialog).queryByRole("button", { name: "Type" })).toBeNull();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("filters by a keyword and an output variable, with chips, the URL and a badge on the button", async () => {
+    vi.useFakeTimers();
+    fetchSnapshots.mockResolvedValue(page([TUTORIAL]));
+    renderPicker();
+    const dialog = openDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keyword" }));
+    fireEvent.click(within(dialog).getAllByRole("checkbox", { name: /storage/ })[0]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Output variable" }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Discharge/ }));
+    await settle();
+    expect(fetchSnapshots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ keyword: ["storage"], output: ["discharge"], page: 1 })
+    );
+    expect(window.location.search).toBe("?keyword=storage&output=discharge");
+    expect(screen.getByRole("button", { name: "Remove filter: Keyword: storage", hidden: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove filter: Output: Discharge", hidden: true })).toBeTruthy();
+    expect(toggle().textContent).toContain("2 active");
+    // The button behind the dialog counts what only the dialog has.
+    expect(moreButton().textContent).toContain("2 active");
+  });
+
+  it("starts from the filters of a copied link, however far from the compact panel", () => {
+    renderPicker({ initialFilters: { ...FILTERS, license: ["GPL-3.0-only"] } });
+    fireEvent.click(toggle());
+    expect(moreButton().textContent).toContain("1 active");
+    expect(screen.getByRole("button", { name: "Remove filter: License: GPL-3.0-only", hidden: true })).toBeTruthy();
+    // A group with a selection is open when the dialog opens.
+    const dialog = openDialog();
+    expect(within(dialog).getByRole("button", { name: "License" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("offers Show N snapshots, which closes it, and Reset, which clears every filter but keeps the search", async () => {
+    vi.useFakeTimers();
+    fetchSnapshots.mockResolvedValue(page(BIG));
+    renderPicker({
+      initialFilters: { ...FILTERS, searchQuery: "snap", keyword: ["storage"], tag: ["tutorial"], yearStart: 2000 },
+    });
+    const dialog = openDialog();
+    expect(within(dialog).getByRole("button", { name: "Show 10 snapshots" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reset" }));
+    await settle();
+    expect(fetchSnapshots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ searchQuery: "snap", keyword: [], tag: [], yearStart: null })
+    );
+    expect(window.location.search).toBe("?q=snap");
+    expect(toggle().textContent).toBe("Filters");
+    expect((within(dialog).getByRole("button", { name: "Reset" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Show \d+ snapshots?$/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("is left out of the page's own ids: the panel and the dialog do not share an element id", () => {
+    renderPicker();
+    openDialog();
+    const ids = [...document.querySelectorAll("[id]")].map((e) => e.id);
+    expect(ids.length).toBe(new Set(ids).size);
+  });
+});
+
 describe("paging and loading", () => {
   beforeEach(() => vi.useFakeTimers());
 

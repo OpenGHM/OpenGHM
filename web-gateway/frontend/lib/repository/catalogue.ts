@@ -57,7 +57,8 @@ export const CATALOGUE_FACET_NAMES: Record<CatalogueFacetKey, { title: string; c
  * catalogue offers, in what order and under what title: the Data Repository's
  * sidebar and the Start screen's snapshot picker both render it
  * (`components/repository/catalogue-filter-body.tsx`) and decide only the
- * presentation. A filter added here shows up in both.
+ * presentation. A filter added here shows up in both: in the picker's dialog of
+ * every filter at once, and in its compact panel when it is flagged `picker`.
  */
 export type CatalogueFilterGroup =
   | {
@@ -65,7 +66,7 @@ export type CatalogueFilterGroup =
       /** The facet it filters on, and the key of the group. */
       key: CatalogueFacetKey;
       title: string;
-      /** Also offered in the Start screen's snapshot picker (the compact panel), not only the sidebar. */
+      /** Also in the Start screen's snapshot picker's compact panel. The picker's "More filters" dialog lists every group, flagged or not. */
       picker: boolean;
       /** The sidebar opens the group by default; `"when-short"` only when its options fit `shortAtMost`. */
       defaultOpen: boolean | "when-short";
@@ -150,9 +151,11 @@ export function visibleFilterGroups(
 }
 
 /**
- * The groups of the Start screen's snapshot picker: the flagged ones
- * (`picker`), without what the picker fixes, and only those with something to
- * list. The same definition and the same rules as the sidebar's.
+ * The groups of the Start screen's snapshot picker's compact panel: the flagged
+ * ones (`picker`), without what the picker fixes, and only those with something
+ * to list. The same definition and the same rules as the sidebar's. The "More
+ * filters" dialog is not this list: it takes every group
+ * (`visibleFilterGroups(…, SNAPSHOT_PICKER_FIXED_FILTERS)`).
  */
 export function pickerFilterGroups(
   facets: CatalogueFacets,
@@ -161,11 +164,25 @@ export function pickerFilterGroups(
   return visibleFilterGroups(facets, filters, SNAPSHOT_PICKER_FIXED_FILTERS).filter((g) => g.picker);
 }
 
-/** The filter-state keys the picker's groups read and write. */
+/**
+ * The filter-state keys the picker reads and writes: those of every group of
+ * the definition, flagged or not (the dialog offers them all), less what the
+ * picker fixes.
+ */
 export function pickerFilterKeys(): (keyof CatalogueFilterState)[] {
   return CATALOGUE_FILTER_GROUPS.filter(
-    (g) => g.picker && !groupFilterKeys(g).some((k) => k in SNAPSHOT_PICKER_FIXED_FILTERS)
+    (g) => !groupFilterKeys(g).some((k) => k in SNAPSHOT_PICKER_FIXED_FILTERS)
   ).flatMap(groupFilterKeys);
+}
+
+/**
+ * How many filters are on in groups the picker's compact panel does not show:
+ * the ones only the "More filters" dialog has. What its button's badge counts.
+ */
+export function countMoreFilters(filters: CatalogueFilterState): number {
+  return CATALOGUE_FILTER_GROUPS.filter(
+    (g) => !g.picker && !groupFilterKeys(g).some((k) => k in SNAPSHOT_PICKER_FIXED_FILTERS)
+  ).reduce((n, g) => n + groupActiveCount(g, filters), 0);
 }
 
 /**

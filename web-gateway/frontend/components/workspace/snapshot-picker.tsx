@@ -128,7 +128,12 @@ export function SnapshotPicker({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <SnapshotPickerFilters filters={filters} facets={facets} onChange={setFilters} />
+      <SnapshotPickerFilters
+        filters={filters}
+        facets={facets}
+        onChange={setFilters}
+        resultCount={error ? null : result.totalCount}
+      />
 
       <div ref={resultsRef} className="flex min-h-7 scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-2">
         <p

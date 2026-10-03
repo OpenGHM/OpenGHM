@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CatalogueSidebar } from "./catalogue-sidebar";
 import { SnapshotPickerFilters } from "@/components/workspace/snapshot-picker-filters";
 import {
@@ -45,6 +45,24 @@ function pickerTitles(state: CatalogueFilterState, facets: CatalogueFacets): str
     <SnapshotPickerFilters filters={state} facets={facets} onChange={vi.fn()} />
   );
   const titles = [...container.querySelectorAll("section h3")].map((h) => h.textContent ?? "");
+  cleanup();
+  return titles;
+}
+
+/** Opens the compact panel, then the dialog from its More filters button. */
+function openMoreFilters() {
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^More filters/ }));
+}
+
+/** The headings of the picker's "More filters" dialog, in order (the dialog is in a portal, so the document is searched). */
+function dialogTitles(state: CatalogueFilterState, facets: CatalogueFacets): string[] {
+  render(<SnapshotPickerFilters filters={state} facets={facets} onChange={vi.fn()} />);
+  openMoreFilters();
+  const dialog = screen.getByRole("dialog", { name: "Filters" });
+  const titles = [...dialog.querySelectorAll('[role="group"][id$="-panel"]')].map(
+    (g) => document.getElementById(g.getAttribute("aria-labelledby") as string)?.textContent ?? ""
+  );
   cleanup();
   return titles;
 }
@@ -107,6 +125,44 @@ describe("the sidebar and the picker's panel share their filter groups", () => {
     expect(sidebarTitles(filters({ process: ["irrigation"] }), FACETS)).toEqual(all);
   });
 
+  it("show in the picker's dialog every sidebar group but the fixed type, in the sidebar's order", () => {
+    const sidebar = sidebarTitles(filters(), FACETS);
+    const dialog = dialogTitles(filters(), FACETS);
+    expect(dialog).toEqual(sidebar.filter((t) => t !== "Type"));
+    // Not a vacuous match: it holds the filters the compact panel does not.
+    expect(dialog).toEqual(expect.arrayContaining([...PICKER_TITLES, "Keyword", "Output variable", "License"]));
+    expect(dialog.length).toBeGreaterThan(PICKER_TITLES.length);
+    expect(dialog).not.toContain("Type");
+  });
+
+  it("show the dialog's groups open as the definition says, and the compact ones among them", () => {
+    render(<SnapshotPickerFilters filters={filters()} facets={FACETS} onChange={vi.fn()} />);
+    openMoreFilters();
+    const dialog = screen.getByRole("dialog", { name: "Filters" });
+    const expanded = (title: string) =>
+      within(dialog).getByRole("button", { name: title }).getAttribute("aria-expanded");
+    expect(expanded("Temporal coverage")).toBe("true");
+    expect(expanded("Spatial resolution")).toBe("true");
+    expect(expanded("License")).toBe("false");
+    expect(expanded("Output variable")).toBe("false");
+  });
+
+  it("has no More filters button when the compact panel already has every group", () => {
+    const only: CatalogueFacets = {
+      ...FACETS,
+      keyword: [],
+      output: [],
+      forcing: [],
+      wbm: [],
+      process: [],
+      creator: [],
+      license: [],
+    };
+    render(<SnapshotPickerFilters filters={filters()} facets={only} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    expect(screen.queryByRole("button", { name: /^More filters/ })).toBeNull();
+  });
+
   describe("a group added to the definition", () => {
     // A facet the API does not have yet, as a future one would be.
     const withExtra = {
@@ -127,19 +183,33 @@ describe("the sidebar and the picker's panel share their filter groups", () => {
       }
       expect(sidebarTitles(state, withExtra)).not.toContain("Study region");
       expect(pickerTitles(state, withExtra)).not.toContain("Study region");
+      expect(dialogTitles(state, withExtra)).not.toContain("Study region");
     }
 
-    it("shows in both when it is flagged for the picker", () => {
+    it("shows in the sidebar, the compact panel and the dialog when it is flagged for the picker", () => {
       withGroup(extra(true), () => {
         expect(sidebarTitles(state, withExtra)).toContain("Study region");
         expect(pickerTitles(state, withExtra)).toContain("Study region");
+        expect(dialogTitles(state, withExtra)).toContain("Study region");
       });
     });
 
-    it("shows only in the sidebar when it is not", () => {
+    it("shows in the sidebar and the dialog, not in the compact panel, when it is not", () => {
       withGroup(extra(false), () => {
         expect(sidebarTitles(state, withExtra)).toContain("Study region");
         expect(pickerTitles(state, withExtra)).not.toContain("Study region");
+        expect(dialogTitles(state, withExtra)).toContain("Study region");
+      });
+    });
+
+    it("is counted on the More filters button when it is not in the compact panel", () => {
+      const selected = { ...state, region: ["global"] } as unknown as CatalogueFilterState;
+      const badge = () => screen.getByRole("button", { name: /^More filters/ }).textContent;
+      withGroup(extra(false), () => {
+        render(<SnapshotPickerFilters filters={selected} facets={withExtra} onChange={vi.fn()} />);
+        fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+        expect(badge()).toContain("1 active");
+        cleanup();
       });
     });
   });
@@ -162,7 +232,7 @@ describe("the sidebar and the picker's panel share their filter groups", () => {
       <SnapshotPickerFilters filters={filters()} facets={FACETS} onChange={vi.fn()} />
     );
     expect(container.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(2);
-    expect(container.querySelector("#catalogue-year-from")).not.toBeNull();
+    expect(container.querySelector('input[type="number"]')).not.toBeNull();
     expect(container.querySelector("button[aria-pressed]")).not.toBeNull();
   });
 });

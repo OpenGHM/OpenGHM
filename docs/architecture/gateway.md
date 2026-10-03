@@ -348,10 +348,13 @@ do not take it.
 `GET /repository/datasets` and `GET /repository/model-inputs` stay as the
 separate, single-kind lists. The Start screen's snapshot picker
 (`/workspace/new`) does not read them: it asks this route for `type=snapshot`
-twelve to a page, with the search, the tag, year and resolution filters and the facet counts the
-Data Repository has. The filters come from one definition in the frontend
-(`CATALOGUE_FILTER_GROUPS` in `web-gateway/frontend/lib/repository/catalogue.ts`),
-which also says, per group, whether the picker offers it (`picker`)
+twelve to a page, with the search, every filter the Data Repository has but the
+type it fixes, and its facet counts. The filters come from one definition in the
+frontend (`CATALOGUE_FILTER_GROUPS` in
+`web-gateway/frontend/lib/repository/catalogue.ts`), which also says, per group,
+whether the picker's compact panel shows it (`picker`: tags, years, resolution);
+a "More filters" button there opens a dialog with all of them, so a filter added
+to the definition is in the picker without a second edit
 ([ADR 0028](../decisions/0028-a-new-simulation-is-a-saved-draft-from-its-first-step.md)).
 
 `GET /repository/mine` (signed in) is the one catalogue read that needs a

@@ -8,15 +8,11 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   countActiveFilters,
-  facetGroupOptions,
-  groupActiveCount,
   hasActiveFilters,
   visibleFilterGroups,
 } from "@/lib/repository/catalogue";
 import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/types";
-import { CatalogueFilterBody } from "./catalogue-filter-body";
-import { COLLAPSED_OPTION_COUNT } from "./catalogue-filter-controls";
-import { FilterGroup } from "./filter-group";
+import { CatalogueFilterSection } from "./catalogue-filter-body";
 
 /**
  * The Data Repository's filter sidebar: every group of `CATALOGUE_FILTER_GROUPS`
@@ -88,25 +84,13 @@ export function CatalogueSidebar({
 
           <div>
             {visibleFilterGroups(facets, filters).map((group) => (
-              <FilterGroup
+              <CatalogueFilterSection
                 key={group.key}
-                title={group.title}
-                defaultOpen={
-                  group.defaultOpen === "when-short"
-                    ? group.kind === "facet" &&
-                      facetGroupOptions(group.key, facets).length <=
-                        (group.shortAtMost ?? COLLAPSED_OPTION_COUNT)
-                    : group.defaultOpen
-                }
-                activeCount={groupActiveCount(group, filters)}
-              >
-                <CatalogueFilterBody
-                  group={group}
-                  filters={filters}
-                  facets={facets}
-                  onChange={onChange}
-                />
-              </FilterGroup>
+                group={group}
+                filters={filters}
+                facets={facets}
+                onChange={onChange}
+              />
             ))}
           </div>
         </Card>

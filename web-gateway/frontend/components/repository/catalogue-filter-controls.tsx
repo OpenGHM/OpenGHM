@@ -220,6 +220,8 @@ export function YearRangeFilter({
       yearEnd: b >= bounds.max ? null : b,
     });
 
+  // Ids of its own: the picker has this control in its panel and in its dialog at once.
+  const inputId = useId();
   return (
     <div className="space-y-2">
       <Slider
@@ -238,7 +240,7 @@ export function YearRangeFilter({
       />
       <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
         <YearInput
-          id="catalogue-year-from"
+          id={`${inputId}-from`}
           label="From"
           value={shown[0]}
           min={bounds.min}
@@ -250,7 +252,7 @@ export function YearRangeFilter({
           –
         </span>
         <YearInput
-          id="catalogue-year-to"
+          id={`${inputId}-to`}
           label="To"
           value={shown[1]}
           min={bounds.min}

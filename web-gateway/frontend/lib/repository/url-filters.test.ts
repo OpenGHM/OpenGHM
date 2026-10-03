@@ -104,7 +104,7 @@ describe("catalogue sort and view in the URL", () => {
   });
 });
 
-describe("the snapshot picker's filters (the catalogue's, of the groups it offers)", () => {
+describe("the snapshot picker's filters (every group of the definition but the fixed type)", () => {
   it("round-trips the search, the tags, the year and resolution ranges and the page", () => {
     const qs = "q=wbm&tag=publication&tag=tutorial&year_start=2000&year_end=2009&spatial_res_min=0.08&spatial_res_max=0.25&page=2";
     const filters = parsePickerFilters(new URLSearchParams(qs));
@@ -113,24 +113,36 @@ describe("the snapshot picker's filters (the catalogue's, of the groups it offer
     expect(pickerFiltersToParams(filters).toString()).toBe(qs);
   });
 
-  it("drops what no group of the picker covers: other facets, the type, the sort and the view", () => {
-    const filters = parsePickerFilters(
-      new URLSearchParams("type=model-input&keyword=hydrology&output=discharge&sort=title-az&view=grid&q=a")
-    );
+  it("keeps the filters only the More filters dialog has, and round-trips them", () => {
+    const qs = "q=a&keyword=hydrology&output=discharge&output=runoff&forcing=windU&wbm=1.0.0&process=irrigation&creator=Ada+Hydro&license=CC-BY-4.0";
+    const filters = parsePickerFilters(new URLSearchParams(qs));
+    expect(filters.keyword).toEqual(["hydrology"]);
+    expect(filters.output).toEqual(["discharge", "runoff"]);
+    expect(filters.forcing).toEqual(["windU"]);
+    expect(filters.wbm).toEqual(["1.0.0"]);
+    expect(filters.process).toEqual(["irrigation"]);
+    expect(filters.creator).toEqual(["Ada Hydro"]);
+    expect(filters.license).toEqual(["CC-BY-4.0"]);
+    expect(pickerFiltersToParams(filters).toString()).toBe(qs);
+  });
+
+  it("drops what the picker fixes or has no control for: the type, the sort and the view", () => {
+    const filters = parsePickerFilters(new URLSearchParams("type=model-input&sort=title-az&view=grid&q=a"));
     expect(filters).toEqual({ ...EMPTY_CATALOGUE_FILTERS, searchQuery: "a" });
     expect(pickerFiltersToParams(filters).toString()).toBe("q=a");
   });
 
-  it("keeps the keys of the groups flagged for the picker, whichever they are", () => {
+  it("reads the keys from the definition: a group taken out of it is no longer read", () => {
     const groups = CATALOGUE_FILTER_GROUPS as CatalogueFilterGroup[];
     const keyword = groups.find((g) => g.key === "keyword") as CatalogueFilterGroup;
-    const was = keyword.picker;
-    keyword.picker = true;
+    const at = groups.indexOf(keyword);
+    groups.splice(at, 1);
     try {
-      expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual(["hydrology"]);
+      // Out of the definition, the picker no longer reads it.
+      expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual([]);
     } finally {
-      keyword.picker = was;
+      groups.splice(at, 0, keyword);
     }
-    expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual([]);
+    expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual(["hydrology"]);
   });
 });

@@ -3,6 +3,7 @@ import {
   activeFilterChips,
   clearedFilters,
   countActiveFilters,
+  countMoreFilters,
   formatResolutionRange,
   hasActiveFilters,
   humanizeForcing,
@@ -169,7 +170,32 @@ describe("the filter groups", () => {
       "Temporal coverage",
       "Spatial resolution",
     ]);
-    expect(pickerFilterKeys().sort()).toEqual(["spatialResMax", "spatialResMin", "tag", "yearEnd", "yearStart"]);
+  });
+
+  it("read and write in the picker the keys of every group but the fixed type, flagged or not", () => {
+    expect(pickerFilterKeys().sort()).toEqual(
+      [
+        "creator",
+        "forcing",
+        "keyword",
+        "license",
+        "output",
+        "process",
+        "spatialResMax",
+        "spatialResMin",
+        "tag",
+        "wbm",
+        "yearEnd",
+        "yearStart",
+      ].sort()
+    );
+  });
+
+  it("count, for the More filters button, only filters in groups the compact panel lacks", () => {
+    expect(countMoreFilters(filters())).toBe(0);
+    // Tags, years and resolution are in the panel; the type is fixed.
+    expect(countMoreFilters(filters({ tag: ["publication"], yearStart: 2000, type: ["snapshot"] }))).toBe(0);
+    expect(countMoreFilters(filters({ keyword: ["a", "b"], output: ["discharge"], tag: ["publication"] }))).toBe(3);
   });
 });
 

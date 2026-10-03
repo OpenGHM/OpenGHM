@@ -94,10 +94,15 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   body is [`CatalogueFilterBody`](components/repository/catalogue-filter-body.tsx).
   The sidebar and the filter panel of the Start screen's snapshot picker
   (`/workspace/new`) are two layouts of that one list. A group's `picker` flag
-  says whether the compact picker panel offers it too (Tags, Temporal coverage
-  and Spatial resolution do), and the picker leaves out what it fixes
-  (`SNAPSHOT_PICKER_FIXED_FILTERS`, the type). A filter is added or changed in
-  the definition only; neither component lists a filter or a title of its own.
+  says whether the compact picker panel shows it (Tags, Temporal coverage and
+  Spatial resolution do). The panel's "More filters" button opens a dialog (a
+  sheet) with every group, the compact ones included, in the sidebar's
+  collapsible frame ([`CatalogueFilterSection`](components/repository/catalogue-filter-body.tsx));
+  its Reset clears the filters and keeps the search, and the button's badge
+  counts the active filters only the dialog has. The picker leaves out what it
+  fixes (`SNAPSHOT_PICKER_FIXED_FILTERS`, the type), and its URL keeps every other
+  filter's key. A filter is added or changed in the definition only; neither
+  layout lists a filter or a title of its own.
 - The sidebar is built from the facets the backend returns, in one "Filters"
   card with a Reset link (shown only while something is on; it keeps the sort
   and the view). Groups are separated by rules and open and close with a + / –

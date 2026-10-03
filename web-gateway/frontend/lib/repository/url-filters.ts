@@ -114,9 +114,9 @@ export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSear
 
 /**
  * The picker's filters from the URL: the search, the page and the filters of
- * the groups it offers (`pickerFilterKeys`, the groups flagged `picker` in
- * `CATALOGUE_FILTER_GROUPS`). The rest of a link copied from the repository (a
- * keyword, a sort, the type the fetch fixes) is dropped, because the picker
+ * every group of `CATALOGUE_FILTER_GROUPS` it can show (`pickerFilterKeys`: all
+ * of them, less what it fixes). The rest of a link copied from the repository
+ * (the sort, the view, the type the fetch fixes) is dropped, because the picker
  * could not show it or take it off.
  */
 export function parsePickerFilters(params: URLSearchParams): CatalogueFilterState {
