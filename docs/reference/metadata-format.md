@@ -264,7 +264,7 @@ in order of weight:
   beside each snapshot on Anvil carries these same element names, alongside
   `hsterms:`-prefixed link types — i.e. it was written against HydroShare, the
   repository this domain's data actually lands in. The gateway's own models
-  ([open item 15](open-items.md)) still read them.
+  still read them.
 - It settles where the CRS lives. `projection` is a DCMI Box element, so the
   standard already answers the question of whether a coordinate system belongs
   inside the bounding box or beside the grid description.
