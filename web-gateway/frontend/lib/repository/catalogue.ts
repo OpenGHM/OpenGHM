@@ -1,12 +1,14 @@
 /**
  * The catalogue list's shared constants and pure helpers: the empty states, the
- * facet groups' names, and the active-filter summary the sidebar badge and the
- * chip row both read. No React and no I/O, so tests call it directly.
+ * filter groups (which exist, in what order, under what title), and the
+ * active-filter summary the sidebar badge and the chip row both read. No React
+ * and no I/O, so tests call it directly.
  */
 import { SPATIAL_RES_PRESETS } from "./data";
 import type { OpenGHMCitationBlock } from "./generated";
 import type {
   CatalogueFacetKey,
+  CatalogueFacetOption,
   CatalogueFacets,
   CatalogueFilterState,
   CatalogueResponse,
@@ -46,6 +48,133 @@ export const CATALOGUE_FACET_NAMES: Record<CatalogueFacetKey, { title: string; c
   process: { title: "Active processes", chip: "Process" },
   creator: { title: "Creator", chip: "Creator" },
   license: { title: "License", chip: "License" },
+};
+
+// ─── The filter groups ───────────────────────────────────────────────────────
+
+/**
+ * One group of filters. This list is the only place that says which filters the
+ * catalogue offers, in what order and under what title: the Data Repository's
+ * sidebar and the Start screen's snapshot picker both render it
+ * (`components/repository/catalogue-filter-body.tsx`) and decide only the
+ * presentation. A filter added here shows up in both.
+ */
+export type CatalogueFilterGroup =
+  | {
+      kind: "facet";
+      /** The facet it filters on, and the key of the group. */
+      key: CatalogueFacetKey;
+      title: string;
+      /** Also offered in the Start screen's snapshot picker (the compact panel), not only the sidebar. */
+      picker: boolean;
+      /** The sidebar opens the group by default; `"when-short"` only when its options fit `shortAtMost`. */
+      defaultOpen: boolean | "when-short";
+      shortAtMost?: number;
+    }
+  | { kind: "temporal"; key: "temporal"; title: string; picker: boolean; defaultOpen: boolean }
+  | { kind: "resolution"; key: "resolution"; title: string; picker: boolean; defaultOpen: boolean };
+
+/** A group in `CATALOGUE_FILTER_GROUPS`, titled from `CATALOGUE_FACET_NAMES`. */
+function facetGroup(
+  key: CatalogueFacetKey,
+  picker: boolean,
+  defaultOpen: boolean | "when-short",
+  shortAtMost?: number
+): CatalogueFilterGroup {
+  return { kind: "facet", key, title: CATALOGUE_FACET_NAMES[key].title, picker, defaultOpen, shortAtMost };
+}
+
+/** The order of the groups, top to bottom. */
+export const CATALOGUE_FILTER_GROUPS: readonly CatalogueFilterGroup[] = [
+  facetGroup("type", false, true),
+  // The closed tag list is short: open unless it has grown past eight options.
+  facetGroup("tag", true, "when-short", 8),
+  // Open only when the whole list fits without "Show all".
+  facetGroup("keyword", false, "when-short"),
+  { kind: "temporal", key: "temporal", title: "Temporal coverage", picker: true, defaultOpen: true },
+  { kind: "resolution", key: "resolution", title: "Spatial resolution", picker: true, defaultOpen: true },
+  facetGroup("output", false, false),
+  facetGroup("forcing", false, false),
+  facetGroup("wbm", false, false),
+  facetGroup("process", false, false),
+  facetGroup("creator", false, false),
+  facetGroup("license", false, false),
+];
+
+/** The filter-state keys one group reads and writes. */
+export function groupFilterKeys(group: CatalogueFilterGroup): (keyof CatalogueFilterState)[] {
+  if (group.kind === "temporal") return ["yearStart", "yearEnd"];
+  if (group.kind === "resolution") return ["spatialResMin", "spatialResMax"];
+  return [group.key];
+}
+
+/** What the Type group offers when the facets could not be loaded. */
+const TYPE_FALLBACK: CatalogueFacetOption[] = [
+  { value: "snapshot", label: "Model Snapshot", count: NaN },
+  { value: "model-input", label: "Model Input", count: NaN },
+];
+
+/** The options a facet group lists: the facets' own, or the fixed kinds for Type when there are none. */
+export function facetGroupOptions(
+  key: CatalogueFacetKey,
+  facets: CatalogueFacets
+): CatalogueFacetOption[] {
+  return facets[key].length === 0 && key === "type" ? TYPE_FALLBACK : facets[key];
+}
+
+/** How many filters one group has on: one per selected value, one for a range. */
+export function groupActiveCount(group: CatalogueFilterGroup, filters: CatalogueFilterState): number {
+  if (group.kind === "temporal") return filters.yearStart !== null || filters.yearEnd !== null ? 1 : 0;
+  if (group.kind === "resolution") {
+    return filters.spatialResMin !== null || filters.spatialResMax !== null ? 1 : 0;
+  }
+  return filters[group.key].length;
+}
+
+/**
+ * The groups a filter panel shows. `fixed` is what the context has already
+ * decided (the picker queries `type=snapshot`): a group whose filters it fixes
+ * is left out. A facet group with no options and nothing selected is left out
+ * too: it would be an empty heading.
+ */
+export function visibleFilterGroups(
+  facets: CatalogueFacets,
+  filters: CatalogueFilterState,
+  fixed: Partial<CatalogueFilterState> = {}
+): CatalogueFilterGroup[] {
+  return CATALOGUE_FILTER_GROUPS.filter((group) => {
+    if (groupFilterKeys(group).some((k) => k in fixed)) return false;
+    if (group.kind !== "facet") return true;
+    return facetGroupOptions(group.key, facets).length > 0 || filters[group.key].length > 0;
+  });
+}
+
+/**
+ * The groups of the Start screen's snapshot picker: the flagged ones
+ * (`picker`), without what the picker fixes, and only those with something to
+ * list. The same definition and the same rules as the sidebar's.
+ */
+export function pickerFilterGroups(
+  facets: CatalogueFacets,
+  filters: CatalogueFilterState
+): CatalogueFilterGroup[] {
+  return visibleFilterGroups(facets, filters, SNAPSHOT_PICKER_FIXED_FILTERS).filter((g) => g.picker);
+}
+
+/** The filter-state keys the picker's groups read and write. */
+export function pickerFilterKeys(): (keyof CatalogueFilterState)[] {
+  return CATALOGUE_FILTER_GROUPS.filter(
+    (g) => g.picker && !groupFilterKeys(g).some((k) => k in SNAPSHOT_PICKER_FIXED_FILTERS)
+  ).flatMap(groupFilterKeys);
+}
+
+/**
+ * What the Start screen's snapshot picker fixes: it lists model snapshots, so
+ * `type` is `snapshot`, in the query (`fetchSnapshots`) and not in the URL or
+ * the filter state. A group this fixes is not offered.
+ */
+export const SNAPSHOT_PICKER_FIXED_FILTERS: Partial<CatalogueFilterState> = {
+  type: ["snapshot"],
 };
 
 export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
@@ -94,18 +223,28 @@ export function clearedFilters(filters: CatalogueFilterState): CatalogueFilterSt
   return { ...EMPTY_CATALOGUE_FILTERS, sortBy: filters.sortBy, view: filters.view };
 }
 
-/** Filters in effect, not counting the search box: what the Filters badge shows. */
-export function countActiveFilters(filters: CatalogueFilterState): number {
+/**
+ * Filters in effect, not counting the search box: what the Filters badge shows.
+ * A filter the context fixes (`fixed`) is not the user's and is not counted.
+ */
+export function countActiveFilters(
+  filters: CatalogueFilterState,
+  fixed: Partial<CatalogueFilterState> = {}
+): number {
   let n = 0;
-  for (const key of CATALOGUE_FACET_KEYS) n += filters[key].length;
-  if (filters.yearStart !== null || filters.yearEnd !== null) n += 1;
-  if (filters.spatialResMin !== null || filters.spatialResMax !== null) n += 1;
+  for (const group of CATALOGUE_FILTER_GROUPS) {
+    if (groupFilterKeys(group).some((k) => k in fixed)) continue;
+    n += groupActiveCount(group, filters);
+  }
   return n;
 }
 
 /** Anything at all narrowing the list, the search included. */
-export function hasActiveFilters(filters: CatalogueFilterState): boolean {
-  return countActiveFilters(filters) > 0 || filters.searchQuery.trim() !== "";
+export function hasActiveFilters(
+  filters: CatalogueFilterState,
+  fixed: Partial<CatalogueFilterState> = {}
+): boolean {
+  return countActiveFilters(filters, fixed) > 0 || filters.searchQuery.trim() !== "";
 }
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
@@ -205,10 +344,11 @@ export interface ActiveFilterChip {
   remove: Partial<CatalogueFilterState>;
 }
 
-/** One chip per selected value, plus one each for the search, the years and the resolution. */
+/** One chip per selected value, plus one each for the search, the years and the resolution; none for a filter the context fixes. */
 export function activeFilterChips(
   filters: CatalogueFilterState,
-  facets: CatalogueFacets
+  facets: CatalogueFacets,
+  fixed: Partial<CatalogueFilterState> = {}
 ): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
 
@@ -216,6 +356,7 @@ export function activeFilterChips(
   if (q) chips.push({ id: "q", label: `Search: ‘${q}’`, remove: { searchQuery: "" } });
 
   for (const key of CATALOGUE_FACET_KEYS) {
+    if (key in fixed) continue;
     for (const value of filters[key]) {
       const option = facets[key].find((o) => o.value === value);
       chips.push({

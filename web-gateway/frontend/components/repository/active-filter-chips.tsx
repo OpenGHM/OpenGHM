@@ -11,13 +11,16 @@ export function ActiveFilterChips({
   facets,
   onChange,
   onClearAll,
+  fixed,
 }: {
   filters: CatalogueFilterState;
   facets: CatalogueFacets;
   onChange: (updates: Partial<CatalogueFilterState>) => void;
   onClearAll: () => void;
+  /** Filters the context fixes (the picker's type): never shown as chips. */
+  fixed?: Partial<CatalogueFilterState>;
 }) {
-  const chips = activeFilterChips(filters, facets);
+  const chips = activeFilterChips(filters, facets, fixed);
   if (chips.length === 0) return null;
 
   return (

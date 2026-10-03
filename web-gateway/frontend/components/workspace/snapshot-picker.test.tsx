@@ -271,6 +271,18 @@ describe("filtering", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("offers only the compact groups in the panel, never the type, and so does not count a link's other facets", async () => {
+    fetchSnapshots.mockResolvedValue(page([GLOBAL]));
+    renderPicker();
+    fireEvent.click(filtersToggle());
+    const panel = document.getElementById(filtersToggle().getAttribute("aria-controls") as string) as HTMLElement;
+    expect(within(panel).getAllByRole("heading").map((h) => h.textContent)).toEqual([
+      "Tags",
+      "Temporal coverage",
+      "Spatial resolution",
+    ]);
+  });
+
   it("filters by a resolution preset in the panel", async () => {
     fetchSnapshots.mockResolvedValue(page([GLOBAL]));
     renderPicker();

@@ -11,7 +11,11 @@
  * repeatable facet keys — so a shared link is also a valid direct API call
  * shape, not a second vocabulary to translate.
  */
-import { CATALOGUE_FACET_KEYS, EMPTY_CATALOGUE_FILTERS } from "./catalogue";
+import {
+  CATALOGUE_FACET_KEYS,
+  EMPTY_CATALOGUE_FILTERS,
+  pickerFilterKeys,
+} from "./catalogue";
 import type {
   CatalogueFilterState,
   CatalogueKind,
@@ -109,26 +113,23 @@ export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSear
 // ─── The Start screen's snapshot picker ─────────────────────────────────────
 
 /**
- * The catalogue filters the picker has controls for: the search, the tag, the
- * year range, the resolution range, and the page. Anything else in the URL (a
- * link copied from the repository with a keyword or a sort) is dropped, because
- * the picker could not show it or take it off. The Type facet is fixed to
- * snapshots by the fetch (`fetchSnapshots`), so it is not in the URL either.
+ * The picker's filters from the URL: the search, the page and the filters of
+ * the groups it offers (`pickerFilterKeys`, the groups flagged `picker` in
+ * `CATALOGUE_FILTER_GROUPS`). The rest of a link copied from the repository (a
+ * keyword, a sort, the type the fetch fixes) is dropped, because the picker
+ * could not show it or take it off.
  */
 export function parsePickerFilters(params: URLSearchParams): CatalogueFilterState {
   const all = parseCatalogueFilters(params);
-  return {
+  const state: CatalogueFilterState = {
     ...EMPTY_CATALOGUE_FILTERS,
     searchQuery: all.searchQuery,
-    tag: all.tag,
-    yearStart: all.yearStart,
-    yearEnd: all.yearEnd,
-    spatialResMin: all.spatialResMin,
-    spatialResMax: all.spatialResMax,
     page: all.page,
   };
+  for (const key of pickerFilterKeys()) Object.assign(state, { [key]: all[key] });
+  return state;
 }
 
 /** The picker's filters as a query string: the catalogue's own, in the same
- *  keys, of which the picker's state only ever holds its own. */
+ *  keys; the picker's state only holds its own. */
 export const pickerFiltersToParams = catalogueFiltersToParams;

@@ -10,6 +10,14 @@ import {
   formatTags,
   facetOptionLabel,
   ABOUT_TAGS,
+  CATALOGUE_FACET_KEYS,
+  CATALOGUE_FACET_NAMES,
+  CATALOGUE_FILTER_GROUPS,
+  SNAPSHOT_PICKER_FIXED_FILTERS,
+  groupFilterKeys,
+  pickerFilterGroups,
+  pickerFilterKeys,
+  visibleFilterGroups,
 } from "./catalogue";
 import { FACETS, filters } from "@/components/repository/catalogue.fixtures";
 import {
@@ -109,6 +117,73 @@ describe("active filters", () => {
     expect(
       clearedFilters(filters({ sortBy: "coverage-start", view: "grid", output: ["a"], page: 4 }))
     ).toEqual(filters({ sortBy: "coverage-start", view: "grid" }));
+  });
+});
+
+describe("the filter groups", () => {
+  it("name every facet once, with its title from the facet names, and add the two ranges", () => {
+    const facetKeys = CATALOGUE_FILTER_GROUPS.filter((g) => g.kind === "facet").map((g) => g.key);
+    expect([...facetKeys].sort()).toEqual([...CATALOGUE_FACET_KEYS].sort());
+    for (const g of CATALOGUE_FILTER_GROUPS) {
+      if (g.kind === "facet") expect(g.title).toBe(CATALOGUE_FACET_NAMES[g.key].title);
+    }
+    expect(CATALOGUE_FILTER_GROUPS.filter((g) => g.kind !== "facet").map((g) => g.title)).toEqual([
+      "Temporal coverage",
+      "Spatial resolution",
+    ]);
+  });
+
+  it("read every filter-state key between them, the search, sort, view and page aside", () => {
+    const keys = CATALOGUE_FILTER_GROUPS.flatMap(groupFilterKeys).sort();
+    expect(keys).toEqual(
+      Object.keys(filters())
+        .filter((k) => !["searchQuery", "sortBy", "view", "page"].includes(k))
+        .sort()
+    );
+  });
+
+  it("hide a facet group with no options and nothing selected, but not Type", () => {
+    const titles = (f = filters()) => visibleFilterGroups(FACETS, f).map((g) => g.title);
+    expect(titles()).not.toContain("Active processes");
+    expect(titles(filters({ process: ["irrigation"] }))).toContain("Active processes");
+    const bare = visibleFilterGroups({ ...FACETS, type: [], keyword: [] }, filters());
+    expect(bare.map((g) => g.title)).toContain("Type");
+    expect(bare.map((g) => g.title)).not.toContain("Keyword");
+  });
+
+  it("leave out what the context fixes: the picker's type, and nothing else", () => {
+    const all = visibleFilterGroups(FACETS, filters()).map((g) => g.key);
+    const fixed = visibleFilterGroups(FACETS, filters(), SNAPSHOT_PICKER_FIXED_FILTERS).map((g) => g.key);
+    expect(all).toContain("type");
+    expect(fixed).toEqual(all.filter((k) => k !== "type"));
+  });
+
+  it("flag Tags, Temporal coverage and Spatial resolution for the picker, and no other", () => {
+    expect(CATALOGUE_FILTER_GROUPS.filter((g) => g.picker).map((g) => g.title)).toEqual([
+      "Tags",
+      "Temporal coverage",
+      "Spatial resolution",
+    ]);
+    expect(pickerFilterGroups(FACETS, filters()).map((g) => g.title)).toEqual([
+      "Tags",
+      "Temporal coverage",
+      "Spatial resolution",
+    ]);
+    expect(pickerFilterKeys().sort()).toEqual(["spatialResMax", "spatialResMin", "tag", "yearEnd", "yearStart"]);
+  });
+});
+
+describe("a fixed filter is not the user's", () => {
+  const fixedState = filters({ type: ["snapshot"], tag: ["publication"] });
+
+  it("is not counted, not a chip, and does not make a list filtered", () => {
+    expect(countActiveFilters(fixedState)).toBe(2);
+    expect(countActiveFilters(fixedState, SNAPSHOT_PICKER_FIXED_FILTERS)).toBe(1);
+    expect(activeFilterChips(fixedState, FACETS, SNAPSHOT_PICKER_FIXED_FILTERS).map((c) => c.id)).toEqual([
+      "tag:publication",
+    ]);
+    expect(hasActiveFilters(filters({ type: ["snapshot"] }), SNAPSHOT_PICKER_FIXED_FILTERS)).toBe(false);
+    expect(hasActiveFilters(filters({ type: ["snapshot"] }))).toBe(true);
   });
 });
 

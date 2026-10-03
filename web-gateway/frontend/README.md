@@ -88,6 +88,16 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   the map on top, then the badge, the title, one mono line and the date.
   The map is a real SVG land outline with the bounding box, not a map tile.
   Colour has three roles here: `primary` is selection and interaction (checked boxes, the slider, pressed chips, focus), neutral slate is labels at rest (kind badge, tag and keyword chips, active-filter chips, the map's ocean and land) and `highlight` is data emphasis (the coverage box, the result count, the Filters count badge).
+- Which filter groups exist, their order and their titles are defined once, as
+  `CATALOGUE_FILTER_GROUPS` in
+  [`lib/repository/catalogue.ts`](lib/repository/catalogue.ts), and each group's
+  body is [`CatalogueFilterBody`](components/repository/catalogue-filter-body.tsx).
+  The sidebar and the filter panel of the Start screen's snapshot picker
+  (`/workspace/new`) are two layouts of that one list. A group's `picker` flag
+  says whether the compact picker panel offers it too (Tags, Temporal coverage
+  and Spatial resolution do), and the picker leaves out what it fixes
+  (`SNAPSHOT_PICKER_FIXED_FILTERS`, the type). A filter is added or changed in
+  the definition only; neither component lists a filter or a title of its own.
 - The sidebar is built from the facets the backend returns, in one "Filters"
   card with a Reset link (shown only while something is on; it keeps the sort
   and the view). Groups are separated by rules and open and close with a + / –

@@ -4,13 +4,12 @@ import { useId, useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CatalogueFilterBody } from "@/components/repository/catalogue-filter-body";
 import {
-  FacetCheckboxList,
-  ResolutionFilter,
-  YearRangeFilter,
-} from "@/components/repository/catalogue-sidebar";
-import { countActiveFilters } from "@/lib/repository/catalogue";
-import { TEMPORAL_RANGE_BOUNDS } from "@/lib/repository/data";
+  countActiveFilters,
+  pickerFilterGroups,
+  SNAPSHOT_PICKER_FIXED_FILTERS,
+} from "@/lib/repository/catalogue";
 import { cn } from "@/lib/utils";
 import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/types";
 
@@ -18,11 +17,12 @@ import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/typ
  * The toolbar above the snapshot grid, the Data Repository's search and
  * filters in one row: a search box (titles, descriptions, keywords: the
  * repository's own query) and a Filters button that opens a panel under the row
- * with the filters the repository offers for model snapshots: the tag, the
- * temporal coverage and the spatial resolution, the same controls with the same
- * facet counts. The panel is closed until asked for, and whether it is open is
- * local: the filters themselves live in the URL, through `onChange`; what is
- * narrowing the list is shown under the toolbar as chips (`ActiveFilterChips`),
+ * with the repository's filter groups flagged `picker` in
+ * `CATALOGUE_FILTER_GROUPS` (the same controls with the same facet counts),
+ * less what the picker fixes (`SNAPSHOT_PICKER_FIXED_FILTERS`: the type). The
+ * groups are not listed here: the definition says which there are. The panel is
+ * closed until asked for, and whether it is open is local: the filters
+ * themselves live in the URL, through `onChange`; what is narrowing the list is shown under the toolbar as chips (`ActiveFilterChips`),
  * so a closed panel hides nothing.
  */
 export function SnapshotPickerFilters({
@@ -37,13 +37,10 @@ export function SnapshotPickerFilters({
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const tagsId = useId();
-  const yearsId = useId();
-  const resolutionId = useId();
-  const activeCount = countActiveFilters(filters);
+  const headingId = useId();
+  const activeCount = countActiveFilters(filters, SNAPSHOT_PICKER_FIXED_FILTERS);
   const hasQuery = filters.searchQuery !== "";
-  // A tag a stale link names stays in the list so that it can be unticked.
-  const showTags = facets.tag.length > 0 || filters.tag.length > 0;
+  const groups = pickerFilterGroups(facets, filters);
 
   return (
     <div className="space-y-3">
@@ -101,43 +98,31 @@ export function SnapshotPickerFilters({
         <div
           className={cn(
             "grid gap-x-10 gap-y-6 rounded-xl border bg-card p-4 sm:p-5",
-            showTags ? "md:grid-cols-3" : "md:grid-cols-2"
+            groups.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"
           )}
         >
-          {showTags && (
-            <section aria-labelledby={tagsId}>
-              <h3 id={tagsId} className="mb-2 text-[13.5px] font-semibold text-foreground">
-                Tags
-              </h3>
-              <FacetCheckboxList
-                facetKey="tag"
-                options={facets.tag}
-                selected={filters.tag}
-                onChange={(tag) => onChange({ tag })}
-              />
-            </section>
-          )}
-          <section aria-labelledby={yearsId}>
-            <h3 id={yearsId} className="mb-3 text-[13.5px] font-semibold text-foreground">
-              Temporal coverage
-            </h3>
-            <YearRangeFilter
-              bounds={facets.yearBounds ?? TEMPORAL_RANGE_BOUNDS}
-              start={filters.yearStart}
-              end={filters.yearEnd}
-              onChange={onChange}
-            />
-          </section>
-          <section aria-labelledby={resolutionId}>
-            <h3 id={resolutionId} className="mb-3 text-[13.5px] font-semibold text-foreground">
-              Spatial resolution
-            </h3>
-            <ResolutionFilter
-              min={filters.spatialResMin}
-              max={filters.spatialResMax}
-              onChange={onChange}
-            />
-          </section>
+          {groups.map((group) => {
+            const id = `${headingId}-${group.key}`;
+            return (
+              <section key={group.key} aria-labelledby={id}>
+                <h3
+                  id={id}
+                  className={cn(
+                    "text-[13.5px] font-semibold text-foreground",
+                    group.kind === "facet" ? "mb-2" : "mb-3"
+                  )}
+                >
+                  {group.title}
+                </h3>
+                <CatalogueFilterBody
+                  group={group}
+                  filters={filters}
+                  facets={facets}
+                  onChange={onChange}
+                />
+              </section>
+            );
+          })}
         </div>
       </div>
     </div>

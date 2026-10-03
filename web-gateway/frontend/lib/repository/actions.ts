@@ -1,7 +1,12 @@
 "use server";
 
 import { getApiClient } from "@/lib/api-client";
-import { CATALOGUE_FACET_KEYS, CATALOGUE_PAGE_SIZE, SNAPSHOT_PICKER_PAGE_SIZE } from "@/lib/repository/catalogue";
+import {
+  CATALOGUE_FACET_KEYS,
+  CATALOGUE_PAGE_SIZE,
+  SNAPSHOT_PICKER_FIXED_FILTERS,
+  SNAPSHOT_PICKER_PAGE_SIZE,
+} from "@/lib/repository/catalogue";
 import {
   CatalogueFilterState,
   CatalogueResponse,
@@ -67,15 +72,15 @@ export async function fetchMine(): Promise<MineResponse> {
 /**
  * One page of the model snapshots, searched and filtered the way the Data
  * Repository does it: the same `GET /repository/catalogue` with the Type facet
- * fixed to `snapshot`, so the search, the tag, year and resolution filters, the
- * facet counts and the order are the repository's own. The Start screen's
- * snapshot picker (`/workspace/new`) is its one reader. Whatever `type` the
- * filters hold is replaced.
+ * fixed to `snapshot` (`SNAPSHOT_PICKER_FIXED_FILTERS`), so the search, every
+ * other filter, the facet counts and the order are the repository's own. The
+ * Start screen's snapshot picker (`/workspace/new`) is its one reader. Whatever
+ * the filters hold for what is fixed is replaced.
  */
 export async function fetchSnapshots(
   filters: CatalogueFilterState
 ): Promise<CatalogueResponse> {
-  return fetchCatalogue({ ...filters, type: ["snapshot"] }, SNAPSHOT_PICKER_PAGE_SIZE);
+  return fetchCatalogue({ ...filters, ...SNAPSHOT_PICKER_FIXED_FILTERS }, SNAPSHOT_PICKER_PAGE_SIZE);
 }
 
 /**

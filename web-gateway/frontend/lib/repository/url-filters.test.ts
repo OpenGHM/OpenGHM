@@ -6,7 +6,7 @@ import {
   pickerFiltersToParams,
   toURLSearchParams,
 } from "./url-filters";
-import { EMPTY_CATALOGUE_FILTERS } from "./catalogue";
+import { CATALOGUE_FILTER_GROUPS, EMPTY_CATALOGUE_FILTERS, type CatalogueFilterGroup } from "./catalogue";
 import type { CatalogueFilterState } from "./types";
 
 const FULL: CatalogueFilterState = {
@@ -104,22 +104,33 @@ describe("catalogue sort and view in the URL", () => {
   });
 });
 
-describe("the snapshot picker's filters (the catalogue's, fewer of them)", () => {
+describe("the snapshot picker's filters (the catalogue's, of the groups it offers)", () => {
   it("round-trips the search, the tags, the year and resolution ranges and the page", () => {
     const qs = "q=wbm&tag=publication&tag=tutorial&year_start=2000&year_end=2009&spatial_res_min=0.08&spatial_res_max=0.25&page=2";
     const filters = parsePickerFilters(new URLSearchParams(qs));
     expect(filters.tag).toEqual(["publication", "tutorial"]);
     expect(filters.type).toEqual([]);
-    expect(pickerFiltersToParams(filters).toString()).toBe(
-      "q=wbm&tag=publication&tag=tutorial&year_start=2000&year_end=2009&spatial_res_min=0.08&spatial_res_max=0.25&page=2"
-    );
+    expect(pickerFiltersToParams(filters).toString()).toBe(qs);
   });
 
-  it("drops what the picker has no control for: other facets, the type, the sort and the view", () => {
+  it("drops what no group of the picker covers: other facets, the type, the sort and the view", () => {
     const filters = parsePickerFilters(
       new URLSearchParams("type=model-input&keyword=hydrology&output=discharge&sort=title-az&view=grid&q=a")
     );
     expect(filters).toEqual({ ...EMPTY_CATALOGUE_FILTERS, searchQuery: "a" });
     expect(pickerFiltersToParams(filters).toString()).toBe("q=a");
+  });
+
+  it("keeps the keys of the groups flagged for the picker, whichever they are", () => {
+    const groups = CATALOGUE_FILTER_GROUPS as CatalogueFilterGroup[];
+    const keyword = groups.find((g) => g.key === "keyword") as CatalogueFilterGroup;
+    const was = keyword.picker;
+    keyword.picker = true;
+    try {
+      expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual(["hydrology"]);
+    } finally {
+      keyword.picker = was;
+    }
+    expect(parsePickerFilters(new URLSearchParams("keyword=hydrology")).keyword).toEqual([]);
   });
 });

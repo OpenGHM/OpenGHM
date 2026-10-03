@@ -9,7 +9,12 @@ import { SnapshotDetailSheet } from "./snapshot-detail-sheet";
 import { SnapshotGrid } from "./snapshot-grid";
 import { SnapshotPickerFilters } from "./snapshot-picker-filters";
 import { fetchModelInputIds, fetchSnapshots } from "@/lib/repository/actions";
-import { clearedFilters, EMPTY_CATALOGUE, hasActiveFilters } from "@/lib/repository/catalogue";
+import {
+  clearedFilters,
+  EMPTY_CATALOGUE,
+  hasActiveFilters,
+  SNAPSHOT_PICKER_FIXED_FILTERS,
+} from "@/lib/repository/catalogue";
 import { parsePickerFilters, pickerFiltersToParams } from "@/lib/repository/url-filters";
 import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
@@ -111,7 +116,7 @@ export function SnapshotPicker({
   };
 
   const resultsRef = useRef<HTMLDivElement>(null);
-  const filtered = hasActiveFilters(filters);
+  const filtered = hasActiveFilters(filters, SNAPSHOT_PICKER_FIXED_FILTERS);
   const query = filters.searchQuery.trim();
   const clear = () => setFilters(clearedFilters(filters));
   // `type=snapshot` leaves nothing else, but the type says so.
@@ -150,7 +155,13 @@ export function SnapshotPicker({
           )}
           {busy && <span className="sr-only"> Loading results</span>}
         </p>
-        <ActiveFilterChips filters={filters} facets={facets} onChange={setFilters} onClearAll={clear} />
+        <ActiveFilterChips
+          filters={filters}
+          facets={facets}
+          onChange={setFilters}
+          onClearAll={clear}
+          fixed={SNAPSHOT_PICKER_FIXED_FILTERS}
+        />
       </div>
 
       <div
