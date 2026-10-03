@@ -159,7 +159,11 @@ pre-fills it from a published snapshot's parameters, and
 `POST /api/v1/jobs/{id}/duplicate` copies the settings of one of the caller's
 own simulations, whatever its status (`422 snapshot_not_found` when its snapshot
 has left the repository). Neither starts one from nothing, which would need a
-model-input catalogue the gateway does not have yet. A copy takes the snapshot,
+model-input catalogue the gateway does not have yet. `GET /api/v1/jobs/derive/{dataset_id}`
+previews the draft the POST would create: it answers with the same fields,
+built by the same code, with an empty `id`, and stores nothing and writes no
+audit event. The new-simulation screen shows it until the user saves, so the
+defaults stay defined in the backend. A copy takes the snapshot,
 slug, `about` (a name it has gets " (copy)"; one it lacks stays absent), model
 input, parameters and compute, and nothing of the run. A new draft has no name:
 "Untitled (<first 8 of the id>)" is what the header and the list show for one,
@@ -358,7 +362,7 @@ frontend (`CATALOGUE_FILTER_GROUPS` in
 whether the picker's compact panel shows it (`picker`: tags, years, resolution);
 a "More filters" button there opens a dialog with all of them, so a filter added
 to the definition is in the picker without a second edit
-([ADR 0028](../decisions/0028-a-new-simulation-is-a-saved-draft-from-its-first-step.md)).
+([ADR 0028](../decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md)).
 
 `GET /repository/mine` (signed in) is the one catalogue read that needs a
 session: the same two item shapes, with `kind`, for what the caller owns, plus

@@ -23,7 +23,7 @@ import type { Dataset } from "@/lib/repository/types";
  * without selecting. The facts are the button's description, so a screen reader
  * hears the title and then which snapshot it is.
  *
- * While its draft is being made `pending` covers the card with a message, and
+ * While its page is opening `pending` covers the card with a message, and
  * `disabled` (every card, while any one is pending) turns the others off.
  */
 function SnapshotCard({
@@ -108,7 +108,7 @@ function SnapshotCard({
           className="absolute inset-0 z-20 flex items-center justify-center gap-2 bg-card/85 text-sm font-medium text-foreground"
         >
           <Loader2 aria-hidden="true" className="size-4 text-primary motion-safe:animate-spin" />
-          Creating your draft…
+          Opening…
         </div>
       )}
     </Card>
@@ -137,11 +137,11 @@ export function SnapshotGrid({
   usedFirst: boolean;
   /** Details: open the sheet for this snapshot. */
   onDetails: (dataset: Dataset) => void;
-  /** The card: start a draft from this snapshot. */
+  /** The card: start a new simulation from this snapshot. */
   onSelect: (dataset: Dataset) => void;
-  /** The snapshot whose draft is being created, if any. */
+  /** The snapshot whose page is opening, if any. */
   pendingId: string | null;
-  /** Every card is off while a draft is being created. */
+  /** Every card is off while one is opening. */
   disabled: boolean;
 }) {
   const ordered = usedFirst

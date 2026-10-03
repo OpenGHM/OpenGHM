@@ -146,7 +146,7 @@ describe("while a draft is being made", () => {
   it("covers the clicked card with a message, and turns every card off", () => {
     grid({ pendingId: "global", disabled: true });
     const [first, second] = cards();
-    expect(within(first).getByRole("status").textContent).toContain("Creating your draft");
+    expect(within(first).getByRole("status").textContent).toContain("Opening");
     expect(within(first).getByRole("button", { name: LONG_TITLE }).getAttribute("aria-busy")).toBe("true");
     for (const button of screen.getAllByRole("button", { name: /^WBM / })) {
       expect((button as HTMLButtonElement).disabled).toBe(true);

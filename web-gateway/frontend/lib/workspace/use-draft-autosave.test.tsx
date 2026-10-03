@@ -963,6 +963,15 @@ describe("disabled", () => {
     await wait(800);
     expect(update).toHaveBeenCalledTimes(1);
   });
+
+  it("owes nothing and so asks nothing: no leave prompt for edits it will not save", async () => {
+    const { set, base } = setup();
+    set({ ...base, name: "Run" }, true);
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
 });
 
 describe("the loop breaker", () => {

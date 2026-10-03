@@ -32,7 +32,8 @@ function Strip({ children }: { children: React.ReactNode }) {
  * The three steps of the draft wizard as a slim light strip under the title:
  * "Start from" is done (a check) and is not a link (a draft's starting point
  * cannot change; the header says what it was, once). The other two are links to
- * `/workspace/<id>?step=...`; a plain click is handed to `onSelectStep`, which is
+ * `/workspace/<id>?step=...` (or what `hrefFor` says, for a simulation that is not
+ * saved yet); a plain click is handed to `onSelectStep`, which is
  * how the wizard changes step without a page load, and anything else (middle
  * click, a new tab) follows the href. The current one is filled and bold, and has
  * `aria-current="step"`. A step in `problemSteps` carries a dot, and "needs
@@ -43,15 +44,21 @@ function Strip({ children }: { children: React.ReactNode }) {
  */
 export function DraftProgress({
   jobId,
+  hrefFor,
   current,
   problemSteps,
   onSelectStep,
 }: {
-  jobId: string;
+  /** The stored draft whose steps these are. */
+  jobId?: string;
+  /** The address of a step, for a simulation that has no job id yet
+   *  (`newStepHref`). Wins over `jobId`. */
+  hrefFor?: (step: DraftStep) => string;
   current: DraftStep;
   problemSteps: readonly DraftStep[];
   onSelectStep: (step: DraftStep) => void;
 }) {
+  const hrefOf = (step: DraftStep) => (hrefFor ? hrefFor(step) : stepHref(jobId ?? "", step));
   return (
     <Strip>
       <li className="flex min-w-0 items-center gap-2">
@@ -68,7 +75,7 @@ export function DraftProgress({
         return (
           <li key={step} className="flex items-center gap-2">
             <Link
-              href={stepHref(jobId, step)}
+              href={hrefOf(step)}
               prefetch={false}
               aria-current={isCurrent ? "step" : undefined}
               onClick={(event) => {

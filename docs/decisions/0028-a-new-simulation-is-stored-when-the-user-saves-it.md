@@ -1,4 +1,4 @@
-# ADR 0028 — A new simulation is a saved draft from its first step, and its edits auto-save
+# ADR 0028 — A new simulation is stored when the user saves it, and a stored draft saves its own edits
 
 | | |
 |---|---|
@@ -19,21 +19,44 @@ Save button. So two screens edit one thing, each with its own copy of the
 same rules, and a refresh or a closed tab in the wizard loses everything the
 user typed.
 
+A first version of this decision stored a draft the moment a snapshot was
+picked and auto-saved every edit after it. That left an empty draft in My
+Simulations for every snapshot someone only looked at, and saved settings the
+person had not asked to keep. So a new simulation is now stored only when the
+person says so. Refresh and a closed tab still lose what was typed before that
+point, and the wizard asks before it lets that happen.
+
 ## Decision
 
-**A simulation is a saved `DRAFT` from the end of step 1, and the steps after
-it (Run settings, then Review & submit) edit that draft and save it as they
-go.**
+**A new simulation lives in the browser until the user saves it, with "Save as
+draft" or by submitting it. From then on it is a stored `DRAFT`, and the steps
+(Run settings, then Review & submit) edit that draft and save it as they go.**
 
-- **Derive on the start screen, duplicate on the simulation's page.** The start screen
-  (`/workspace/new`, step 1, "Choose a model snapshot") derives a draft from a
-  published snapshot (`POST /jobs/derive/{dataset_id}`) and offers nothing else:
-  no copy of a simulation. Copying happens where the simulation is, on its own
-  page, once it has ended: "Duplicate" for a completed one, and "Try again with
-  these settings" in the status summary of a failed or cancelled one (a page
-  never shows the action twice), both `POST /jobs/{id}/duplicate`, which copies
-  one of the caller's own simulations in any status. Either answer is a new
-  `DRAFT`, and the user lands on Run settings.
+- **Choose on the start screen, store on save, duplicate on the simulation's
+  page.** The start screen (`/workspace/new`, step 1, "Choose a model snapshot")
+  only chooses: picking a published snapshot opens
+  `/workspace/new/<snapshot id>?step=run` and creates nothing. That screen is
+  the same wizard over a draft that is not stored yet. It is filled from
+  `GET /jobs/derive/{dataset_id}`, which answers with what the derive would
+  store, so the defaults are the backend's. **Save as draft** (header, and
+  bottom of Run settings) derives the draft (`POST /jobs/derive/{dataset_id}`),
+  sends the edits as one `PATCH`, and opens the stored draft with the same
+  step showing. **Submit** from Review does the same save first, then submits.
+  A save is never done twice for one click: the first one creates the draft,
+  and a retry after a failed submit reuses it. Copying happens where the
+  simulation is, on its own page, once it has ended: "Duplicate" for a
+  completed one, and "Try again with these settings" in the status summary of a
+  failed or cancelled one (a page never shows the action twice), both
+  `POST /jobs/{id}/duplicate`, which copies one of the caller's own simulations
+  in any status. A copy is stored at once (it starts from settings that exist),
+  and the user lands on Run settings. "New from this model snapshot" on an ended
+  simulation and on a snapshot's page open the unsaved wizard like the start
+  screen does.
+- **Leaving an unsaved simulation asks first.** While the wizard differs from
+  the preview (a space typed and deleted is not a difference), `beforeunload`
+  is armed, and a click on a link out of the wizard opens "Leave without
+  saving?" with Save as draft, Discard changes and Keep editing. The browser's
+  Back and Forward are not intercepted.
 - **The start screen is the repository's search over snapshots.** It always
   shows a search box and a Filters panel (tag, temporal coverage, spatial
   resolution), the count, the cards and pages, and an empty state: the same
@@ -56,9 +79,10 @@ go.**
   submit area; nothing is edited there). There
   was a "Model & input" step between them; nothing on it could be changed, because
   the toolkit has no option for a different model input, so it was dropped, and
-  `?step=model` opens Run settings. The draft saves itself after a pause, when the user
-  changes step, and when the page is hidden or left. Opening a draft from the
-  list opens the same wizard, at Review.
+  `?step=model` opens Run settings. **A stored draft** saves itself after a pause,
+  when the user changes step, and when the page is hidden or left; an unsaved new
+  simulation does not. Opening a draft from the list opens the same wizard, at
+  Review.
 - **The name is asked for first, and is optional.** Name and description are the
   first part of Run settings, the first screen of a new draft, and the Name takes
   focus there while the draft has none. The input is empty until the user names
@@ -90,7 +114,8 @@ go.**
 
 | Option | Why it lost |
 |---|---|
-| Keep local state until Review | A refresh or a closed tab loses the input, and the wizard stays a second editor of the same record |
+| Keep local state until Review | A refresh or a closed tab loses the input, and the wizard stays a second editor of the same record. (Today's design keeps local state too, but in the same wizard that edits a stored draft, and the person chooses when it is stored.) |
+| Store a draft when a snapshot is picked, and auto-save it | Every snapshot someone only looked at became a draft in My Simulations, and settings were saved the person had not asked to keep (the first version of this decision) |
 | A separate "wizard draft" collection | A second place to keep a simulation, with its own conversion into the first. `jobs` already has a `DRAFT` status |
 | Save on every keystroke | It floods the backend, and Next runs server actions one at a time, so a Next click would queue behind a backlog of saves |
 
@@ -100,10 +125,15 @@ go.**
   it must copy only what a draft is made of. A copy never carries the source's
   `sim_id`, SLURM ids, verdict, files or `orphan_sim_ids`.
 - Choosing a snapshot on the Start screen (a click on its card, or Select in
-  its Details sheet) now creates a draft, not a choice held in the page. A user
-  who goes Back from Run settings and picks again leaves the first draft
-  behind. It is a draft like any other, shown in My Simulations and
-  deletable there.
+  its Details sheet) creates nothing. Going Back and picking another snapshot
+  leaves no draft behind, and a draft appears in My Simulations only when
+  someone saved it.
+- Input typed into a new simulation is lost on a refresh, a closed tab or the
+  browser's Back, unless it was saved. The leave prompt covers the first two
+  for real page loads and the third not at all.
+- A simulation saved with "Save as draft" takes two requests (derive, then
+  patch). If the patch fails or leaves a field out, the draft exists with what
+  the server took, and the wizard says which settings were not saved.
 - A save changes `updated_at`, which re-sorts My Simulations. That is
   intended.
 - The gateway architecture document changes with it. The draft editor

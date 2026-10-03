@@ -127,7 +127,7 @@ describe("the list", () => {
 
   it("turns the cards off and covers the clicked one while a draft is being made", () => {
     renderPicker({ pendingId: "global", disabled: true });
-    expect(screen.getByRole("status").textContent).toContain("Creating your draft");
+    expect(screen.getByRole("status").textContent).toContain("Opening");
     expect((screen.getAllByRole("button", { name: /^WBM / })[0] as HTMLButtonElement).disabled).toBe(true);
   });
 

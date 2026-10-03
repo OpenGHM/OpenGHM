@@ -65,6 +65,8 @@ function renderHeader(key: string, { preview = true }: { preview?: boolean } = {
 }
 
 const button = (name: string) => screen.queryByRole("button", { name });
+/** A button-styled link: it only opens the new-simulation wizard, so it is a link. */
+const startLink = (name: string) => screen.queryByRole("link", { name });
 
 describe("the header", () => {
   it("has no actions while the job is active: Cancel is in the status summary", () => {
@@ -72,17 +74,17 @@ describe("the header", () => {
       renderHeader(key);
       expect(button("Cancel")).toBeNull();
       expect(button("Duplicate")).toBeNull();
-      expect(button("New from this model snapshot")).toBeNull();
+      expect(startLink("New from this model snapshot")).toBeNull();
       expect(button("Delete simulation")).toBeNull();
       cleanup();
     }
   });
 
   it.each(["completed", "failed:timeout", "cancelled:user"])(
-    "shows New from this model snapshot and Delete, as buttons, once %s",
+    "shows New from this model snapshot (a link to the new-simulation wizard) and Delete, once %s",
     (key) => {
       renderHeader(key);
-      expect(button("New from this model snapshot")).not.toBeNull();
+      expect(startLink("New from this model snapshot")).not.toBeNull();
       expect(button("Delete simulation")).not.toBeNull();
       expect(screen.queryByRole("menu")).toBeNull();
       expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
@@ -164,7 +166,7 @@ describe("the header", () => {
     expect(container.innerHTML).not.toContain("text-white");
     const del = screen.getByRole("button", { name: "Delete simulation" });
     expect(del.className).toContain("text-destructive");
-    expect(screen.getByRole("button", { name: "New from this model snapshot" }).getAttribute("data-variant")).toBe("outline");
+    expect(screen.getByRole("link", { name: "New from this model snapshot" }).getAttribute("data-variant")).toBe("outline");
   });
 
   it("has the breadcrumb in the header", () => {

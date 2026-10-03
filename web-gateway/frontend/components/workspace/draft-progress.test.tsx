@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { DraftStep } from "@/lib/workspace/draft-wizard";
+import { newStepHref, type DraftStep } from "@/lib/workspace/draft-wizard";
 
 import { DraftProgress, StartProgress } from "@/components/workspace/draft-progress";
 
@@ -48,6 +48,26 @@ describe("DraftProgress", () => {
     expect(screen.getByRole("link", { name: /Review & submit/ }).getAttribute("href")).toBe(
       "/workspace/job-1?step=review"
     );
+  });
+
+  it("links the steps of a simulation that is not saved yet to /workspace/new/<snapshot>, by hrefFor", () => {
+    const onSelectStep = vi.fn();
+    render(
+      <DraftProgress
+        hrefFor={(step) => newStepHref("snap-1", step)}
+        current="run"
+        problemSteps={[]}
+        onSelectStep={onSelectStep}
+      />
+    );
+    expect(screen.getByRole("link", { name: /Run settings/ }).getAttribute("href")).toBe(
+      "/workspace/new/snap-1?step=run"
+    );
+    expect(screen.getByRole("link", { name: /Review & submit/ }).getAttribute("href")).toBe(
+      "/workspace/new/snap-1?step=review"
+    );
+    fireEvent.click(screen.getByRole("link", { name: /Review & submit/ }));
+    expect(onSelectStep).toHaveBeenCalledWith("review");
   });
 
   it("changes step in place on a plain click, and leaves other clicks to the browser", () => {

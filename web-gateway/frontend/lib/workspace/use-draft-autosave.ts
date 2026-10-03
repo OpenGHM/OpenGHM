@@ -449,7 +449,8 @@ export function useDraftAutosave({
     engine.stall.patchKey === fingerprint(patch);
   const pending = patch !== null && !stalled;
   const failure = engine.failure?.localKey === localKey ? engine.failure : null;
-  const unsaved = !engine.suspended && (pending || engine.inflight || withheld.length > 0 || failure !== null);
+  // A hook that is `disabled` saves nothing and owes nothing, so it asks nothing.
+  const unsaved = !engine.suspended && !disabled && (pending || engine.inflight || withheld.length > 0 || failure !== null);
 
   // Hidden or leaving: save at once, the pause is not waited for.
   useEffect(() => {

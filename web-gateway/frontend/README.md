@@ -149,6 +149,12 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   status summary), and New from this model snapshot and Delete, as visible
   buttons in the page header, for an ended one. A list row's Delete is a
   visible icon button too; there are no hidden "…" menus on the Workspace pages.
+- A new simulation is not stored until the user presses Save as draft or
+  submits (`/workspace/new/<snapshot id>`, [ADR 0028](../../docs/decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md)).
+  The wizard there is the stored draft's wizard with auto-save switched off,
+  and it asks before a link or a reload throws unsaved input away. A stored
+  draft keeps auto-saving. Anything new that starts a simulation from a
+  snapshot links to that route; it does not call the derive action itself.
 - A disabled action says why, both in a tooltip and in visible text.
 - Submit spends allocation, and Cancel and Delete cannot be undone, so each
   one confirms in an AlertDialog that says what will happen. The dialogs are

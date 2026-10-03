@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, FlaskConical, Loader2 } from "lucide-react";
+import { Copy, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobStatusBadge, STATUS_LABEL } from "@/components/jobs/job-status-badge";
 import { ActionError } from "@/components/workspace/action-error";
@@ -13,10 +13,10 @@ import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { displayName } from "@/lib/jobs/display-name";
 import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
-import { useCreateDraft } from "@/lib/jobs/use-create-draft";
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import { summaryOffersCopy } from "@/lib/workspace/failure-copy";
+import { newStepHref } from "@/lib/workspace/draft-wizard";
 
 /**
  * Says "Status: Running" to a screen reader when the status changes, and not
@@ -54,7 +54,6 @@ function StatusAnnouncer({ status }: { status: DisplayStatus }) {
  */
 export function JobHeader({ job, preview = false }: { job: Job; preview?: boolean }) {
   const { status, view } = useLiveJobContext();
-  const { pending, error, deriveFrom } = useCreateDraft();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteExpired, setDeleteExpired] = useState(false);
 
@@ -95,19 +94,11 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
                 className="shrink-0 font-medium"
               />
             )}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => void deriveFrom(job.dataset_id)}
-              className="min-h-10 shrink-0 gap-2"
-            >
-              {pending ? (
-                <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
-              ) : (
+            <Button asChild variant="outline" className="min-h-10 shrink-0 gap-2">
+              <Link href={newStepHref(job.dataset_id, "run")}>
                 <FlaskConical aria-hidden="true" />
-              )}
-              New from this model snapshot
+                New from this model snapshot
+              </Link>
             </Button>
             <JobDeleteButton
               jobId={job.id}
@@ -127,17 +118,12 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
         ) : undefined
       }
     >
-      {(deleteExpired || error?.kind === "session-expired") && (
+      {deleteExpired && (
         <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />
       )}
       {deleteError && (
         <div className="mt-4">
           <ActionError>{deleteError}</ActionError>
-        </div>
-      )}
-      {error?.kind === "error" && (
-        <div className="mt-4">
-          <ActionError>{error.message}</ActionError>
         </div>
       )}
       <StatusAnnouncer status={shown} />

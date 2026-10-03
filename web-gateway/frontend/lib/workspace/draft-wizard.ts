@@ -15,7 +15,8 @@ import type { Dataset } from "@/lib/repository/types";
 export const DRAFT_STEPS = ["run", "review"] as const;
 export type DraftStep = (typeof DRAFT_STEPS)[number];
 
-/** The step a draft opens at when `?step=` is missing or not one of ours. */
+/** The step a stored draft opens at when `?step=` is missing or not one of
+ *  ours. (A new simulation passes "run" instead: it opens on Run settings.) */
 const DEFAULT_STEP: DraftStep = "review";
 
 export const START_STEP_LABEL = "Start from";
@@ -31,10 +32,13 @@ const RETIRED_STEP = "model";
 
 /** `?step=` as Next hands it over (a repeated key is an array). Anything that
  *  is not a step is the default, so a stale or hand-typed link still opens. */
-export function parseStep(raw: string | string[] | null | undefined): DraftStep {
+export function parseStep(
+  raw: string | string[] | null | undefined,
+  fallback: DraftStep = DEFAULT_STEP
+): DraftStep {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (value === RETIRED_STEP) return "run";
-  return DRAFT_STEPS.find((step) => step === value) ?? DEFAULT_STEP;
+  return DRAFT_STEPS.find((step) => step === value) ?? fallback;
 }
 
 /** True when `raw` names the retired step, so the address bar can be rewritten
@@ -48,6 +52,18 @@ export function isRetiredStep(raw: string | string[] | null | undefined): boolea
 export function stepHref(id: string, step: DraftStep | typeof RETIRED_STEP): string {
   const target: DraftStep = step === RETIRED_STEP ? "run" : step;
   return `/workspace/${encodeURIComponent(id)}?step=${target}`;
+}
+
+/** The address of a step of a simulation that is not saved yet:
+ *  `/workspace/new/<snapshot id>?step=...`. The same two steps as a stored
+ *  draft's, under the snapshot's id because there is no job id. */
+export function newStepHref(datasetId: string, step: DraftStep): string {
+  return `/workspace/new/${encodeURIComponent(datasetId)}?step=${step}`;
+}
+
+/** The path of that wizard without its query, for telling its own links from others. */
+export function newWizardPath(datasetId: string): string {
+  return `/workspace/new/${encodeURIComponent(datasetId)}`;
 }
 
 /** The snapshot's own `recommendedCompute`, shown as what an empty cores or

@@ -347,6 +347,40 @@ def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
 # untouched by deriving from it.
 
 
+async def _derived_draft(
+    dataset_id: str,
+    slug: str | None,
+    model_input_id: str | None,
+    user: TokenPayload,
+    *,
+    job_id: str,
+) -> dict:
+    """The draft document that deriving from `dataset_id` creates. Reads the
+    snapshot, writes nothing: the POST route inserts the result, the GET route
+    only shows it, and both build it here so a default cannot drift between
+    the preview and what is stored."""
+    db = get_db()
+    # Envelope shape (mission 2026-09-23-catalogue-envelope) — unwrap to the
+    # spec document.
+    dataset_envelope = await db.datasets.find_one({"_id": dataset_id})
+    if dataset_envelope is None:
+        raise HTTPException(
+            status_code=404, detail=f"Dataset '{dataset_id}' not found"
+        )
+    dataset_doc = dataset_envelope["document"]
+
+    return _new_draft_document(
+        job_id=job_id,
+        dataset_id=dataset_id,
+        dataset_title=dataset_doc.get("about", {}).get("name", dataset_id),
+        parameters=_derive_simulation_parameters(dataset_doc),
+        slug=slug,
+        user=user,
+        now=datetime.now(timezone.utc),
+        model_input_id=model_input_id,
+    )
+
+
 @router.post(
     "/derive/{dataset_id}",
     response_model=JobResponse,
@@ -358,29 +392,9 @@ async def derive_simulation(
     user: TokenPayload = Depends(require_active_user),
 ):
     db = get_db()
-    # Envelope shape (mission 2026-09-23-catalogue-envelope) — unwrap to the
-    # spec document.
-    dataset_envelope = await db.datasets.find_one({"_id": dataset_id})
-    if dataset_envelope is None:
-        raise HTTPException(
-            status_code=404, detail=f"Dataset '{dataset_id}' not found"
-        )
-    dataset_doc = dataset_envelope["document"]
-
-    dataset_title = dataset_doc.get("about", {}).get("name", dataset_id)
-    parameters = _derive_simulation_parameters(dataset_doc)
-
-    now = datetime.now(timezone.utc)
     job_id = str(uuid.uuid4())
-    doc = _new_draft_document(
-        job_id=job_id,
-        dataset_id=dataset_id,
-        dataset_title=dataset_title,
-        parameters=parameters,
-        slug=body.slug,
-        user=user,
-        now=now,
-        model_input_id=body.model_input_id,
+    doc = await _derived_draft(
+        dataset_id, body.slug, body.model_input_id, user, job_id=job_id
     )
     await db.jobs.insert_one(doc)
 
@@ -393,6 +407,24 @@ async def derive_simulation(
         detail={"dataset_id": dataset_id},
     )
 
+    effective = await _resolve_effective_model_input(doc)
+    return _doc_to_response(doc, effective=effective)
+
+
+# GET /jobs/derive/{dataset_id} previews what the POST above would store, for
+# the new-simulation screen that shows a simulation until the user saves it.
+# Nothing is written and nothing is audited. `id` is "" (JobResponse.id is a
+# plain str): there is no job to point at. Declared before `GET /{job_id}` so
+# "derive" is never read as a job id (that route has one path segment, this one
+# has two, so they cannot collide today; the test pins it).
+
+
+@router.get("/derive/{dataset_id}", response_model=JobResponse)
+async def preview_derived_simulation(
+    dataset_id: str,
+    user: TokenPayload = Depends(require_active_user),
+):
+    doc = await _derived_draft(dataset_id, None, None, user, job_id="")
     effective = await _resolve_effective_model_input(doc)
     return _doc_to_response(doc, effective=effective)
 

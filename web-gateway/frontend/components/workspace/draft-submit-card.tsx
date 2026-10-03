@@ -72,6 +72,7 @@ export function DraftSubmitCard({
   onSubmittingChange,
   checkSubmitted,
   openJobHref = null,
+  note = "Your draft saves automatically. Submitting runs it on Anvil and uses compute time.",
 }: {
   jobId: string;
   problems: readonly SubmitProblem[];
@@ -91,6 +92,9 @@ export function DraftSubmitCard({
   checkSubmitted?: (jobId: string) => Promise<Job | null>;
   /** Set by the wizard once a submit went through but its page did not change. */
   openJobHref?: string | null;
+  /** The line beside the button. A simulation that is not saved yet says that
+   *  Submit saves it first. */
+  note?: string;
 }) {
   const noteId = useId();
   const [stage, setStage] = useState<Stage>("idle");
@@ -271,9 +275,7 @@ export function DraftSubmitCard({
         )
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <p className="text-xs text-muted-foreground">
-            Your draft saves automatically. Submitting runs it on Anvil and uses compute time.
-          </p>
+          <p className="text-xs text-muted-foreground">{note}</p>
           <Button
             type="button"
             disabled={blocked || stage !== "idle"}

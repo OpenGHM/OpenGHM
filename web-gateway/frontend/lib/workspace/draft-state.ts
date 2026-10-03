@@ -171,6 +171,38 @@ export function canonicalKey(local: DraftLocal, ctx: DraftContext): string {
   return fingerprint(canonical(local, snapshotVariableOrder(ctx)));
 }
 
+/**
+ * The fields whose value on screen is not what `saved` holds, in the wizard's
+ * order. Both sides in canonical form, like `buildDraftPatch`, but without its
+ * rules: a field the patch would leave out (a start that does not suit the
+ * snapshot, a refused group) is listed here exactly because it differs.
+ */
+export function unsavedFields(local: DraftLocal, saved: Job, ctx: DraftContext): DraftField[] {
+  const order = snapshotVariableOrder(ctx);
+  const want = canonical(local, order);
+  const have = canonical(fromJob(saved), order);
+  const differs: Record<DraftField, boolean> = {
+    modelInput: want.modelInputId !== have.modelInputId,
+    start: want.parameters.temporal_range_start !== have.parameters.temporal_range_start,
+    end: want.parameters.temporal_range_end !== have.parameters.temporal_range_end,
+    variables: fingerprint(want.parameters.variables) !== fingerprint(have.parameters.variables),
+    spatial: fingerprint(want.parameters.spatial_domain) !== fingerprint(have.parameters.spatial_domain),
+    custom: fingerprint(want.parameters.custom_params) !== fingerprint(have.parameters.custom_params),
+    cores: want.slurm.cores !== have.slurm.cores,
+    walltime: want.slurm.walltime !== have.slurm.walltime,
+    name: want.name !== have.name,
+    description: want.description !== have.description,
+  };
+  return DRAFT_FIELDS.filter((field) => differs[field]);
+}
+
+/** True when anything on screen differs from `baseline`: what a person would
+ *  lose by leaving. Compared in canonical form, so typing a space and deleting
+ *  it, or the variables in another order, is not a change. */
+export function isDirty(local: DraftLocal, baseline: Job, ctx: DraftContext): boolean {
+  return canonicalKey(local, ctx) !== canonicalKey(fromJob(baseline), ctx);
+}
+
 // ─── The patch ───────────────────────────────────────────────────────────────
 
 const SLURM_KEYS = ["cores", "walltime"] as const;

@@ -124,7 +124,7 @@ and 0012 were folded into 0010.
 | [0025](decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md) | A gateway job is a slurmly batch job whose body runs the pinned toolkit | accepted |
 | [0026](decisions/0026-how-a-job-verdict-is-reached.md) | How a job's verdict is reached, and how long its files live | accepted |
 | [0027](decisions/0027-live-updates-are-polled.md) | A job's live state is polled and shared, and its logs are read by byte offset | accepted |
-| [0028](decisions/0028-a-new-simulation-is-a-saved-draft-from-its-first-step.md) | A new simulation is a saved draft from its first step, and its edits auto-save | accepted |
+| [0028](decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md) | A new simulation is stored when the user saves it, and a stored draft saves its own edits | accepted |
 
 ## Missions
 

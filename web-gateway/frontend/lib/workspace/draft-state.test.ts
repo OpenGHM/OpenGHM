@@ -7,9 +7,11 @@ import {
   clientProblem,
   fieldsForPaths,
   fromJob,
+  isDirty,
   refuseGroups,
   refuseStart,
   submitProblems,
+  unsavedFields,
   type DraftContext,
   type DraftLocal,
   type ServerRefusals,
@@ -643,5 +645,83 @@ describe("submitProblems", () => {
       "Still saving your changes.",
     ]);
     expect(out[2]).toEqual({ step: "review", message: "Still saving your changes." });
+  });
+});
+
+describe("isDirty", () => {
+  const baseline = draft();
+
+  it("is false for the baseline itself and for a copy of it", () => {
+    expect(isDirty(fromJob(baseline), baseline, FOUND)).toBe(false);
+  });
+
+  it("is true for any field that differs", () => {
+    expect(isDirty(edited(baseline, { name: "Run A" }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { description: "why" }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { params: { temporal_range_end: "2002-12-31" } }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { params: { variables: ["runoff"] } }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { slurm: { cores: 8, walltime: null } }), baseline, FOUND)).toBe(true);
+  });
+
+  it("does not count what canonical form ignores: blanks around text, variables in another order", () => {
+    // Typing a space into the empty name, or choosing the variables in a
+    // different order, leaves nothing that would be saved.
+    expect(isDirty(edited(baseline, { name: "   " }), baseline, FOUND)).toBe(false);
+    expect(isDirty(edited(baseline, { params: { variables: [...NAMES].reverse() } }), baseline, FOUND)).toBe(false);
+  });
+
+  it("goes back to false when an edit is undone", () => {
+    const named = edited(baseline, { name: "Run A" });
+    expect(isDirty(named, baseline, FOUND)).toBe(true);
+    expect(isDirty({ ...named, name: "" }, baseline, FOUND)).toBe(false);
+  });
+
+  it("agrees with unsavedFields: dirty exactly when some field differs", () => {
+    for (const local of [fromJob(baseline), edited(baseline, { name: "x" }), edited(baseline, { name: " " })]) {
+      expect(isDirty(local, baseline, FOUND)).toBe(unsavedFields(local, baseline, FOUND).length > 0);
+    }
+  });
+});
+
+describe("unsavedFields", () => {
+  const saved = draft();
+
+  it("is empty when the server holds what is on screen", () => {
+    expect(unsavedFields(fromJob(saved), saved, FOUND)).toEqual([]);
+  });
+
+  it("names each differing field, in the wizard's order", () => {
+    const local = edited(saved, {
+      name: "Run A",
+      description: "why",
+      slurm: { cores: 4, walltime: "01:00:00" },
+      params: {
+        temporal_range_start: "2002-01-01",
+        temporal_range_end: "2002-12-31",
+        variables: ["runoff"],
+        spatial_domain: { north: 1, south: -1, east: 2, west: -2 },
+        custom_params: { A: "1" },
+      },
+      modelInputId: "other",
+    });
+    expect(unsavedFields(local, saved, FOUND)).toEqual([
+      "modelInput",
+      "start",
+      "end",
+      "variables",
+      "spatial",
+      "custom",
+      "cores",
+      "walltime",
+      "name",
+      "description",
+    ]);
+  });
+
+  it("lists a value the patch would withhold, because it is not on the server", () => {
+    // 2001-07-01 does not suit a yearly model: the patch leaves it out.
+    const local = edited(saved, { params: { temporal_range_start: "2001-07-01" } });
+    expect(buildDraftPatch(local, saved, FOUND).withheld).toEqual(["start"]);
+    expect(unsavedFields(local, saved, FOUND)).toEqual(["start"]);
   });
 });

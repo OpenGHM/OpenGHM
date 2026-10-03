@@ -54,9 +54,9 @@ export function SnapshotPicker({
   /** Ids of the snapshots the caller has used: marked, and listed first when nothing else orders the list. */
   usedIds: ReadonlySet<string>;
   onSelect: (dataset: Dataset) => void;
-  /** The snapshot whose draft is being created, if any. */
+  /** The snapshot whose page is opening, if any. */
   pendingId?: string | null;
-  /** Every card is off while a draft is being created. */
+  /** Every card is off while one is opening. */
   disabled?: boolean;
 }) {
   const { filters, setFilters, result, isPending, error, retry } = useUrlSyncedFilters<
@@ -109,7 +109,7 @@ export function SnapshotPicker({
     setDetail(dataset);
     setDetailOpen(true);
   };
-  // Closed first, so an error from the draft is not left behind the sheet.
+  // Closed first, so the sheet is not left open behind the page that opens.
   const selectFromSheet = (dataset: Dataset) => {
     setDetailOpen(false);
     onSelect(dataset);

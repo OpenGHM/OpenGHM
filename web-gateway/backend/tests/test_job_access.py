@@ -80,6 +80,8 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
     "stats": ("GET", "/api/v1/jobs/stats", None, None),
     "submit": ("POST", "/api/v1/jobs/{id}/submit", None, "DRAFT"),
     "derive": ("POST", "/api/v1/jobs/derive/ds-1", {}, None),
+    # The preview of what `derive` stores: the same gate, nothing written.
+    "derive_preview": ("GET", "/api/v1/jobs/derive/ds-1", None, None),
     # The owner copies a simulation of any status; the copy is a new draft.
     "duplicate": ("POST", "/api/v1/jobs/{id}/duplicate", None, "RUNNING"),
     "get": ("GET", "/api/v1/jobs/{id}", None, "RUNNING"),
@@ -126,6 +128,10 @@ EXPECTED: dict[str, dict[str, int]] = {
     "mock_admin": {**NOT_OWNER, "get": 200, "status": 200, "logs": 200, "cancel": 200,
                    "submit": 403, "derive": 201},
 }
+
+# The preview answers every caller as `derive` does, 200 where derive says 201.
+for _caller, _expected in EXPECTED.items():
+    _expected.setdefault("derive_preview", 200 if _expected["derive"] == 201 else _expected["derive"])
 
 
 @pytest.mark.parametrize("route", list(ROUTES))

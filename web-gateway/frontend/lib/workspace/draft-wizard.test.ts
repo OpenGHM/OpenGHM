@@ -8,6 +8,8 @@ import {
   START_STEP_LABEL,
   STEP_LABELS,
   isRetiredStep,
+  newStepHref,
+  newWizardPath,
   parseStep,
   recommendedComputeFor,
   stepHref,
@@ -69,6 +71,39 @@ describe("stepHref", () => {
 
   it("encodes an id that is not a plain path segment", () => {
     expect(stepHref("a/b?c", "run")).toBe("/workspace/a%2Fb%3Fc?step=run");
+  });
+});
+
+describe("parseStep with a fallback", () => {
+  it("opens a new simulation at Run settings when the step is missing or not one of ours", () => {
+    for (const raw of [undefined, null, "", "start", "../x", []]) {
+      expect(parseStep(raw, "run")).toBe("run");
+    }
+  });
+
+  it("still reads a step that is named", () => {
+    expect(parseStep("review", "run")).toBe("review");
+    expect(parseStep("run", "review")).toBe("run");
+    expect(parseStep("model", "review")).toBe("run");
+  });
+});
+
+describe("newStepHref", () => {
+  it("names the snapshot and the step, under /workspace/new", () => {
+    expect(newStepHref("snap-1", "run")).toBe("/workspace/new/snap-1?step=run");
+    expect(newStepHref("snap-1", "review")).toBe("/workspace/new/snap-1?step=review");
+  });
+
+  it("encodes an id that is not a plain path segment, as the page's own path does", () => {
+    expect(newStepHref("a/b?c", "run")).toBe("/workspace/new/a%2Fb%3Fc?step=run");
+    expect(newWizardPath("a/b?c")).toBe("/workspace/new/a%2Fb%3Fc");
+  });
+
+  it("round-trips through parseStep", () => {
+    for (const step of DRAFT_STEPS) {
+      const raw = new URL(newStepHref("x", step), "http://h").searchParams.get("step");
+      expect(parseStep(raw, "run")).toBe(step);
+    }
   });
 });
 

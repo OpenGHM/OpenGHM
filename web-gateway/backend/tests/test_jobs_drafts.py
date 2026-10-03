@@ -362,6 +362,64 @@ def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
     assert event["detail"] == {"dataset_id": "ds-1"}
 
 
+# ---- previewing a derive: GET shows what POST would store, stores nothing ----
+
+
+def test_the_derive_preview_matches_what_derive_stores(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    headers = token_for("alice")
+
+    preview = client.get("/api/v1/jobs/derive/ds-1", headers=headers)
+    stored = client.post("/api/v1/jobs/derive/ds-1", json={}, headers=headers)
+
+    assert preview.status_code == 200, preview.text
+    assert stored.status_code == 201, stored.text
+    shown, saved = preview.json(), stored.json()
+    assert shown["id"] == "" and saved["id"] != ""
+    # Everything but the identity and the clock is the same answer.
+    for key in ("created_at", "updated_at", "id"):
+        shown.pop(key), saved.pop(key)
+    assert shown == saved
+    assert shown["status"] == "DRAFT"
+    assert shown["dataset_id"] == "ds-1" and shown["dataset_title"] == "Dataset one"
+    assert shown["parameters"]["variables"] == ["runoff", "discharge"]
+
+
+def test_the_derive_preview_writes_nothing(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    jobs, events = dict(db.jobs.docs), dict(db.audit_events.docs)
+
+    response = client.get("/api/v1/jobs/derive/ds-1", headers=token_for("alice"))
+
+    assert response.status_code == 200, response.text
+    assert db.jobs.docs == jobs and db.audit_events.docs == events
+
+
+def test_the_derive_preview_is_not_read_as_a_job_id(client, db):
+    """`GET /jobs/{job_id}` also exists; a path under `derive/` must reach the
+    preview, never answer "Job not found"."""
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    response = client.get("/api/v1/jobs/derive/ds-1", headers=token_for("alice"))
+    assert response.status_code == 200
+    assert response.json()["dataset_id"] == "ds-1"
+
+
+def test_the_derive_preview_of_an_unknown_snapshot_is_a_404(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    response = client.get("/api/v1/jobs/derive/nope", headers=token_for("alice"))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Dataset 'nope' not found"
+    assert db.jobs.docs == {}
+
+
 # ---- _duplicate_document: an allowlist, not a copy of the source -----------
 
 #: Every field a run, a verdict, a cancel or a submit adds to a job, plus one

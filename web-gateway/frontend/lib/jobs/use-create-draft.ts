@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deriveSimulation, duplicateSimulation } from "@/lib/jobs/actions";
+import { duplicateSimulation } from "@/lib/jobs/actions";
 import type { ActionResult, Job } from "@/lib/jobs/types";
 import { stepHref } from "@/lib/workspace/draft-wizard";
 
@@ -13,9 +13,10 @@ type CreateDraftError =
   | { kind: "error"; message: string; code?: string };
 
 /**
- * The two ways to start a draft, as the Start screen and the repository page
- * use them: from a snapshot (`deriveFrom`) or from one of the caller's own
- * simulations (`duplicateFrom`). Success opens the new draft's first step;
+ * Creates a stored draft at once from one of the caller's own simulations
+ * (`duplicateFrom`: "Duplicate" and "Try again with these settings"). A new
+ * simulation from a snapshot is not stored until the person saves it
+ * (`/workspace/new/<snapshot id>`). Success opens the new draft's first step;
  * failures are returned in `error`, never thrown.
  *
  * One request at a time: a call while another is pending is ignored, so a
@@ -58,15 +59,10 @@ export function useCreateDraft() {
     [router]
   );
 
-  const deriveFrom = useCallback(
-    (datasetId: string) =>
-      create(() => deriveSimulation(datasetId), "That model snapshot is no longer in the repository."),
-    [create]
-  );
   const duplicateFrom = useCallback(
     (jobId: string) => create(() => duplicateSimulation(jobId), "That simulation no longer exists."),
     [create]
   );
 
-  return { pending, error, deriveFrom, duplicateFrom };
+  return { pending, error, duplicateFrom };
 }

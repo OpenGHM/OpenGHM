@@ -167,6 +167,22 @@ export async function deriveSimulation(
 }
 
 /**
+ * The draft `deriveSimulation` would create from a snapshot, without creating
+ * it: nothing is stored. The new-simulation wizard (`/workspace/new/<id>`) is
+ * seeded with it and keeps everything in the browser until the user saves.
+ * Its `id` carries no meaning (the backend sends an empty string): never use
+ * it as a job id. `not_found` means the snapshot is not in the repository.
+ */
+export async function previewDraft(datasetId: string): Promise<ActionResult<Job>> {
+  return run(async (client) => {
+    const res = await client.get<Job>(
+      `/api/v1/jobs/derive/${encodeURIComponent(datasetId)}`
+    );
+    return res.data;
+  });
+}
+
+/**
  * Create a new DRAFT from one of the caller's own simulations, whatever its
  * status: the second creation path. The source is only ever read. A source
  * whose model snapshot has left the repository answers

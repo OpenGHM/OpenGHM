@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ActionResult, Job } from "@/lib/jobs/types";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const { deriveSimulation, duplicateSimulation, fetchJobs, fetchSnapshots, fetchModelInputIds, push } = vi.hoisted(() => ({
   deriveSimulation: vi.fn(),
@@ -21,7 +20,7 @@ vi.mock("next/navigation", () => ({
 
 import { filters as catalogueFilters, response } from "@/components/repository/catalogue.fixtures";
 import { StartFrom, type PickerSeed } from "@/components/workspace/start-from";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset } from "@/lib/workspace/fixtures";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -52,10 +51,6 @@ function start(over: Partial<React.ComponentProps<typeof StartFrom>> = {}) {
   return render(<StartFrom usedIds={["snap-used"]} picker={SEED} {...over} />);
 }
 
-const created = (id = "new-draft"): ActionResult<Job> => ({
-  ok: true,
-  data: fakeSimulation("DRAFT", { id }),
-});
 /** A snapshot card's one control, by the snapshot's title. */
 const snapshotButton = (title: string) => screen.getByRole("button", { name: title });
 
@@ -132,63 +127,36 @@ describe("the snapshot grid", () => {
 });
 
 describe("a model snapshot", () => {
-  it("is derived at once from a click on its card, and opens Run settings", async () => {
-    deriveSimulation.mockResolvedValue(created("d1"));
+  it("opens Run settings of a new simulation from a click on its card, and creates nothing", () => {
     start();
     fireEvent.click(snapshotButton("Used Snapshot"));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d1?step=run"));
-    expect(deriveSimulation).toHaveBeenCalledWith("snap-used");
+    expect(push).toHaveBeenCalledWith("/workspace/new/snap-used?step=run");
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(deriveSimulation).not.toHaveBeenCalled();
+    expect(duplicateSimulation).not.toHaveBeenCalled();
   });
 
-  it("is derived from the Select in a snapshot's Details sheet, which closes first", async () => {
-    deriveSimulation.mockResolvedValue(created("d4"));
+  it("opens the same from the Select in a snapshot's Details sheet, which closes first", async () => {
     start();
     fireEvent.click(screen.getByRole("button", { name: /^Details: Listed Snapshot/ }));
     const sheet = await screen.findByRole("dialog");
     fireEvent.click(within(sheet).getByRole("button", { name: /select/i }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/d4?step=run"));
-    expect(deriveSimulation).toHaveBeenCalledWith("snap-listed");
+    expect(push).toHaveBeenCalledWith("/workspace/new/snap-listed?step=run");
+    expect(deriveSimulation).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("turns every card off while one is pending, with a message on the clicked one, and creates one draft", async () => {
-    let resolve!: (r: ActionResult<Job>) => void;
-    deriveSimulation.mockReturnValue(new Promise((r) => (resolve = r)));
-    start();
-    const used = snapshotButton("Used Snapshot");
-    fireEvent.click(used);
-    fireEvent.click(used);
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect((used as HTMLButtonElement).disabled).toBe(true);
-    expect(used.getAttribute("aria-busy")).toBe("true");
-    expect(screen.getByRole("status").textContent).toContain("Creating your draft");
-    expect(used.closest("[data-slot=card]")?.contains(screen.getByRole("status"))).toBe(true);
-    // The other card is out of reach too.
-    fireEvent.click(snapshotButton("Listed Snapshot"));
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    await act(async () => resolve(created("d3")));
-    expect(push).toHaveBeenCalledWith("/workspace/d3?step=run");
+  it("encodes a snapshot id that is not a plain path segment", () => {
+    const odd = snap("a/b c", "Odd Snapshot", "1.0.0");
+    start({ picker: { ...SEED, data: response([odd]) } });
+    fireEvent.click(snapshotButton("Odd Snapshot"));
+    expect(push).toHaveBeenCalledWith("/workspace/new/a%2Fb%20c?step=run");
   });
 
-  it("shows a missing snapshot in an alert and lets the user try again", async () => {
-    deriveSimulation.mockResolvedValueOnce({ ok: false, reason: "not_found" });
+  it("shows no error or banner of its own: a snapshot that is gone is the next page's not-found", () => {
     start();
     fireEvent.click(snapshotButton("Used Snapshot"));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("no longer in the repository");
-    expect(push).not.toHaveBeenCalled();
-    expect((snapshotButton("Used Snapshot") as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("shows any other error, and the sign-in banner for an expired session", async () => {
-    deriveSimulation.mockResolvedValueOnce({ ok: false, reason: "error", message: "Backend exploded" });
-    start();
-    fireEvent.click(snapshotButton("Used Snapshot"));
-    expect((await screen.findByRole("alert")).textContent).toContain("Backend exploded");
-
-    deriveSimulation.mockResolvedValueOnce({ ok: false, reason: "session_expired" });
-    fireEvent.click(snapshotButton("Used Snapshot"));
-    expect(await screen.findByText("Your session has expired.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Your session has expired.")).toBeNull();
   });
 });

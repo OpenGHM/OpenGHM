@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionError } from "@/components/workspace/action-error";
 import { focusDraftField } from "@/components/workspace/draft-field";
@@ -14,16 +16,20 @@ import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import { stepHeadingId } from "@/components/workspace/draft-step-heading";
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
+import { LeaveDraftDialog } from "@/components/workspace/leave-draft-dialog";
+import { NewDraftStatus, SaveDraftButton } from "@/components/workspace/new-draft-controls";
 import { PageHeader, SimulationBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
+import { describeSubmitFailure } from "@/components/workspace/submit-summary";
 import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
 import { displayName } from "@/lib/jobs/display-name";
 import { simulationSource } from "@/lib/jobs/simulation-source";
-import type { Job, SubmitError } from "@/lib/jobs/types";
+import type { ActionFailure, ActionResult, Job, SubmitError } from "@/lib/jobs/types";
 import { newerJob, writeDraftCache } from "@/lib/workspace/draft-cache";
 import {
   fromJob,
+  isDirty,
   submitProblems,
   type DraftContext,
   type DraftField,
@@ -33,13 +39,31 @@ import {
   DRAFT_STEPS,
   FIELD_STEP,
   isRetiredStep,
+  newStepHref,
+  newWizardPath,
   parseStep,
   recommendedComputeFor,
   stepHref,
   type DraftStep,
 } from "@/lib/workspace/draft-wizard";
+import { useLeaveGuard } from "@/lib/workspace/leave-guard";
+import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
-import { useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
+import { type FlushResult, useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
+import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
+
+/** Which draft the wizard edits: one that is stored (`/workspace/<id>`, saved as
+ *  it is edited), or a new simulation that exists only in this browser until
+ *  the person saves it (`/workspace/new/<snapshot id>`). */
+export type WizardMode = { kind: "saved" } | { kind: "new"; datasetId: string };
+
+const SAVED: WizardMode = { kind: "saved" };
+
+const noop = () => {};
+
+/** What nothing is saved for: the new mode has no server answers to show. */
+const NO_ERRORS: Partial<Record<DraftField, string>> = {};
+const NO_FIELDS: DraftField[] = [];
 
 /** After a submit went through, how long Next gets to show the job's page by
  *  itself before the wizard checks the server and steps in. */
@@ -58,8 +82,8 @@ function liveName(name: string, job: Job): string {
 }
 
 /** The step the address bar names right now. */
-function stepFromLocation(): DraftStep {
-  return parseStep(new URLSearchParams(window.location.search).get("step"));
+function stepFromLocation(fallback?: DraftStep): DraftStep {
+  return parseStep(new URLSearchParams(window.location.search).get("step"), fallback);
 }
 
 /**
@@ -80,12 +104,18 @@ function stepFromLocation(): DraftStep {
  *   heading. Nothing blocks a step: what stands in the way of a submit is flagged
  *   on the strip and listed beside the Submit button. An address that still says
  *   `?step=model` (the step this replaced) is rewritten to `?step=run`.
+ *
+ * `mode` `new` is a simulation nobody has saved: `job` is the draft the server
+ * would create (it has no id), everything stays in the browser, nothing is
+ * auto-saved, and "Save as draft" (or Submit) creates the stored draft. Leaving
+ * with changes asks first (`useLeaveGuard`).
  */
 export function DraftWizard({
   job,
   ctx,
   blockedReason,
   initialStep,
+  mode = SAVED,
 }: {
   /** The draft as the server page read it. */
   job: Job;
@@ -93,6 +123,7 @@ export function DraftWizard({
   /** Why this user cannot submit (ADR 0024), or null. */
   blockedReason: string | null;
   initialStep: DraftStep;
+  mode?: WizardMode;
 }) {
   const [seen, setSeen] = useState(job);
   const [start, setStart] = useState(() => ({ job: newerJob(job), step: initialStep, epoch: 0 }));
@@ -109,10 +140,26 @@ export function DraftWizard({
     setStart((s) => ({ job: fresh, step: stepFromLocation(), epoch: s.epoch + 1 }));
   }, []);
 
+  if (mode.kind === "new") {
+    // The preview is the baseline for good: no cache, no reload.
+    return (
+      <WizardBody
+        key={mode.datasetId}
+        initialJob={job}
+        mode={mode}
+        ctx={ctx}
+        blockedReason={blockedReason}
+        initialStep={initialStep}
+        onReload={reload}
+      />
+    );
+  }
+
   return (
     <WizardBody
       key={start.epoch}
       initialJob={start.job}
+      mode={mode}
       ctx={ctx}
       blockedReason={blockedReason}
       initialStep={start.step}
@@ -123,12 +170,14 @@ export function DraftWizard({
 
 function WizardBody({
   initialJob,
+  mode,
   ctx,
   blockedReason,
   initialStep,
   onReload,
 }: {
   initialJob: Job;
+  mode: WizardMode;
   ctx: DraftContext;
   blockedReason: string | null;
   initialStep: DraftStep;
@@ -136,7 +185,17 @@ function WizardBody({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const jobId = initialJob.id;
+  const newDatasetId = mode.kind === "new" ? mode.datasetId : null;
+  const isNew = newDatasetId !== null;
+  // A new simulation has no job id (the preview's is meaningless): its steps
+  // are addressed by the snapshot, and it opens on Run settings.
+  const jobId = isNew ? "" : initialJob.id;
+  const datasetId = newDatasetId ?? initialJob.dataset_id;
+  const defaultStep: DraftStep = isNew ? "run" : "review";
+  const hrefFor = useCallback(
+    (target: DraftStep) => (newDatasetId !== null ? newStepHref(newDatasetId, target) : stepHref(jobId, target)),
+    [newDatasetId, jobId]
+  );
 
   const [local, setLocal] = useState<DraftLocal>(() => fromJob(initialJob));
   // A draft nobody has named, opened on Run settings (a new one is): the Name
@@ -163,7 +222,8 @@ function WizardBody({
     };
   }, []);
 
-  const autosave = useDraftAutosave({ jobId, initialSaved: initialJob, local, ctx });
+  // A new simulation is not auto-saved: the hook is off and sends nothing.
+  const autosave = useDraftAutosave({ jobId, initialSaved: initialJob, local, ctx, disabled: isNew });
   const { flush, suspend, resume } = autosave;
   const modelInput = useCatalogueModelInput(effectiveModelInputId(local.modelInputId, ctx.dataset));
 
@@ -174,17 +234,17 @@ function WizardBody({
   // URL, the browser's back/forward included, comes through `useSearchParams`.
   // Back/forward is also heard directly, so the step does not wait for Next.
   const [step, setStep] = useState<DraftStep>(initialStep);
-  const urlStep = parseStep(searchParams.get("step"));
+  const urlStep = parseStep(searchParams.get("step"), defaultStep);
   const [seenUrlStep, setSeenUrlStep] = useState(urlStep);
   if (urlStep !== seenUrlStep) {
     setSeenUrlStep(urlStep);
     setStep(urlStep);
   }
   useEffect(() => {
-    const onPopState = () => setStep(stepFromLocation());
+    const onPopState = () => setStep(stepFromLocation(defaultStep));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [defaultStep]);
 
   // The field an Edit link or a "fix <field>" link asked to focus, until the
   // effect below has done it. `focusTick` makes a second request for the same
@@ -193,7 +253,7 @@ function WizardBody({
   const [focusTick, setFocusTick] = useState(0);
   const goTo = useCallback(
     (next: DraftStep, field?: DraftField) => {
-      const url = stepHref(jobId, next);
+      const url = hrefFor(next);
       // A native pushState adds an entry even for the URL we are on.
       if (url !== window.location.pathname + window.location.search) {
         window.history.pushState(null, "", url);
@@ -202,7 +262,7 @@ function WizardBody({
       if (field) setFocusTick((n) => n + 1);
       setStep(next);
     },
-    [jobId]
+    [hrefFor]
   );
 
   // A new step (from a button, the strip, or the browser's back/forward): save
@@ -229,8 +289,8 @@ function WizardBody({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!isRetiredStep(params.get("step"))) return;
-    window.history.replaceState(null, "", stepHref(jobId, "run"));
-  }, [jobId]);
+    window.history.replaceState(null, "", hrefFor("run"));
+  }, [hrefFor]);
 
   // ── Back in view ──────────────────────────────────────────────────────────
   // Another tab or a submit elsewhere may have moved the draft on while this
@@ -241,6 +301,8 @@ function WizardBody({
     latest.current = { clean, savedAt: autosave.saved.updated_at };
   });
   useEffect(() => {
+    // Nothing is stored for a new simulation: there is nothing to go stale.
+    if (isNew) return;
     const onVisible = async () => {
       if (document.visibilityState !== "visible" || !latest.current.clean) return;
       const result = await fetchJob(jobId).catch(() => null);
@@ -251,14 +313,14 @@ function WizardBody({
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [jobId, router, onReload]);
+  }, [isNew, jobId, router, onReload]);
 
   // ── What is wrong with the draft ──────────────────────────────────────────
   // `saving` is left out: Submit saves first, so a pause in the middle of a
   // save is not something to fix, and it must not flash a warning on every key.
   const problems = useMemo(
-    () => submitProblems(local, ctx, blockedReason, { withheld: autosave.withheld, saving: false }),
-    [local, ctx, blockedReason, autosave.withheld]
+    () => submitProblems(local, ctx, blockedReason, { withheld: isNew ? NO_FIELDS : autosave.withheld, saving: false }),
+    [local, ctx, blockedReason, isNew, autosave.withheld]
   );
   const problemSteps = useMemo(
     () => DRAFT_STEPS.filter((s) => problems.some((p) => p.step === s)),
@@ -266,13 +328,87 @@ function WizardBody({
   );
 
   const recommended = recommendedComputeFor(ctx.dataset);
-  const source = simulationSource(initialJob);
-  const name = liveName(local.name, initialJob);
+  const source = simulationSource({ dataset_id: datasetId, dataset_title: initialJob.dataset_title });
+  const name = isNew ? local.name.trim() || "New simulation" : liveName(local.name, initialJob);
   const index = DRAFT_STEPS.indexOf(step);
+
+  // ── A new simulation: saving it, and leaving it ───────────────────────────
+  // Inert for a stored draft. Once a save created the draft, `saved` is what
+  // the server holds, and "unsaved" is measured against that.
+  const newDraft = useSaveNewDraft({ datasetId, ctx });
+  const baseline = newDraft.saved ?? initialJob;
+  const dirty = isNew && isDirty(local, baseline, ctx);
+  // Set once a save or a submit went through and the page is on its way to the
+  // draft: from then on nothing is asked about leaving, and nothing is saved twice.
+  const [departing, setDeparting] = useState(false);
+  const guard = useLeaveGuard({ active: dirty && !departing, ownPath: newWizardPath(datasetId) });
+  // The reason the last submit gave, for the toast of one that did not go through.
+  const submitFailure = useRef<ActionFailure | null>(null);
+
+  /** Save the new simulation as a draft and go on: to its own page (`go` null,
+   *  on the step showing) or to `go`. A draft that came out without some of the
+   *  settings is still the draft: it opens, and a toast says what is missing.
+   *  False when nothing was created, and the page then says why. */
+  const saveAndGo = async (go: string | null): Promise<boolean> => {
+    const result = await newDraft.save(local);
+    if (result === null || !result.ok) return false;
+    writeDraftCache(result.job);
+    if (result.notSaved.length > 0) toast.error(describeNotSaved(result.notSaved));
+    else toast.success("Draft saved");
+    setDeparting(true);
+    guard.stay();
+    if (go === null) router.replace(stepHref(result.job.id, step));
+    else router.push(go);
+    return true;
+  };
+  const discardAndGo = (go: string) => {
+    setDeparting(true);
+    guard.stay();
+    router.push(go);
+  };
+
+  // Submit from Review: the first press creates the draft (once: a retry after a
+  // failed submit finds it), and what the confirmation shows is what it holds.
+  const newFlush = async (): Promise<FlushResult> => {
+    const result = await newDraft.ensureSaved(local);
+    if (!result.ok) return { ok: false };
+    if (result.patchError !== null) {
+      toast.error(`The draft was created, but its settings could not be saved: ${result.patchError}`);
+      return { ok: false };
+    }
+    return { ok: true, job: result.job, withheld: result.notSaved };
+  };
+  const newSubmit = async (): Promise<ActionResult<Job>> => {
+    submitFailure.current = null;
+    const id = newDraft.created()?.id;
+    if (!id) return { ok: false, reason: "error", message: "The draft was not created." };
+    const result = await submitSimulation(id);
+    if (!result.ok) submitFailure.current = result;
+    return result;
+  };
+  // The draft exists, so a failed submit goes on to it: it shows the reason the
+  // server stored, and the person continues there.
+  const onNewSubmitFailed = () => {
+    const created = newDraft.created();
+    if (!created) return;
+    const failure = submitFailure.current;
+    const why =
+      failure === null
+        ? null
+        : failure.reason === "error"
+          ? describeSubmitFailure(failure)
+          : failure.reason === "session_expired"
+            ? "Your session has expired."
+            : "The draft no longer exists.";
+    toast.error(`Your draft was saved, but it was not submitted.${why ? ` ${why}` : ""}`);
+    setDeparting(true);
+    router.replace(stepHref(created.id, "review"));
+  };
 
   // ── Submit and delete ─────────────────────────────────────────────────────
   const onSubmitted = (submitted: Job) => {
     const url = `/workspace/${encodeURIComponent(submitted.id)}`;
+    if (isNew) setDeparting(true);
     setLastSubmitError(null);
     router.replace(url);
     router.refresh();
@@ -316,13 +452,22 @@ function WizardBody({
   };
 
   const state = autosave.state;
+  const saveDisabled = departing || submitting;
 
   return (
     <main className={WORKSPACE_MAIN}>
       <PageHeader
         top={<SimulationBreadcrumb current={name} />}
         title={name}
-        badge={<JobStatusBadge status="DRAFT" />}
+        badge={
+          isNew ? (
+            <Badge variant="outline" className="px-2.5 font-semibold text-muted-foreground">
+              Not saved
+            </Badge>
+          ) : (
+            <JobStatusBadge status="DRAFT" />
+          )
+        }
         meta={
           <p className="mt-2.5 min-w-0 text-sm text-muted-foreground">
             <Link
@@ -335,46 +480,68 @@ function WizardBody({
           </p>
         }
         aside={
-          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-            <SaveStatus
-              state={state}
-              onRetry={autosave.retry}
-              onGoToField={(field) => goTo(FIELD_STEP[field], field)}
-            />
-            <JobDeleteButton
-              jobId={jobId}
-              isDraft
-              workDir={null}
-              remoteJobDir={null}
-              files={null}
-              onOpen={() => {
-                setDeleteError(null);
-                setDeleteExpired(false);
-              }}
-              onOpenChange={(open) => {
-                // Nothing is saved behind a Delete that may go through. A
-                // dialog that closes without deleting gives saving back.
-                if (open) suspend();
-                else if (!deleted.current) resume();
-              }}
-              onDeleted={() => {
-                deleted.current = true;
-                suspend();
-                router.push("/workspace");
-              }}
-              onError={setDeleteError}
-              onSessionExpired={() => setDeleteExpired(true)}
-            />
-          </div>
+          isNew ? (
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              <NewDraftStatus
+                state={newDraft.saving ? "saving" : newDraft.saved && !dirty ? "saved" : "unsaved"}
+              />
+              <Button asChild variant="ghost" className="min-h-10 sm:min-h-9">
+                <Link href="/workspace">Cancel</Link>
+              </Button>
+              <SaveDraftButton
+                saving={newDraft.saving}
+                disabled={saveDisabled}
+                onClick={() => void saveAndGo(null)}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              <SaveStatus
+                state={state}
+                onRetry={autosave.retry}
+                onGoToField={(field) => goTo(FIELD_STEP[field], field)}
+              />
+              <JobDeleteButton
+                jobId={jobId}
+                isDraft
+                workDir={null}
+                remoteJobDir={null}
+                files={null}
+                onOpen={() => {
+                  setDeleteError(null);
+                  setDeleteExpired(false);
+                }}
+                onOpenChange={(open) => {
+                  // Nothing is saved behind a Delete that may go through. A
+                  // dialog that closes without deleting gives saving back.
+                  if (open) suspend();
+                  else if (!deleted.current) resume();
+                }}
+                onDeleted={() => {
+                  deleted.current = true;
+                  suspend();
+                  router.push("/workspace");
+                }}
+                onError={setDeleteError}
+                onSessionExpired={() => setDeleteExpired(true)}
+              />
+            </div>
+          )
         }
       >
+        {newDraft.error?.reason === "session_expired" && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
+        {newDraft.error?.reason === "error" && (
+          <div className="mt-4">
+            <ActionError>Couldn&apos;t save the draft: {newDraft.error.message}</ActionError>
+          </div>
+        )}
         {deleteExpired && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
         {deleteError && (
           <div className="mt-4">
             <ActionError>{deleteError}</ActionError>
           </div>
         )}
-        <DraftProgress jobId={jobId} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
+        <DraftProgress hrefFor={hrefFor} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
       </PageHeader>
 
       <div className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
@@ -428,7 +595,7 @@ function WizardBody({
           >
             {step === "run" && (
               <DraftRunStep
-                datasetId={initialJob.dataset_id}
+                datasetId={datasetId}
                 datasetTitle={initialJob.dataset_title}
                 ctx={ctx}
                 parameters={local.parameters}
@@ -441,8 +608,8 @@ function WizardBody({
                 autoFocusName={focusNameOnOpen}
                 onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
                 onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
-                serverErrors={autosave.serverErrors}
-                startRefusal={autosave.startRefusal}
+                serverErrors={isNew ? NO_ERRORS : autosave.serverErrors}
+                startRefusal={isNew ? null : autosave.startRefusal}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
                 onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
                 onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
@@ -451,7 +618,7 @@ function WizardBody({
             )}
             {step === "review" && (
               <DraftReviewStep
-                datasetId={initialJob.dataset_id}
+                datasetId={datasetId}
                 datasetTitle={initialJob.dataset_title}
                 ctx={ctx}
                 local={local}
@@ -459,21 +626,41 @@ function WizardBody({
                 onEditStep={goTo}
                 disabled={submitting}
                 submitArea={
-                  <DraftSubmitCard
-                    jobId={jobId}
-                    problems={problems}
-                    onFix={goTo}
-                    lastSubmitError={lastSubmitError}
-                    recommended={recommended}
-                    flush={flush}
-                    suspend={suspend}
-                    submit={submitSimulation}
-                    onSubmitted={onSubmitted}
-                    onSubmitFailed={onSubmitFailed}
-                    onSubmittingChange={setSubmitting}
-                    checkSubmitted={checkSubmitted}
-                    openJobHref={pageStuck}
-                  />
+                  isNew ? (
+                    // Nothing is stored yet: Submit creates the draft first, once.
+                    <DraftSubmitCard
+                      jobId=""
+                      problems={problems}
+                      onFix={goTo}
+                      lastSubmitError={null}
+                      recommended={recommended}
+                      flush={newFlush}
+                      suspend={noop}
+                      submit={newSubmit}
+                      onSubmitted={onSubmitted}
+                      onSubmitFailed={onNewSubmitFailed}
+                      onSubmittingChange={setSubmitting}
+                      checkSubmitted={() => checkSubmitted(newDraft.created()?.id ?? "")}
+                      openJobHref={pageStuck}
+                      note="Submitting saves this as a draft first, then runs it on Anvil and uses compute time."
+                    />
+                  ) : (
+                    <DraftSubmitCard
+                      jobId={jobId}
+                      problems={problems}
+                      onFix={goTo}
+                      lastSubmitError={lastSubmitError}
+                      recommended={recommended}
+                      flush={flush}
+                      suspend={suspend}
+                      submit={submitSimulation}
+                      onSubmitted={onSubmitted}
+                      onSubmitFailed={onSubmitFailed}
+                      onSubmittingChange={setSubmitting}
+                      checkSubmitted={checkSubmitted}
+                      openJobHref={pageStuck}
+                    />
+                  )
                 }
               />
             )}
@@ -484,7 +671,15 @@ function WizardBody({
               Next. */}
           <div className="mt-8 flex items-center justify-between gap-3">
             {step === "run" ? (
-              <span />
+              isNew ? (
+                <SaveDraftButton
+                  saving={newDraft.saving}
+                  disabled={saveDisabled}
+                  onClick={() => void saveAndGo(null)}
+                />
+              ) : (
+                <span />
+              )
             ) : (
               <Button
                 type="button"
@@ -506,6 +701,24 @@ function WizardBody({
           </div>
         </div>
       </div>
+
+      {isNew && (
+        <LeaveDraftDialog
+          open={guard.target !== null}
+          saving={newDraft.saving}
+          onSave={() => {
+            const target = guard.target;
+            if (target === null) return;
+            void saveAndGo(target).then((saved) => {
+              if (!saved) guard.stay();
+            });
+          }}
+          onDiscard={() => {
+            if (guard.target !== null) discardAndGo(guard.target);
+          }}
+          onKeep={guard.stay}
+        />
+      )}
     </main>
   );
 }
