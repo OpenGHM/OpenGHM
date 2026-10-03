@@ -78,7 +78,9 @@ export function PageHeader({
     <header className={cn(WORKSPACE_CONTAINER, "pt-8 sm:pt-10")}>
       {top}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="min-w-0 max-w-full">
+        {/* From `lg` the title block takes what the actions leave, so a long `meta` line is cut
+            with an ellipsis instead of pushing the actions onto a row of their own. */}
+        <div className="min-w-0 max-w-full lg:flex-1 lg:basis-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className={TITLE}>{title}</h1>
             {badge}

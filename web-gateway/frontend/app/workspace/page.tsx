@@ -14,7 +14,7 @@ import { SimulationSearchInput, SimulationSearchProvider } from "@/components/wo
 import { SimulationTable } from "@/components/workspace/simulation-table";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
-import { simulationMetaLines } from "@/lib/jobs/meta-lines";
+import { runNotes } from "@/lib/jobs/run-notes";
 import { listHref, tabForStatus } from "@/lib/jobs/filters";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
@@ -86,9 +86,9 @@ async function SimulationList({
     redirect(listHref(statusFilter, jobData.total_pages));
   }
 
-  // What each row says under its name comes from its snapshot's metadata,
+  // Whether a run is shorter than its snapshot's coverage needs the snapshot,
   // which the job does not carry: read here, once per distinct snapshot.
-  const metaLines = jobData ? await simulationMetaLines(jobData.items) : {};
+  const notes = jobData ? await runNotes(jobData.items) : {};
   const hasRows = !!jobData && jobData.items.length > 0;
 
   return (
@@ -143,7 +143,7 @@ async function SimulationList({
         <div className="mt-4">
           <SimulationTable
             jobs={jobData.items}
-            metaLines={metaLines}
+            runNotes={notes}
             moreThanOnePage={jobData.total_pages > 1}
           />
 

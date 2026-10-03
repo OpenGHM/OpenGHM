@@ -2,10 +2,11 @@
 
 import { useEffect, useId } from "react";
 import { toast } from "sonner";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
+import { cn } from "@/lib/utils";
 
 type CreateError = NonNullable<ReturnType<typeof useCreateDraft>["error"]>;
 
@@ -18,11 +19,16 @@ function errorMessage(error: CreateError): string {
 }
 
 /**
- * "Try again with these settings": a new draft that copies this simulation's
- * run settings (`POST /jobs/{id}/duplicate`), opened at the draft wizard's
- * second step. Unlike `DeriveSimulationButton`, which starts over from the
- * snapshot's defaults, nothing the owner chose is lost. The simulation itself
- * is not touched.
+ * A new draft that copies this simulation's run settings
+ * (`POST /jobs/{id}/duplicate`), opened at the draft wizard's second step.
+ * Unlike `DeriveSimulationButton`, which starts over from the snapshot's
+ * defaults, nothing the owner chose is lost. The simulation itself is not
+ * touched.
+ *
+ * It is the one copy action of the simulation page, in two places so that it is
+ * on the page once: "Try again with these settings" in the status summary of a
+ * failed or cancelled job, "Duplicate" in the header of a completed one
+ * (`summaryOffersCopy`).
  *
  * One request at a time, and the button stays off after a success, through the
  * navigation (`useCreateDraft`). A failure is shown under the button and as a
@@ -33,11 +39,15 @@ export function DuplicateSimulationButton({
   jobId,
   label = "Try again with these settings",
   variant = "default",
+  Icon = RotateCcw,
+  className,
 }: {
   jobId: string;
   label?: string;
   /** `default`: the page's one emphasised action (a failed run). `outline`: a quieter one. */
   variant?: "default" | "outline";
+  Icon?: LucideIcon;
+  className?: string;
 }) {
   const { pending, error, duplicateFrom } = useCreateDraft();
   const noteId = useId();
@@ -56,12 +66,12 @@ export function DuplicateSimulationButton({
         disabled={pending}
         aria-describedby={noteId}
         onClick={() => void duplicateFrom(jobId)}
-        className="min-h-10 gap-2 font-semibold"
+        className={cn("min-h-10 gap-2 font-semibold", className)}
       >
         {pending ? (
           <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
         ) : (
-          <RotateCcw aria-hidden="true" />
+          <Icon aria-hidden="true" />
         )}
         {label}
       </Button>

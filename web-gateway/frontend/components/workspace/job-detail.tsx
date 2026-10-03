@@ -10,7 +10,7 @@ import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
 
 /**
  * The job detail page below the site header: the header (breadcrumb, the
- * simulation's name and status, the snapshot it is based on, the actions) and, in the order a person
+ * simulation's name and status, the title of the snapshot it is based on, the actions) and, in the order a person
  * reads it, the status summary (is it running, did it work, why not, where are
  * the results), the logs, and the details of the run. One view for two routes:
  * the real page (`app/workspace/[id]`) renders it from the backend, and the
@@ -25,7 +25,6 @@ export function JobDetail({
   job,
   viewerEmail,
   recommended = null,
-  basedOn = null,
   preview = false,
   previewLogs,
   previewLive = null,
@@ -36,10 +35,6 @@ export function JobDetail({
   /** The base snapshot's `recommendedCompute`, for the cores and walltime a
    *  job asked for by default; null when the snapshot could not be read. */
   recommended?: Recommended | null;
-  /** The base snapshot in short (`basedOnLabel`), for the header's line; null
-   *  when the snapshot could not be read, and the header then says the title
-   *  the job was derived under. */
-  basedOn?: string | null;
   /** Fixture data: nothing is polled and the dialogs send nothing. */
   preview?: boolean;
   /** The logs to show instead of fetching them. Preview only. */
@@ -74,7 +69,7 @@ export function JobDetail({
       preview={preview}
     >
       <main className={WORKSPACE_MAIN}>
-        <JobHeader job={job} basedOn={basedOn} preview={preview} />
+        <JobHeader job={job} preview={preview} />
         <div className={`${WORKSPACE_CONTAINER} flex-1 space-y-8 py-6 sm:py-8`}>
           <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
           <LogViewer previewLogs={previewLogs} />

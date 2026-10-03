@@ -1,15 +1,15 @@
 /**
  * URL ⇄ filter-state conversion for the repository catalogue and the
- * Start screen's snapshot picker (`/workspace/new`), which shares the dataset list.
- * This is the fix for open item 16: a search result is only
+ * Start screen's snapshot picker (`/workspace/new`), which shares the
+ * catalogue's query. This is the fix for open item 16: a search result is only
  * linkable/bookmarkable if the URL is the source of truth for the filters,
  * not a `useState` seeded once from it.
  *
  * Every param name here matches what the backend route actually accepts
- * (`app/api/v1/repository.py`'s `list_datasets` / the catalogue route) —
- * `q`, `year_start`, `year_end`, `spatial_res_min`, `spatial_res_max`,
- * `sort`, `page`, and for the catalogue the repeatable facet keys — so a shared link is also a valid direct API call shape,
- * not a second vocabulary to translate.
+ * (`app/api/v1/repository.py`'s `list_catalogue`) — `q`, `year_start`,
+ * `year_end`, `spatial_res_min`, `spatial_res_max`, `sort`, `page`, and the
+ * repeatable facet keys — so a shared link is also a valid direct API call
+ * shape, not a second vocabulary to translate.
  */
 import { CATALOGUE_FACET_KEYS, EMPTY_CATALOGUE_FILTERS } from "./catalogue";
 import type {
@@ -17,15 +17,10 @@ import type {
   CatalogueKind,
   CatalogueSortOption,
   CatalogueView,
-  FilterState,
   SortOption,
 } from "./types";
 
 const SORT_OPTIONS: readonly SortOption[] = ["relevance", "newest", "title-az", "title-za"];
-
-function isSortOption(v: string | null): v is SortOption {
-  return v !== null && (SORT_OPTIONS as readonly string[]).includes(v);
-}
 
 function parseNumberParam(v: string | null): number | null {
   if (v === null || v === "") return null;
@@ -52,32 +47,6 @@ export function toURLSearchParams(
     // A repeated key (`?tag=a&tag=b`) arrives as an array: keep every value.
     for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
   }
-  return params;
-}
-
-// ─── Datasets ───────────────────────────────────────────────────────────────
-
-export function parseDatasetFilters(params: URLSearchParams): FilterState {
-  return {
-    searchQuery: params.get("q") ?? "",
-    temporalCoverageStart: parseNumberParam(params.get("year_start")),
-    temporalCoverageEnd: parseNumberParam(params.get("year_end")),
-    spatialResMin: parseNumberParam(params.get("spatial_res_min")),
-    spatialResMax: parseNumberParam(params.get("spatial_res_max")),
-    sortBy: isSortOption(params.get("sort")) ? (params.get("sort") as SortOption) : "relevance",
-    page: parsePageParam(params.get("page")),
-  };
-}
-
-export function datasetFiltersToParams(filters: FilterState): URLSearchParams {
-  const params = new URLSearchParams();
-  if (filters.searchQuery.trim()) params.set("q", filters.searchQuery.trim());
-  if (filters.temporalCoverageStart != null) params.set("year_start", String(filters.temporalCoverageStart));
-  if (filters.temporalCoverageEnd != null) params.set("year_end", String(filters.temporalCoverageEnd));
-  if (filters.spatialResMin != null) params.set("spatial_res_min", String(filters.spatialResMin));
-  if (filters.spatialResMax != null) params.set("spatial_res_max", String(filters.spatialResMax));
-  if (filters.sortBy !== "relevance") params.set("sort", filters.sortBy);
-  if (filters.page !== 1) params.set("page", String(filters.page));
   return params;
 }
 
@@ -136,3 +105,30 @@ export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSear
   if (filters.page !== 1) params.set("page", String(filters.page));
   return params;
 }
+
+// ─── The Start screen's snapshot picker ─────────────────────────────────────
+
+/**
+ * The catalogue filters the picker has controls for: the search, the tag, the
+ * year range, the resolution range, and the page. Anything else in the URL (a
+ * link copied from the repository with a keyword or a sort) is dropped, because
+ * the picker could not show it or take it off. The Type facet is fixed to
+ * snapshots by the fetch (`fetchSnapshots`), so it is not in the URL either.
+ */
+export function parsePickerFilters(params: URLSearchParams): CatalogueFilterState {
+  const all = parseCatalogueFilters(params);
+  return {
+    ...EMPTY_CATALOGUE_FILTERS,
+    searchQuery: all.searchQuery,
+    tag: all.tag,
+    yearStart: all.yearStart,
+    yearEnd: all.yearEnd,
+    spatialResMin: all.spatialResMin,
+    spatialResMax: all.spatialResMax,
+    page: all.page,
+  };
+}
+
+/** The picker's filters as a query string: the catalogue's own, in the same
+ *  keys, of which the picker's state only ever holds its own. */
+export const pickerFiltersToParams = catalogueFiltersToParams;

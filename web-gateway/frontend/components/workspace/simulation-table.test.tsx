@@ -36,13 +36,13 @@ function job(id: string, status: Job["status"], over: Partial<Job> = {}): Job {
   } as Job;
 }
 
-const META = { a: "WBM 2.0.0 · 2000–2001 · Regional", b: "WBM 1.0.0 · 2000–2009 · Global · Run 2000–2005" };
+const NOTES = { b: "Run 2000–2005" };
 
 const items = () => within(screen.getByRole("list", { name: "Simulations" })).getAllByRole("listitem");
 
 describe("the simulation list", () => {
   it("is one card of rows with a small header, not a table", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
     expect(screen.queryByRole("table")).toBeNull();
     expect(items()).toHaveLength(1);
     const card = screen.getByRole("list", { name: "Simulations" }).parentElement!;
@@ -53,7 +53,7 @@ describe("the simulation list", () => {
   });
 
   it("makes the whole row a link: the name's link is stretched over it", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     const row = items()[0];
     const link = within(row).getByRole("link", { name: "Run a" });
     expect(link.getAttribute("href")).toBe("/workspace/a");
@@ -65,26 +65,42 @@ describe("the simulation list", () => {
     expect(within(row).getAllByRole("link")).toHaveLength(1);
   });
 
-  it("puts what it is based on and the run period under the name, in mono", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} metaLines={META} />);
-    const meta = within(items()[0]).getByText("WBM 2.0.0 · 2000–2001 · Regional");
-    expect(meta.className).toContain("font-mono");
-    expect(meta.className).toContain("text-muted-foreground");
+  it("puts the title of the snapshot under the name, in one line with the whole title on hover", () => {
+    const title = "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
+    render(<SimulationTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} runNotes={NOTES} />);
+    const line = within(items()[0]).getByText(title);
+    expect(line.getAttribute("title")).toBe(title);
+    expect(line.className).toContain("truncate");
+    expect(line.className).not.toContain("line-clamp");
+    expect(line.parentElement?.className).toContain("text-muted-foreground");
+  });
+
+  it("makes up no name for the snapshot: nothing but its title and the run note is there", () => {
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);
+  });
+
+  it("adds the run period after the title only for a run shorter than the snapshot covers", () => {
+    render(<SimulationTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
+    expect(within(items()[0]).queryByText(/Run 2000/)).toBeNull();
+    const note = within(items()[1]).getByText(/Run 2000–2005/);
+    expect(note.className).toContain("shrink-0");
   });
 
   it("does not print a Model Snapshot badge on every row", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
     expect(screen.queryByText("Model Snapshot")).toBeNull();
   });
 
-  it("prints no line for a job the server built none for, and keeps the row", () => {
-    render(<SimulationTable jobs={[job("z", "COMPLETED")]} metaLines={{}} />);
+  it("keeps the row, with the title and no run note, for a job with no note", () => {
+    render(<SimulationTable jobs={[job("z", "COMPLETED")]} runNotes={{}} />);
     expect(within(items()[0]).getByRole("link", { name: "Run z" })).toBeTruthy();
-    expect(items()[0].querySelector("p.font-mono")).toBeNull();
+    expect(within(items()[0]).getByText("Dataset one")).toBeTruthy();
+    expect(within(items()[0]).queryByText(/Run 2/)).toBeNull();
   });
 
   it("shows the status as a dot and a word in its colour, not as a bordered badge", () => {
-    render(<SimulationTable jobs={[job("a", "FAILED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "FAILED")]} runNotes={NOTES} />);
     const word = within(items()[0]).getByText("Failed");
     expect(word.className).toContain("text-status-failed");
     expect(word.className).not.toContain("border");
@@ -92,19 +108,19 @@ describe("the simulation list", () => {
   });
 
   it("prints the update time as a TimeStamp with its absolute time on hover", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
     const time = items()[0].querySelector("time");
     expect(time?.getAttribute("datetime")).toBe("2026-09-30T12:00:00Z");
     expect(time?.getAttribute("title")).toBeTruthy();
   });
 
   it("falls back to the creation time for a job that has never been updated", () => {
-    render(<SimulationTable jobs={[job("a", "DRAFT", { updated_at: null })]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "DRAFT", { updated_at: null })]} runNotes={NOTES} />);
     expect(items()[0].querySelector("time")?.getAttribute("datetime")).toBe("2026-09-30T10:00:00Z");
   });
 
   it("stacks on a phone with the same markup: one list, no second copy and no table", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} runNotes={NOTES} />);
     expect(screen.getAllByRole("list", { name: "Simulations" })).toHaveLength(1);
     // Name and meta, then status and time, with Delete beside them; from sm up they are columns.
     expect(items()[0].className).toContain("sm:grid-cols-[");
@@ -115,7 +131,7 @@ describe("the simulation list", () => {
     render(
       <SimulationTable
         jobs={[job("0123456789abcdef", "DRAFT", { about: null, slug: null, sim_id: "" })]}
-        metaLines={META}
+        runNotes={NOTES}
       />
     );
     const row = items()[0];
@@ -131,7 +147,7 @@ describe("the simulation list", () => {
     render(
       <SimulationTable
         jobs={[job("a", "DRAFT", { about: null, slug: "my-slug" }), job("b", "DRAFT", { about: null })]}
-        metaLines={META}
+        runNotes={NOTES}
       />
     );
     expect(screen.getByRole("link", { name: "my-slug" })).toBeTruthy();
@@ -142,7 +158,7 @@ describe("the simulation list", () => {
     render(
       <SimulationTable
         jobs={[job("a", "RUNNING"), job("b", "DRAFT"), job("c", "FAILED"), job("d", "COMPLETING")]}
-        metaLines={META}
+        runNotes={NOTES}
       />
     );
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
@@ -153,7 +169,7 @@ describe("the simulation list", () => {
   });
 
   it("keeps Delete above the row's link, muted until hover or focus", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     const button = screen.getByRole("button", { name: "Delete Run a" });
     expect(button.className).toContain("z-10");
     expect(button.className).toContain("text-muted-foreground");
@@ -162,7 +178,7 @@ describe("the simulation list", () => {
   });
 
   it("opens the delete confirmation from a row's button without navigating", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete Run a" }));
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     expect(screen.getByText("Delete this simulation?")).toBeTruthy();
@@ -174,7 +190,7 @@ describe("the list's search", () => {
     return render(
       <SimulationSearchProvider>
         <SimulationSearchInput />
-        <SimulationTable jobs={jobs} metaLines={META} moreThanOnePage={moreThanOnePage} />
+        <SimulationTable jobs={jobs} runNotes={NOTES} moreThanOnePage={moreThanOnePage} />
       </SimulationSearchProvider>
     );
   }
@@ -214,7 +230,7 @@ describe("the list's search", () => {
   });
 
   it("is left alone when the table is rendered without a search box", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} metaLines={META} />);
+    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     expect(items()).toHaveLength(1);
   });
 });

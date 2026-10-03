@@ -29,14 +29,18 @@ function yearOf(date: string): string {
   return date.slice(0, 4);
 }
 
+/** "2000–2009" for a period, "2001" when it falls in one year. */
+export function yearsLabel(period: { start: string; end: string }): string {
+  const start = yearOf(period.start);
+  const end = yearOf(period.end);
+  return start === end ? start : `${start}–${end}`;
+}
+
 /** "2000–2009", "2001" for one year, `null` when the item has no calendar period. */
 export function periodLabel(item: CatalogueItem): string | null {
   const period =
     item.kind === "snapshot" ? item.simulation.temporalCoverage : item.coverage.temporalCoverage;
-  if (!period) return null;
-  const start = yearOf(period.start);
-  const end = yearOf(period.end);
-  return start === end ? start : `${start}–${end}`;
+  return period ? yearsLabel(period) : null;
 }
 
 /** "5 arc-min", "30 arc-sec", "0.5°": the unit as the filter chips write it. */

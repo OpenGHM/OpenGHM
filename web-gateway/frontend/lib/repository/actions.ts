@@ -1,13 +1,11 @@
 "use server";
 
 import { getApiClient } from "@/lib/api-client";
-import { CATALOGUE_FACET_KEYS, CATALOGUE_PAGE_SIZE } from "@/lib/repository/catalogue";
+import { CATALOGUE_FACET_KEYS, CATALOGUE_PAGE_SIZE, SNAPSHOT_PICKER_PAGE_SIZE } from "@/lib/repository/catalogue";
 import {
   CatalogueFilterState,
   CatalogueResponse,
-  RepositoryListResponse,
   Dataset,
-  FilterState,
   MineResponse,
   ModelInput,
   ModelInputFilterState,
@@ -26,14 +24,15 @@ import {
  * `getApiClient` serialises arrays that way (`paramsSerializer.indexes: null`).
  */
 export async function fetchCatalogue(
-  filters: CatalogueFilterState
+  filters: CatalogueFilterState,
+  pageSize: number = CATALOGUE_PAGE_SIZE
 ): Promise<CatalogueResponse> {
   const client = await getApiClient();
 
   const params: Record<string, string | number | string[]> = {
     sort: filters.sortBy,
     page: filters.page,
-    page_size: CATALOGUE_PAGE_SIZE,
+    page_size: pageSize,
   };
 
   if (filters.searchQuery.trim()) {
@@ -66,42 +65,17 @@ export async function fetchMine(): Promise<MineResponse> {
 }
 
 /**
- * Fetch a paginated, filtered list of datasets from FastAPI. The Start
- * screen's snapshot picker (`/workspace/new`) uses it (BFF layer — the browser never
- * calls FastAPI directly).
+ * One page of the model snapshots, searched and filtered the way the Data
+ * Repository does it: the same `GET /repository/catalogue` with the Type facet
+ * fixed to `snapshot`, so the search, the tag, year and resolution filters, the
+ * facet counts and the order are the repository's own. The Start screen's
+ * snapshot picker (`/workspace/new`) is its one reader. Whatever `type` the
+ * filters hold is replaced.
  */
-export async function fetchDatasets(
-  filters: FilterState
-): Promise<RepositoryListResponse> {
-  const client = await getApiClient();
-
-  const params: Record<string, string | number> = {
-    sort: filters.sortBy,
-    page: filters.page,
-    page_size: 5,
-  };
-
-  if (filters.searchQuery.trim()) {
-    params.q = filters.searchQuery.trim();
-  }
-  if (filters.temporalCoverageStart != null) {
-    params.year_start = filters.temporalCoverageStart;
-  }
-  if (filters.temporalCoverageEnd != null) {
-    params.year_end = filters.temporalCoverageEnd;
-  }
-  if (filters.spatialResMin !== null) {
-    params.spatial_res_min = filters.spatialResMin;
-  }
-  if (filters.spatialResMax !== null) {
-    params.spatial_res_max = filters.spatialResMax;
-  }
-  const response = await client.get<RepositoryListResponse>(
-    "/api/v1/repository/datasets",
-    { params }
-  );
-
-  return response.data;
+export async function fetchSnapshots(
+  filters: CatalogueFilterState
+): Promise<CatalogueResponse> {
+  return fetchCatalogue({ ...filters, type: ["snapshot"] }, SNAPSHOT_PICKER_PAGE_SIZE);
 }
 
 /**
@@ -127,7 +101,7 @@ export async function fetchDatasetById(id: string): Promise<Dataset | null> {
 
 /**
  * Fetch a paginated, filtered list of model inputs from FastAPI (ADR 0015).
- * Sibling of `fetchDatasets` — same envelope, no spatial/temporal filters:
+ * The same envelope as the catalogue's, but no spatial/temporal filters:
  * a model input has no single top-level resolution to filter on the way a
  * snapshot's `simulation.resolution` does (see `ModelInputResponse`'s
  * docstring in `app/models/repository.py`).

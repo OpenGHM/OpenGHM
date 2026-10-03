@@ -28,6 +28,10 @@ export const CATALOGUE_FACET_KEYS: readonly CatalogueFacetKey[] = [
 /** Page size the list asks the backend for. */
 export const CATALOGUE_PAGE_SIZE = 10;
 
+/** Page size of the Start screen's snapshot picker: a whole number of rows of
+ *  its grid at one, two, three and four columns. */
+export const SNAPSHOT_PICKER_PAGE_SIZE = 12;
+
 /**
  * Group headings, and the shorter name a chip prefixes its value with
  * ("Output: Discharge").

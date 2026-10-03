@@ -44,27 +44,6 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
   aggregationStartYear?: number | null;
 }
 
-// ─── Filter state ─────────────────────────────────────────────────────────────
-
-export interface FilterState {
-  searchQuery: string;
-  temporalCoverageStart: number | null;
-  temporalCoverageEnd: number | null;
-  spatialResMin: number | null;
-  spatialResMax: number | null;
-  sortBy: SortOption;
-  page: number;
-}
-
-// ─── API response ─────────────────────────────────────────────────────────────
-
-export interface RepositoryListResponse {
-  items: Dataset[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-}
-
 // ─── Model input ───────────────────────────────────────────────────────────────
 
 /**

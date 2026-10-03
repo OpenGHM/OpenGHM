@@ -72,6 +72,14 @@ describe("the list", () => {
     expect(within(snap).getAllByRole("link")).toHaveLength(1);
   });
 
+  it("shows the title in one line, cut with an ellipsis, with the whole title on hover", () => {
+    render(<MyDataTable items={[SNAP]} />);
+    const link = within(rows()[0]).getByRole("link", { name: "Global Storage Run" });
+    expect(link.getAttribute("title")).toBe("Global Storage Run");
+    expect(link.className).toContain("truncate");
+    expect(link.className).not.toContain("line-clamp");
+  });
+
   it("puts the first 8 characters of the id and the coverage in one mono line under the title", () => {
     render(<MyDataTable items={[SNAP, PRIVATE_INPUT]} />);
     const [snap, input] = rows();

@@ -46,8 +46,9 @@ function KindLabel({ kind }: { kind: MineItem["kind"] }) {
 
 /**
  * The caller's snapshots and model inputs: the kind filter and a search box,
- * then one card of rows, each a link to the item's detail page (its title, then
- * a mono line of its short id and coverage; its type, who can find it, and when
+ * then one card of rows, each a link to the item's detail page (its title, in
+ * one line cut with an ellipsis and whole on hover, then a mono line of its
+ * short id and coverage; its type, who can find it, and when
  * it was published). From `sm` up the rows sit in columns under a small header;
  * on a phone each stacks, so nothing scrolls sideways. It is the simulation
  * list's look, so the two Workspace pages read as one.
@@ -123,7 +124,8 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
                   <div className="min-w-0">
                     <Link
                       href={detailHref(item)}
-                      className="line-clamp-2 text-[15px] font-medium break-words text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+                      title={item.about.name}
+                      className="block truncate text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']"
                     >
                       {item.about.name}
                     </Link>

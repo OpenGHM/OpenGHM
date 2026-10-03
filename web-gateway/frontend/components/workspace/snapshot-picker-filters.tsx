@@ -4,65 +4,61 @@ import { useId, useState } from "react";
 import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ResolutionFilter, YearRangeFilter } from "@/components/repository/catalogue-sidebar";
+import {
+  FacetCheckboxList,
+  ResolutionFilter,
+  YearRangeFilter,
+} from "@/components/repository/catalogue-sidebar";
+import { countActiveFilters } from "@/lib/repository/catalogue";
 import { TEMPORAL_RANGE_BOUNDS } from "@/lib/repository/data";
 import { cn } from "@/lib/utils";
-import type { FilterState } from "@/lib/repository/types";
-
-/** What the Filters badge counts: the year range and the resolution range, each once. The search box is not a filter group. */
-export function countPickerFilters(filters: FilterState): number {
-  let n = 0;
-  if (filters.temporalCoverageStart !== null || filters.temporalCoverageEnd !== null) n += 1;
-  if (filters.spatialResMin !== null || filters.spatialResMax !== null) n += 1;
-  return n;
-}
-
-/** Anything narrowing the list, the search included. */
-export function hasPickerFilters(filters: FilterState): boolean {
-  return countPickerFilters(filters) > 0 || filters.searchQuery.trim() !== "";
-}
-
-/** The filters a Reset puts back: everything but the sort, which the picker does not offer. */
-export const CLEARED_PICKER_FILTERS: Partial<FilterState> = {
-  searchQuery: "",
-  temporalCoverageStart: null,
-  temporalCoverageEnd: null,
-  spatialResMin: null,
-  spatialResMax: null,
-};
+import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/types";
 
 /**
- * The row above the snapshot list: a search box, and a Filters button that
- * opens a panel of the same year-range and resolution controls the Data
- * Repository's sidebar has, in columns, under the row. The panel is closed
- * until asked for, and whether it is open is local: the filters themselves
- * live in the URL, through `onChange`.
+ * The toolbar above the snapshot grid, the Data Repository's search and
+ * filters in one row: a search box (titles, descriptions, keywords: the
+ * repository's own query) and a Filters button that opens a panel under the row
+ * with the filters the repository offers for model snapshots: the tag, the
+ * temporal coverage and the spatial resolution, the same controls with the same
+ * facet counts. The panel is closed until asked for, and whether it is open is
+ * local: the filters themselves live in the URL, through `onChange`; what is
+ * narrowing the list is shown under the toolbar as chips (`ActiveFilterChips`),
+ * so a closed panel hides nothing.
  */
 export function SnapshotPickerFilters({
   filters,
+  facets,
   onChange,
 }: {
-  filters: FilterState;
-  onChange: (updates: Partial<FilterState>) => void;
+  filters: CatalogueFilterState;
+  /** The facet counts of the last answer that came; they fall back to the full year range with none. */
+  facets: CatalogueFacets;
+  onChange: (updates: Partial<CatalogueFilterState>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const tagsId = useId();
   const yearsId = useId();
   const resolutionId = useId();
-  const activeCount = countPickerFilters(filters);
+  const activeCount = countActiveFilters(filters);
   const hasQuery = filters.searchQuery !== "";
+  // A tag a stale link names stays in the list so that it can be unticked.
+  const showTags = facets.tag.length > 0 || filters.tag.length > 0;
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2.5 sm:flex-nowrap">
-        <div className="flex h-11 min-w-0 flex-1 basis-full items-center gap-2.5 rounded-xl border bg-card px-3.5 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none sm:basis-0">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border bg-card px-3.5 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none">
           <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           <input
             type="search"
             aria-label="Search model snapshots"
-            placeholder="Search model snapshots…"
+            placeholder="Search snapshots…"
             value={filters.searchQuery}
             onChange={(e) => onChange({ searchQuery: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") e.currentTarget.blur();
+            }}
             className="h-full min-w-0 flex-1 bg-transparent text-[14.5px] text-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none"
           />
           {hasQuery && (
@@ -83,18 +79,16 @@ export function SnapshotPickerFilters({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((o) => !o)}
-          className="h-11 w-full shrink-0 justify-between gap-2 rounded-xl bg-card hover:bg-muted hover:text-foreground sm:w-auto"
+          className="h-11 shrink-0 gap-2 rounded-xl bg-card px-3.5 hover:bg-muted hover:text-foreground"
         >
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal aria-hidden="true" />
-            Filters
-            {activeCount > 0 && (
-              <Badge className="bg-highlight/10 text-highlight">
-                <span aria-hidden="true">{activeCount}</span>
-                <span className="sr-only">{activeCount} active</span>
-              </Badge>
-            )}
-          </span>
+          <SlidersHorizontal aria-hidden="true" />
+          Filters
+          {activeCount > 0 && (
+            <Badge className="bg-highlight/10 text-highlight">
+              <span aria-hidden="true">{activeCount}</span>
+              <span className="sr-only">{activeCount} active</span>
+            </Badge>
+          )}
           <ChevronDown
             aria-hidden="true"
             className={cn("motion-safe:transition-transform", open && "rotate-180")}
@@ -104,18 +98,34 @@ export function SnapshotPickerFilters({
 
       {/* `hidden` on a wrapper of its own: a display class on the card would beat it. */}
       <div id={panelId} hidden={!open}>
-        <div className="grid gap-x-10 gap-y-6 rounded-xl border bg-card p-4 sm:p-5 md:grid-cols-2">
+        <div
+          className={cn(
+            "grid gap-x-10 gap-y-6 rounded-xl border bg-card p-4 sm:p-5",
+            showTags ? "md:grid-cols-3" : "md:grid-cols-2"
+          )}
+        >
+          {showTags && (
+            <section aria-labelledby={tagsId}>
+              <h3 id={tagsId} className="mb-2 text-[13.5px] font-semibold text-foreground">
+                Tags
+              </h3>
+              <FacetCheckboxList
+                facetKey="tag"
+                options={facets.tag}
+                selected={filters.tag}
+                onChange={(tag) => onChange({ tag })}
+              />
+            </section>
+          )}
           <section aria-labelledby={yearsId}>
             <h3 id={yearsId} className="mb-3 text-[13.5px] font-semibold text-foreground">
               Temporal coverage
             </h3>
             <YearRangeFilter
-              bounds={TEMPORAL_RANGE_BOUNDS}
-              start={filters.temporalCoverageStart}
-              end={filters.temporalCoverageEnd}
-              onChange={({ yearStart, yearEnd }) =>
-                onChange({ temporalCoverageStart: yearStart, temporalCoverageEnd: yearEnd })
-              }
+              bounds={facets.yearBounds ?? TEMPORAL_RANGE_BOUNDS}
+              start={filters.yearStart}
+              end={filters.yearEnd}
+              onChange={onChange}
             />
           </section>
           <section aria-labelledby={resolutionId}>

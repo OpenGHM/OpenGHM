@@ -728,15 +728,15 @@ describe("the draft run step: a long list of output variables", () => {
 });
 
 describe("the draft run step: what the draft is based on", () => {
-  it("is one small card: map, short name, one line of facts with the model input, and a link", () => {
+  it("is one small card: map, the snapshot's title, one line of facts with the model input, and a link", () => {
     step({ resolvedModelInput: { about: { name: "WBM Inputs [CONUS]" } } as never });
-    // The short name is the headline; the official title is on hover, not a wall of text.
-    const name = screen.getByText("WBM 2.0.0 · 2001");
+    // The title is the headline, whole in the page, cut to two lines by CSS, and on hover.
+    const name = screen.getByText("Fake Snapshot");
     expect(name.getAttribute("title")).toBe("Fake Snapshot");
-    expect(screen.queryByText("Fake Snapshot")).toBeNull();
+    expect(name.className).toContain("line-clamp-2");
     expect(screen.getByRole("img", { name: /^Coverage: north 10°/ })).toBeTruthy();
     expect(
-      screen.getByText((_, el) => el?.tagName === "P" && /^Regional · wbm 2\.0\.0 · 0\.5° · Model input:/.test(el.textContent ?? ""))
+      screen.getByText((_, el) => el?.tagName === "P" && /^WBM 2\.0\.0 · 2001 · 0\.5° · Model input:/.test(el.textContent ?? ""))
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "WBM Inputs [CONUS]" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /View in repository/ }).getAttribute("href")).toBe("/repository/snap-1");

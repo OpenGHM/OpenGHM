@@ -37,6 +37,7 @@ function grid(over: Partial<React.ComponentProps<typeof SnapshotGrid>> = {}) {
     <SnapshotGrid
       datasets={[GLOBAL, TUTORIAL]}
       usedIds={new Set()}
+      usedFirst
       onSelect={onSelect}
       onDetails={onDetails}
       pendingId={null}
@@ -47,24 +48,32 @@ function grid(over: Partial<React.ComponentProps<typeof SnapshotGrid>> = {}) {
   return { ...view, onSelect, onDetails };
 }
 const cards = () => within(screen.getByRole("list", { name: "Model snapshots" })).getAllByRole("listitem");
+const headings = () => cards().map((card) => within(card).getByRole("heading", { level: 3 }).textContent);
 
 describe("a card", () => {
-  it("leads with the short name, then one mono line, then the official title, then the tag", () => {
+  it("is named by the snapshot's title, whole, and by nothing made up from its fields", () => {
     grid();
-    const [first, second] = cards();
-    expect(within(first).getByRole("heading", { level: 3 }).textContent).toBe("WBM 1.0.0 · 2000–2009");
-    expect(within(second).getByRole("heading", { level: 3 }).textContent).toBe("WBM 2.0.0 · 2000–2001");
-    expect(first.textContent).toContain("5 arc-min · Published");
-    expect(first.textContent).toContain("Publication");
-    expect(second.textContent).toContain("Tutorial");
+    expect(headings()).toEqual([LONG_TITLE, "WBM v2.0.0 simulation as tutorial: [CONUS] [2000-2001]"]);
+    for (const card of cards()) expect(within(card).getByRole("heading", { level: 3 }).textContent).not.toMatch(/^WBM \d/);
   });
 
-  it("clamps the official title to two muted lines and keeps the whole of it in title", () => {
+  it("clamps the title to two lines and keeps the whole of it in title", () => {
     grid();
-    const title = within(cards()[0]).getByText(LONG_TITLE);
-    expect(title.className).toContain("line-clamp-2");
-    expect(title.className).toContain("text-muted-foreground");
-    expect(title.getAttribute("title")).toBe(LONG_TITLE);
+    const select = within(cards()[0]).getByRole("button", { name: LONG_TITLE });
+    expect(select.getAttribute("title")).toBe(LONG_TITLE);
+    const text = within(select).getByText(LONG_TITLE);
+    expect(text.className).toContain("line-clamp-2");
+  });
+
+  it("puts the facts under the title in mono: model, years and resolution, then when it was published, then the tag", () => {
+    grid();
+    const [first, second] = cards();
+    const facts = (card: HTMLElement) => card.querySelector("p.font-mono") as HTMLElement;
+    expect(facts(first).firstChild?.textContent).toBe("WBM 1.0.0 · 2000–2009 · 5 arc-min");
+    expect(facts(second).firstChild?.textContent).toBe("WBM 2.0.0 · 2000–2001 · 5 arc-min");
+    expect(facts(first).querySelector("span")?.textContent).toMatch(/^Published /);
+    expect(first.textContent).toContain("Publication");
+    expect(second.textContent).toContain("Tutorial");
   });
 
   it("draws the bounding box as a map thumbnail, with the repository's Global or Regional label", () => {
@@ -73,13 +82,13 @@ describe("a card", () => {
     expect(within(cards()[0]).getByText("Regional")).toBeTruthy();
   });
 
-  it("is selected by its name, the one control, which the official title describes", () => {
+  it("is selected by its title, the one control, which the facts describe", () => {
     const { onSelect } = grid();
-    const select = within(cards()[1]).getByRole("button", { name: "WBM 2.0.0 · 2000–2001" });
+    const select = within(cards()[1]).getByRole("button", { name: TUTORIAL.about.name });
     expect(select.className).toContain("after:absolute");
     expect(select.className).toContain("after:inset-0");
     const describedBy = select.getAttribute("aria-describedby") as string;
-    expect(document.getElementById(describedBy)?.textContent).toBe("WBM v2.0.0 simulation as tutorial: [CONUS] [2000-2001]");
+    expect(document.getElementById(describedBy)?.textContent).toContain("WBM 2.0.0 · 2000–2001 · 5 arc-min");
     fireEvent.click(select);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(TUTORIAL);
@@ -111,25 +120,25 @@ describe("a card", () => {
 });
 
 describe("the snapshots the user has used", () => {
-  it("come first, in the order they were given, and are marked", () => {
+  it("come first when asked to, in the order they were given, and are marked", () => {
     grid({ datasets: [GLOBAL, TUTORIAL, WYOMING], usedIds: new Set(["wyoming", "tutorial"]) });
-    const headings = cards().map((card) => within(card).getByRole("heading", { level: 3 }).textContent);
-    expect(headings).toEqual(["WBM 2.0.0 · 2000–2001", "WBM 1.0.0 · 2000–2009", "WBM 1.0.0 · 2000–2009"]);
+    expect(headings()).toEqual([TUTORIAL.about.name, WYOMING.about.name, LONG_TITLE]);
     expect(within(cards()[0]).getByText("Used before")).toBeTruthy();
     expect(within(cards()[1]).getByText("Used before")).toBeTruthy();
     expect(within(cards()[2]).queryByText("Used before")).toBeNull();
-    // The one that was not used is the first given: Global.
-    expect(within(cards()[2]).getByText(LONG_TITLE)).toBeTruthy();
+  });
+
+  it("keep the order they came in when it is not asked, and are still marked", () => {
+    grid({ datasets: [GLOBAL, TUTORIAL, WYOMING], usedIds: new Set(["wyoming"]), usedFirst: false });
+    expect(headings()).toEqual([LONG_TITLE, TUTORIAL.about.name, WYOMING.about.name]);
+    expect(within(cards()[2]).getByText("Used before")).toBeTruthy();
+    expect(screen.getAllByText("Used before")).toHaveLength(1);
   });
 
   it("leave the order alone when there are none", () => {
     grid({ datasets: [GLOBAL, TUTORIAL, WYOMING] });
     expect(screen.queryByText("Used before")).toBeNull();
-    expect(cards().map((card) => within(card).getAllByRole("button")[0].textContent)).toEqual([
-      "WBM 1.0.0 · 2000–2009",
-      "WBM 2.0.0 · 2000–2001",
-      "WBM 1.0.0 · 2000–2009",
-    ]);
+    expect(headings()).toEqual([LONG_TITLE, TUTORIAL.about.name, WYOMING.about.name]);
   });
 });
 
@@ -138,21 +147,12 @@ describe("while a draft is being made", () => {
     grid({ pendingId: "global", disabled: true });
     const [first, second] = cards();
     expect(within(first).getByRole("status").textContent).toContain("Creating your draft");
-    expect(within(first).getByRole("button", { name: "WBM 1.0.0 · 2000–2009" }).getAttribute("aria-busy")).toBe("true");
+    expect(within(first).getByRole("button", { name: LONG_TITLE }).getAttribute("aria-busy")).toBe("true");
     for (const button of screen.getAllByRole("button", { name: /^WBM / })) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
     expect(within(second).queryByRole("status")).toBeNull();
     expect(second.querySelector("[data-slot=card]")?.className).toContain("pointer-events-none");
     expect(first.querySelector("[data-slot=card]")?.className).not.toContain("pointer-events-none");
-  });
-});
-
-describe("with nothing to show", () => {
-  it("says so, and offers the way out it is given", () => {
-    grid({ datasets: [], emptyAction: <button type="button">Reset</button> });
-    expect(screen.getByRole("heading", { name: "No model snapshots found" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Reset" })).toBeTruthy();
-    expect(screen.queryByRole("list")).toBeNull();
   });
 });

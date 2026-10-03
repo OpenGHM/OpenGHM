@@ -11,12 +11,16 @@ import { matchesQuery } from "@/components/workspace/search-field";
 import { useSimulationSearch } from "@/components/workspace/simulation-search";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { displayName, listName } from "@/lib/jobs/display-name";
+import { simulationSource } from "@/lib/jobs/simulation-source";
+import { kindLabel } from "@/lib/repository/catalogue-format";
 import type { Job } from "@/lib/jobs/types";
 
 /**
  * The simulations as one card of rows, each row a link to the simulation: its
- * name with what it is based on and when it ran under it, its status, when it
- * was last updated, and a visible Delete once it can be deleted. From `sm` up
+ * name with, under it, the title of the snapshot it is based on (one line,
+ * cut with an ellipsis, the whole title on hover) and, when the run is shorter
+ * than the snapshot's coverage, the period it ran; its status, when it was last
+ * updated, and a visible Delete once it can be deleted. From `sm` up
  * the rows sit in columns under a small header; on a phone each row stacks (name
  * and meta, then status and time, Delete beside them), so nothing scrolls
  * sideways.
@@ -29,14 +33,13 @@ import type { Job } from "@/lib/jobs/types";
  */
 export function SimulationTable({
   jobs,
-  metaLines = {},
+  runNotes = {},
   moreThanOnePage = false,
 }: {
   jobs: Job[];
-  /** The line under each name, by job id: what it is based on and when it ran
-   *  (`simulationMetaLines`, built on the server from the snapshots' metadata,
-   *  and the title the job was derived under for one that could not be read). */
-  metaLines?: Record<string, string>;
+  /** "Run 2000–2005", by job id, for the jobs that ran less than their snapshot
+   *  covers (`runNotes`, built on the server from the snapshots' coverage). */
+  runNotes?: Record<string, string>;
   /** The list continues on other pages; a search says it only looked at this one. */
   moreThanOnePage?: boolean;
 }) {
@@ -83,7 +86,8 @@ export function SimulationTable({
           {rows.map((job) => {
             const name = displayName(job);
             const shown = listName(job);
-            const meta = metaLines[job.id];
+            const source = simulationSource(job);
+            const runNote = runNotes[job.id];
             return (
               <li
                 key={job.id}
@@ -99,9 +103,13 @@ export function SimulationTable({
                     </Link>
                     {shown.id && <span className="shrink-0 font-mono text-xs text-muted-foreground">{shown.id}</span>}
                   </p>
-                  {meta && (
-                    <p className="mt-0.5 font-mono text-xs break-words text-muted-foreground sm:truncate">{meta}</p>
-                  )}
+                  <p className="mt-0.5 flex min-w-0 items-baseline gap-x-2 text-[13px] text-muted-foreground">
+                    {source.kind !== "snapshot" && <span className="shrink-0">{kindLabel(source.kind)} ·</span>}
+                    <span title={source.title} className="min-w-0 truncate">
+                      {source.title}
+                    </span>
+                    {runNote && <span className="shrink-0 whitespace-nowrap">· {runNote}</span>}
+                  </p>
                 </div>
 
                 <div className="col-start-1 flex items-center gap-2 sm:contents">

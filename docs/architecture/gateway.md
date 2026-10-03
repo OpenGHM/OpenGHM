@@ -346,8 +346,11 @@ ties by name, then id. The single-kind `/datasets` and `/model-inputs` routes
 do not take it.
 
 `GET /repository/datasets` and `GET /repository/model-inputs` stay as the
-separate, single-kind lists; the Start screen's snapshot picker
-(`/workspace/new`) still reads `/datasets`.
+separate, single-kind lists. The Start screen's snapshot picker
+(`/workspace/new`) does not read them: it asks this route for `type=snapshot`
+twelve to a page, with the search, the tag, year and resolution filters and the
+facet counts the Data Repository has
+([ADR 0028](../decisions/0028-a-new-simulation-is-a-saved-draft-from-its-first-step.md)).
 
 `GET /repository/mine` (signed in) is the one catalogue read that needs a
 session: the same two item shapes, with `kind`, for what the caller owns, plus
@@ -524,13 +527,16 @@ never at once.
 
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
-simulation's own name with its status, the snapshot it is based on in short, and
-once the job has ended the buttons "New from this model snapshot" and "Delete
-simulation"; a light header like the Data Repository's), one full-width status summary
+simulation's own name with its status, the title of the snapshot it is based on
+in one line, and once the job has ended the buttons "Duplicate" (a completed
+job only), "New from this model snapshot" and "Delete simulation"; a light
+header like the Data Repository's), one full-width status summary
 (`job-status-summary.tsx`) that changes with the live status, the Logs, and a
 compact Details section. The summary is the only place with a state's main
 action: Cancel while it is queued or running, "Try again with these settings"
-after a failure. A completed job's results (scratch path, file counts, when
+after a failure or a cancel. That button and "Duplicate" are the one copy action
+(`POST /jobs/{id}/duplicate`), shown once: the header has it only where the
+summary does not. A completed job's results (scratch path, file counts, when
 Anvil may delete them) sit in it, a failed job's cause and log excerpt, and
 the times are short (`Submitted 3:33 AM · Waited 3 min · Ran 14 min`, the full
 date and zone on hover). Details shows the cores and walltime the job asked

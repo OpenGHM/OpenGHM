@@ -142,25 +142,26 @@ describe("the header", () => {
     expect(h1()).toBe("Typed");
   });
 
-  it("says what it is based on in short, from the snapshot's own metadata, with the full title on hover", () => {
-    wizard({ job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) } });
-    const link = screen.getByRole("link", { name: "Based on WBM 2.0.0 · 2001 · Regional" });
-    expect(link.getAttribute("title")).toBe(`Based on ${"A very long model snapshot title ".repeat(6)}`);
+  it("says what it is based on by the snapshot's title, in one truncated line, with the whole title on hover", () => {
+    const title = "A very long model snapshot title ".repeat(6);
+    wizard({ job: { ...JOB, dataset_title: title } });
+    const link = screen.getByRole("link", { name: /^Based on A very long/ });
+    expect(link.textContent).toBe(`Based on ${title}`);
+    expect(link.className).toContain("truncate");
+    expect(link.className).toContain("block");
+    expect(link.className).toContain("hover:underline");
+    expect(link.className).not.toMatch(/(^|\s)underline(\s|$)/);
+    expect(link.getAttribute("title")).toBe(title);
     expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
   });
 
-  it("keeps the Based on line to one truncated line when only the long title is left", () => {
+  it("says the same when the snapshot is gone: the title the draft was made with", () => {
     wizard({
       job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) },
       ctx: { dataset: null, snapshotState: "gone" },
     });
     const link = screen.getByRole("link", { name: /^Based on A very long/ });
-    expect(link.className).toContain("truncate");
-    expect(link.className).toContain("block");
-    expect(link.className).toContain("hover:underline");
-    expect(link.className).not.toMatch(/(^|\s)underline(\s|$)/);
-    expect(link.getAttribute("title")).toBe(`Based on ${"A very long model snapshot title ".repeat(6)}`);
-    expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
+    expect(link.getAttribute("title")).toBe("A very long model snapshot title ".repeat(6));
   });
 
   it("is a light header, with no dark gradient and nothing white on it", () => {
@@ -179,7 +180,7 @@ describe("the page", () => {
     expect(h1.textContent).toBe("Untitled (job-1)");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Untitled (job-1)");
     expect(screen.getByText("Draft")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Based on WBM 2.0.0 · 2001 · Regional" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Based on Fake Snapshot" }).getAttribute("href")).toBe(
       `/repository/${dataset.id}`
     );
     expect(screen.getByRole("navigation", { name: "Steps" })).toBeTruthy();

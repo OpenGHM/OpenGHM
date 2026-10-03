@@ -3,37 +3,16 @@ import { AlertTriangle, ArrowUpRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { draftField } from "@/components/workspace/draft-field";
-import {
-  snapshotBox,
-  snapshotExtent,
-  snapshotName,
-  snapshotResolution,
-} from "@/components/workspace/snapshot-label";
+import { snapshotBox, snapshotFacts } from "@/components/workspace/snapshot-facts";
 import type { ModelInput } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
 const shortId = (id: string) => `${id.slice(0, 12)}…`;
 
-/** What to call the snapshot a draft is based on, and the whole title behind
- *  it: the short name (`snapshotName`) and the official title when the
- *  snapshot was found; the title the draft was made with, alone, when not. */
-export function basisName(
-  ctx: DraftContext,
-  fallbackTitle: string
-): { name: string; title: string } {
-  const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
-  return dataset
-    ? { name: snapshotName(dataset), title: dataset.about.name }
-    : { name: fallbackTitle, title: fallbackTitle };
-}
-
-/** The facts about a found snapshot, as the short phrases of one muted line:
- *  how far it reaches (Global or Regional), model and version, resolution. */
-export function snapshotFacts(ctx: DraftContext): string[] {
-  const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
-  if (!dataset) return [];
-  const { image, version } = dataset.uses.container;
-  return [snapshotExtent(dataset), `${image} ${version}`, snapshotResolution(dataset)];
+/** The title of the snapshot a draft is based on, whole: the snapshot's own
+ *  (`about.name`) when it was found, else the title the draft was made with. */
+export function basisTitle(ctx: DraftContext, fallbackTitle: string): string {
+  return ctx.snapshotState === "found" && ctx.dataset ? ctx.dataset.about.name : fallbackTitle;
 }
 
 /** The repository page of the snapshot a draft was made from. */
@@ -42,8 +21,9 @@ export const snapshotHref = (datasetId: string) => `/repository/${encodeURICompo
 /**
  * What the draft is based on, read-only (a draft's starting point cannot
  * change), as a small card at the top of Run settings: the snapshot's map
- * thumbnail, its short name (`snapshotName`; the official title is on hover),
- * one muted line of facts, and a link to its repository page. Three states, as
+ * thumbnail, its title (two lines at most, the whole title on hover), one
+ * muted line of facts (model and version, years, resolution), and a link to
+ * its repository page. Three states, as
  * `DraftContext.snapshotState` says:
  * - `found`: the above.
  * - `gone`: it left the repository. The draft keeps the title it was made
@@ -83,12 +63,12 @@ export function DraftBasis({
 }) {
   const href = snapshotHref(datasetId);
   const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const { name, title } = basisName(ctx, fallbackTitle);
+  const title = basisTitle(ctx, fallbackTitle);
   const inheritedId = dataset?.uses.modelInput.id ?? null;
   const chosen = modelInput?.id ?? null;
   const shownId = chosen ?? inheritedId;
 
-  const facts = snapshotFacts(ctx);
+  const facts = dataset ? snapshotFacts(dataset) : [];
   let modelInputText: React.ReactNode = null;
   if (modelInput && chosen === null && shownId !== null) {
     modelInputText =
@@ -114,7 +94,8 @@ export function DraftBasis({
   return (
     <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm sm:px-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
+        {/* On a phone the thumbnail sits above the text, so the title has the card's whole width. */}
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
           {dataset && (
             <div className="relative h-12 w-24 shrink-0 overflow-hidden rounded-lg border bg-muted">
               <CoverageThumbnail
@@ -125,10 +106,10 @@ export function DraftBasis({
               />
             </div>
           )}
-          <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="min-w-0 max-w-full flex-1 space-y-0.5">
             <p className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Based on</p>
-            <p title={title} className="truncate text-base font-semibold text-foreground">
-              {name}
+            <p title={title} className="line-clamp-2 text-base leading-snug font-semibold break-words text-foreground">
+              {title}
             </p>
             {(facts.length > 0 || modelInputText) && (
               <p className="text-[13px] break-words text-muted-foreground">

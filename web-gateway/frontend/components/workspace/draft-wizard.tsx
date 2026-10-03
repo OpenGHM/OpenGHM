@@ -18,7 +18,6 @@ import { PageHeader, SimulationBreadcrumb, WORKSPACE_MAIN } from "@/components/w
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
-import { basedOnLabel } from "@/lib/jobs/based-on";
 import { displayName } from "@/lib/jobs/display-name";
 import { simulationSource } from "@/lib/jobs/simulation-source";
 import type { Job, SubmitError } from "@/lib/jobs/types";
@@ -320,10 +319,10 @@ function WizardBody({
           <p className="mt-2.5 min-w-0 text-sm text-muted-foreground">
             <Link
               href={source.href}
-              title={`Based on ${source.title}`}
+              title={source.title}
               className="block max-w-full truncate rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
-              Based on {ctx.dataset ? basedOnLabel(ctx.dataset) : source.title}
+              Based on {source.title}
             </Link>
           </p>
         }

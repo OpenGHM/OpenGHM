@@ -25,10 +25,31 @@ user typed.
 it (Run settings, then Review & submit) edit that draft and save it as they
 go.**
 
-- **Two ways to start.** Step 1 either derives a draft from a published
-  snapshot (`POST /jobs/derive/{dataset_id}`, as now), or duplicates one of
-  the caller's own simulations, in any status (`POST /jobs/{id}/duplicate`).
-  Either answer is a new `DRAFT`, and the user lands on Run settings.
+- **Derive on the start screen, duplicate on the simulation's page.** The start screen
+  (`/workspace/new`, step 1, "Choose a model snapshot") derives a draft from a
+  published snapshot (`POST /jobs/derive/{dataset_id}`) and offers nothing else:
+  no copy of a simulation. Copying happens where the simulation is, on its own
+  page, once it has ended: "Duplicate" for a completed one, and "Try again with
+  these settings" in the status summary of a failed or cancelled one (a page
+  never shows the action twice), both `POST /jobs/{id}/duplicate`, which copies
+  one of the caller's own simulations in any status. Either answer is a new
+  `DRAFT`, and the user lands on Run settings.
+- **The start screen is the repository's search over snapshots.** It always
+  shows a search box and a Filters panel (tag, temporal coverage, spatial
+  resolution), the count, the cards and pages, and an empty state: the same
+  `GET /repository/catalogue` the Data Repository reads, with the type fixed to
+  `snapshot`, so the search, the filters, the facet counts and the order are
+  the repository's, and a short list and a long one are used the same way.
+  Snapshots the caller has used are marked, and listed first only when nothing
+  else orders the list (no search, one page).
+- **A snapshot is named by its title.** Wherever the workspace names one (a
+  card, "Based on" on Run settings, Review and the simulation page, a
+  simulation's row in the list, the Snapshots & Inputs list) it shows the
+  snapshot's own title (`about.name`, or the title the simulation was derived
+  under), cut to one or two lines by CSS and whole on hover. The model and
+  version, the years, the resolution and the publication date appear beside it as
+  plain facts, never joined into a name of their own: the spec has no short
+  name, and one made up from its fields would read as if it were.
 - **The steps after Start from edit the draft.** Run settings (what it is
   based on, the run period, the output variables, cores and walltime), then
   Review & submit (one summary, name and description, and the submit area). There

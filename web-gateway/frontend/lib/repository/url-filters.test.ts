@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   catalogueFiltersToParams,
-  datasetFiltersToParams,
   parseCatalogueFilters,
-  parseDatasetFilters,
+  parsePickerFilters,
+  pickerFiltersToParams,
   toURLSearchParams,
 } from "./url-filters";
 import { EMPTY_CATALOGUE_FILTERS } from "./catalogue";
@@ -40,7 +40,7 @@ describe("toURLSearchParams", () => {
   it("still gives get() the first value, as the single-value callers read it", () => {
     const params = toURLSearchParams({ page: ["2", "5"] });
     expect(params.get("page")).toBe("2");
-    expect(parseDatasetFilters(params).page).toBe(2);
+    expect(parsePickerFilters(params).page).toBe(2);
   });
 });
 
@@ -102,17 +102,24 @@ describe("catalogue sort and view in the URL", () => {
     const qs = catalogueFiltersToParams(parsed).toString();
     expect(qs).toBe("sort=coverage-start&view=grid");
   });
-
-  it("keeps coverage-start out of the snapshot picker, whose route does not take it", () => {
-    expect(parseDatasetFilters(new URLSearchParams("sort=coverage-start")).sortBy).toBe("relevance");
-  });
 });
 
-describe("dataset filters (the snapshot picker)", () => {
-  it("still round-trips", () => {
-    const filters = parseDatasetFilters(new URLSearchParams("q=a&year_start=2000&page=2&sort=title-az"));
-    expect(datasetFiltersToParams(filters).toString()).toBe(
-      "q=a&year_start=2000&sort=title-az&page=2"
+describe("the snapshot picker's filters (the catalogue's, fewer of them)", () => {
+  it("round-trips the search, the tags, the year and resolution ranges and the page", () => {
+    const qs = "q=wbm&tag=publication&tag=tutorial&year_start=2000&year_end=2009&spatial_res_min=0.08&spatial_res_max=0.25&page=2";
+    const filters = parsePickerFilters(new URLSearchParams(qs));
+    expect(filters.tag).toEqual(["publication", "tutorial"]);
+    expect(filters.type).toEqual([]);
+    expect(pickerFiltersToParams(filters).toString()).toBe(
+      "q=wbm&tag=publication&tag=tutorial&year_start=2000&year_end=2009&spatial_res_min=0.08&spatial_res_max=0.25&page=2"
     );
+  });
+
+  it("drops what the picker has no control for: other facets, the type, the sort and the view", () => {
+    const filters = parsePickerFilters(
+      new URLSearchParams("type=model-input&keyword=hydrology&output=discharge&sort=title-az&view=grid&q=a")
+    );
+    expect(filters).toEqual({ ...EMPTY_CATALOGUE_FILTERS, searchQuery: "a" });
+    expect(pickerFiltersToParams(filters).toString()).toBe("q=a");
   });
 });

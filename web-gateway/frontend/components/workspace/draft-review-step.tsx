@@ -6,7 +6,8 @@ import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { basisName, snapshotFacts, snapshotHref } from "@/components/workspace/draft-basis";
+import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
+import { snapshotFacts } from "@/components/workspace/snapshot-facts";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
@@ -150,8 +151,8 @@ export function DraftReviewStep({
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const { name: basedOn, title } = basisName(ctx, datasetTitle);
-  const facts = snapshotFacts(ctx);
+  const title = basisTitle(ctx, datasetTitle);
+  const facts = found ? snapshotFacts(found) : [];
 
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
@@ -172,13 +173,13 @@ export function DraftReviewStep({
                   >
                     View
                     <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                    <span className="sr-only"> {basedOn} in the repository</span>
+                    <span className="sr-only"> {title} in the repository</span>
                   </Link>
                 ) : undefined
               }
             >
-              <span title={title} className="line-clamp-2 font-medium">
-                {basedOn}
+              <span title={title} className="line-clamp-2 font-medium break-words">
+                {title}
               </span>
               {facts.length > 0 && <span className="block text-[13px] text-muted-foreground">{facts.join(" · ")}</span>}
             </Row>

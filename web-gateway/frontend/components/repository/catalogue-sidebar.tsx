@@ -42,7 +42,8 @@ const ROW = "min-h-10 lg:min-h-8";
 
 // ─── A checkbox list with a count per option ─────────────────────────────────
 
-function FacetCheckboxList({
+/** Also the snapshot picker's tag filter (`workspace/snapshot-picker-filters.tsx`). */
+export function FacetCheckboxList({
   facetKey,
   options,
   selected,

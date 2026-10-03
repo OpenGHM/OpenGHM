@@ -2,27 +2,29 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { JobStatus, JobStatusResponse } from "@/lib/jobs/types";
 
-const { pollJobStatus, refresh } = vi.hoisted(() => ({
+const { pollJobStatus, refresh, push, duplicateSimulation } = vi.hoisted(() => ({
   pollJobStatus: vi.fn(),
   refresh: vi.fn(),
+  push: vi.fn(),
+  duplicateSimulation: vi.fn(),
 }));
 vi.mock("@/lib/jobs/actions", () => ({
   pollJobStatus,
   cancelJob: vi.fn(),
   deleteSimulation: vi.fn(),
   deriveSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
+  duplicateSimulation,
   submitSimulation: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh }),
+  useRouter: () => ({ push, refresh }),
   usePathname: () => "/workspace/x",
 }));
 
 import { JobHeader } from "@/components/workspace/job-header";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
-import { previewSimulation } from "@/lib/workspace/fixtures";
+import { fakeSimulation, previewSimulation } from "@/lib/workspace/fixtures";
 
 // Radix's popper and focus code read browser APIs jsdom does not have.
 beforeAll(() => {
@@ -36,6 +38,8 @@ beforeAll(() => {
 beforeEach(() => {
   pollJobStatus.mockReset();
   refresh.mockReset();
+  push.mockReset();
+  duplicateSimulation.mockReset();
 });
 afterEach(() => {
   cleanup();
@@ -67,6 +71,7 @@ describe("the header", () => {
     for (const key of ["pending", "submitted", "running", "completing", "cancelling"]) {
       renderHeader(key);
       expect(button("Cancel")).toBeNull();
+      expect(button("Duplicate")).toBeNull();
       expect(button("New from this model snapshot")).toBeNull();
       expect(button("Delete simulation")).toBeNull();
       cleanup();
@@ -93,6 +98,30 @@ describe("the header", () => {
     }
   );
 
+  it("offers Duplicate in the header of a completed job, which has no copy action in its summary", () => {
+    renderHeader("completed");
+    const duplicate = button("Duplicate");
+    expect(duplicate).not.toBeNull();
+    expect(duplicate?.getAttribute("data-variant")).toBe("outline");
+    expect(button("Try again with these settings")).toBeNull();
+  });
+
+  it.each(["failed:timeout", "failed:wbm_error", "cancelled:user"])(
+    "leaves the copy action of a job that is %s to its status summary: no Duplicate in the header",
+    (key) => {
+      renderHeader(key);
+      expect(button("Duplicate")).toBeNull();
+    }
+  );
+
+  it("copies the simulation into a new draft when Duplicate is pressed", async () => {
+    duplicateSimulation.mockResolvedValue({ ok: true, data: fakeSimulation("DRAFT", { id: "copy-1" }) });
+    renderHeader("completed");
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/copy-1?step=run"));
+    expect(duplicateSimulation).toHaveBeenCalledWith(previewSimulation("completed").id);
+  });
+
   it("titles the page with the simulation's name, with the status beside it and the snapshot under it", () => {
     renderHeader("running");
     const job = previewSimulation("running");
@@ -100,7 +129,7 @@ describe("the header", () => {
     expect(screen.getByText("Running")).toBeTruthy();
     const link = screen.getByRole("link", { name: `Based on ${job.dataset_title}` });
     expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
-    expect(link.getAttribute("title")).toBe(`Based on ${job.dataset_title}`);
+    expect(link.getAttribute("title")).toBe(job.dataset_title);
     expect(screen.queryByText(`Slurm #${job.slurm_job_id}`)).toBeTruthy();
   });
 
@@ -115,16 +144,18 @@ describe("the header", () => {
     expect(screen.getByText(new RegExp(job.sim_id))).toBeTruthy();
   });
 
-  it("says which snapshot it is based on in short when given, keeping the full title on hover", () => {
-    const job = previewSimulation("completed");
+  it("says which snapshot it is based on by its title, cut to one line with the whole title on hover", () => {
+    const title = "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
+    const job = previewSimulation("completed", { overrides: { dataset_title: title } });
     render(
       <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
-        <JobHeader job={job} basedOn="WBM 2.0.0 · 2001 · Regional" preview />
+        <JobHeader job={job} preview />
       </LiveJobProvider>
     );
-    const link = screen.getByRole("link", { name: "Based on WBM 2.0.0 · 2001 · Regional" });
+    const link = screen.getByRole("link", { name: `Based on ${title}` });
     expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
-    expect(link.getAttribute("title")).toBe(`Based on ${job.dataset_title}`);
+    expect(link.getAttribute("title")).toBe(title);
+    expect(link.className).toContain("truncate");
   });
 
   it("is a light header like the repository's: no dark gradient, nothing white, a normal Delete button", () => {

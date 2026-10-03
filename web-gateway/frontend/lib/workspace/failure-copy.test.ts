@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { FailureCause } from "@/lib/jobs/types";
+import type { FailureCause, JobFailure } from "@/lib/jobs/types";
 import {
   FAILURE_COPY,
   NEXT_STEP_COPY,
   UNRECORDED_FAILURE_COPY,
   offersNewDraft,
+  summaryOffersCopy,
 } from "@/lib/workspace/failure-copy";
 
 // The backend's vocabulary (ADR 0026). A cause added there must be added here,
@@ -63,5 +64,17 @@ describe("FAILURE_COPY", () => {
     expect(offersNewDraft("none")).toBe(false);
     expect(offersNewDraft("resubmit")).toBe(true);
     expect(offersNewDraft("contact_admin")).toBe(true);
+  });
+
+  it("has the copy action in the summary of a cancelled job and of a failed one that offers a new draft, and nowhere else", () => {
+    const failure = (cause: FailureCause): JobFailure => ({ cause, phase: null, message: "m", excerpt: null });
+    expect(summaryOffersCopy("CANCELLED", failure("cancelled_by_user"))).toBe(true);
+    expect(summaryOffersCopy("CANCELLED", null)).toBe(true);
+    expect(summaryOffersCopy("FAILED", failure("wbm_error"))).toBe(true);
+    expect(summaryOffersCopy("FAILED", null)).toBe(true);
+    // A failed job whose cause offers nothing leaves the action to the header.
+    expect(summaryOffersCopy("FAILED", failure("cancelled_by_user"))).toBe(false);
+    expect(summaryOffersCopy("COMPLETED", null)).toBe(false);
+    expect(summaryOffersCopy("RUNNING", null)).toBe(false);
   });
 });

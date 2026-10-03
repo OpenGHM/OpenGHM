@@ -74,6 +74,25 @@ describe("the detail page", () => {
     expect(screen.getByRole("button", { name: "Delete simulation" })).toBeTruthy();
   });
 
+  it.each([
+    ["completed", "Duplicate"],
+    ["failed:timeout", "Try again with these settings"],
+    ["failed:wbm_error", "Try again with these settings"],
+    ["cancelled:user", "Try again with these settings"],
+  ])("offers the copy action once on an ended job (%s): %s", (key, label) => {
+    renderDetail(key);
+    const copy = screen
+      .getAllByRole("button")
+      .filter((b) => b.textContent === "Duplicate" || b.textContent === "Try again with these settings");
+    expect(copy.map((b) => b.textContent)).toEqual([label]);
+  });
+
+  it("has no copy action while the job is active", () => {
+    renderDetail("running");
+    expect(screen.queryByRole("button", { name: "Duplicate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again with these settings" })).toBeNull();
+  });
+
   it("puts Cancel in the summary while it runs, and nothing in the header", () => {
     renderDetail("running");
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);

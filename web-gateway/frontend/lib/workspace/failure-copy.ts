@@ -1,4 +1,4 @@
-import type { FailureCause } from "@/lib/jobs/types";
+import type { FailureCause, JobFailure, JobStatus } from "@/lib/jobs/types";
 
 /** What the person can do about it. The card turns this into a sentence
  *  (`NEXT_STEP_COPY`) and the buttons it offers. */
@@ -123,3 +123,16 @@ export const UNRECORDED_FAILURE_COPY: FailureCopy = {
   nextStep: "new_draft",
   tone: "danger",
 };
+
+/**
+ * Whether the status summary of a job in this status already has "Try again
+ * with these settings", the copy action. It does for a cancelled job, and for a
+ * failed one whose cause offers a new draft (`offersNewDraft`); the page header
+ * offers "Duplicate" for every other ended job, so that each has the action once
+ * and none has it twice.
+ */
+export function summaryOffersCopy(status: JobStatus, failure: JobFailure | null): boolean {
+  if (status === "CANCELLED") return true;
+  if (status !== "FAILED") return false;
+  return offersNewDraft((failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY).nextStep);
+}

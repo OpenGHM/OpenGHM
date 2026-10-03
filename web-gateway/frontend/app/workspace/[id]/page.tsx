@@ -7,7 +7,6 @@ import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
-import { basedOnLabel } from "@/lib/jobs/based-on";
 import { submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { DraftContext } from "@/lib/workspace/draft-state";
@@ -72,24 +71,19 @@ export default async function JobDetailPage({
 
   // The base snapshot, for what the job asked for when it chose no cores or
   // walltime of its own (its recommendation; snapshots never change, so reading
-  // it now gives what the submit read) and for the header's short name. Null
-  // when it cannot be read just now: the page then shows a dash rather than a
-  // guess, and the header the title the job was derived under.
+  // it now gives what the submit read). Null when it cannot be read just now:
+  // the page then shows a dash rather than a guess.
   let recommended = null;
-  let basedOn: string | null = null;
   try {
-    const snapshot = await fetchDatasetById(job.dataset_id);
-    recommended = recommendedComputeFor(snapshot);
-    basedOn = snapshot ? basedOnLabel(snapshot) : null;
+    recommended = recommendedComputeFor(await fetchDatasetById(job.dataset_id));
   } catch {
     recommended = null;
-    basedOn = null;
   }
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} basedOn={basedOn} />
+      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} />
       <Footer />
     </div>
   );

@@ -116,15 +116,17 @@ describe("DraftReviewStep: the summary", () => {
     expect(screen.queryByText("Needs attention")).toBeNull();
   });
 
-  it("links the snapshot to the repository and gives it no Edit", () => {
+  it("names the snapshot by its title, two lines at most, and links it to the repository with no Edit", () => {
     review();
     const based = row("Based on");
-    // The short name, not the title's wall of text, which is on hover.
-    const name = within(based).getByText("WBM 2.0.0 · 2001");
-    expect(name.getAttribute("title")).toBe("Fake Snapshot");
-    expect(within(based).queryByText("Fake Snapshot")).toBeNull();
-    expect(within(based).getByText("Regional · wbm 2.0.0 · 0.5°")).toBeTruthy();
-    expect(within(based).getByRole("link", { name: /View.*in the repository/ }).getAttribute("href")).toBe(
+    // The snapshot's title, whole in the page, cut by CSS, and on hover.
+    const title = within(based).getByText("Fake Snapshot");
+    expect(title.getAttribute("title")).toBe("Fake Snapshot");
+    expect(title.className).toContain("line-clamp-2");
+    // The facts are plain phrases beside it, never a name.
+    expect(within(based).getByText("WBM 2.0.0 · 2001 · 0.5°")).toBeTruthy();
+    expect(based.textContent).not.toMatch(/Regional|Global/);
+    expect(within(based).getByRole("link", { name: /View.*Fake Snapshot.*in the repository/ }).getAttribute("href")).toBe(
       "/repository/snap-1"
     );
     expect(within(based).queryByRole("button", { name: /Edit/ })).toBeNull();
