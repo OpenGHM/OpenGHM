@@ -6,7 +6,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/workspace/job-1" }));
 
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
-import type { FlushResult } from "@/lib/workspace/use-draft-autosave";
+import type { FlushResult } from "@/lib/workspace/use-draft-saver";
 import { fakeSimulation } from "@/lib/workspace/fixtures";
 
 // What the server holds after the flush: not what the page's props said.
@@ -83,9 +83,9 @@ async function openDialog() {
 }
 
 describe("DraftSubmitCard: what it says", () => {
-  it("says the draft saves itself", () => {
+  it("says Submit saves the changes first", () => {
     card();
-    expect(screen.getByText(/Your draft saves automatically/)).toBeTruthy();
+    expect(screen.getByText(/Submitting saves your changes first/)).toBeTruthy();
     expect(submitButton().disabled).toBe(false);
   });
 
@@ -200,7 +200,7 @@ describe("DraftSubmitCard: the stale error", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("Submitted — opening the job page…");
     expect(screen.queryByRole("button", { name: "Submit to Anvil" })).toBeNull();
-    expect(screen.queryByText(/Your draft saves automatically/)).toBeNull();
+    expect(screen.queryByText(/Submitting saves your changes first/)).toBeNull();
   });
 
   it("shows a new failure's own message and not the old one", async () => {
@@ -304,7 +304,7 @@ describe("DraftSubmitCard: submitting", () => {
 
     fireEvent.click(confirmButton());
     await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith(SUBMITTED));
-    // Auto-save is stopped before the request, and the page told to lock.
+    // Saving is stopped before the request, and the page told to lock.
     expect(calls).toEqual(["flush", "suspend", "submitting:true", "submit"]);
     expect(submit).toHaveBeenCalledWith("job-1");
     expect(onSubmitFailed).not.toHaveBeenCalled();

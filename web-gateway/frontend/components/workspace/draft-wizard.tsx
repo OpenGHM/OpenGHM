@@ -37,6 +37,7 @@ import {
 } from "@/lib/workspace/draft-state";
 import {
   DRAFT_STEPS,
+  FIELD_LABELS,
   FIELD_STEP,
   isRetiredStep,
   newStepHref,
@@ -49,7 +50,7 @@ import {
 import { useLeaveGuard } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
-import { type FlushResult, useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
+import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
 import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
 
 /** Which draft the wizard edits: one that is stored (`/workspace/<id>`, saved as
@@ -81,6 +82,31 @@ function liveName(name: string, job: Job): string {
   return displayName({ ...job, about: { name: name.trim() } });
 }
 
+/** The path of the wizard without its query: what its own step links share. */
+function wizardPath(isNew: boolean, datasetId: string, jobId: string): string {
+  return isNew ? newWizardPath(datasetId) : `/workspace/${encodeURIComponent(jobId)}`;
+}
+
+/** Why a stored draft's Save button is off, for its tooltip, by what the save
+ *  status says. */
+function whyNotSaveable(kind: SaveState["kind"]): string | undefined {
+  switch (kind) {
+    case "saved":
+      return "No changes to save";
+    case "refused":
+      return "Fix the settings that can't be saved first";
+    case "session-expired":
+      return "Sign in again to save";
+    case "conflict":
+    case "gone":
+      return "This draft can't be saved any more";
+    case "suspended":
+      return "Finish or close what is open first";
+    default:
+      return undefined;
+  }
+}
+
 /** The step the address bar names right now. */
 function stepFromLocation(fallback?: DraftStep): DraftStep {
   return parseStep(new URLSearchParams(window.location.search).get("step"), fallback);
@@ -89,8 +115,11 @@ function stepFromLocation(fallback?: DraftStep): DraftStep {
 /**
  * A draft, edited in place: the wizard behind `/workspace/<id>?step=...` (ADR
  * 0028). It owns the local copy of the draft, which step is showing, and the
- * auto-save (`useDraftAutosave`), and lays out the page: the header (name, status,
- * save status, Delete, the steps) over the content of the current step.
+ * saving (`useDraftSaver`), and lays out the page: the header (name, save
+ * status and button, Delete, the steps) over the content of the current step.
+ * Nothing is saved by itself: the Save draft button (or Ctrl/Cmd+S), Submit and
+ * the leave dialog are the only things that send, and leaving with unsaved
+ * changes asks first (`useLeaveGuard`).
  *
  * - **Starting point.** The job the server rendered, or the copy of it this tab
  *   last saw saved when that is newer (Next can restore a page from its
@@ -100,15 +129,14 @@ function stepFromLocation(fallback?: DraftStep): DraftStep {
  *   from it.
  * - **Steps.** The URL says which one (Run settings or Review); Next, Back and
  *   the progress strip change it with `history.pushState`, so there is no server
- *   round trip. Each change saves what is waiting and moves focus to the step's
- *   heading. Nothing blocks a step: what stands in the way of a submit is flagged
+ *   round trip. Each change moves focus to the step's heading and saves
+ *   nothing. Nothing blocks a step: what stands in the way of a submit is flagged
  *   on the strip and listed beside the Submit button. An address that still says
  *   `?step=model` (the step this replaced) is rewritten to `?step=run`.
  *
  * `mode` `new` is a simulation nobody has saved: `job` is the draft the server
- * would create (it has no id), everything stays in the browser, nothing is
- * auto-saved, and "Save as draft" (or Submit) creates the stored draft. Leaving
- * with changes asks first (`useLeaveGuard`).
+ * would create (it has no id), everything stays in the browser, and "Save as
+ * draft" (or Submit) creates the stored draft.
  */
 export function DraftWizard({
   job,
@@ -222,9 +250,10 @@ function WizardBody({
     };
   }, []);
 
-  // A new simulation is not auto-saved: the hook is off and sends nothing.
-  const autosave = useDraftAutosave({ jobId, initialSaved: initialJob, local, ctx, disabled: isNew });
-  const { flush, suspend, resume } = autosave;
+  // Nothing is saved by itself, in either mode: `saver.flush()` is the one thing that
+  // sends, from a button. A new simulation is not stored, so the hook is off for it.
+  const saver = useDraftSaver({ jobId, initialSaved: initialJob, local, ctx, disabled: isNew });
+  const { flush, suspend, resume } = saver;
   const modelInput = useCatalogueModelInput(effectiveModelInputId(local.modelInputId, ctx.dataset));
 
   // ── The step ──────────────────────────────────────────────────────────────
@@ -265,15 +294,14 @@ function WizardBody({
     [hrefFor]
   );
 
-  // A new step (from a button, the strip, or the browser's back/forward): save
-  // what is waiting, and send focus to its heading. Not on the first render.
+  // A new step (from a button, the strip, or the browser's back/forward): send
+  // focus to its heading. Not on the first render. Changing step saves nothing.
   const shownStep = useRef(step);
   useEffect(() => {
     if (shownStep.current === step) return;
     shownStep.current = step;
-    void flush();
     document.getElementById(stepHeadingId(step))?.focus();
-  }, [step, flush]);
+  }, [step]);
 
   // A field was asked for: once its step has rendered, focus it (the heading
   // when the step has no such control). Declared after the effect above, so it
@@ -295,10 +323,10 @@ function WizardBody({
   // ── Back in view ──────────────────────────────────────────────────────────
   // Another tab or a submit elsewhere may have moved the draft on while this
   // one was away. Only when nothing here is unsaved, so nothing is lost.
-  const clean = autosave.state.kind === "saved";
-  const latest = useRef({ clean, savedAt: autosave.saved.updated_at });
+  const clean = saver.state.kind === "saved";
+  const latest = useRef({ clean, savedAt: saver.saved.updated_at });
   useEffect(() => {
-    latest.current = { clean, savedAt: autosave.saved.updated_at };
+    latest.current = { clean, savedAt: saver.saved.updated_at };
   });
   useEffect(() => {
     // Nothing is stored for a new simulation: there is nothing to go stale.
@@ -319,8 +347,8 @@ function WizardBody({
   // `saving` is left out: Submit saves first, so a pause in the middle of a
   // save is not something to fix, and it must not flash a warning on every key.
   const problems = useMemo(
-    () => submitProblems(local, ctx, blockedReason, { withheld: isNew ? NO_FIELDS : autosave.withheld, saving: false }),
-    [local, ctx, blockedReason, isNew, autosave.withheld]
+    () => submitProblems(local, ctx, blockedReason, { withheld: isNew ? NO_FIELDS : saver.withheld, saving: false }),
+    [local, ctx, blockedReason, isNew, saver.withheld]
   );
   const problemSteps = useMemo(
     () => DRAFT_STEPS.filter((s) => problems.some((p) => p.step === s)),
@@ -332,16 +360,26 @@ function WizardBody({
   const name = isNew ? local.name.trim() || "New simulation" : liveName(local.name, initialJob);
   const index = DRAFT_STEPS.indexOf(step);
 
-  // ── A new simulation: saving it, and leaving it ───────────────────────────
-  // Inert for a stored draft. Once a save created the draft, `saved` is what
-  // the server holds, and "unsaved" is measured against that.
+  // ── Saving, and leaving ───────────────────────────────────────────────────
+  // Saving is always a button: nothing is sent by itself. A new simulation is
+  // created by `newDraft` (inert for a stored draft); a stored one is saved by
+  // `saver.flush()`. Once a save created the new draft, `saved` is what the
+  // server holds, and "unsaved" is measured against that.
   const newDraft = useSaveNewDraft({ datasetId, ctx });
   const baseline = newDraft.saved ?? initialJob;
   const dirty = isNew && isDirty(local, baseline, ctx);
   // Set once a save or a submit went through and the page is on its way to the
   // draft: from then on nothing is asked about leaving, and nothing is saved twice.
   const [departing, setDeparting] = useState(false);
-  const guard = useLeaveGuard({ active: dirty && !departing, ownPath: newWizardPath(datasetId) });
+  // Unsaved work is what leaving would lose: a new simulation that differs from
+  // what the server would create, a stored draft with a difference waiting or a
+  // withheld field. The wizard's own step links are not leaving. A stored
+  // draft's saver already asks the browser; a new simulation's guard does.
+  const guard = useLeaveGuard({
+    active: (isNew ? dirty : saver.unsaved) && !departing,
+    ownPath: wizardPath(isNew, datasetId, jobId),
+    beforeUnload: isNew,
+  });
   // The reason the last submit gave, for the toast of one that did not go through.
   const submitFailure = useRef<ActionFailure | null>(null);
 
@@ -366,6 +404,69 @@ function WizardBody({
     guard.stay();
     router.push(go);
   };
+
+  /** Save the stored draft now: the Save draft button, Ctrl/Cmd+S, the leave
+   *  dialog. True when the server holds everything on screen. A save that did
+   *  not go through shows in the status (and Retry); one that left settings out
+   *  says which. */
+  const storing = useRef(false);
+  const saveStored = async (): Promise<boolean> => {
+    // One at a time: a second press before the first has answered is the first.
+    if (storing.current) return false;
+    storing.current = true;
+    let result: FlushResult;
+    try {
+      result = await flush();
+    } finally {
+      storing.current = false;
+    }
+    if (!result.ok) return false;
+    if (result.withheld.length > 0) {
+      toast.error(`Saved, but these settings weren't: ${result.withheld.map((f) => FIELD_LABELS[f]).join(", ")}.`);
+      return false;
+    }
+    toast.success("Draft saved");
+    return true;
+  };
+  const saveStoredAndGo = async (go: string) => {
+    if (!(await saveStored())) {
+      guard.stay();
+      return;
+    }
+    setDeparting(true);
+    guard.stay();
+    router.push(go);
+  };
+
+  const saving = isNew ? newDraft.saving : saver.state.kind === "saving";
+  // The stored draft's button is on only when a save has something to do or to
+  // try again; otherwise it says why not.
+  const savedKind = saver.state.kind;
+  const storedCanSave = savedKind === "unsaved" || savedKind === "failed";
+  const saveDisabled = isNew ? departing || submitting : !storedCanSave || submitting;
+  const saveReason = isNew ? undefined : whyNotSaveable(savedKind);
+  const saveLabel = isNew ? "Save as draft" : "Save draft";
+  const saveNow = () => {
+    if (saveDisabled || saving) return;
+    if (isNew) void saveAndGo(null);
+    else void saveStored();
+  };
+  // Ctrl/Cmd+S is the Save button, and the browser's own "save page" is not
+  // wanted here whether or not there is anything to save.
+  const saveNowRef = useRef(saveNow);
+  useEffect(() => {
+    saveNowRef.current = saveNow;
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      saveNowRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Submit from Review: the first press creates the draft (once: a retry after a
   // failed submit finds it), and what the confirmation shows is what it holds.
@@ -408,7 +509,7 @@ function WizardBody({
   // ── Submit and delete ─────────────────────────────────────────────────────
   const onSubmitted = (submitted: Job) => {
     const url = `/workspace/${encodeURIComponent(submitted.id)}`;
-    if (isNew) setDeparting(true);
+    setDeparting(true);
     setLastSubmitError(null);
     router.replace(url);
     router.refresh();
@@ -440,7 +541,7 @@ function WizardBody({
     return result?.ok && result.data.status !== "DRAFT" ? result.data : null;
   };
   const onSubmitFailed = () => {
-    // Still a draft, and auto-save was suspended for the submit.
+    // Still a draft, and saving was suspended for the submit.
     resume();
     void fetchJob(jobId)
       .then((result) => {
@@ -451,8 +552,7 @@ function WizardBody({
       .catch(() => {});
   };
 
-  const state = autosave.state;
-  const saveDisabled = departing || submitting;
+  const state = saver.state;
 
   return (
     <main className={WORKSPACE_MAIN}>
@@ -488,18 +588,21 @@ function WizardBody({
               <Button asChild variant="ghost" className="min-h-10 sm:min-h-9">
                 <Link href="/workspace">Cancel</Link>
               </Button>
-              <SaveDraftButton
-                saving={newDraft.saving}
-                disabled={saveDisabled}
-                onClick={() => void saveAndGo(null)}
-              />
+              <SaveDraftButton saving={saving} disabled={saveDisabled} onClick={saveNow} />
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-3 sm:justify-end">
               <SaveStatus
                 state={state}
-                onRetry={autosave.retry}
+                onRetry={saver.retry}
                 onGoToField={(field) => goTo(FIELD_STEP[field], field)}
+              />
+              <SaveDraftButton
+                saving={saving}
+                disabled={saveDisabled}
+                reason={saveReason}
+                label={saveLabel}
+                onClick={saveNow}
               />
               <JobDeleteButton
                 jobId={jobId}
@@ -587,12 +690,7 @@ function WizardBody({
             </div>
           )}
 
-          {/* Focus leaving the step is a reason to save without waiting. */}
-          <div
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void flush();
-            }}
-          >
+          <>
             {step === "run" && (
               <DraftRunStep
                 datasetId={datasetId}
@@ -608,8 +706,8 @@ function WizardBody({
                 autoFocusName={focusNameOnOpen}
                 onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
                 onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
-                serverErrors={isNew ? NO_ERRORS : autosave.serverErrors}
-                startRefusal={isNew ? null : autosave.startRefusal}
+                serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
+                startRefusal={isNew ? null : saver.startRefusal}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
                 onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
                 onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
@@ -642,7 +740,6 @@ function WizardBody({
                       onSubmittingChange={setSubmitting}
                       checkSubmitted={() => checkSubmitted(newDraft.created()?.id ?? "")}
                       openJobHref={pageStuck}
-                      note="Submitting saves this as a draft first, then runs it on Anvil and uses compute time."
                     />
                   ) : (
                     <DraftSubmitCard
@@ -664,22 +761,20 @@ function WizardBody({
                 }
               />
             )}
-          </div>
+          </>
 
           {/* Never blocked: a step with problems says so on the strip. Run
               settings has no Back (the browser's goes to Start from), Review no
               Next. */}
           <div className="mt-8 flex items-center justify-between gap-3">
             {step === "run" ? (
-              isNew ? (
-                <SaveDraftButton
-                  saving={newDraft.saving}
-                  disabled={saveDisabled}
-                  onClick={() => void saveAndGo(null)}
-                />
-              ) : (
-                <span />
-              )
+              <SaveDraftButton
+                saving={saving}
+                disabled={saveDisabled}
+                reason={saveReason}
+                label={saveLabel}
+                onClick={saveNow}
+              />
             ) : (
               <Button
                 type="button"
@@ -702,23 +797,24 @@ function WizardBody({
         </div>
       </div>
 
-      {isNew && (
-        <LeaveDraftDialog
-          open={guard.target !== null}
-          saving={newDraft.saving}
-          onSave={() => {
-            const target = guard.target;
-            if (target === null) return;
+      <LeaveDraftDialog
+        stored={!isNew}
+        open={guard.target !== null}
+        saving={saving}
+        onSave={() => {
+          const target = guard.target;
+          if (target === null) return;
+          if (isNew) {
             void saveAndGo(target).then((saved) => {
               if (!saved) guard.stay();
             });
-          }}
-          onDiscard={() => {
-            if (guard.target !== null) discardAndGo(guard.target);
-          }}
-          onKeep={guard.stay}
-        />
-      )}
+          } else void saveStoredAndGo(target);
+        }}
+        onDiscard={() => {
+          if (guard.target !== null) discardAndGo(guard.target);
+        }}
+        onKeep={guard.stay}
+      />
     </main>
   );
 }

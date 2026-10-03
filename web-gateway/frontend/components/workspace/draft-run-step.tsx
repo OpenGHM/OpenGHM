@@ -105,7 +105,7 @@ export function DraftRunStep({
   autoFocusName?: boolean;
   /** What the server said about a field it did not take. */
   serverErrors: Partial<Record<DraftField, string>>;
-  /** The server's refusal of the current start (`useDraftAutosave().startRefusal`). */
+  /** The server's refusal of the current start (`useDraftSaver().startRefusal`). */
   startRefusal: { message: string; suggestion: string | null } | null;
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;

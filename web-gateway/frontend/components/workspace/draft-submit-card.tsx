@@ -20,7 +20,7 @@ import { describeCoresBelowRecommended, effectiveCompute, type Recommended } fro
 import type { ActionResult, Job, SubmitError } from "@/lib/jobs/types";
 import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
-import type { FlushResult } from "@/lib/workspace/use-draft-autosave";
+import type { FlushResult } from "@/lib/workspace/use-draft-saver";
 
 /** `checking` is the short stretch after a submit whose answer never came: the
  *  card asks the server whether the job went out anyway. */
@@ -33,7 +33,7 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
  * Submit does not submit what is on screen: it saves first (`flush`), and the
  * confirmation shows what the server then holds, which is what will run. A save
  * that failed, or that left a value out (`withheld`), stops here with the reason.
- * Confirm stops auto-save (`suspend`) so that no PATCH can slip in after the save
+ * Confirm stops saving (`suspend`) so that no PATCH can slip in after the save
  * the submit's claim is checked against, then calls `submit`.
  *
  * - `problems` is `submitProblems(...)`: while it is not empty the button is off
@@ -49,9 +49,8 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
  * - A submit whose answer never came (the request threw) is not necessarily a
  *   failure: `checkSubmitted` asks the server, and a job that is no longer a
  *   draft takes the success path. A failed submit calls `onSubmitFailed`: the
- *   draft is still a draft, but auto-save has been suspended for good, so the
- *   wizard has to load the job again and start over with it (a new `key`) before
- *   more can be saved.
+ *   draft is still a draft, but saving has been suspended, so the
+ *   wizard resumes it and reads the stored failure.
  * - `onSubmittingChange(true)` is called at Confirm, not while saving, so the
  *   wizard may switch its inputs off without stopping the save.
  *
@@ -72,7 +71,6 @@ export function DraftSubmitCard({
   onSubmittingChange,
   checkSubmitted,
   openJobHref = null,
-  note = "Your draft saves automatically. Submitting runs it on Anvil and uses compute time.",
 }: {
   jobId: string;
   problems: readonly SubmitProblem[];
@@ -92,9 +90,6 @@ export function DraftSubmitCard({
   checkSubmitted?: (jobId: string) => Promise<Job | null>;
   /** Set by the wizard once a submit went through but its page did not change. */
   openJobHref?: string | null;
-  /** The line beside the button. A simulation that is not saved yet says that
-   *  Submit saves it first. */
-  note?: string;
 }) {
   const noteId = useId();
   const [stage, setStage] = useState<Stage>("idle");
@@ -275,7 +270,9 @@ export function DraftSubmitCard({
         )
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <p className="text-xs text-muted-foreground">{note}</p>
+          <p className="text-xs text-muted-foreground">
+            Submitting saves your changes first, then runs it on Anvil and uses compute time.
+          </p>
           <Button
             type="button"
             disabled={blocked || stage !== "idle"}

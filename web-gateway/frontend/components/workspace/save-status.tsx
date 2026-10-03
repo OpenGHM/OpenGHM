@@ -5,12 +5,11 @@ import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { FIELD_LABELS, type DraftField } from "@/lib/workspace/draft-wizard";
-import type { SaveState } from "@/lib/workspace/use-draft-autosave";
+import type { SaveState } from "@/lib/workspace/use-draft-saver";
 
 /** The states in which the draft on screen is not on the server and a person
  *  has something to know or do about it. */
 const FAILING: ReadonlySet<SaveState["kind"]> = new Set([
-  "retrying",
   "failed",
   "refused",
   "session-expired",
@@ -34,10 +33,13 @@ function PillButton({ onClick, children }: { onClick: () => void; children: Reac
 }
 
 /**
- * How auto-saving is going, in words, from `useDraftAutosave().state`.
+ * Where saving the draft stands, in words, from `useDraftSaver().state`:
+ * "Unsaved changes" until the person saves, "Saving…", "Saved". Nothing is
+ * saved by itself, so a failure is not retried either: it says so and offers
+ * Retry.
  *
- * The visible text is not a live region: it changes with every keystroke
- * ("Saving…", "Saved") and announcing that would be noise. A separate hidden
+ * The visible text is not a live region: it changes with every edit
+ * ("Unsaved changes", "Saving…", "Saved") and announcing that would be noise. A separate hidden
  * `role="status"` speaks only when the draft first fails to save and when it is
  * saved again afterwards, once each, whatever the visible text does in between.
  *
@@ -78,6 +80,14 @@ export function SaveStatus({
         </span>
       );
       break;
+    case "unsaved":
+      visible = (
+        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
+          Unsaved changes
+        </span>
+      );
+      break;
     case "saving":
       visible = (
         <span className="inline-flex items-center gap-1.5">
@@ -87,7 +97,7 @@ export function SaveStatus({
       );
       break;
     case "suspended":
-      visible = "Auto-save is off";
+      visible = "Saving is paused";
       break;
     default:
       visible = (
@@ -118,8 +128,6 @@ function FailureText({
   onGoToField: (field: DraftField) => void;
 }) {
   switch (state.kind) {
-    case "retrying":
-      return <span>Couldn&apos;t save. Retrying…</span>;
     case "failed":
       return (
         <>

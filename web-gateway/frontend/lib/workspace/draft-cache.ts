@@ -2,7 +2,7 @@
  * The latest saved copy of each draft this tab has seen.
  *
  * Next restores a page from its back/forward cache with the props it was
- * rendered with, which can predate what auto-save has written since. The
+ * rendered with, which can predate what an explicit save has written since. The
  * wizard therefore starts from whichever is newer by `updated_at`: the job the
  * server page rendered, or what this module last saw saved. Module state, so it
  * lives as long as the tab and is gone on a full reload, which is right: a

@@ -4,7 +4,7 @@ import type { ActionResult, Job, PartialAbout, SimulationUpdateRequest } from "@
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 
-const { updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, replace, refresh } = vi.hoisted(() => ({
+const { updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, replace, refresh, toast } = vi.hoisted(() => ({
   updateSimulation: vi.fn(),
   fetchJob: vi.fn(),
   submitSimulation: vi.fn(),
@@ -12,6 +12,7 @@ const { updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, re
   push: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 vi.mock("@/lib/jobs/actions", () => ({
   updateSimulation,
@@ -24,7 +25,7 @@ vi.mock("@/lib/jobs/actions", () => ({
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
 }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({ toast }));
 // The address bar is the router: what a test pushes is what `useSearchParams` reads.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace, refresh }),
@@ -33,7 +34,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { DraftWizard } from "@/components/workspace/draft-wizard";
-import { clearDraftCache, writeDraftCache } from "@/lib/workspace/draft-cache";
+import { clearDraftCache, readDraftCache, writeDraftCache } from "@/lib/workspace/draft-cache";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
 
 beforeAll(() => {
@@ -94,6 +95,7 @@ beforeEach(() => {
   push.mockReset();
   replace.mockReset();
   refresh.mockReset();
+  for (const m of Object.values(toast)) m.mockReset();
 });
 afterEach(() => {
   cleanup();
@@ -445,52 +447,314 @@ describe("the step", () => {
   });
 });
 
-describe("saving", () => {
-  it("shows Saving… and then Saved for an edit, in one request", async () => {
+// Hidden too: a dialog open over the page hides it from the accessibility tree.
+const saveButtons = () =>
+  screen.getAllByRole("button", { name: /^Save draft$|^Saving…$/, hidden: true }) as HTMLButtonElement[];
+const pressSave = () => fireEvent.click(saveButtons()[0]);
+/** A plain click on `el`: whether the leave guard held it back, with jsdom
+ *  never asked to follow a link. The probe sits after the guard on the same
+ *  node and phase, so it sees what the guard did. */
+function click(el: Element): boolean {
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+  let heldBack = false;
+  const probe = (e: Event) => {
+    heldBack = e.defaultPrevented;
+    e.preventDefault();
+  };
+  document.addEventListener("click", probe, true);
+  act(() => void el.dispatchEvent(event));
+  document.removeEventListener("click", probe, true);
+  return heldBack;
+}
+const outsideLink = (href: string) => {
+  const a = document.createElement("a");
+  a.setAttribute("href", href);
+  a.textContent = "elsewhere";
+  document.body.append(a);
+  return a;
+};
+const keydown = (init: KeyboardEventInit) => {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => void document.dispatchEvent(event));
+  return event;
+};
+
+describe("saving is a button", () => {
+  it("says Unsaved changes after an edit, sends nothing, and the button is on", async () => {
     wizard({ step: "run" });
-    type("Colorado");
-    expect(screen.getByText("Saving…")).toBeTruthy();
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
-    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
-    await waitFor(() => expect(screen.queryByText("Saving…")).toBeNull());
     expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
-  });
-
-  it("saves what is waiting as soon as the step changes", async () => {
-    wizard({ step: "run" });
     type("Colorado");
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    expect(saveButtons().every((b) => !b.disabled)).toBe(true);
+    await pause(1_500);
     expect(updateSimulation).not.toHaveBeenCalled();
-    fireEvent.click(stepLink("Review & submit"));
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
-    expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
-  it("saves it when the browser's back changes the step, too", async () => {
+  it("Save draft sends the edit in one request, shows Saving… and then Saved, and says so in a toast", async () => {
+    let answer!: (r: ActionResult<Job>) => void;
+    updateSimulation.mockReturnValue(new Promise((r) => (answer = r)));
     wizard({ step: "run" });
     type("Colorado");
-    act(() => {
-      window.history.replaceState(null, "", "/workspace/job-1?step=review");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    pressSave();
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Saving…" })).toHaveLength(2));
+    expect(screen.getByText("Saving…", { selector: "span span, span" })).toBeTruthy();
+    expect(saveButtons().every((b) => b.disabled)).toBe(true);
+    await act(async () => answer({ ok: true, data: { ...JOB, about: { name: "Colorado" }, updated_at: "2026-10-01T12:00:05.000Z" } }));
+
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(readDraftCache("job-1")?.about).toEqual({ name: "Colorado" });
   });
 
-  it("saves when focus leaves the step for something outside it", async () => {
+  it("is off when there is nothing to save, and says why in a tooltip and to a screen reader", () => {
+    wizard({ step: "run" });
+    const [header, bottom] = saveButtons();
+    expect(header.disabled).toBe(true);
+    expect(bottom.disabled).toBe(true);
+    expect(header.closest("span[title]")?.getAttribute("title")).toBe("No changes to save");
+    expect(header.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(header.getAttribute("aria-describedby")!)?.textContent).toBe("No changes to save");
+  });
+
+  it("is on again for the next edit, and off again once saved", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    pressSave();
+    await waitFor(() => expect(saveButtons()[0].disabled).toBe(true));
+    await waitFor(() => expect(screen.getByText("Saved", { exact: false })).toBeTruthy());
+    type("Colorado 2");
+    expect(saveButtons()[0].disabled).toBe(false);
+  });
+
+  it("is also under Run settings, and does the same; Review has the header's only", async () => {
+    wizard({ step: "run" });
+    expect(saveButtons()).toHaveLength(2);
+    type("Colorado");
+    fireEvent.click(saveButtons()[1]);
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    fireEvent.click(button("Next")!);
+    expect(saveButtons()).toHaveLength(1);
+  });
+
+  it("is not pressed twice by a double click", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    pressSave();
+    pressSave();
+    await settle();
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it("changing step saves nothing: not Next, not the strip, not the browser's back, not focus leaving", async () => {
     wizard({ step: "run" });
     const input = nameInput();
     input.focus();
     type("Colorado");
     fireEvent.blur(input, { relatedTarget: document.body });
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    fireEvent.click(stepLink("Review & submit"));
+    expect(heading()).toBe("Review & submit");
+    act(() => {
+      window.history.replaceState(null, "", "/workspace/job-1?step=run");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(heading()).toBe("Run settings");
+    fireEvent.click(button("Next")!);
+    await pause(1_500);
+    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
-  it("does not save when focus only moves within the step", async () => {
+  it("the tab being hidden or the page being hidden saves nothing", async () => {
     wizard({ step: "run" });
-    const input = nameInput();
     type("Colorado");
-    fireEvent.blur(input, { relatedTarget: screen.getByLabelText(/^Description/) });
+    hold("hidden");
+    fireEvent(document, new Event("visibilitychange"));
+    fireEvent(window, new Event("pagehide"));
+    await pause(1_500);
+    hold("visible");
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("closing the page without saving sends nothing", async () => {
+    const view = wizard({ step: "run" });
+    type("Colorado");
+    view.unmount();
+    await pause(1_200);
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+});
+
+describe("Ctrl/Cmd+S", () => {
+  it("saves, and keeps the browser's own save-page dialog away, with Ctrl and with Cmd", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    const event = keydown({ key: "s", ctrlKey: true });
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(saveButtons()[0].disabled).toBe(true));
+
+    type("Colorado 2");
+    expect(keydown({ key: "S", metaKey: true }).defaultPrevented).toBe(true);
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+  });
+
+  it("still keeps the browser's dialog away when there is nothing to save, and sends nothing", async () => {
+    wizard({ step: "run" });
+    expect(keydown({ key: "s", ctrlKey: true }).defaultPrevented).toBe(true);
     await settle();
     expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("is only the plain chord: Ctrl+Shift+S, Alt and a bare S are left alone", () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    expect(keydown({ key: "s", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
+    expect(keydown({ key: "s", ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
+    expect(keydown({ key: "s" }).defaultPrevented).toBe(false);
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("is stopped when the page is gone from under it: the listener is removed on unmount", () => {
+    const view = wizard({ step: "run" });
+    view.unmount();
+    expect(keydown({ key: "s", ctrlKey: true }).defaultPrevented).toBe(false);
+  });
+});
+
+describe("leaving a stored draft", () => {
+  afterEach(() => document.body.querySelectorAll("a").forEach((a) => a.remove()));
+
+  it("asks nothing while nothing is unsaved: links just go, and the browser is not asked", () => {
+    wizard({ step: "run" });
+    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(false);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  it("holds back a link click once something is unsaved, and offers Save draft, Discard changes and Keep editing", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(true);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Leave without saving?");
+    expect(within(dialog).getByRole("button", { name: "Save draft" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Discard changes" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep editing" })).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Save as draft" })).toBeNull();
+  });
+
+  it("asks the browser once, before a reload, while something is unsaved", () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+  });
+
+  it("does not ask when the edit was undone, or about the wizard's own step links", () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    click(stepLink("Review & submit"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(heading()).toBe("Review & submit");
+    fireEvent.click(button("Back")!);
+    type("");
+    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(false);
+  });
+
+  it("Keep editing closes it, goes nowhere and keeps the edit", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    click(outsideLink("/repository"));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(push).not.toHaveBeenCalled();
+    expect(nameInput().value).toBe("Colorado");
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("Discard changes goes to the link without saving", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    click(outsideLink("/repository?q=wbm"));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard changes" }));
+    expect(push).toHaveBeenCalledWith("/repository?q=wbm");
+    await pause(1_200);
+    expect(updateSimulation).not.toHaveBeenCalled();
+    // Nothing asks about the navigation that is under way.
+    expect(click(outsideLink("/workspace"))).toBe(false);
+  });
+
+  it("Save draft saves it, then goes to the link", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    click(outsideLink("/repository"));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/repository"));
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+  });
+
+  it("stays when the save fails: the dialog closes, the edit and the failure are on the page", async () => {
+    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    wizard({ step: "run" });
+    type("Colorado");
+    click(outsideLink("/repository"));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText("Couldn't save")).toBeTruthy();
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("does not ask while the Delete dialog has saving suspended", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    await openDeleteDialog();
+    expect(screen.getByText("Saving is paused")).toBeTruthy();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+});
+
+describe("the status and the button for each state", () => {
+  it("failed: Couldn't save with Retry, which does not retry by itself", async () => {
+    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    wizard({ step: "run" });
+    type("Colorado");
+    pressSave();
+    expect(await screen.findByText("Couldn't save")).toBeTruthy();
+    await pause(3_000);
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+
+    updateSimulation.mockImplementation(fakeServer());
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("Couldn't save")).toBeNull());
+    expect(screen.getByText("Your changes are saved.")).toBeTruthy();
+  });
+
+  it("refused: names the field, and the button is off with its reason", async () => {
+    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Too many cores", status: 422, fields: ["slurm_config.cores"] });
+    wizard({ step: "run" });
+    type("Colorado");
+    pressSave();
+    expect(await screen.findByRole("button", { name: /^fix / })).toBeTruthy();
+    expect(saveButtons()[0].disabled).toBe(true);
+    expect(saveButtons()[0].closest("span[title]")?.getAttribute("title")).toBe("Fix the settings that can't be saved first");
   });
 });
 
@@ -499,7 +763,7 @@ describe("when the draft cannot be saved", () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "session_expired" });
     wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Review & submit"));
+    pressSave();
     expect(await screen.findByText("Your session has expired.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
     fireEvent.click(stepLink("Run settings"));
@@ -510,7 +774,7 @@ describe("when the draft cannot be saved", () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Only drafts can be edited", status: 409 });
     wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Review & submit"));
+    pressSave();
     const banner = await screen.findByText("This simulation was submitted or changed elsewhere");
     expect(banner.closest('[role="alert"]')).not.toBeNull();
     expect(refresh).not.toHaveBeenCalled();
@@ -522,7 +786,7 @@ describe("when the draft cannot be saved", () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "not_found" });
     wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Review & submit"));
+    pressSave();
     expect(await screen.findByText("This draft was deleted")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Go to My Simulations" }).getAttribute("href")).toBe("/workspace");
     expect(screen.getByText("Not saved")).toBeTruthy();
@@ -556,22 +820,26 @@ describe("deleting the draft", () => {
     expect(updateSimulation).not.toHaveBeenCalled();
   });
 
-  it("saves again when the dialog is cancelled", async () => {
+  it("allows saving again when the dialog is cancelled, and saves nothing by itself", async () => {
     wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
     // Nothing is saved behind an open Delete dialog.
-    await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
-    expect(screen.getByText("Auto-save is off")).toBeTruthy();
+    expect(screen.getByText("Saving is paused")).toBeTruthy();
+    expect(saveButtons()[0].disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await waitFor(() => expect(screen.getByText("Unsaved changes")).toBeTruthy());
+    await pause(1_500);
+    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(saveButtons()[0].disabled).toBe(false);
+    pressSave();
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
     expect(push).not.toHaveBeenCalled();
     expect(deleteSimulation).not.toHaveBeenCalled();
   });
 
-  it("saves again, and says why, when the delete is refused", async () => {
+  it("allows saving again, and says why, when the delete is refused", async () => {
     deleteSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Anvil can't be reached." });
     wizard({ step: "run" });
     type("Colorado");
@@ -579,7 +847,9 @@ describe("deleting the draft", () => {
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete draft" }));
     expect(await screen.findByText("Anvil can't be reached.")).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await waitFor(() => expect(screen.getByText("Unsaved changes")).toBeTruthy());
+    await pause(1_500);
+    expect(updateSimulation).not.toHaveBeenCalled();
   });
 });
 
@@ -706,10 +976,19 @@ describe("submitting", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(submitSimulation).not.toHaveBeenCalled();
-    // Cancelling leaves auto-save on.
+    // Cancelling leaves saving available, and sends nothing by itself.
     fireEvent.click(button("Back")!);
     type("Colorado 2");
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    await pause(1_200);
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    pressSave();
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+  });
+
+  it("says Submit saves the changes first, not that the draft saves itself", () => {
+    wizard();
+    expect(screen.getByText(/Submitting saves your changes first/)).toBeTruthy();
+    expect(screen.queryByText(/saves automatically/)).toBeNull();
   });
 
   it("opens the run's page when it goes through", async () => {
@@ -751,7 +1030,10 @@ describe("submitting", () => {
 
     fireEvent.click(edit);
     type("After the failure");
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    await pause(1_200);
+    expect(updateSimulation).not.toHaveBeenCalled();
+    pressSave();
+    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
     expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "After the failure", description: null } });
     expect(replace).not.toHaveBeenCalled();
   });
@@ -762,7 +1044,7 @@ describe("submitting", () => {
     wizard();
     confirm(await openSubmitDialog());
     await waitFor(() => expect(submitSimulation).toHaveBeenCalled());
-    expect(screen.getByText("Auto-save is off")).toBeTruthy();
+    expect(screen.getByText("Saving is paused")).toBeTruthy();
     await pause(1_000);
     expect(updateSimulation).not.toHaveBeenCalled();
     await act(async () => answer({ ok: true, data: SUBMITTED }));

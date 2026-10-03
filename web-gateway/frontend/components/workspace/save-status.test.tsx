@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { SaveStatus } from "@/components/workspace/save-status";
-import type { SaveState } from "@/lib/workspace/use-draft-autosave";
+import type { SaveState } from "@/lib/workspace/use-draft-saver";
 
 afterEach(cleanup);
 
@@ -36,9 +36,10 @@ describe("SaveStatus: the words", () => {
     expect(container.textContent).toContain("Saving…");
   });
 
-  it("retrying: says it is trying again, with no button", () => {
-    const { container } = show({ kind: "retrying", attempt: 2 });
-    expect(container.textContent).toContain("Couldn't save. Retrying…");
+  it("unsaved: says there are unsaved changes, with no button of its own and no failure look", () => {
+    const { container } = show({ kind: "unsaved" });
+    expect(container.textContent).toContain("Unsaved changes");
+    expect(container.textContent).not.toContain("Couldn't save");
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -80,9 +81,9 @@ describe("SaveStatus: the words", () => {
     expect(container.textContent).toContain("Not saved");
   });
 
-  it("suspended: says auto-save is off, not that anything failed", () => {
+  it("suspended: says saving is paused, not that anything failed", () => {
     const { container } = show({ kind: "suspended" });
-    expect(container.textContent).toContain("Auto-save is off");
+    expect(container.textContent).toContain("Saving is paused");
     expect(container.textContent).not.toContain("Couldn't save");
   });
 });
@@ -92,6 +93,7 @@ describe("SaveStatus: the live region", () => {
     const { rerender } = show({ kind: "saved", at: null });
     expect(live().textContent).toBe("");
     expect(live().className).toContain("sr-only");
+    rerender({ kind: "unsaved" });
     rerender({ kind: "saving" });
     rerender({ kind: "saved", at: "2026-10-01T12:00:01.000Z" });
     rerender({ kind: "saving" });
@@ -105,12 +107,12 @@ describe("SaveStatus: the live region", () => {
 
   it("announces entering a failure once, however the failure goes on", () => {
     const { rerender } = show({ kind: "saving" });
-    rerender({ kind: "retrying", attempt: 1 });
+    rerender({ kind: "failed", message: "x" });
     expect(live().textContent).toBe("Couldn't save your changes.");
 
     // Still failing: the same announcement stays, nothing new is spoken.
-    rerender({ kind: "retrying", attempt: 2 });
-    rerender({ kind: "failed", message: "x" });
+    rerender({ kind: "unsaved" });
+    rerender({ kind: "failed", message: "y" });
     expect(live().textContent).toBe("Couldn't save your changes.");
   });
 

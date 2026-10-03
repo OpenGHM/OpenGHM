@@ -18,19 +18,17 @@ import {
 } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
 
-/** How long to wait before the 1st, 2nd, ... retry of a save that got no
- *  answer. After the last one the save is reported as failed, with a Retry. */
-export const RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
-
 export type SaveState =
   /** The server holds what is on screen; `at` is its `updated_at`. */
   | { kind: "saved"; at: string | null }
-  /** A change is waiting for its pause, or a request is out. */
+  /** Something on screen is not saved and nothing is being sent: the person
+   *  has to save (`flush()`). */
+  | { kind: "unsaved" }
+  /** A request is out. */
   | { kind: "saving" }
-  /** The last request got no answer; the next attempt is already scheduled. */
-  | { kind: "retrying"; attempt: number }
-  /** Every attempt failed, or the server refused the same change twice.
-   *  `retry()` tries again; so does the next edit. */
+  /** The last save did not go through (no answer, a 5xx, a timeout), or the
+   *  server refused the same change twice. Nothing is retried by itself:
+   *  `retry()` or `flush()` tries again. */
   | { kind: "failed"; message: string }
   /** Everything that may be saved is, but these fields are not: they fail a
    *  check or the server refused them. Nothing to retry; the field changes. */
@@ -47,8 +45,13 @@ export type FlushResult =
   | { ok: true; job: Job; withheld: DraftField[] }
   | { ok: false };
 
-interface UseDraftAutosave {
+interface UseDraftSaver {
   state: SaveState;
+  /** True while there is something the server does not hold and a save would
+   *  put there, or could not: a difference waiting to be sent, a request out, a
+   *  withheld field, a failed save. False when suspended or disabled, since
+   *  nothing is owed then. What a "leave this page?" prompt asks about. */
+  unsaved: boolean;
   /** The last job the server answered with: the baseline. Never the local copy. */
   saved: Job;
   /** What the server said about a field it did not take, by field. */
@@ -59,28 +62,26 @@ interface UseDraftAutosave {
   /** Fields whose local value is not saved and will not be until it changes. */
   withheld: DraftField[];
   /** Save now, and resolve once nothing is in flight or waiting. `ok: false`
-   *  when the save failed or auto-save has stopped; `withheld` says what the
-   *  `job` it returns does not hold. */
+   *  when the save failed or saving has stopped; `withheld` says what the
+   *  `job` it returns does not hold. The only thing that sends anything. */
   flush: () => Promise<FlushResult>;
   /** Stop saving, for a Delete or a Submit that takes over. A request already
    *  out is let finish. */
   suspend: () => void;
-  /** Start saving again after `suspend()`, for a Delete that was cancelled or a
-   *  Submit that did not go through. Whatever changed meanwhile is saved after
-   *  the usual pause. Does nothing when not suspended. */
+  /** Allow saving again after `suspend()`, for a Delete that was cancelled or a
+   *  Submit that did not go through. Sends nothing by itself. Does nothing when
+   *  not suspended. */
   resume: () => void;
-  /** Try again after a failure or an expired session. */
+  /** Save again after a failure or an expired session: what the Retry button does. */
   retry: () => void;
 }
 
 type Halt = "session-expired" | "conflict" | "gone";
 
 interface Failure {
-  attempts: number;
   message: string;
   /** The local copy it happened for: an edit makes it stale. */
   localKey: string;
-  final: boolean;
 }
 
 /** What the save loop has learned; the render reads it, the loop writes it. */
@@ -101,19 +102,19 @@ interface Latest {
   ctx: DraftContext;
   localKey: string;
   disabled: boolean;
-  debounceMs: number;
 }
 
-/** Statuses worth trying again: no answer, the server failing, or asking us to
- *  slow down. Any other 4xx is an answer, and sending the same thing again
- *  would only be answered the same way. */
+/** Statuses that mean "try again later": no answer, the server failing, or
+ *  asking us to slow down. Any other 4xx is an answer, and sending the same
+ *  thing again would only be answered the same way. */
 const isRetryable = (status: number | undefined) =>
   status === undefined || status >= 500 || status === 408 || status === 429;
 
 /**
- * The save loop, apart from React so that its timers and its one request in
- * flight are plain variables. It also holds the `Engine` the screen reads, as
- * an external store: `subscribe` and `getEngine` are for `useSyncExternalStore`.
+ * The save loop, apart from React so that its one request in flight is a plain
+ * variable. It also holds the `Engine` the screen reads, as an external store:
+ * `subscribe` and `getEngine` are for `useSyncExternalStore`. Nothing in it
+ * starts by itself: every request begins in `flush()`.
  */
 function createSaver(initialSaved: Job, initialLatest: Latest) {
   let engine: Engine = {
@@ -126,33 +127,19 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
     stall: null,
   };
   let latest = initialLatest;
-  let mounted = false;
   const listeners = new Set<() => void>();
   const host = {
     engine: () => engine,
     latest: () => latest,
-    mounted: () => mounted,
     commit(change: Partial<Engine>) {
       engine = { ...engine, ...change };
       listeners.forEach((listener) => listener());
     },
   };
 
-  let debounce: ReturnType<typeof setTimeout> | null = null;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let draining: Promise<boolean> | null = null;
-  let failures = 0;
   let lastOk: { patchKey: string; localKey: string } | null = null;
   let lastRefused: string | null = null;
-
-  const clearDebounce = () => {
-    if (debounce) clearTimeout(debounce);
-    debounce = null;
-  };
-  const clearRetry = () => {
-    if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = null;
-  };
 
   const diff = () => {
     const { local, ctx } = host.latest();
@@ -181,14 +168,15 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
       // typed, and sending it again would never settle.
       if (lastOk && lastOk.patchKey === patchKey && lastOk.localKey === localKey) {
         console.error(
-          "Draft auto-save stopped: the server's copy still differs from this draft after saving the same change.",
+          "Draft save stopped: the server's copy still differs from this draft after saving the same change.",
           patch
         );
         host.commit({ stall: { patchKey, localKey } });
         return true;
       }
 
-      host.commit({ inflight: true });
+      // A new attempt: the last failure is history until this one says otherwise.
+      host.commit({ inflight: true, failure: null });
       let result: ActionResult<Job>;
       try {
         result = await updateSimulation(latest.jobId, patch);
@@ -204,12 +192,9 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
         writeDraftCache(result.data);
         lastOk = { patchKey, localKey };
         lastRefused = null;
-        failures = 0;
         // The response is the new baseline and nothing else: the local copy is
         // what the person is typing into and is never overwritten by it.
         host.commit({ saved: result.data, failure: null, inflight: false, stall: null });
-        // An edit made while this request was out has its own pause to wait for.
-        if (debounce) return true;
         continue;
       }
 
@@ -229,22 +214,8 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
       }
 
       if (isRetryable(result.status)) {
-        failures += 1;
-        const final = failures > RETRY_DELAYS_MS.length;
-        host.commit({
-          failure: {
-            attempts: failures,
-            message: result.message,
-            localKey: host.latest().localKey,
-            final,
-          },
-        });
-        if (!final && host.mounted()) {
-          retryTimer = setTimeout(() => {
-            retryTimer = null;
-            void ensureDrain();
-          }, RETRY_DELAYS_MS[failures - 1]);
-        }
+        // Not tried again by itself: the person presses Retry or Save.
+        host.commit({ failure: { message: result.message, localKey: host.latest().localKey } });
         return false;
       }
 
@@ -266,9 +237,7 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
             });
       if (lastRefused === patchKey) {
         // The same patch refused again, so the refusal did not take hold.
-        host.commit({
-          failure: { attempts: 0, message: result.message, localKey, final: true },
-        });
+        host.commit({ failure: { message: result.message, localKey } });
         return false;
       }
       lastRefused = patchKey;
@@ -289,24 +258,7 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
     return run;
   }
 
-  /** The local copy or what depends on it changed: wait for a pause. */
-  function changed() {
-    failures = 0;
-    clearRetry();
-    clearDebounce();
-    const engine = host.engine();
-    const latest = host.latest();
-    if (engine.suspended || engine.halt || latest.disabled) return;
-    if (!diff().patch) return;
-    debounce = setTimeout(() => {
-      debounce = null;
-      void ensureDrain();
-    }, latest.debounceMs);
-  }
-
   async function flush(): Promise<FlushResult> {
-    clearDebounce();
-    clearRetry();
     for (;;) {
       const ok = await ensureDrain();
       const engine = host.engine();
@@ -318,8 +270,7 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
         engine.stall?.localKey === localKey &&
         engine.stall.patchKey === fingerprint(patch);
       if (!patch || stalled) return { ok: true, job: engine.saved, withheld };
-      // Edited while this was running; the pause that edit started is over.
-      clearDebounce();
+      // Edited while this was running: that is part of this save too.
     }
   }
 
@@ -333,106 +284,64 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
     setLatest(next: Latest) {
       latest = next;
     },
-    setMounted(value: boolean) {
-      mounted = value;
-    },
-    changed,
     flush,
     retry() {
       const engine = host.engine();
       if (engine.suspended || engine.halt === "conflict" || engine.halt === "gone") return;
-      failures = 0;
       lastRefused = null;
-      clearRetry();
       host.commit({ halt: null, failure: null });
       void flush();
     },
-    online() {
-      if (!host.engine().failure) return;
-      failures = 0;
-      clearRetry();
-      void ensureDrain();
-    },
     suspend() {
-      clearDebounce();
-      clearRetry();
       host.commit({ suspended: true });
     },
     resume() {
       if (!host.engine().suspended) return;
-      failures = 0;
       host.commit({ suspended: false });
-      changed();
-    },
-    /** Unmounting: leave nothing behind, and send what is still owed. */
-    dispose() {
-      clearDebounce();
-      clearRetry();
-      const engine = host.engine();
-      if (engine.suspended || engine.halt || host.latest().disabled) return;
-      if (diff().patch) void ensureDrain();
     },
   };
 }
 
 /**
- * Saves a draft as it is edited (the draft wizard, ADR 0028). The caller owns
- * the local copy and says when it changes; this sends the difference from the
- * last saved job after a pause, one request at a time, and reports how that is
- * going. Nothing is saved on mount, and an answer never replaces `local`.
+ * Saves a stored draft when the person asks (the draft wizard, ADR 0028). The
+ * caller owns the local copy; this sends the difference from the last saved job
+ * when `flush()` is called (the Save draft button, Ctrl/Cmd+S, Submit, the
+ * leave dialog), one request at a time, and reports how that went. Nothing is
+ * ever sent by itself: not on a change, a pause, a step change, the tab being
+ * hidden, the page being left or unmounted, coming back online, or after a
+ * failure. An answer never replaces `local`.
  *
- * - **Pause.** `debounceMs` after the last change. `flush()` does not wait for
- *   it, and the page being hidden, left or unmounted does not either.
- * - **One request at a time.** A change made while one is out is sent after it,
- *   against the answer as the new baseline.
+ * - **One request at a time.** An edit made while a save is out is sent by the
+ *   same `flush()` afterwards, against the answer as the new baseline.
  * - **Answers.** Saved: the answer is the baseline. `run_start_not_aligned`:
  *   the start is refused, withheld and the rest sent again at once. Any other
  *   4xx (a 422 included): that group is withheld until it changes, no retry.
  *   401: stop (`session-expired`). 404: stop (`gone`). 409: stop (`conflict`).
- *   No answer, 5xx, 408 or 429: retry after 2, 4, 8, 16 and 30 s, then
- *   `failed`; going back online or the next edit tries again too.
- * - **`beforeunload`** is asked for only while something is unsaved.
+ *   No answer, 5xx, 408 or 429: `failed`, until `retry()` or `flush()`.
+ * - **`unsaved`** says whether leaving would lose something; the
+ *   `beforeunload` prompt is asked for only while it is true.
  */
-export function useDraftAutosave({
+export function useDraftSaver({
   jobId,
   initialSaved,
   local,
   ctx,
-  debounceMs = 800,
   disabled = false,
 }: {
   jobId: string;
   initialSaved: Job;
   local: DraftLocal;
   ctx: DraftContext;
-  debounceMs?: number;
-  /** Save nothing while true, e.g. while a submit is under way. */
+  /** Save nothing while true: the draft is not stored (a new simulation). */
   disabled?: boolean;
-}): UseDraftAutosave {
+}): UseDraftSaver {
   const localKey = useMemo(() => canonicalKey(local, ctx), [local, ctx]);
 
-  const [saver] = useState(() =>
-    createSaver(initialSaved, { jobId, local, ctx, localKey, disabled, debounceMs })
-  );
+  const [saver] = useState(() => createSaver(initialSaved, { jobId, local, ctx, localKey, disabled }));
   const engine = useSyncExternalStore(saver.subscribe, saver.getEngine, saver.getEngine);
   useEffect(() => {
-    saver.setLatest({ jobId, local, ctx, localKey, disabled, debounceMs });
+    saver.setLatest({ jobId, local, ctx, localKey, disabled });
   });
-
-  // A change to the draft, or to what is known about its snapshot (which can
-  // change the verdict on a start date), starts the pause again.
-  useEffect(() => {
-    saver.changed();
-  }, [saver, localKey, disabled, debounceMs, ctx.snapshotState, ctx.dataset?.id]);
-
-  // Leaving: the pause is not waited for.
-  useEffect(() => {
-    saver.setMounted(true);
-    return () => {
-      saver.setMounted(false);
-      saver.dispose();
-    };
-  }, [saver]);
 
   const flush = useCallback(() => saver.flush(), [saver]);
   const suspend = useCallback(() => saver.suspend(), [saver]);
@@ -449,25 +358,8 @@ export function useDraftAutosave({
     engine.stall.patchKey === fingerprint(patch);
   const pending = patch !== null && !stalled;
   const failure = engine.failure?.localKey === localKey ? engine.failure : null;
-  // A hook that is `disabled` saves nothing and owes nothing, so it asks nothing.
+  // A hook that is suspended or `disabled` saves nothing and owes nothing, so it asks nothing.
   const unsaved = !engine.suspended && !disabled && (pending || engine.inflight || withheld.length > 0 || failure !== null);
-
-  // Hidden or leaving: save at once, the pause is not waited for.
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") void saver.flush();
-    };
-    const onPageHide = () => void saver.flush();
-    const onOnline = () => saver.online();
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", onPageHide);
-    window.addEventListener("online", onOnline);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", onPageHide);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [saver]);
 
   // The browser's own "leave this page?" prompt, only while it matters.
   useEffect(() => {
@@ -483,9 +375,9 @@ export function useDraftAutosave({
   let state: SaveState;
   if (engine.halt) state = { kind: engine.halt };
   else if (engine.suspended || disabled) state = { kind: "suspended" };
-  else if (failure?.final) state = { kind: "failed", message: failure.message };
-  else if (failure) state = { kind: "retrying", attempt: failure.attempts };
-  else if (engine.inflight || pending) state = { kind: "saving" };
+  else if (failure) state = { kind: "failed", message: failure.message };
+  else if (engine.inflight) state = { kind: "saving" };
+  else if (pending) state = { kind: "unsaved" };
   else if (withheld.length > 0) {
     const message =
       errors[withheld[0]] ??
@@ -500,5 +392,5 @@ export function useDraftAutosave({
       ? { message: start.message, suggestion: start.suggestion }
       : null;
 
-  return { state, saved: engine.saved, serverErrors: errors, startRefusal, withheld, flush, suspend, resume, retry };
+  return { state, unsaved, saved: engine.saved, serverErrors: errors, startRefusal, withheld, flush, suspend, resume, retry };
 }

@@ -22,15 +22,18 @@ user typed.
 A first version of this decision stored a draft the moment a snapshot was
 picked and auto-saved every edit after it. That left an empty draft in My
 Simulations for every snapshot someone only looked at, and saved settings the
-person had not asked to keep. So a new simulation is now stored only when the
-person says so. Refresh and a closed tab still lose what was typed before that
-point, and the wizard asks before it lets that happen.
+person had not asked to keep. So nothing is saved until the person says so,
+for a new simulation and for a stored draft alike. Refresh and a closed tab
+lose what was typed since the last save, and the wizard asks before it lets
+that happen.
 
 ## Decision
 
-**A new simulation lives in the browser until the user saves it, with "Save as
-draft" or by submitting it. From then on it is a stored `DRAFT`, and the steps
-(Run settings, then Review & submit) edit that draft and save it as they go.**
+**Saving is always the user's button. A new simulation lives in the browser
+until the user saves it, with "Save as draft" or by submitting it. From then
+on it is a stored `DRAFT`, and the steps (Run settings, then Review & submit)
+edit that draft; its "Save draft" button writes the edits, and nothing writes
+them by itself.**
 
 - **Choose on the start screen, store on save, duplicate on the simulation's
   page.** The start screen (`/workspace/new`, step 1, "Choose a model snapshot")
@@ -79,10 +82,16 @@ draft" or by submitting it. From then on it is a stored `DRAFT`, and the steps
   submit area; nothing is edited there). There
   was a "Model & input" step between them; nothing on it could be changed, because
   the toolkit has no option for a different model input, so it was dropped, and
-  `?step=model` opens Run settings. **A stored draft** saves itself after a pause,
-  when the user changes step, and when the page is hidden or left; an unsaved new
-  simulation does not. Opening a draft from the list opens the same wizard, at
-  Review.
+  `?step=model` opens Run settings. **Nothing saves by itself**, new or stored: not
+  after a pause, not on a change of step, not when the page is hidden or left, and
+  a failed save is not retried. The header says where the draft stands ("Unsaved
+  changes", "Saving…", "Saved · time", "Couldn't save" with a Retry) next to a
+  "Save draft" button (Ctrl or Cmd + S does the same), and the button is off when
+  there is nothing to save. A stored draft asks before a link out of the wizard
+  loses unsaved changes, with Save draft, Discard changes and Keep editing, and
+  the browser's own prompt covers a reload; changing step inside the wizard never
+  asks. Submit saves first, then submits. Opening a draft from the list opens the
+  same wizard, at Review.
 - **The name is asked for first, and is optional.** Name and description are the
   first part of Run settings, the first screen of a new draft, and the Name takes
   focus there while the draft has none. The input is empty until the user names
@@ -100,9 +109,9 @@ draft" or by submitting it. From then on it is a stored `DRAFT`, and the steps
   A submit that lands between the check and the write cannot then be
   overwritten.
 - **Edits are not audited.** Creation (`simulation_derived`,
-  `simulation_duplicated`), submit and delete are. A save fires every few
-  seconds while someone types, and a draft is private to its owner, so its
-  history is not an operational fact.
+  `simulation_duplicated`), submit and delete are. A draft is private to its
+  owner and saved as often as they press the button, so its history is not an
+  operational fact.
 - **`about` merges key by key.** A save sends only the keys it owns (`name`
   and `description`); the stored keys it does not mention (creators, license,
   keywords, tags) are kept. A `null` key removes that key, and `about: null`
@@ -115,6 +124,7 @@ draft" or by submitting it. From then on it is a stored `DRAFT`, and the steps
 | Option | Why it lost |
 |---|---|
 | Keep local state until Review | A refresh or a closed tab loses the input, and the wizard stays a second editor of the same record. (Today's design keeps local state too, but in the same wizard that edits a stored draft, and the person chooses when it is stored.) |
+| Auto-save a stored draft after a pause (kept for stored drafts for a while after new simulations stopped doing it) | It saved settings the person had not asked to keep, and made "did I save?" a question about timers instead of a button. One rule is easier to explain: nothing is saved until Save |
 | Store a draft when a snapshot is picked, and auto-save it | Every snapshot someone only looked at became a draft in My Simulations, and settings were saved the person had not asked to keep (the first version of this decision) |
 | A separate "wizard draft" collection | A second place to keep a simulation, with its own conversion into the first. `jobs` already has a `DRAFT` status |
 | Save on every keystroke | It floods the backend, and Next runs server actions one at a time, so a Next click would queue behind a backlog of saves |

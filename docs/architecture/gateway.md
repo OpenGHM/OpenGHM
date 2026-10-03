@@ -205,7 +205,7 @@ init could not be read). The browser holds the same rule in
 wizard's Run settings step says it once, in one line under the two dates
 ("Start on January 1 · End on 2001-12-31 · Coverage 2000-01-01 → 2001-12-31",
 `web-gateway/frontend/lib/jobs/run-period.ts`); a start that breaks it is flagged in red under the
-Start field with the nearest valid one as a one-click "Use …"; auto-save does
+Start field with the nearest valid one as a one-click "Use …"; Save does
 not send such a start, and the submit area on Review lists it with a link to the
 field, which keeps Submit off.
 `PATCH /jobs/{id}` (when the start changes) and the submit (every start) answer

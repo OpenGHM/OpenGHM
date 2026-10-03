@@ -5,7 +5,7 @@
  * is the baseline it is compared with. `buildDraftPatch` takes the difference
  * and sends only the groups that differ, each whole, so an edit is one small
  * PATCH and a group that did not change is never rewritten. Nothing here
- * touches React or the network: `use-draft-autosave.ts` wires it to both.
+ * touches React or the network: `use-draft-saver.ts` wires it to both.
  *
  * Both sides are compared in `canonical` form (trimmed text, variables in the
  * snapshot's own order). Opening a draft therefore never saves, and a value the

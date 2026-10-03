@@ -15,24 +15,29 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Asked when someone with unsaved settings follows a link out of the new
- * simulation wizard: save them as a draft and go on, drop them and go on, or
- * stay. A controlled dialog that stays open while the save is in flight, like
+ * Asked when someone with unsaved settings follows a link out of the draft
+ * wizard: save them and go on, drop them and go on, or stay. For a simulation
+ * that is not stored yet, saving makes it a draft ("Save as draft"); for a
+ * stored draft it saves the changes ("Save draft"). A controlled dialog that stays open while the save is in flight, like
  * the app's other confirmations.
  */
 export function LeaveDraftDialog({
+  stored,
   open,
   saving,
   onSave,
   onDiscard,
   onKeep,
 }: {
+  /** The draft is stored already: its changes are what is unsaved. */
+  stored: boolean;
   open: boolean;
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
   onKeep: () => void;
 }) {
+  const saveLabel = stored ? "Save draft" : "Save as draft";
   return (
     <AlertDialog
       open={open}
@@ -44,8 +49,9 @@ export function LeaveDraftDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
           <AlertDialogDescription>
-            This simulation is not saved yet. If you leave now, the settings you chose are lost. Save it as a draft
-            to keep them in My Simulations.
+            {stored
+              ? "This draft has changes that are not saved. If you leave now, they are lost. Save the draft to keep them."
+              : "This simulation is not saved yet. If you leave now, the settings you chose are lost. Save it as a draft to keep them in My Simulations."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -78,7 +84,7 @@ export function LeaveDraftDialog({
                 Saving…
               </>
             ) : (
-              "Save as draft"
+              saveLabel
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

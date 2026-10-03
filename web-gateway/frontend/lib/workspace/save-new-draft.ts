@@ -10,7 +10,7 @@
  *   later save (a retry after a failed submit, Save as draft after Submit's
  *   flush) only sends what still differs. A save made while another is
  *   running waits for it, so no two calls can create two drafts.
- * - **Fill.** `buildDraftPatch` against the created draft, like auto-save. A
+ * - **Fill.** `buildDraftPatch` against the created draft, as saving a stored draft does. A
  *   refusal of one group (a 4xx that is not about the session or a conflict)
  *   is remembered and the rest is sent again, at most once per group.
  * - **Outcome.** Once the draft exists, a failure after that is not a failure
@@ -65,7 +65,7 @@ const MAX_PATCHES = 4;
 
 /** A 4xx that is the server declining this change, as opposed to a session
  *  that ended (401), a missing or changed draft (404, 409), or a request to
- *  try again later (408, 429). Same split as auto-save's. */
+ *  try again later (408, 429). Same split as the stored draft's saver. */
 function isRefusal(status: number | undefined): boolean {
   return status !== undefined && status >= 400 && status < 500 && ![401, 404, 408, 409, 429].includes(status);
 }

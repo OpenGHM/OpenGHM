@@ -7,7 +7,7 @@ vi.mock("@/lib/jobs/actions", () => ({ updateSimulation: vi.fn() }));
 import { updateSimulation } from "@/lib/jobs/actions";
 import { clearDraftCache, readDraftCache } from "@/lib/workspace/draft-cache";
 import { fromJob, type DraftContext, type DraftLocal } from "@/lib/workspace/draft-state";
-import { RETRY_DELAYS_MS, useDraftAutosave } from "@/lib/workspace/use-draft-autosave";
+import { useDraftSaver, type FlushResult } from "@/lib/workspace/use-draft-saver";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
 
 const update = vi.mocked(updateSimulation);
@@ -86,10 +86,10 @@ function deferred<T>() {
 
 const patches = () => update.mock.calls.map((call) => call[1]);
 
-function setup(job: Job = JOB, ctx: DraftContext = FOUND, options: { debounceMs?: number } = {}) {
+function setup(job: Job = JOB, ctx: DraftContext = FOUND) {
   const hook = renderHook(
     (props: { local: DraftLocal; disabled?: boolean }) =>
-      useDraftAutosave({ jobId: job.id, initialSaved: job, ctx, ...options, ...props }),
+      useDraftSaver({ jobId: job.id, initialSaved: job, ctx, ...props }),
     { initialProps: { local: fromJob(job) } as { local: DraftLocal; disabled?: boolean } }
   );
   const base = fromJob(job);
@@ -106,6 +106,21 @@ const wait = (ms: number) =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
+
+/** Press Save: `flush()` inside act, with what it answered. */
+async function save(result: { current: { flush: () => Promise<FlushResult> } }): Promise<FlushResult> {
+  let answer!: FlushResult;
+  await act(async () => {
+    answer = await result.current.flush();
+  });
+  return answer;
+}
+
+const prompted = () => {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
 
 const withCores = (local: DraftLocal, cores: number | null): DraftLocal => ({
   ...local,
@@ -126,95 +141,158 @@ afterEach(() => {
 });
 
 describe("when nothing was edited", () => {
-  it("saves nothing on mount, however long it waits", async () => {
+  it("is saved on mount, however long it waits, and sends nothing", async () => {
     const server = fakeServer();
     update.mockImplementation(server.impl);
     const { result } = setup();
     await wait(60_000);
     expect(update).not.toHaveBeenCalled();
     expect(result.current.state).toEqual({ kind: "saved", at: JOB.updated_at });
+    expect(result.current.unsaved).toBe(false);
     expect(result.current.saved).toBe(JOB);
   });
 
-  it("saves nothing for a draft whose variables are stored in another order than the snapshot's", async () => {
+  it("is saved for a draft whose variables are stored in another order than the snapshot's", async () => {
     const job = { ...JOB, parameters: { ...JOB.parameters, variables: ["runoff", "discharge"] } };
-    setup(job);
+    const { result } = setup(job);
     await wait(10_000);
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("saves nothing when the same local copy is passed again as a new object", async () => {
-    const { rerender } = setup();
-    rerender({ local: fromJob(JOB) });
-    await wait(10_000);
-    expect(update).not.toHaveBeenCalled();
-  });
-});
-
-describe("the pause", () => {
-  it("coalesces rapid edits into one PATCH, 800 ms after the last", async () => {
-    const server = fakeServer();
-    update.mockImplementation(server.impl);
-    const { result, name } = setup();
-
-    name("R");
-    await wait(300);
-    name("Ru");
-    await wait(300);
-    name("Run");
-    expect(result.current.state).toEqual({ kind: "saving" });
-    await wait(799);
-    expect(update).not.toHaveBeenCalled();
-    await wait(1);
-
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith("job-1", { about: { name: "Run", description: null } });
-    expect(result.current.state).toEqual({ kind: "saved", at: server.current.updated_at });
-    await wait(10_000);
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("honours another pause", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const { name } = setup(JOB, FOUND, { debounceMs: 100 });
-    name("Run");
-    await wait(99);
-    expect(update).not.toHaveBeenCalled();
-    await wait(1);
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("sends nothing for an edit that was undone before the pause ended", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const { name, result } = setup();
-    name("Run");
-    await wait(400);
-    name("");
-    await wait(5_000);
     expect(update).not.toHaveBeenCalled();
     expect(result.current.state.kind).toBe("saved");
   });
 
+  it("is saved when the same local copy is passed again as a new object", async () => {
+    const { rerender, result } = setup();
+    rerender({ local: fromJob(JOB) });
+    await wait(10_000);
+    expect(update).not.toHaveBeenCalled();
+    expect(result.current.unsaved).toBe(false);
+  });
+});
+
+describe("nothing is sent until flush", () => {
+  it("an edit is unsaved, and stays so however long it waits", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { result, name } = setup();
+    name("Run");
+    expect(result.current.state).toEqual({ kind: "unsaved" });
+    expect(result.current.unsaved).toBe(true);
+    await wait(10 * 60_000);
+    expect(update).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({ kind: "unsaved" });
+  });
+
+  it("rapid edits send nothing either", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { name } = setup();
+    for (const value of ["R", "Ru", "Run"]) {
+      name(value);
+      await wait(300);
+    }
+    await wait(5_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("the page being hidden, left, or coming back online sends nothing", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { name } = setup();
+    name("Run");
+    const state = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("pagehide"));
+      window.dispatchEvent(new Event("online"));
+    });
+    state.mockRestore();
+    await wait(60_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("unmounting sends nothing, and leaves no timer behind", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { name, unmount } = setup();
+    name("Run");
+    await act(async () => {
+      unmount();
+    });
+    await wait(60_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("an edit that was undone is not unsaved", async () => {
+    const { name, result } = setup();
+    name("Run");
+    expect(result.current.unsaved).toBe(true);
+    name("");
+    expect(result.current.state.kind).toBe("saved");
+    expect(result.current.unsaved).toBe(false);
+    await wait(5_000);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("flush", () => {
+  it("sends the difference once, at once, and says what the saved job holds", async () => {
+    const server = fakeServer();
+    update.mockImplementation(server.impl);
+    const { result, name } = setup();
+    for (const value of ["R", "Ru", "Run"]) name(value);
+
+    const flushed = await save(result);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith("job-1", { about: { name: "Run", description: null } });
+    expect(flushed).toEqual({ ok: true, job: server.current, withheld: [] });
+    expect(result.current.state).toEqual({ kind: "saved", at: server.current.updated_at });
+    expect(result.current.unsaved).toBe(false);
+    await wait(60_000);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it("saves the groups an edit touched and no others", async () => {
     update.mockImplementation(fakeServer().impl);
-    const { set, base } = setup();
+    const { result, set, base } = setup();
     set(withCores(base, 4));
-    await wait(800);
+    await save(result);
     expect(patches()).toEqual([{ slurm_config: { cores: 4, walltime: null } }]);
+  });
+
+  it("the answer is the baseline, never written over the local copy", async () => {
+    const server = fakeServer();
+    update.mockImplementation(server.impl);
+    const { result, name } = setup();
+    name("Run");
+    await save(result);
+    expect(result.current.saved).toBe(server.current);
+    expect(result.current.saved.updated_at).not.toBe(JOB.updated_at);
   });
 
   it("remembers the saved job for the back/forward cache", async () => {
     const server = fakeServer();
     update.mockImplementation(server.impl);
-    const { name } = setup();
+    const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     expect(readDraftCache("job-1")).toBe(server.current);
   });
-});
 
-describe("one request at a time", () => {
-  it("sends an edit made during a save afterwards, from the answer as the new baseline, and never writes the answer over the local copy", async () => {
+  it("sends nothing the second time when nothing changed since", async () => {
+    update.mockImplementation(fakeServer().impl);
+    const { result, name } = setup();
+    name("Run");
+    await save(result);
+    const again = await save(result);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(again.ok).toBe(true);
+  });
+
+  it("resolves with no request when nothing is owed", async () => {
+    const { result } = setup();
+    const flushed = await save(result);
+    expect(update).not.toHaveBeenCalled();
+    expect(flushed).toEqual({ ok: true, job: JOB, withheld: [] });
+  });
+
+  it("an edit made while it is out is sent by the same flush, from the answer as the new baseline", async () => {
     const first = deferred<ActionResult<Job>>();
     const server = fakeServer();
     update.mockImplementationOnce(async (id, patch) => {
@@ -225,14 +303,19 @@ describe("one request at a time", () => {
     const { result, set, base, name } = setup();
 
     name("Run");
-    await wait(800);
+    let flushed: unknown;
+    act(() => {
+      void result.current.flush().then((r) => (flushed = r));
+    });
+    await wait(0);
     expect(update).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: "saving" });
 
     // Typed while the first request is out.
     set({ ...base, name: "Run 2", slurm: { cores: 8, walltime: null } });
-    await wait(800);
+    await wait(5_000);
     expect(update).toHaveBeenCalledTimes(1);
+    expect(flushed).toBeUndefined();
 
     // The answer is a name the person has already changed.
     first.resolve({ ok: true, data: { ...server.current, about: { name: "Run" } } });
@@ -242,34 +325,12 @@ describe("one request at a time", () => {
       about: { name: "Run 2", description: null },
       slurm_config: { cores: 8, walltime: null },
     });
+    expect(flushed).toMatchObject({ ok: true, job: { about: { name: "Run 2" } } });
     expect(result.current.state.kind).toBe("saved");
     expect(server.current.about).toEqual({ name: "Run 2" });
   });
 
-  it("holds a change made during a save for its own pause when that is still running", async () => {
-    const first = deferred<ActionResult<Job>>();
-    const server = fakeServer();
-    update.mockImplementationOnce(async (id, patch) => {
-      await server.impl(id, patch);
-      return first.promise;
-    });
-    update.mockImplementation(server.impl);
-    const { set, base, name } = setup();
-
-    name("Run");
-    await wait(800);
-    set({ ...base, name: "Run 2" });
-    await wait(100);
-    first.resolve({ ok: true, data: server.current });
-    await wait(0);
-    expect(update).toHaveBeenCalledTimes(1);
-    await wait(699);
-    expect(update).toHaveBeenCalledTimes(1);
-    await wait(1);
-    expect(update).toHaveBeenCalledTimes(2);
-  });
-
-  it("never has two requests out at once", async () => {
+  it("never has two requests out at once, however many times it is pressed", async () => {
     const answers = [deferred<ActionResult<Job>>(), deferred<ActionResult<Job>>()];
     let out = 0;
     let most = 0;
@@ -283,11 +344,16 @@ describe("one request at a time", () => {
       out -= 1;
       return data;
     });
-    const { set, base } = setup();
+    const { result, set, base } = setup();
 
     set({ ...base, name: "a" });
-    await wait(800);
+    act(() => {
+      void result.current.flush();
+      void result.current.flush();
+    });
+    await wait(0);
     set({ ...base, name: "ab" });
+    act(() => void result.current.flush());
     await wait(5_000);
     expect(update).toHaveBeenCalledTimes(1);
 
@@ -297,77 +363,14 @@ describe("one request at a time", () => {
     answers[1].resolve({ ok: true, data: { ...JOB, about: { name: "ab" }, updated_at: "2026-10-01T12:00:02.000Z" } });
     await wait(0);
     expect(most).toBe(1);
-  });
-});
-
-describe("flush", () => {
-  it("saves at once without waiting for the pause, and says what the saved job holds", async () => {
-    const server = fakeServer();
-    update.mockImplementation(server.impl);
-    const { result, name } = setup();
-    name("Run");
-
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
-
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(flushed).toEqual({ ok: true, job: server.current, withheld: [] });
-    await wait(10_000);
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("resolves with no request when nothing is owed", async () => {
-    const { result } = setup();
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
-    expect(update).not.toHaveBeenCalled();
-    expect(flushed).toEqual({ ok: true, job: JOB, withheld: [] });
-  });
-
-  it("waits for a request that is out, and for the edit made behind it", async () => {
-    const first = deferred<ActionResult<Job>>();
-    const server = fakeServer();
-    update.mockImplementationOnce(async (id, patch) => {
-      await server.impl(id, patch);
-      return first.promise;
-    });
-    update.mockImplementation(server.impl);
-    const { result, set, base, name } = setup();
-
-    name("Run");
-    await wait(800);
-    set({ ...base, name: "Run 2" });
-
-    let done = false;
-    let flushed: unknown;
-    act(() => {
-      void result.current.flush().then((r) => {
-        done = true;
-        flushed = r;
-      });
-    });
-    await wait(0);
-    expect(done).toBe(false);
-
-    first.resolve({ ok: true, data: server.current });
-    await wait(0);
-    expect(done).toBe(true);
     expect(update).toHaveBeenCalledTimes(2);
-    expect(flushed).toMatchObject({ ok: true, job: { about: { name: "Run 2" } } });
   });
 
   it("lists what the saved job does not hold", async () => {
     update.mockImplementation(fakeServer().impl);
     const { result, set, base } = setup();
     set({ ...withCores(base, 0), name: "Run" });
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
+    const flushed = await save(result);
     expect(patches()).toEqual([{ about: { name: "Run", description: null } }]);
     expect(flushed).toMatchObject({ ok: true, withheld: ["cores"] });
   });
@@ -376,65 +379,18 @@ describe("flush", () => {
     update.mockResolvedValue(failure(503));
     const { result, name } = setup();
     name("Run");
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
-    expect(flushed).toEqual({ ok: false });
-  });
-
-  it("is saved when the page is hidden", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const { name } = setup();
-    name("Run");
-    const state = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    await act(async () => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    expect(update).toHaveBeenCalledTimes(1);
-    state.mockRestore();
-  });
-
-  it("is saved on pagehide, and on unmount", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const first = setup();
-    first.name("Run");
-    await act(async () => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-    expect(update).toHaveBeenCalledTimes(1);
-
-    update.mockClear();
-    const second = setup();
-    second.name("Run");
-    await act(async () => {
-      second.unmount();
-    });
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("leaves no timer behind when it unmounts with nothing owed", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const { name, unmount } = setup();
-    name("Run");
-    await wait(800);
-    update.mockClear();
-    unmount();
-    await wait(60_000);
-    expect(update).not.toHaveBeenCalled();
+    expect(await save(result)).toEqual({ ok: false });
   });
 });
 
 describe("what the server answers", () => {
-  it("ok: the answer is the baseline, and the state says when it was saved", async () => {
+  it("ok: the state says when it was saved", async () => {
     const server = fakeServer();
     update.mockImplementation(server.impl);
     const { result, name } = setup();
     name("Run");
-    await wait(800);
-    expect(result.current.saved).toBe(server.current);
+    await save(result);
     expect(result.current.state).toEqual({ kind: "saved", at: server.current.updated_at });
-    expect(result.current.saved.updated_at).not.toBe(JOB.updated_at);
   });
 
   describe("422 run_start_not_aligned", () => {
@@ -455,7 +411,7 @@ describe("what the server answers", () => {
         ...base,
         parameters: { ...base.parameters, temporal_range_start: "2001-03-15", temporal_range_end: "2002-12-31" },
       });
-      await wait(800);
+      await save(result);
 
       expect(update).toHaveBeenCalledTimes(2);
       expect(patches()[0]!.parameters).toMatchObject({ temporal_range_start: "2001-03-15", temporal_range_end: "2002-12-31" });
@@ -470,6 +426,7 @@ describe("what the server answers", () => {
         fields: ["start"],
         message: MESSAGE,
       });
+      expect(result.current.unsaved).toBe(true);
     });
 
     it("is not asked again for the same start, and clears when the start changes", async () => {
@@ -483,17 +440,18 @@ describe("what the server answers", () => {
       });
 
       set(withStart("2001-03-15"));
-      await wait(800);
+      await save(result);
       // Nothing else to send: the refused start stays withheld and costs nothing.
       expect(update).toHaveBeenCalledTimes(1);
-      await wait(60_000);
+      await save(result);
       expect(update).toHaveBeenCalledTimes(1);
       expect(result.current.startRefusal).not.toBeNull();
 
       set(withStart("2002-01-01"));
       expect(result.current.startRefusal).toBeNull();
       expect(result.current.serverErrors.start).toBeUndefined();
-      await wait(800);
+      expect(result.current.state).toEqual({ kind: "unsaved" });
+      await save(result);
       expect(update).toHaveBeenCalledTimes(2);
       expect(patches()[1]!.parameters).toMatchObject({ temporal_range_start: "2002-01-01" });
       expect(result.current.state.kind).toBe("saved");
@@ -503,6 +461,7 @@ describe("what the server answers", () => {
       update.mockResolvedValue(refusal);
       const { result, set, base } = setup(JOB, UNCHECKED);
       set({ ...base, parameters: { ...base.parameters, temporal_range_end: "2002-12-31" } });
+      await save(result);
       await wait(10_000);
       expect(update.mock.calls.length).toBeLessThanOrEqual(2);
       expect(result.current.state.kind).toBe("failed");
@@ -519,7 +478,7 @@ describe("what the server answers", () => {
       const { result, set, base } = setup();
 
       set({ ...withCores(base, 99), name: "Run" });
-      await wait(800);
+      await save(result);
 
       expect(patches()).toEqual([
         { slurm_config: { cores: 99, walltime: null }, about: { name: "Run", description: null } },
@@ -538,11 +497,11 @@ describe("what the server answers", () => {
       update.mockImplementation(server.impl);
       const { result, set, base } = setup();
       set(withCores(base, 99));
-      await wait(800);
+      await save(result);
       expect(result.current.state.kind).toBe("refused");
 
       set(withCores(base, 64));
-      await wait(800);
+      await save(result);
       expect(patches()[1]).toEqual({ slurm_config: { cores: 64, walltime: null } });
       expect(result.current.state.kind).toBe("saved");
       expect(result.current.serverErrors).toEqual({});
@@ -552,6 +511,7 @@ describe("what the server answers", () => {
       update.mockResolvedValue(failure(422, { message: "no" }));
       const { result, set, base } = setup();
       set({ ...withCores(base, 4), name: "Run" });
+      await save(result);
       await wait(10_000);
       expect(update).toHaveBeenCalledTimes(1);
       expect(result.current.withheld).toEqual(["cores", "walltime", "name", "description"]);
@@ -561,6 +521,7 @@ describe("what the server answers", () => {
       update.mockResolvedValue(failure(403));
       const { result, name } = setup();
       name("Run");
+      await save(result);
       await wait(120_000);
       expect(update).toHaveBeenCalledTimes(1);
       expect(result.current.state.kind).toBe("refused");
@@ -571,10 +532,11 @@ describe("what the server answers", () => {
     update.mockResolvedValue({ ok: false, reason: "session_expired" });
     const { result, name, set, base } = setup();
     name("Run");
-    await wait(800);
+    expect(await save(result)).toEqual({ ok: false });
     expect(result.current.state).toEqual({ kind: "session-expired" });
 
     set({ ...base, name: "Run 2" });
+    expect(await save(result)).toEqual({ ok: false });
     await wait(120_000);
     expect(update).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: "session-expired" });
@@ -586,7 +548,7 @@ describe("what the server answers", () => {
     update.mockImplementation(server.impl);
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     await act(async () => result.current.retry());
     expect(update).toHaveBeenCalledTimes(2);
     expect(result.current.state.kind).toBe("saved");
@@ -596,11 +558,10 @@ describe("what the server answers", () => {
     update.mockResolvedValue(failure(409, { code: "not_a_draft", message: "Only a draft can be edited." }));
     const { result, name, set, base } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     expect(result.current.state).toEqual({ kind: "conflict" });
 
     set({ ...base, name: "Run 2" });
-    await wait(60_000);
     await act(async () => result.current.retry());
     expect(update).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: "conflict" });
@@ -610,189 +571,170 @@ describe("what the server answers", () => {
     update.mockResolvedValue({ ok: false, reason: "not_found" });
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     expect(result.current.state).toEqual({ kind: "gone" });
-    await wait(120_000);
+    await save(result);
     expect(update).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("no answer, a 5xx, a timeout", () => {
-  it("retries after 2, 4, 8, 16 and 30 seconds, then reports a failure", async () => {
-    expect([...RETRY_DELAYS_MS]).toEqual([2_000, 4_000, 8_000, 16_000, 30_000]);
+  it("fails and says so, and is not tried again by itself, however long it waits", async () => {
     update.mockResolvedValue(failure(503));
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    expect(await save(result)).toEqual({ ok: false });
     expect(update).toHaveBeenCalledTimes(1);
-    expect(result.current.state).toEqual({ kind: "retrying", attempt: 1 });
-
-    let calls = 1;
-    for (const [i, delay] of [2_000, 4_000, 8_000, 16_000, 30_000].entries()) {
-      await wait(delay - 1);
-      expect(update).toHaveBeenCalledTimes(calls);
-      await wait(1);
-      calls += 1;
-      expect(update).toHaveBeenCalledTimes(calls);
-      if (i < 4) expect(result.current.state).toEqual({ kind: "retrying", attempt: i + 2 });
-    }
-
     expect(result.current.state).toEqual({ kind: "failed", message: "failed 503" });
-    await wait(300_000);
-    expect(update).toHaveBeenCalledTimes(6);
+    expect(result.current.unsaved).toBe(true);
+    await wait(10 * 60_000);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toEqual({ kind: "failed", message: "failed 503" });
   });
 
-  it("treats a request that throws, and one with no status, the same way", async () => {
+  it("treats a request that throws, one with no status, a 408 and a 429 the same way", async () => {
     update.mockRejectedValueOnce(new Error("network down"));
     update.mockResolvedValueOnce(failure(undefined));
-    update.mockImplementation(fakeServer().impl);
-    const { result, name } = setup();
-    name("Run");
-    await wait(800);
-    expect(result.current.state).toEqual({ kind: "retrying", attempt: 1 });
-    await wait(2_000);
-    expect(result.current.state).toEqual({ kind: "retrying", attempt: 2 });
-    await wait(4_000);
-    expect(update).toHaveBeenCalledTimes(3);
-    expect(result.current.state.kind).toBe("saved");
-  });
-
-  it("retries a 408 and a 429", async () => {
-    update.mockResolvedValueOnce(failure(429));
     update.mockResolvedValueOnce(failure(408));
-    update.mockImplementation(fakeServer().impl);
+    update.mockResolvedValueOnce(failure(429));
     const { result, name } = setup();
     name("Run");
-    await wait(800 + 2_000 + 4_000);
-    expect(update).toHaveBeenCalledTimes(3);
-    expect(result.current.state.kind).toBe("saved");
+    await save(result);
+    expect(result.current.state).toEqual({ kind: "failed", message: "network down" });
+    await save(result);
+    expect(result.current.state).toEqual({ kind: "failed", message: "failed without a status" });
+    await save(result);
+    expect(result.current.state.kind).toBe("failed");
+    await save(result);
+    expect(result.current.state.kind).toBe("failed");
+    expect(update).toHaveBeenCalledTimes(4);
   });
 
-  it("recovers: a later success clears the failure and the count starts again", async () => {
-    update.mockResolvedValueOnce(failure(503));
-    update.mockImplementation(fakeServer().impl);
-    const { result, name } = setup();
-    name("Run");
-    await wait(800 + 2_000);
-    expect(result.current.state.kind).toBe("saved");
-    update.mockResolvedValueOnce(failure(503));
-    name("Run again");
-    await wait(800);
-    expect(result.current.state).toEqual({ kind: "retrying", attempt: 1 });
-  });
-
-  it("retry() tries at once after a failure and counts from the start", async () => {
+  it("retry() tries once, at once, and recovers when the server is back", async () => {
     update.mockResolvedValue(failure(503));
     const { result, name } = setup();
     name("Run");
-    await wait(800 + 2_000 + 4_000 + 8_000 + 16_000 + 30_000);
+    await save(result);
     expect(result.current.state.kind).toBe("failed");
-    expect(update).toHaveBeenCalledTimes(6);
 
     update.mockImplementation(fakeServer().impl);
     await act(async () => result.current.retry());
-    expect(update).toHaveBeenCalledTimes(7);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(result.current.state.kind).toBe("saved");
+    await wait(60_000);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("retry() that fails again fails again, and waits to be pressed once more", async () => {
+    update.mockResolvedValue(failure(503));
+    const { result, name } = setup();
+    name("Run");
+    await save(result);
+    await act(async () => result.current.retry());
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(result.current.state.kind).toBe("failed");
+    await wait(10 * 60_000);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("flush tries again too, and is saving while it does, not failed", async () => {
+    update.mockResolvedValueOnce(failure(503));
+    const answer = deferred<ActionResult<Job>>();
+    update.mockReturnValueOnce(answer.promise);
+    const { result, name } = setup();
+    name("Run");
+    await save(result);
+    expect(result.current.state.kind).toBe("failed");
+
+    act(() => void result.current.flush());
+    await wait(0);
+    expect(result.current.state).toEqual({ kind: "saving" });
+    await act(async () => answer.resolve({ ok: true, data: { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" } }));
     expect(result.current.state.kind).toBe("saved");
   });
 
-  it("the next edit saves after its own pause instead of waiting out the back-off", async () => {
+  it("the next edit makes the failure stale: unsaved again, with nothing sent", async () => {
     update.mockResolvedValueOnce(failure(503));
     update.mockImplementation(fakeServer().impl);
     const { result, set, base } = setup();
     set({ ...base, name: "Run" });
-    await wait(800);
-    expect(update).toHaveBeenCalledTimes(1);
+    await save(result);
+    expect(result.current.state.kind).toBe("failed");
 
     set({ ...base, name: "Run 2" });
-    expect(result.current.state).toEqual({ kind: "saving" });
-    await wait(800);
-    expect(update).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toEqual({ kind: "unsaved" });
+    await wait(60_000);
+    expect(update).toHaveBeenCalledTimes(1);
+    await save(result);
     expect(patches()[1]).toMatchObject({ about: { name: "Run 2" } });
     expect(result.current.state.kind).toBe("saved");
-    await wait(60_000);
-    expect(update).toHaveBeenCalledTimes(2);
   });
 
-  it("going back online tries at once", async () => {
+  it("going back online does not try", async () => {
     update.mockResolvedValueOnce(failure(undefined));
     update.mockImplementation(fakeServer().impl);
     const { result, name } = setup();
     name("Run");
-    await wait(800);
-    expect(update).toHaveBeenCalledTimes(1);
-
+    await save(result);
     await act(async () => {
       window.dispatchEvent(new Event("online"));
     });
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(result.current.state.kind).toBe("saved");
     await wait(60_000);
-    expect(update).toHaveBeenCalledTimes(2);
-  });
-
-  it("going online with nothing wrong sends nothing", async () => {
-    setup();
-    await act(async () => {
-      window.dispatchEvent(new Event("online"));
-    });
-    expect(update).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(result.current.state.kind).toBe("failed");
   });
 });
 
 describe("beforeunload", () => {
-  const prompted = () => {
-    const event = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(event);
-    return event.defaultPrevented;
-  };
-
   it("is asked for only while something is unsaved", async () => {
     update.mockImplementation(fakeServer().impl);
-    const { name } = setup();
+    const { result, name } = setup();
     expect(prompted()).toBe(false);
 
     name("Run");
     expect(prompted()).toBe(true);
-    await wait(800);
+    await save(result);
     expect(prompted()).toBe(false);
   });
 
   it("is asked for while a request is out", async () => {
     const answer = deferred<ActionResult<Job>>();
     update.mockReturnValue(answer.promise);
-    const { name } = setup();
+    const { result, name } = setup();
     name("Run");
-    await wait(800);
-    expect(prompted()).toBe(true);
-    answer.resolve({ ok: true, data: { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" } });
+    act(() => void result.current.flush());
     await wait(0);
+    expect(prompted()).toBe(true);
+    await act(async () =>
+      answer.resolve({ ok: true, data: { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" } })
+    );
     expect(prompted()).toBe(false);
   });
 
-  it("is asked for while a value is withheld, and while a save is failing", async () => {
+  it("is asked for while a value is withheld", async () => {
     update.mockImplementation(fakeServer().impl);
-    const { set, base } = setup();
+    const { set, base, result } = setup();
     set(withCores(base, 0));
-    await wait(800);
+    expect(result.current.state.kind).toBe("refused");
     expect(update).not.toHaveBeenCalled();
     expect(prompted()).toBe(true);
     set(withCores(base, 4));
-    await wait(800);
+    await save(result);
     expect(prompted()).toBe(false);
   });
 
   it("is asked for after a failure and not once saved again", async () => {
     update.mockResolvedValueOnce(failure(503));
     update.mockImplementation(fakeServer().impl);
-    const { name } = setup();
+    const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     expect(prompted()).toBe(true);
-    await wait(2_000);
+    await save(result);
     expect(prompted()).toBe(false);
   });
 
-  it("is not added when the hook unmounts", async () => {
+  it("is not left behind when the hook unmounts", async () => {
     const { name, unmount } = setup();
     name("Run");
     expect(prompted()).toBe(true);
@@ -802,33 +744,19 @@ describe("beforeunload", () => {
 });
 
 describe("suspend", () => {
-  it("stops all saving, including an edit that was waiting for its pause", async () => {
+  it("stops saving: flush does nothing, the state says so and nothing is owed", async () => {
     update.mockImplementation(fakeServer().impl);
     const { result, name, set, base } = setup();
     name("Run");
     act(() => result.current.suspend());
-    await wait(10_000);
-    expect(update).not.toHaveBeenCalled();
     expect(result.current.state).toEqual({ kind: "suspended" });
-
+    expect(result.current.unsaved).toBe(false);
+    expect(await save(result)).toEqual({ ok: false });
     set({ ...base, name: "Run 2" });
-    await wait(10_000);
+    expect(await save(result)).toEqual({ ok: false });
     expect(update).not.toHaveBeenCalled();
-  });
-
-  it("flush no longer saves, and the page stops asking before leaving", async () => {
-    const { result, name } = setup();
-    name("Run");
-    act(() => result.current.suspend());
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
-    expect(flushed).toEqual({ ok: false });
-    expect(update).not.toHaveBeenCalled();
-    const event = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
+    // The page stops asking before leaving.
+    expect(prompted()).toBe(false);
   });
 
   it("lets a request that is out finish, and sends nothing after it", async () => {
@@ -836,55 +764,46 @@ describe("suspend", () => {
     update.mockReturnValue(answer.promise);
     const { result, name, set, base } = setup();
     name("Run");
-    await wait(800);
+    act(() => void result.current.flush());
+    await wait(0);
     act(() => result.current.suspend());
     set({ ...base, name: "Run 2" });
     const saved = { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" };
-    answer.resolve({ ok: true, data: saved });
+    await act(async () => answer.resolve({ ok: true, data: saved }));
     await wait(10_000);
     expect(update).toHaveBeenCalledTimes(1);
     expect(result.current.saved).toBe(saved);
   });
 
-  it("does not retry a save that failed after it", async () => {
+  it("does not note a failure that came after it", async () => {
     const answer = deferred<ActionResult<Job>>();
     update.mockReturnValue(answer.promise);
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    act(() => void result.current.flush());
+    await wait(0);
     act(() => result.current.suspend());
-    answer.resolve(failure(503));
+    await act(async () => answer.resolve(failure(503)));
     await wait(120_000);
     expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not unmount-save either", async () => {
-    const { result, name, unmount } = setup();
-    name("Run");
-    act(() => result.current.suspend());
-    unmount();
-    await wait(1_000);
-    expect(update).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({ kind: "suspended" });
   });
 });
 
 describe("resume", () => {
-  it("saves again after a suspend, including what was edited meanwhile", async () => {
+  it("allows saving again and sends nothing by itself: the edit made meanwhile is unsaved until flush", async () => {
     const server = fakeServer();
     update.mockImplementation(server.impl);
     const { result, name } = setup();
     name("Run");
     act(() => result.current.suspend());
-    await wait(10_000);
+    act(() => result.current.resume());
+    expect(result.current.state).toEqual({ kind: "unsaved" });
+    await wait(60_000);
     expect(update).not.toHaveBeenCalled();
 
-    act(() => result.current.resume());
-    expect(result.current.state).toEqual({ kind: "saving" });
-    await wait(799);
-    expect(update).not.toHaveBeenCalled();
-    await wait(1);
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(patches()[0]).toEqual({ about: { name: "Run", description: null } });
+    await save(result);
+    expect(patches()).toEqual([{ about: { name: "Run", description: null } }]);
     expect(result.current.state.kind).toBe("saved");
   });
 
@@ -898,51 +817,20 @@ describe("resume", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("lets flush save again", async () => {
-    update.mockImplementation(fakeServer().impl);
+  it("does nothing when it was not suspended", async () => {
     const { result, name } = setup();
     name("Run");
-    act(() => result.current.suspend());
     act(() => result.current.resume());
-    let flushed!: Awaited<ReturnType<typeof result.current.flush>>;
-    await act(async () => {
-      flushed = await result.current.flush();
-    });
-    expect(flushed.ok).toBe(true);
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("does nothing when it was not suspended, so a pending pause is not restarted", async () => {
-    update.mockImplementation(fakeServer().impl);
-    const { result, name } = setup();
-    name("Run");
-    await wait(500);
-    act(() => result.current.resume());
-    await wait(300);
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  it("lets a request that was out when it was suspended finish first, then sends the rest", async () => {
-    const answer = deferred<ActionResult<Job>>();
-    update.mockReturnValueOnce(answer.promise);
-    update.mockImplementation(fakeServer().impl);
-    const { result, name, set, base } = setup();
-    name("Run");
-    await wait(800);
-    act(() => result.current.suspend());
-    set({ ...base, name: "Run 2" });
-    act(() => result.current.resume());
-    answer.resolve({ ok: true, data: { ...JOB, about: { name: "Run" }, updated_at: "2026-10-01T12:00:05.000Z" } });
-    await wait(1_000);
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(patches()[1]).toEqual({ about: { name: "Run 2", description: null } });
+    await wait(60_000);
+    expect(update).not.toHaveBeenCalled();
+    expect(result.current.state).toEqual({ kind: "unsaved" });
   });
 
   it("does not undo a halt: a deleted draft stays deleted", async () => {
     update.mockResolvedValue({ ok: false, reason: "not_found" });
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     expect(result.current.state).toEqual({ kind: "gone" });
     act(() => result.current.suspend());
     act(() => result.current.resume());
@@ -951,25 +839,28 @@ describe("resume", () => {
 });
 
 describe("disabled", () => {
-  it("saves nothing while it is on, and the edits made meanwhile when it goes off", async () => {
+  it("saves nothing while it is on, flush included, and flush works once it is off", async () => {
     update.mockImplementation(fakeServer().impl);
     const { result, set, base } = setup();
     set({ ...base, name: "Run" }, true);
     await wait(10_000);
     expect(update).not.toHaveBeenCalled();
     expect(result.current.state).toEqual({ kind: "suspended" });
+    expect(await save(result)).toEqual({ ok: false });
+    expect(update).not.toHaveBeenCalled();
 
     set({ ...base, name: "Run" }, false);
-    await wait(800);
+    await wait(10_000);
+    expect(update).not.toHaveBeenCalled();
+    await save(result);
     expect(update).toHaveBeenCalledTimes(1);
   });
 
   it("owes nothing and so asks nothing: no leave prompt for edits it will not save", async () => {
-    const { set, base } = setup();
+    const { set, base, result } = setup();
     set({ ...base, name: "Run" }, true);
-    const event = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
+    expect(prompted()).toBe(false);
+    expect(result.current.unsaved).toBe(false);
     expect(update).not.toHaveBeenCalled();
   });
 });
@@ -981,16 +872,15 @@ describe("the loop breaker", () => {
     update.mockResolvedValue({ ok: true, data: { ...JOB, updated_at: "2026-10-01T12:00:09.000Z" } });
     const { result, name } = setup();
     name("Run");
-    await wait(800);
-    expect(update).toHaveBeenCalledTimes(1);
-    await wait(60_000);
+    await save(result);
     expect(update).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledTimes(1);
-    // Nothing is owed, so nothing is claimed to be saving or unsaved.
+    // Pressing Save again sends nothing either.
+    await save(result);
+    expect(update).toHaveBeenCalledTimes(1);
+    // Nothing is owed, so nothing is claimed to be unsaved.
     expect(result.current.state.kind).toBe("saved");
-    const event = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
+    expect(prompted()).toBe(false);
   });
 
   it("is lifted by the next edit", async () => {
@@ -998,23 +888,23 @@ describe("the loop breaker", () => {
     update.mockResolvedValue({ ok: true, data: { ...JOB, updated_at: "2026-10-01T12:00:09.000Z" } });
     const { result, name } = setup();
     name("Run");
-    await wait(800);
+    await save(result);
     name("Run 2");
-    expect(result.current.state).toEqual({ kind: "saving" });
-    await wait(800);
+    expect(result.current.state).toEqual({ kind: "unsaved" });
+    await save(result);
     expect(update).toHaveBeenCalledTimes(2);
   });
 
   it("does not stop an ordinary second save of the same value after the baseline changed", async () => {
     const server = fakeServer();
     update.mockImplementation(server.impl);
-    const { set, base } = setup();
+    const { result, set, base } = setup();
     set({ ...base, name: "Run" });
-    await wait(800);
+    await save(result);
     set({ ...base, name: "Run 2" });
-    await wait(800);
+    await save(result);
     set({ ...base, name: "Run" });
-    await wait(800);
+    await save(result);
     expect(patches().map((p) => p!.about)).toEqual([
       { name: "Run", description: null },
       { name: "Run 2", description: null },

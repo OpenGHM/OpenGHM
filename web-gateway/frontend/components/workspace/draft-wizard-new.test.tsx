@@ -318,6 +318,25 @@ describe("Save as draft", () => {
   });
 });
 
+describe("Ctrl/Cmd+S in a new simulation", () => {
+  const keydown = (init: KeyboardEventInit) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    act(() => void document.dispatchEvent(event));
+    return event;
+  };
+
+  it("is Save as draft: it creates the draft once, and keeps the browser's own dialog away", async () => {
+    wizard();
+    type("Colorado");
+    expect(keydown({ key: "s", metaKey: true }).defaultPrevented).toBe(true);
+    keydown({ key: "s", ctrlKey: true });
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
+    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(replace).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("leaving a new simulation", () => {
   it("asks nothing before anything has changed: Cancel and links just go", () => {
     wizard();
@@ -437,7 +456,7 @@ describe("Submit from Review", () => {
 
   it("says that Submit saves the draft first", () => {
     wizard({ step: "review" });
-    expect(screen.getByText(/Submitting saves this as a draft first/)).toBeTruthy();
+    expect(screen.getByText(/Submitting saves your changes first/)).toBeTruthy();
     expect(screen.queryByText(/saves automatically/)).toBeNull();
   });
 

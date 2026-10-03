@@ -40,7 +40,7 @@ export function leavingHref(
  * Stops a page with something unsaved from being left without a say, while
  * `active`:
  * - the browser's own prompt on a reload, a closed tab or a link that is not
- *   ours (`beforeunload`);
+ *   ours (`beforeunload`, unless `beforeUnload` is off);
  * - a plain click on an in-app link (the header, the breadcrumb, Cancel, the
  *   footer) is held back, and the link it would have followed is returned as
  *   `target`, for the page to ask what to do. `stay()` forgets it.
@@ -51,7 +51,17 @@ export function leavingHref(
  * Switch it off (`active` false) before navigating on purpose, or the guard
  * asks about its own navigation.
  */
-export function useLeaveGuard({ active, ownPath }: { active: boolean; ownPath: string }) {
+export function useLeaveGuard({
+  active,
+  ownPath,
+  beforeUnload = true,
+}: {
+  active: boolean;
+  ownPath: string;
+  /** Ask the browser too. Off when something else already does (a stored
+   *  draft's saver asks while it has unsaved work). */
+  beforeUnload?: boolean;
+}) {
   const [target, setTarget] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,12 +79,12 @@ export function useLeaveGuard({ active, ownPath }: { active: boolean; ownPath: s
       event.returnValue = "";
     };
     document.addEventListener("click", onClick, true);
-    window.addEventListener("beforeunload", onBeforeUnload);
+    if (beforeUnload) window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
-  }, [active, ownPath]);
+  }, [active, ownPath, beforeUnload]);
 
   return { target, stay: () => setTarget(null) };
 }
