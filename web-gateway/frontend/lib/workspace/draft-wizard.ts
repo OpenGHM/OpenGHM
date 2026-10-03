@@ -81,8 +81,8 @@ export const FIELD_STEP: Record<DraftField, DraftStep> = {
   custom: "run",
   cores: "run",
   walltime: "run",
-  name: "review",
-  description: "review",
+  name: "run",
+  description: "run",
 };
 
 export const FIELD_LABELS: Record<DraftField, string> = {

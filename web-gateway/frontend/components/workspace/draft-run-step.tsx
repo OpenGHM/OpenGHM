@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,8 +40,10 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
 
 /**
  * Step 2, "Run settings": what the draft is based on (a small card), then one
- * card of three parts: the run period, the output variables, and cores and
- * walltime. Most people keep the defaults, so the last two are a line saying
+ * card whose first part is the simulation's name and description (the first
+ * thing a new draft asks for, so the Name takes focus when it has none and
+ * `autoFocusName` is set), followed by the run period, the output variables,
+ * and cores and walltime. Most people keep the defaults, so the last two are a line saying
  * what they hold and a button that opens them (`DraftCollapsible`); what is
  * wrong with them stays in view either way.
  *
@@ -74,8 +76,13 @@ export function DraftRunStep({
   recommended,
   modelInputId,
   resolvedModelInput,
+  name,
+  description,
+  autoFocusName = false,
   serverErrors,
   startRefusal,
+  onNameChange,
+  onDescriptionChange,
   onParametersChange,
   onSlurmChange,
   onRevertModelInput,
@@ -91,10 +98,17 @@ export function DraftRunStep({
   /** The draft's own model input; null inherits the snapshot's. */
   modelInputId: string | null;
   resolvedModelInput: ModelInput | null | undefined;
+  /** What the Name input holds: empty until the user names the simulation. */
+  name: string;
+  description: string;
+  /** Focus the Name input when the step opens (a new draft nobody has named). */
+  autoFocusName?: boolean;
   /** What the server said about a field it did not take. */
   serverErrors: Partial<Record<DraftField, string>>;
   /** The server's refusal of the current start (`useDraftAutosave().startRefusal`). */
   startRefusal: { message: string; suggestion: string | null } | null;
+  onNameChange: (name: string) => void;
+  onDescriptionChange: (description: string) => void;
   onParametersChange: (parameters: JobParameters) => void;
   onSlurmChange: (slurm: SlurmConfig) => void;
   onRevertModelInput: () => void;
@@ -102,6 +116,13 @@ export function DraftRunStep({
   disabled?: boolean;
 }) {
   const id = useId();
+  const nameRef = useRef<HTMLInputElement>(null);
+  // Once, as the step opens. Moving to the step by Back or the strip sends focus
+  // to its heading afterwards (the wizard's effect runs after this one).
+  useEffect(() => {
+    if (autoFocusName) nameRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const dataset = ctx.dataset;
   const coverage = dataset?.simulation.temporalCoverage ?? null;
   const set = (change: Partial<JobParameters>) => onParametersChange({ ...parameters, ...change });
@@ -162,6 +183,52 @@ export function DraftRunStep({
       />
 
       <DraftPanel>
+        <DraftSection title="Name and description">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-name`} className="text-xs text-muted-foreground">
+              Name
+            </Label>
+            <Input
+              id={`${id}-name`}
+              ref={nameRef}
+              value={name}
+              placeholder="e.g. Global 2000–2009 baseline"
+              autoComplete="off"
+              {...draftField("name")}
+              className="h-10 md:h-9"
+              aria-describedby={serverErrors.name ? `${id}-name-error` : undefined}
+              aria-invalid={serverErrors.name ? true : undefined}
+              onChange={(e) => onNameChange(e.target.value)}
+            />
+            {serverErrors.name && (
+              <p id={`${id}-name-error`} className="text-xs text-destructive">
+                {serverErrors.name}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-description`} className="text-xs text-muted-foreground">
+              Description <span className="font-normal">(optional)</span>
+            </Label>
+            <textarea
+              id={`${id}-description`}
+              value={description}
+              rows={2}
+              placeholder="What is this simulation for?"
+              {...draftField("description")}
+              aria-describedby={serverErrors.description ? `${id}-description-error` : undefined}
+              aria-invalid={serverErrors.description ? true : undefined}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm"
+            />
+            {serverErrors.description && (
+              <p id={`${id}-description-error`} className="text-xs text-destructive">
+                {serverErrors.description}
+              </p>
+            )}
+          </div>
+        </DraftSection>
+
         <DraftSection title="Run period">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

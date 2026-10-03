@@ -50,7 +50,9 @@ const OPEN_RETRY_MS = 2_000;
 
 /** What the header calls a draft: the list's `displayName` rule applied to the
  *  name being typed (then the slug, the run id, `Untitled (<id8>)`), so a draft
- *  reads the same in the list and here. Follows the input on every keystroke. */
+ *  reads the same in the list and here. Follows the input on every keystroke.
+ *  `Untitled (<id8>)` is only this display fallback: it is never stored and
+ *  never put in the Name input, which stays empty until the user names it. */
 function liveName(name: string, job: Job): string {
   return displayName({ ...job, about: { name: name.trim() } });
 }
@@ -137,6 +139,10 @@ function WizardBody({
   const jobId = initialJob.id;
 
   const [local, setLocal] = useState<DraftLocal>(() => fromJob(initialJob));
+  // A draft nobody has named, opened on Run settings (a new one is): the Name
+  // is the first thing on the page, so it takes focus. Read once; a draft that
+  // has a name, or that opens on Review, is left alone.
+  const [focusNameOnOpen] = useState(() => initialStep === "run" && !initialJob.about?.name?.trim());
   const [submitting, setSubmitting] = useState(false);
   const [lastSubmitError, setLastSubmitError] = useState<SubmitError | null>(
     initialJob.last_submit_error ?? null
@@ -428,6 +434,11 @@ function WizardBody({
                 recommended={recommended}
                 modelInputId={local.modelInputId}
                 resolvedModelInput={modelInput}
+                name={local.name}
+                description={local.description}
+                autoFocusName={focusNameOnOpen}
+                onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
+                onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
                 serverErrors={autosave.serverErrors}
                 startRefusal={autosave.startRefusal}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
@@ -440,13 +451,9 @@ function WizardBody({
               <DraftReviewStep
                 datasetId={initialJob.dataset_id}
                 datasetTitle={initialJob.dataset_title}
-                fallbackName={displayName({ ...initialJob, about: null })}
                 ctx={ctx}
                 local={local}
                 recommended={recommended}
-                serverErrors={autosave.serverErrors}
-                onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
-                onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
                 onEditStep={goTo}
                 disabled={submitting}
                 submitArea={

@@ -128,7 +128,7 @@ const pause = (ms: number) => act(() => new Promise<void>((resolve) => setTimeou
 
 describe("the header", () => {
   it("names the draft by the list's rule, with the live typed name first", () => {
-    const { again } = wizard();
+    const { again } = wizard({ step: "run" });
     const h1 = () => screen.getByRole("heading", { level: 1 }).textContent;
     expect(h1()).toBe("Untitled (job-1)");
     type("  My run ");
@@ -189,7 +189,7 @@ describe("the page", () => {
   });
 
   it("follows the name as it is typed, and falls back to the slug, then to a placeholder", () => {
-    wizard({ job: { ...JOB, slug: "my-slug" } });
+    wizard({ step: "run", job: { ...JOB, slug: "my-slug" } });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("my-slug");
     type("  Colorado basin  ");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Colorado basin");
@@ -198,18 +198,32 @@ describe("the page", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("my-slug");
   });
 
-  it("shows what the draft will be called as the Name placeholder, and follows it", () => {
-    const { again } = wizard();
-    expect(nameInput().placeholder).toBe("Untitled (job-1)");
+  it("keeps the Name input empty for an unnamed draft: the header's fallback is never put in it", () => {
+    const { again } = wizard({ step: "run" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Untitled (job-1)");
+    expect(nameInput().value).toBe("");
+    expect(nameInput().placeholder).toMatch(/^e\.g\. /);
+    expect(nameInput().placeholder).not.toContain("Untitled");
     again({ job: { ...JOB, slug: "my-slug", updated_at: "2026-10-01T13:00:00.000Z" } });
-    expect(nameInput().placeholder).toBe("my-slug");
-    // Typing a name does not change what an empty one falls back to.
-    type("Typed");
-    expect(nameInput().placeholder).toBe("my-slug");
+    expect(nameInput().value).toBe("");
+    expect(nameInput().placeholder).not.toContain("my-slug");
+  });
+
+  it("focuses the empty Name when Run settings opens on an unnamed draft, and not on a named one", () => {
+    const first = wizard({ step: "run" });
+    expect(document.activeElement).toBe(nameInput());
+    first.unmount();
+    wizard({ step: "run", job: { ...JOB, about: { name: "Stored name" } } });
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("does not focus the Name when the draft opens on Review", () => {
+    wizard({ step: "review" });
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("shows a saved name from the start", () => {
-    wizard({ job: { ...JOB, about: { name: "Stored name" } } });
+    wizard({ step: "run", job: { ...JOB, about: { name: "Stored name" } } });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Stored name");
     expect(nameInput().value).toBe("Stored name");
   });
@@ -322,7 +336,7 @@ describe("the step", () => {
   });
 
   it("moves focus to the step's heading, and does not on the first render", async () => {
-    wizard({ step: "run" });
+    wizard({ step: "run", job: { ...JOB, about: { name: "Named" } } });
     expect(document.activeElement).toBe(document.body);
     fireEvent.click(button("Next")!);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2 })));
@@ -381,6 +395,27 @@ describe("the step", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Cores")));
   });
 
+  it("shows the name typed on Run settings as a row on Review, and Edit returns focus to the Name input", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    fireEvent.click(button("Next")!);
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    const row = screen.getByText("Name", { selector: "dt" }).parentElement as HTMLElement;
+    expect(within(row).getByText("Colorado")).toBeTruthy();
+    fireEvent.click(button("Edit name")!);
+    expect(heading()).toBe("Run settings");
+    await waitFor(() => expect(document.activeElement).toBe(nameInput()));
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("says 'Not named yet' on Review for an unnamed draft, and lists no problem about it", () => {
+    wizard({ step: "review" });
+    const row = screen.getByText("Name", { selector: "dt" }).parentElement as HTMLElement;
+    expect(within(row).getByText("Not named yet")).toBeTruthy();
+    expect(screen.queryByText("Fix this to submit:")).toBeNull();
+    expect((screen.getByRole("button", { name: "Submit to Anvil" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("opens the closed part of Run settings that holds the field an Edit line names", async () => {
     wizard({ step: "review" });
     fireEvent.click(button("Edit walltime")!);
@@ -412,7 +447,7 @@ describe("the step", () => {
 
 describe("saving", () => {
   it("shows Saving… and then Saved for an edit, in one request", async () => {
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
     expect(screen.getByText("Saving…")).toBeTruthy();
     await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
@@ -422,26 +457,26 @@ describe("saving", () => {
   });
 
   it("saves what is waiting as soon as the step changes", async () => {
-    wizard({ step: "review" });
+    wizard({ step: "run" });
     type("Colorado");
     expect(updateSimulation).not.toHaveBeenCalled();
-    fireEvent.click(stepLink("Run settings"));
+    fireEvent.click(stepLink("Review & submit"));
     await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
     expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
   });
 
   it("saves it when the browser's back changes the step, too", async () => {
-    wizard({ step: "review" });
+    wizard({ step: "run" });
     type("Colorado");
     act(() => {
-      window.history.replaceState(null, "", "/workspace/job-1?step=run");
+      window.history.replaceState(null, "", "/workspace/job-1?step=review");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
     await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
   });
 
   it("saves when focus leaves the step for something outside it", async () => {
-    wizard({ step: "review" });
+    wizard({ step: "run" });
     const input = nameInput();
     input.focus();
     type("Colorado");
@@ -450,10 +485,10 @@ describe("saving", () => {
   });
 
   it("does not save when focus only moves within the step", async () => {
-    wizard({ step: "review" });
+    wizard({ step: "run" });
     const input = nameInput();
     type("Colorado");
-    fireEvent.blur(input, { relatedTarget: screen.getByLabelText("Description") });
+    fireEvent.blur(input, { relatedTarget: screen.getByLabelText(/^Description/) });
     await settle();
     expect(updateSimulation).not.toHaveBeenCalled();
   });
@@ -462,20 +497,20 @@ describe("saving", () => {
 describe("when the draft cannot be saved", () => {
   it("says the session expired, and keeps what was typed", async () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "session_expired" });
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Run settings"));
+    fireEvent.click(stepLink("Review & submit"));
     expect(await screen.findByText("Your session has expired.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
-    fireEvent.click(stepLink("Review & submit"));
+    fireEvent.click(stepLink("Run settings"));
     expect(nameInput().value).toBe("Colorado");
   });
 
   it("says it was submitted or changed elsewhere, and Reload asks the server for the page again", async () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Only drafts can be edited", status: 409 });
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Run settings"));
+    fireEvent.click(stepLink("Review & submit"));
     const banner = await screen.findByText("This simulation was submitted or changed elsewhere");
     expect(banner.closest('[role="alert"]')).not.toBeNull();
     expect(refresh).not.toHaveBeenCalled();
@@ -485,9 +520,9 @@ describe("when the draft cannot be saved", () => {
 
   it("says it was deleted, with a way back to the list", async () => {
     updateSimulation.mockResolvedValue({ ok: false, reason: "not_found" });
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
-    fireEvent.click(stepLink("Run settings"));
+    fireEvent.click(stepLink("Review & submit"));
     expect(await screen.findByText("This draft was deleted")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Go to My Simulations" }).getAttribute("href")).toBe("/workspace");
     expect(screen.getByText("Not saved")).toBeTruthy();
@@ -508,7 +543,7 @@ async function openDeleteDialog() {
 describe("deleting the draft", () => {
   it("stops saving, deletes, and goes to the list", async () => {
     deleteSimulation.mockResolvedValue({ ok: true, data: null });
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete draft" }));
@@ -522,7 +557,7 @@ describe("deleting the draft", () => {
   });
 
   it("saves again when the dialog is cancelled", async () => {
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
     // Nothing is saved behind an open Delete dialog.
@@ -538,7 +573,7 @@ describe("deleting the draft", () => {
 
   it("saves again, and says why, when the delete is refused", async () => {
     deleteSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Anvil can't be reached." });
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete draft" }));
@@ -555,7 +590,7 @@ describe("coming back to the tab", () => {
 
   it("loads the server's copy when it moved on and nothing is unsaved", async () => {
     fetchJob.mockResolvedValue({ ok: true, data: later });
-    wizard();
+    wizard({ step: "run" });
     expect(nameInput().value).toBe("");
     hold("visible");
     fireEvent(document, new Event("visibilitychange"));
@@ -587,7 +622,7 @@ describe("coming back to the tab", () => {
   });
 
   it("changes nothing when the server's copy is the one it has", async () => {
-    wizard();
+    wizard({ step: "run" });
     hold("visible");
     fireEvent(document, new Event("visibilitychange"));
     await waitFor(() => expect(fetchJob).toHaveBeenCalledTimes(1));
@@ -597,7 +632,7 @@ describe("coming back to the tab", () => {
   });
 
   it("does not look while something is unsaved", async () => {
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
     hold("visible");
     fireEvent(document, new Event("visibilitychange"));
@@ -609,7 +644,7 @@ describe("coming back to the tab", () => {
   it("does not replace an edit made while it was looking", async () => {
     let answer!: (r: ActionResult<Job>) => void;
     fetchJob.mockReturnValue(new Promise((r) => (answer = r)));
-    wizard();
+    wizard({ step: "run" });
     hold("visible");
     fireEvent(document, new Event("visibilitychange"));
     type("Colorado");
@@ -629,18 +664,18 @@ describe("coming back to the tab", () => {
 describe("where it starts from", () => {
   it("takes the copy this tab last saw saved when it is newer than the server's", () => {
     writeDraftCache({ ...JOB, about: { name: "Saved in this tab" }, updated_at: "2026-10-01T12:30:00.000Z" });
-    wizard();
+    wizard({ step: "run" });
     expect(nameInput().value).toBe("Saved in this tab");
   });
 
   it("takes the server's copy when that is the newer one", () => {
     writeDraftCache({ ...JOB, about: { name: "Old" }, updated_at: "2026-10-01T11:00:00.000Z" });
-    wizard({ job: { ...JOB, about: { name: "Server's" } } });
+    wizard({ step: "run", job: { ...JOB, about: { name: "Server's" } } });
     expect(nameInput().value).toBe("Server's");
   });
 
   it("starts over from a different copy the server page sends later", () => {
-    const view = wizard();
+    const view = wizard({ step: "run" });
     expect(nameInput().value).toBe("");
     view.again({ job: { ...JOB, about: { name: "Fresh from the server" }, updated_at: "2026-10-01T14:00:00.000Z" } });
     expect(nameInput().value).toBe("Fresh from the server");
@@ -658,8 +693,9 @@ describe("submitting", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
 
   it("saves first, shows what is saved, and Cancel sends nothing", async () => {
-    wizard();
+    wizard({ step: "run" });
     type("Colorado");
+    fireEvent.click(button("Next")!);
     const dialog = await openSubmitDialog();
     // The flush ran before the dialog opened.
     expect(updateSimulation).toHaveBeenCalledTimes(1);
@@ -671,6 +707,7 @@ describe("submitting", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(submitSimulation).not.toHaveBeenCalled();
     // Cancelling leaves auto-save on.
+    fireEvent.click(button("Back")!);
     type("Colorado 2");
     await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2), { timeout: 2_000 });
   });
@@ -689,7 +726,8 @@ describe("submitting", () => {
     submitSimulation.mockReturnValue(new Promise((r) => (answer = r)));
     wizard();
     confirm(await openSubmitDialog());
-    await waitFor(() => expect((nameInput().closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true));
+    const editRunPeriod = () => screen.getByRole("button", { name: "Edit run period", hidden: true });
+    await waitFor(() => expect((editRunPeriod().closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true));
     // Radix hides the page behind its dialog from the accessibility tree.
     expect((screen.getByRole("button", { name: "Back", hidden: true }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => answer({ ok: true, data: SUBMITTED }));
@@ -702,15 +740,16 @@ describe("submitting", () => {
       data: { ...JOB, last_submit_error: { code: "sbatch_rejected", message: "Anvil said no", at: "2026-10-01T12:05:00Z" } },
     });
     wizard();
-    const input = nameInput();
+    const edit = screen.getByRole("button", { name: "Edit run period" });
     confirm(await openSubmitDialog());
     await waitFor(() => expect(screen.getAllByRole("alert").some((a) => a.textContent?.includes("Anvil said no"))).toBe(true));
     await waitFor(() => expect(fetchJob).toHaveBeenCalledWith("job-1"));
-    // The same inputs: nothing was remounted, and they work again.
-    expect(nameInput()).toBe(input);
-    await waitFor(() => expect((nameInput().closest("fieldset") as HTMLFieldSetElement).disabled).toBe(false));
+    // The same controls: nothing was remounted, and they work again.
+    expect(screen.getByRole("button", { name: "Edit run period" })).toBe(edit);
+    await waitFor(() => expect((edit.closest("fieldset") as HTMLFieldSetElement).disabled).toBe(false));
     expect(updateSimulation).not.toHaveBeenCalled();
 
+    fireEvent.click(edit);
     type("After the failure");
     await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1), { timeout: 2_000 });
     expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "After the failure", description: null } });

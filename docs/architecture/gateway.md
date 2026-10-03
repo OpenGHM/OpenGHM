@@ -160,8 +160,11 @@ pre-fills it from a published snapshot's parameters, and
 own simulations, whatever its status (`422 snapshot_not_found` when its snapshot
 has left the repository). Neither starts one from nothing, which would need a
 model-input catalogue the gateway does not have yet. A copy takes the snapshot,
-slug, `about` (its name gets " (copy)"), model input, parameters and compute,
-and nothing of the run.
+slug, `about` (a name it has gets " (copy)"; one it lacks stays absent), model
+input, parameters and compute, and nothing of the run. A new draft has no name:
+"Untitled (<first 8 of the id>)" is what the header and the list show for one,
+computed in the frontend and never stored, and the wizard asks for the name at
+the top of Run settings.
 
 `PATCH /api/v1/jobs/{id}` writes only while `status` is `DRAFT`: the update's
 own filter carries the status, so once it has moved past `DRAFT`, or a submit

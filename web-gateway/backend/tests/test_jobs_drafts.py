@@ -305,6 +305,12 @@ def test_a_fresh_draft_omits_sim_id_entirely():
     assert "sim_id" not in _draft_doc("job-1")
 
 
+def test_a_fresh_draft_has_no_name():
+    """The workspace shows "Untitled (<id>)" for an unnamed draft; that is a
+    display fallback in the frontend, never a stored `about.name`."""
+    assert _draft_doc("job-1")["about"] is None
+
+
 def test_two_drafts_for_the_same_user_do_not_share_a_sim_id_value():
     """The exact regression: a second draft for the same user must not
     collide with the first on the unique sparse `sim_id` index. Both must

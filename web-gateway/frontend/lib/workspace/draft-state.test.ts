@@ -215,7 +215,7 @@ describe("buildDraftPatch: each group sends only its own keys", () => {
     expect(patch!.slurm_config).toEqual({ cores: 16, walltime: "02:00:00" });
   });
 
-  it("review: only name and description, so the other citation fields are left alone", () => {
+  it("name and description: only those two keys, so the other citation fields are left alone", () => {
     const { patch } = buildDraftPatch(edited(job, { name: "Run B", description: "new" }), job, FOUND);
     expect(patch).toEqual({ about: { name: "Run B", description: "new" } });
   });
@@ -566,7 +566,7 @@ describe("submitProblems", () => {
     const out = problems(fromJob(ok), FOUND, null, { withheld: ["cores", "name"], saving: false });
     expect(out).toEqual([
       { field: "cores", step: "run", message: "Cores isn't saved yet. Fix it to continue." },
-      { field: "name", step: "review", message: "Name isn't saved yet. Fix it to continue." },
+      { field: "name", step: "run", message: "Name isn't saved yet. Fix it to continue." },
     ]);
   });
 

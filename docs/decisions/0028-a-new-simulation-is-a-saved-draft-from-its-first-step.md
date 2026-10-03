@@ -51,13 +51,23 @@ go.**
   plain facts, never joined into a name of their own: the spec has no short
   name, and one made up from its fields would read as if it were.
 - **The steps after Start from edit the draft.** Run settings (what it is
-  based on, the run period, the output variables, cores and walltime), then
-  Review & submit (one summary, name and description, and the submit area). There
+  based on, then one card: name and description, the run period, the output
+  variables, cores and walltime), then Review & submit (one summary and the
+  submit area; nothing is edited there). There
   was a "Model & input" step between them; nothing on it could be changed, because
   the toolkit has no option for a different model input, so it was dropped, and
   `?step=model` opens Run settings. The draft saves itself after a pause, when the user
   changes step, and when the page is hidden or left. Opening a draft from the
   list opens the same wizard, at Review.
+- **The name is asked for first, and is optional.** Name and description are the
+  first part of Run settings, the first screen of a new draft, and the Name takes
+  focus there while the draft has none. The input is empty until the user names
+  the draft, with an example as its placeholder. "Untitled (<id8>)" is only what
+  the header, breadcrumb and list call an unnamed draft (`displayName`); it is
+  never stored as `about.name` and never put in the input. Review lists the name
+  and description as rows (an unnamed draft reads "Not named yet") whose Edit
+  returns to the input. An empty name does not block a submit: the simulation
+  keeps the generated display name, and the backend does not require one.
 - **The starting point cannot change.** A draft keeps the snapshot it was
   derived from. To start from another, start another draft.
 - **Only a `DRAFT` can be edited, and the write itself says so.** `PATCH` is

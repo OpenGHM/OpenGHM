@@ -48,6 +48,8 @@ const PARAMETERS: JobParameters = {
 function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
   const onParametersChange = vi.fn();
   const onSlurmChange = vi.fn();
+  const onNameChange = vi.fn();
+  const onDescriptionChange = vi.fn();
   const view = render(
     <DraftRunStep
       datasetId="snap-1"
@@ -58,6 +60,10 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
       recommended={dataset.simulation.recommendedCompute}
       modelInputId={null}
       resolvedModelInput={undefined}
+      name=""
+      description=""
+      onNameChange={onNameChange}
+      onDescriptionChange={onDescriptionChange}
       serverErrors={{}}
       startRefusal={null}
       onParametersChange={onParametersChange}
@@ -66,7 +72,7 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
       {...props}
     />
   );
-  return { onParametersChange, onSlurmChange, ...view };
+  return { onParametersChange, onSlurmChange, onNameChange, onDescriptionChange, ...view };
 }
 
 const start = () => screen.getByLabelText("Start") as HTMLInputElement;
@@ -75,6 +81,58 @@ const checkbox = (name: string | RegExp) => screen.getByRole("checkbox", { name 
 /** Output variables and Compute are closed until asked for. */
 const openVariables = () => fireEvent.click(screen.getByRole("button", { name: "Choose output variables" }));
 const openCompute = () => fireEvent.click(screen.getByRole("button", { name: "Change compute" }));
+
+describe("the draft run step: name and description", () => {
+  it("starts the card with them, an empty Name that shows an example and no generated name", () => {
+    step();
+    const sections = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(sections[0]).toBe("Name and description");
+    const name = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(name.value).toBe("");
+    expect(name.placeholder).toMatch(/^e\.g\. /);
+    expect(name.placeholder).not.toContain("Untitled");
+    expect((screen.getByLabelText(/^Description/) as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("shows what it is given, and reports what is typed, whole", () => {
+    const { onNameChange, onDescriptionChange } = step({ name: "My run", description: "A test" });
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("My run");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "New text" } });
+    expect(onNameChange).toHaveBeenCalledWith("Renamed");
+    expect(onDescriptionChange).toHaveBeenCalledWith("New text");
+  });
+
+  it("marks both for the wizard's focus", () => {
+    step();
+    expect(screen.getByLabelText("Name").getAttribute("data-draft-field")).toBe("name");
+    expect(screen.getByLabelText(/^Description/).getAttribute("data-draft-field")).toBe("description");
+  });
+
+  it("focuses the Name as the step opens when asked to, and not otherwise", () => {
+    const first = step({ autoFocusName: true });
+    expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+    first.unmount();
+    step();
+    expect(document.activeElement).not.toBe(screen.getByLabelText("Name"));
+  });
+
+  it("shows what the server said about each, and ties it to the field", () => {
+    step({ serverErrors: { name: "Name is too long.", description: "Description is too long." } });
+    const name = screen.getByLabelText("Name");
+    expect(name.getAttribute("aria-invalid")).toBe("true");
+    expect(name.getAttribute("aria-describedby")).toContain(screen.getByText("Name is too long.").id);
+    expect(screen.getByLabelText(/^Description/).getAttribute("aria-describedby")).toContain(
+      screen.getByText("Description is too long.").id
+    );
+  });
+
+  it("switches both off while a submit is under way", () => {
+    step({ disabled: true });
+    expect(screen.getByLabelText("Name").matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText(/^Description/).matches(":disabled")).toBe(true);
+  });
+});
 
 describe("the draft run step: fields the wizard can focus", () => {
   it("marks each control an Edit link can send focus to", () => {
@@ -126,10 +184,10 @@ describe("the draft run step: the quiet path", () => {
     expect(screen.getByRole("button", { name: "Change compute" }).textContent).toBe("Change");
   });
 
-  it("is one card of three parts, with no tinted band", () => {
+  it("is one card of four parts, with no tinted band", () => {
     const { container } = step();
     const panel = container.querySelector(".divide-y") as HTMLElement;
-    expect(panel.querySelectorAll(":scope > section")).toHaveLength(3);
+    expect(panel.querySelectorAll(":scope > section")).toHaveLength(4);
     expect(panel.className).toContain("rounded-xl");
     expect(container.innerHTML).not.toContain("bg-muted/40");
   });
@@ -610,6 +668,10 @@ describe("the draft run step: cores below the recommended count", () => {
         recommended={BIG}
         modelInputId={null}
         resolvedModelInput={undefined}
+        name=""
+        description=""
+        onNameChange={vi.fn()}
+        onDescriptionChange={vi.fn()}
         serverErrors={{}}
         startRefusal={null}
         onParametersChange={vi.fn()}

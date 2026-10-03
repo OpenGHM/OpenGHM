@@ -186,7 +186,7 @@ function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown
  *
  * - Model input: `model_input_id`.
  * - Run settings: `parameters` (the full object), and `slurm_config`.
- * - Review: `about` as `{ name, description }` and nothing else, so the
+ * - Name and description (Run settings): `about` as `{ name, description }` and nothing else, so the
  *   citation fields the wizard never shows are not touched. Empty becomes
  *   `null`, which the backend reads as "remove the key".
  *

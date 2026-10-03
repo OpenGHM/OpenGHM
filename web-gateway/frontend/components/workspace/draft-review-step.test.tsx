@@ -24,20 +24,14 @@ const LOCAL: DraftLocal = fromJob(
 );
 
 function review(props: Partial<React.ComponentProps<typeof DraftReviewStep>> = {}) {
-  const handlers = {
-    onNameChange: vi.fn(),
-    onDescriptionChange: vi.fn(),
-    onEditStep: vi.fn(),
-  };
+  const handlers = { onEditStep: vi.fn() };
   render(
     <DraftReviewStep
       datasetId="snap-1"
       datasetTitle="Stored title"
-      fallbackName="Untitled (job-1)"
       ctx={{ dataset, snapshotState: "found" }}
       local={LOCAL}
       recommended={dataset.simulation.recommendedCompute}
-      serverErrors={{}}
       submitArea={<div data-testid="submit-area">submit here</div>}
       {...handlers}
       {...props}
@@ -57,52 +51,43 @@ describe("DraftReviewStep: name and description", () => {
     expect(heading.getAttribute("tabindex")).toBe("-1");
   });
 
-  it("shows the name and description, with the placeholder", () => {
+  it("has no form for them: they are summary rows, entered on Run settings", () => {
     review();
-    const name = screen.getByLabelText("Name") as HTMLInputElement;
-    const description = screen.getByLabelText("Description") as HTMLTextAreaElement;
-    expect(name.value).toBe("My run");
-    expect(description.value).toBe("A test");
-    expect(name.placeholder).toBe("Untitled (job-1)");
-    expect(screen.queryByText(/not a published model snapshot/)).toBeNull();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByLabelText("Description")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(within(row("Name")).getByText("My run")).toBeTruthy();
+    expect(within(row("Description")).getByText("A test")).toBeTruthy();
   });
 
-  it("has what the draft is called with no name as the Name placeholder", () => {
-    review({ fallbackName: "my-slug", local: { ...LOCAL, name: "" } });
-    const name = screen.getByLabelText("Name") as HTMLInputElement;
-    expect(name.value).toBe("");
-    expect(name.placeholder).toBe("my-slug");
+  it("says 'Not named yet', muted, for a draft with no name, and leaves Description out when empty", () => {
+    review({ local: { ...LOCAL, name: "  ", description: "" } });
+    const note = within(row("Name")).getByText("Not named yet");
+    expect(note.className).toContain("text-muted-foreground");
+    expect(screen.queryByText("Description", { selector: "dt" })).toBeNull();
   });
 
-  it("marks the two inputs for the wizard's focus", () => {
-    review();
-    expect(screen.getByLabelText("Name").getAttribute("data-draft-field")).toBe("name");
-    expect(screen.getByLabelText("Description").getAttribute("data-draft-field")).toBe("description");
+  it("sends Edit on each to its input on Run settings", () => {
+    const { onEditStep } = review();
+    fireEvent.click(screen.getByRole("button", { name: "Edit name" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "name");
+    fireEvent.click(screen.getByRole("button", { name: "Edit description" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "description");
   });
 
-  it("reports what is typed, whole", () => {
-    const { onNameChange, onDescriptionChange } = review();
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed" } });
-    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "New text" } });
-    expect(onNameChange).toHaveBeenCalledWith("Renamed");
-    expect(onDescriptionChange).toHaveBeenCalledWith("New text");
-  });
-
-  it("shows what the server said about each, and ties it to the field", () => {
-    review({ serverErrors: { name: "Name is too long.", description: "Description is too long." } });
-    const name = screen.getByLabelText("Name");
-    expect(name.getAttribute("aria-invalid")).toBe("true");
-    expect(name.getAttribute("aria-describedby")).toContain(screen.getByText("Name is too long.").id);
-    expect(screen.getByLabelText("Description").getAttribute("aria-describedby")).toContain(
-      screen.getByText("Description is too long.").id
-    );
+  it("offers Edit on the Name of an unnamed draft", () => {
+    const { onEditStep } = review({ local: { ...LOCAL, name: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Edit name" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "name");
   });
 });
 
 describe("DraftReviewStep: the summary", () => {
-  it("is one list: based on, run period, output variables, cores, walltime", () => {
+  it("is one list: name, description, based on, run period, output variables, cores, walltime", () => {
     review();
     expect(screen.getAllByRole("term").map((t) => t.textContent)).toEqual([
+      "Name",
+      "Description",
       "Based on",
       "Run period",
       "Output variables",
@@ -245,14 +230,13 @@ describe("DraftReviewStep: the rest", () => {
     review();
     const area = screen.getByTestId("submit-area");
     expect(area.textContent).toBe("submit here");
-    expect(area.previousElementSibling?.textContent).toContain("Name and description");
+    expect(area.previousElementSibling?.textContent).toContain("Walltime");
   });
 
-  it("switches its inputs and Edit buttons off while a submit is under way", () => {
+  it("switches its Edit buttons off while a submit is under way", () => {
     review({ disabled: true });
     const off = (el: Element) => el.matches(":disabled");
-    expect(off(screen.getByLabelText("Name"))).toBe(true);
-    expect(off(screen.getByLabelText("Description"))).toBe(true);
+    expect(off(screen.getByRole("button", { name: "Edit name" }))).toBe(true);
     expect(off(screen.getByRole("button", { name: "Edit run period" }))).toBe(true);
   });
 });

@@ -1,14 +1,11 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
-import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import {
@@ -103,48 +100,38 @@ function VariablesValue({ names }: { names: readonly string[] }) {
 }
 
 /**
- * Step 3, "Review & submit": one list that says what will run, each editable
- * line with a way back to the step that edits it; the name and description;
- * and, last, the submit area (`submitArea`, a `DraftSubmitCard`: it lists what
- * stands in the way, each with a link to fix it, and has the button).
+ * Step 3, "Review & submit": one list that says what will run, each line with
+ * a way back to the step that edits it, and, last, the submit area
+ * (`submitArea`, a `DraftSubmitCard`: it lists what stands in the way, each
+ * with a link to fix it, and has the button).
  *
- * Name and description describe this simulation, not a published snapshot, and
- * are the only inputs here. The Name's placeholder is `fallbackName`: what the
- * header and the list call the draft while it has no name. "Based on" has no
- * Edit (a draft's starting point cannot change), only its repository link.
- * `onEditStep` receives the field too so the wizard can focus it.
+ * Nothing is edited here. The name and the description are entered on Run
+ * settings, and show as rows whose Edit sends focus to them; an unnamed draft
+ * reads "Not named yet" and still submits (it keeps the name the header and the
+ * list give it). "Based on" has no Edit (a draft's starting point cannot
+ * change), only its repository link. `onEditStep` receives the field too so the
+ * wizard can focus it.
  */
 export function DraftReviewStep({
   datasetId,
   datasetTitle,
-  fallbackName,
   ctx,
   local,
   recommended,
-  serverErrors,
-  onNameChange,
-  onDescriptionChange,
   onEditStep,
   submitArea,
   disabled = false,
 }: {
   datasetId: string;
   datasetTitle: string;
-  /** What the draft is called with an empty name (`displayName`), shown as the
-   *  Name's placeholder. */
-  fallbackName: string;
   ctx: DraftContext;
   local: DraftLocal;
   recommended: Recommended | null;
-  serverErrors: Partial<Record<DraftField, string>>;
-  onNameChange: (name: string) => void;
-  onDescriptionChange: (description: string) => void;
   onEditStep: (step: DraftStep, field?: DraftField) => void;
   submitArea: ReactNode;
   /** Everything off, while a submit is under way. */
   disabled?: boolean;
 }) {
-  const id = useId();
   const { parameters, slurm } = local;
   const compute = effectiveCompute(slurm, recommended);
   const coresWarning = describeCoresBelowRecommendedShort(slurm, recommended);
@@ -153,16 +140,33 @@ export function DraftReviewStep({
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
   const title = basisTitle(ctx, datasetTitle);
   const facts = found ? snapshotFacts(found) : [];
+  const name = local.name.trim();
+  const description = local.description.trim();
 
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
       <DraftStepHeading step="review">
-        Check what will run, name your simulation, then submit it to Anvil.
+        Check what will run, then submit it to Anvil.
       </DraftStepHeading>
 
       <DraftPanel>
         <DraftSection>
           <dl className="-my-3 divide-y">
+            <Row label="Name" edit={<EditLink step="run" field="name" label="name" onEditStep={onEditStep} />}>
+              {name ? (
+                <span className="font-medium">{name}</span>
+              ) : (
+                <span className="text-muted-foreground">Not named yet</span>
+              )}
+            </Row>
+            {description && (
+              <Row
+                label="Description"
+                edit={<EditLink step="run" field="description" label="description" onEditStep={onEditStep} />}
+              >
+                <span className="line-clamp-3 whitespace-pre-line">{description}</span>
+              </Row>
+            )}
             <Row
               label="Based on"
               edit={
@@ -233,50 +237,6 @@ export function DraftReviewStep({
               </Row>
             )}
           </dl>
-        </DraftSection>
-
-        <DraftSection title="Name and description">
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-name`} className="text-xs text-muted-foreground">
-              Name
-            </Label>
-            <Input
-              id={`${id}-name`}
-              value={local.name}
-              placeholder={fallbackName}
-              {...draftField("name")}
-              className="h-10 md:h-9"
-              aria-describedby={serverErrors.name ? `${id}-name-error` : undefined}
-              aria-invalid={serverErrors.name ? true : undefined}
-              onChange={(e) => onNameChange(e.target.value)}
-            />
-            {serverErrors.name && (
-              <p id={`${id}-name-error`} className="text-xs text-destructive">
-                {serverErrors.name}
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-description`} className="text-xs text-muted-foreground">
-              Description
-            </Label>
-            <textarea
-              id={`${id}-description`}
-              value={local.description}
-              rows={3}
-              placeholder="What is this simulation for?"
-              {...draftField("description")}
-              aria-describedby={serverErrors.description ? `${id}-description-error` : undefined}
-              aria-invalid={serverErrors.description ? true : undefined}
-              onChange={(e) => onDescriptionChange(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm"
-            />
-            {serverErrors.description && (
-              <p id={`${id}-description-error`} className="text-xs text-destructive">
-                {serverErrors.description}
-              </p>
-            )}
-          </div>
         </DraftSection>
 
         {submitArea}

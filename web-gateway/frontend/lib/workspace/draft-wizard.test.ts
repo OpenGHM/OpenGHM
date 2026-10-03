@@ -95,7 +95,7 @@ describe("the fields", () => {
     for (const field of ["modelInput", "start", "end", "variables", "spatial", "custom", "cores", "walltime"] as const) {
       expect(FIELD_STEP[field]).toBe("run");
     }
-    expect(FIELD_STEP.name).toBe("review");
-    expect(FIELD_STEP.description).toBe("review");
+    expect(FIELD_STEP.name).toBe("run");
+    expect(FIELD_STEP.description).toBe("run");
   });
 });
