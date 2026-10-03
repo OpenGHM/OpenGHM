@@ -15,6 +15,22 @@ const eslintConfig = defineConfig([
     files: ["app/layout.tsx"],
     rules: { "@next/next/no-page-custom-font": "off" },
   },
+  // `url.parse()` is deprecated (DEP0169). Next itself still calls it, so the
+  // dev script silences that warning (see README); this keeps our own code
+  // from adding a call the silenced warning would hide.
+  {
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { name: "url", importNames: ["parse"], message: "Use the WHATWG URL API." },
+        { name: "node:url", importNames: ["parse"], message: "Use the WHATWG URL API." },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "url", property: "parse", message: "Use the WHATWG URL API." },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

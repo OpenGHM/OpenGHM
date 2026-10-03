@@ -17,6 +17,15 @@ npx vitest run
 npx eslint app components lib
 ```
 
+`npm run dev` silences one Node deprecation warning, DEP0169 (`url.parse()`):
+Next 16.3 calls it from its own code, Node 26 prints it, and the dev overlay
+shows it as a console error on the first page. Our own code may not call
+`url.parse()`, and ESLint enforces that, so the silenced warning hides nothing
+of ours. Only one `--disable-warning` fits: Next rebuilds `NODE_OPTIONS` for
+its server process and keeps one value per flag. DEP0205
+(`module.register()`, also Next's) still prints once in the terminal. The
+image runs `next start` on Node 20 and needs no flag.
+
 ## Conventions
 
 ### Colour comes from tokens

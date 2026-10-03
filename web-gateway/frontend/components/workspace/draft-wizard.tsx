@@ -288,6 +288,8 @@ function WizardBody({
       const result = await fetchJob(submitted.id).catch(() => null);
       if (!mounted.current) return;
       if (result?.ok && result.data.status !== "DRAFT") {
+        // A full load on purpose: the router already failed to move us.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign(url);
         return;
       }
