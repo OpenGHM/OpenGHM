@@ -47,7 +47,7 @@ import {
   stepHref,
   type DraftStep,
 } from "@/lib/workspace/draft-wizard";
-import { useLeaveGuard } from "@/lib/workspace/leave-guard";
+import { useLeaveGuard, type LeaveTarget } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
 import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
@@ -269,11 +269,15 @@ function WizardBody({
     setSeenUrlStep(urlStep);
     setStep(urlStep);
   }
+  const ownPath = wizardPath(isNew, datasetId, jobId);
   useEffect(() => {
-    const onPopState = () => setStep(stepFromLocation(defaultStep));
+    const onPopState = () => {
+      // A move out of the wizard is not a step change.
+      if (window.location.pathname === ownPath) setStep(stepFromLocation(defaultStep));
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [defaultStep]);
+  }, [defaultStep, ownPath]);
 
   // The field an Edit link or a "fix <field>" link asked to focus, until the
   // effect below has done it. `focusTick` makes a second request for the same
@@ -377,17 +381,21 @@ function WizardBody({
   // draft's saver already asks the browser; a new simulation's guard does.
   const guard = useLeaveGuard({
     active: (isNew ? dirty : saver.unsaved) && !departing,
-    ownPath: wizardPath(isNew, datasetId, jobId),
+    ownPath,
     beforeUnload: isNew,
   });
   // The reason the last submit gave, for the toast of one that did not go through.
   const submitFailure = useRef<ActionFailure | null>(null);
 
+  /** Where a held-back move goes once it is allowed: a link is pushed, the
+   *  browser's Back or Forward is traversed to. */
+  const follow = (go: LeaveTarget) => guard.proceed(go, (href) => router.push(href));
+
   /** Save the new simulation as a draft and go on: to its own page (`go` null,
    *  on the step showing) or to `go`. A draft that came out without some of the
    *  settings is still the draft: it opens, and a toast says what is missing.
    *  False when nothing was created, and the page then says why. */
-  const saveAndGo = async (go: string | null): Promise<boolean> => {
+  const saveAndGo = async (go: LeaveTarget | null): Promise<boolean> => {
     const result = await newDraft.save(local);
     if (result === null || !result.ok) return false;
     writeDraftCache(result.job);
@@ -396,13 +404,13 @@ function WizardBody({
     setDeparting(true);
     guard.stay();
     if (go === null) router.replace(stepHref(result.job.id, step));
-    else router.push(go);
+    else follow(go);
     return true;
   };
-  const discardAndGo = (go: string) => {
+  const discardAndGo = (go: LeaveTarget) => {
     setDeparting(true);
     guard.stay();
-    router.push(go);
+    follow(go);
   };
 
   /** Save the stored draft now: the Save draft button, Ctrl/Cmd+S, the leave
@@ -428,14 +436,14 @@ function WizardBody({
     toast.success("Draft saved");
     return true;
   };
-  const saveStoredAndGo = async (go: string) => {
+  const saveStoredAndGo = async (go: LeaveTarget) => {
     if (!(await saveStored())) {
       guard.stay();
       return;
     }
     setDeparting(true);
     guard.stay();
-    router.push(go);
+    follow(go);
   };
 
   const saving = isNew ? newDraft.saving : saver.state.kind === "saving";

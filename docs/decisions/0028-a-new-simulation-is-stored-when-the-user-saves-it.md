@@ -57,9 +57,24 @@ them by itself.**
   screen does.
 - **Leaving an unsaved simulation asks first.** While the wizard differs from
   the preview (a space typed and deleted is not a difference), `beforeunload`
-  is armed, and a click on a link out of the wizard opens "Leave without
-  saving?" with Save as draft, Discard changes and Keep editing. The browser's
-  Back and Forward are not intercepted.
+  is armed, and a click on a link out of the wizard, or a Back or Forward that
+  would leave it, opens "Leave without saving?" with Save as draft, Discard
+  changes and Keep editing. A stored draft asks the same while it has unsaved
+  changes (Save draft instead of Save as draft). Moving between the wizard's own
+  steps never asks. Back and Forward are held back by cancelling the
+  traversal itself: the Navigation API's `navigate` event (`navigationType`
+  "traverse") fires before `popstate`. Next's `popstate` listener cannot be
+  stopped from the wizard (listeners on `window` run in the order they were
+  added, and Next's was added first). A cancelled traversal changes nothing: the address stays, Next and the page never hear of it, no history
+  entry is added or rewritten, and nothing flashes in the address bar. Discard
+  and Save then traverse to the entry that was asked for. That needs the
+  Navigation API (Chrome and Edge have it; support in Safari and Firefox is
+  open, not checked here); without it Back and Forward are not held back. A
+  browser may also decline to let a traversal be cancelled (Chrome does for a
+  Back without fresh user activation on the page since the last one it
+  cancelled); that move goes through and is not fought. Leaving to another
+  document (a reload, another site) is the browser's own `beforeunload` prompt
+  only.
 - **The start screen is the repository's search over snapshots.** It always
   shows a search box and a Filters panel (tag, temporal coverage, spatial
   resolution), the count, the cards and pages, and an empty state: the same
@@ -139,8 +154,9 @@ them by itself.**
   leaves no draft behind, and a draft appears in My Simulations only when
   someone saved it.
 - Input typed into a new simulation is lost on a refresh, a closed tab or the
-  browser's Back, unless it was saved. The leave prompt covers the first two
-  for real page loads and the third not at all.
+  browser's Back, unless it was saved. The leave prompt covers all three, the
+  last only in a browser with the Navigation API, and not when the browser
+  declines to let a Back be cancelled.
 - A simulation saved with "Save as draft" takes two requests (derive, then
   patch). If the patch fails or leaves a field out, the draft exists with what
   the server took, and the wizard says which settings were not saved.

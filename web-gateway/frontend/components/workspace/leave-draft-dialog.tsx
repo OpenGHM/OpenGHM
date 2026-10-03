@@ -15,8 +15,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Asked when someone with unsaved settings follows a link out of the draft
- * wizard: save them and go on, drop them and go on, or stay. For a simulation
+ * Asked when someone with unsaved settings leaves the draft wizard (a link, or
+ * the browser's Back or Forward): save them and go on, drop them and go on, or
+ * stay. For a simulation
  * that is not stored yet, saving makes it a draft ("Save as draft"); for a
  * stored draft it saves the changes ("Save draft"). A controlled dialog that stays open while the save is in flight, like
  * the app's other confirmations.

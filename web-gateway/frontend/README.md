@@ -153,8 +153,14 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   the user presses Save as draft or submits (`/workspace/new/<snapshot id>`),
   and a stored draft is written by its Save draft button (Ctrl or Cmd + S does
   the same; [ADR 0028](../../docs/decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md)).
-  Both are the one wizard, and both ask before a link or a reload throws
-  unsaved input away; Next, Back and the step strip never ask. Anything new that
+  Both are the one wizard, and both ask before a link, a reload or the
+  browser's Back or Forward throws unsaved input away; Next, Back and the step
+  strip, and the browser's Back or Forward between `?step=` entries, never ask.
+  Back and Forward are held back by cancelling the Navigation API's `navigate`
+  event for a traversal that leaves the wizard (Next's `popstate` listener
+  cannot be stopped from the wizard); without that API, or when the browser
+  declines to let the Back be cancelled, they are not held back. See
+  [`leave-guard.ts`](lib/workspace/leave-guard.ts). Anything new that
   starts a simulation from a snapshot links to the new-simulation route; it does
   not call the derive action itself.
 - A disabled action says why, both in a tooltip and in visible text.

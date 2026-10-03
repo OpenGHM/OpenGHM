@@ -37,6 +37,7 @@ vi.mock("next/navigation", () => ({
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache } from "@/lib/workspace/draft-cache";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -441,6 +442,166 @@ describe("leaving a new simulation", () => {
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(false);
     expect(click(outsideLink("/workspace"))).toBe(false);
+  });
+});
+
+describe("leaving a new simulation with the browser's Back and Forward", () => {
+  const RUN = `${BASE_PATH}?step=run`;
+  const REVIEW = `${BASE_PATH}?step=review`;
+  const at = () => window.location.pathname + window.location.search;
+  let nav: FakeNavigation;
+  /** The browser's history as it was when the wizard opened: the page before it, then the wizard. */
+  const history = (urls = ["/workspace", RUN], index?: number) => {
+    nav = new FakeNavigation(urls, index);
+  };
+  const press = (delta: number) => act(async () => nav.go(delta));
+  afterEach(() => nav?.uninstall());
+
+  it("asks, with the same three ways on, when Back would leave a changed wizard, and stays where it is", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    await press(-1);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Leave without saving?");
+    expect(within(dialog).getByRole("button", { name: "Save as draft" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Discard changes" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep editing" })).toBeTruthy();
+    // The address is the wizard's again, and nothing was added to the history.
+    expect(at()).toBe(RUN);
+    expect(nav.index).toBe(1);
+    expect(nav.entries).toHaveLength(2);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("asks for a Forward that would leave it too", async () => {
+    history(["/workspace", RUN, "/repository"], 1);
+    wizard();
+    type("Colorado");
+    await press(1);
+    await screen.findByRole("alertdialog");
+    expect(at()).toBe(RUN);
+    expect(nav.index).toBe(1);
+  });
+
+  it("Keep editing stays on the wizard with every input, and a later Back asks again", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(at()).toBe(RUN);
+    expect(heading()).toBe("Run settings");
+    expect(nameInput().value).toBe("Colorado");
+    expect(deriveSimulation).not.toHaveBeenCalled();
+
+    await press(-1);
+    await screen.findByRole("alertdialog");
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("Discard changes goes where Back was going, and creates nothing", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(at()).toBe("/workspace"));
+    expect(nav.index).toBe(0);
+    expect(nav.entries).toHaveLength(2);
+    expect(deriveSimulation).not.toHaveBeenCalled();
+    expect(updateSimulation).not.toHaveBeenCalled();
+    // Nothing asks about the move, the browser included.
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  it("Save as draft saves it and then goes where Back was going, not to the new draft", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save as draft" }));
+    await waitFor(() => expect(at()).toBe("/workspace"));
+    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(replace).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("stays, with the error, when the save from the dialog fails", async () => {
+    deriveSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
+    history();
+    wizard();
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save as draft" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(at()).toBe(RUN);
+    expect(nav.index).toBe(1);
+    expect((await screen.findByRole("alert")).textContent).toContain("Backend exploded");
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("never asks about moving between its own steps, by the buttons, the strip or the browser", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(heading()).toBe("Review & submit");
+    expect(nav.urls().map((u) => new URL(u).pathname + new URL(u).search)).toEqual(["/workspace", RUN, REVIEW]);
+
+    await press(-1);
+    await waitFor(() => expect(heading()).toBe("Run settings"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(nameInput().value).toBe("Colorado");
+
+    await press(1);
+    await waitFor(() => expect(heading()).toBe("Review & submit"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    // And the way out from here still asks, and Back from Run settings is the way out.
+    await press(-1);
+    await press(-1);
+    await screen.findByRole("alertdialog");
+    expect(at()).toBe(RUN);
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("does not touch the history while nothing has changed", async () => {
+    history();
+    wizard();
+    await press(-1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(at()).toBe("/workspace");
+    expect(nav.index).toBe(0);
+  });
+
+  it("does not ask once the change is undone", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    type("");
+    await press(-1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(at()).toBe("/workspace");
+  });
+
+  it("does not misfire after Save as draft: the page is on its way to the draft", async () => {
+    history();
+    wizard();
+    type("Colorado");
+    fireEvent.click(saveButtons()[0]);
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    // Next swaps the address for the draft's; the guard is off by then.
+    act(() => window.history.replaceState(null, "", `/workspace/new-1?step=run`));
+    await press(-1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(at()).toBe("/workspace");
+    expect(nav.entries).toHaveLength(2);
   });
 });
 

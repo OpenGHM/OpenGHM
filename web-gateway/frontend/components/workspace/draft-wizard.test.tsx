@@ -36,6 +36,7 @@ vi.mock("next/navigation", () => ({
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache, readDraftCache, writeDraftCache } from "@/lib/workspace/draft-cache";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -727,6 +728,117 @@ describe("leaving a stored draft", () => {
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(false);
+  });
+});
+
+describe("leaving a stored draft with the browser's Back and Forward", () => {
+  const RUN = "/workspace/job-1?step=run";
+  const at = () => window.location.pathname + window.location.search;
+  let nav: FakeNavigation;
+  const press = (delta: number) => act(async () => nav.go(delta));
+  beforeEach(() => {
+    // The list, then the draft on Run settings.
+    nav = new FakeNavigation(["/workspace", RUN]);
+  });
+  afterEach(() => nav.uninstall());
+
+  it("asks, with Save draft, Discard changes and Keep editing, when Back would leave an unsaved draft", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    await press(-1);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Leave without saving?");
+    expect(within(dialog).getByRole("button", { name: "Save draft" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Discard changes" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep editing" })).toBeTruthy();
+    expect(at()).toBe(RUN);
+    expect(nav.index).toBe(1);
+    expect(nav.entries).toHaveLength(2);
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("Keep editing stays with the edit, and a later Back asks again", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(at()).toBe(RUN);
+    expect(nameInput().value).toBe("Colorado");
+    expect(updateSimulation).not.toHaveBeenCalled();
+    await press(-1);
+    await screen.findByRole("alertdialog");
+  });
+
+  it("Discard changes goes where Back was going, without saving", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(at()).toBe("/workspace"));
+    expect(nav.index).toBe(0);
+    await pause(1_200);
+    expect(updateSimulation).not.toHaveBeenCalled();
+  });
+
+  it("Save draft saves it, then goes where Back was going", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(at()).toBe("/workspace"));
+    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("stays when the save fails: the dialog closes, the address is the draft's, the failure is on the page", async () => {
+    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    wizard({ step: "run" });
+    type("Colorado");
+    await press(-1);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(at()).toBe(RUN);
+    expect(nav.index).toBe(1);
+    expect(screen.getByText("Couldn't save")).toBeTruthy();
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("never asks about its own steps, and the entry out of them is still the one asked about", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    fireEvent.click(button("Next")!);
+    expect(heading()).toBe("Review & submit");
+    await press(-1);
+    await waitFor(() => expect(heading()).toBe("Run settings"));
+    await press(1);
+    await waitFor(() => expect(heading()).toBe("Review & submit"));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await press(-1);
+    await press(-1);
+    await screen.findByRole("alertdialog");
+    expect(at()).toBe(RUN);
+    expect(nameInput().value).toBe("Colorado");
+  });
+
+  it("does nothing while everything is saved: Back just goes, and the step does not flip on the way out", async () => {
+    wizard({ step: "run" });
+    await press(-1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(at()).toBe("/workspace");
+    expect(nav.index).toBe(0);
+  });
+
+  it("does not ask again once the draft is saved by its button", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Draft saved"));
+    await press(-1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(at()).toBe("/workspace");
   });
 });
 
