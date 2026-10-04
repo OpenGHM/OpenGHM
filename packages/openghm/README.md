@@ -263,6 +263,16 @@ which gives the run an empty `output_base/<id>/spool`. `simulation.json` records
 `spool_mode` and `spool_dir`. **Two simulations must not share one snapshot's spool
 at the same time** (nothing stops them; use `--spool fresh` for the second).
 
+What building the spool costs inside a run, measured on one Anvil node (job
+21036757, the Global v1 snapshot, January 2000 after a one-month spinup, 26 cores,
+`-t 8`): 3385 s into an empty spool, which came out at 947 files and 15 GB, and
+2972 s for the same run reusing that spool, both exiting 0 with 54 output files.
+So the spool was at most 414 s, 12% of the run; at most, because the second run
+also had a warmer file cache. Building it ahead with forks (`build_spool.pl -f`,
+in both WBM versions' `utilities/`; v2's `wbm.pl -bldSpool` does it alongside the
+run, v1's has no such option) could save no more than that, and the toolkit does
+neither. How the share changes over a 10-year run is not measured.
+
 They differ only in **where** the model runs:
 
 - **`sim run`** executes the container in the **foreground on this machine** — no
