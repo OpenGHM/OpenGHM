@@ -57,6 +57,7 @@ run.
 | [repository-layout.md](architecture/repository-layout.md) | built | the top-level directories, what generates what, naming |
 | [local-development.md](architecture/local-development.md) | built | what runs on a laptop, what only in the cluster, and the traps in between |
 | [artifact-versioning.md](architecture/artifact-versioning.md) | **target** | the snapshot as a unit, the five versioned axes, storage shape, what runs where |
+| [simulation-reuse.md](architecture/simulation-reuse.md) | **target** | which runs need no compute (published output, saved run state) and a spool shared between runs |
 
 Diagram sources are SVG in [`architecture/diagrams/`](architecture/diagrams/),
 rendered to PNG alongside them:
@@ -125,6 +126,7 @@ and 0012 were folded into 0010.
 | [0026](decisions/0026-how-a-job-verdict-is-reached.md) | How a job's verdict is reached, and how long its files live | accepted |
 | [0027](decisions/0027-live-updates-are-polled.md) | A job's live state is polled and shared, and its logs are read by byte offset | accepted |
 | [0028](decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md) | A new simulation is stored when the user saves it, and a stored draft saves its own edits | accepted |
+| [0029](decisions/0029-a-run-computes-only-what-is-not-published.md) | A run computes only what is not already published | proposed |
 
 ## Missions
 
