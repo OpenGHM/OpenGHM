@@ -80,8 +80,9 @@ The job's body runs the toolkit.** Two steps, in order:
 
   The submit route refuses those fields (open item 9, narrowed).
 - WBM used about one core of the 16 it was granted (job 20974812), because
-  the toolkit passes no thread count. Each run is charged for cores it does
-  not use (open item 22).
+  the toolkit passed no thread count then. `sim run` now passes `-t` from
+  `SLURM_CPUS_PER_TASK`, capped at 8
+  ([toolkit README](../../packages/openghm/README.md), "WBM threads").
 - A run builds its own spool, which costs time on every run. Sharing a
   published spool read-only would need evidence that WBM never writes to a
   complete one.

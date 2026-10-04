@@ -19,6 +19,12 @@ from openghm.sim import (
     SubmitOptions, build_run, build_submit, record_exit_code, resolve_job_id, sidecar_path,
 )
 
+@pytest.fixture(autouse=True)
+def _no_slurm_allocation(monkeypatch):
+    """A test run is not inside someone's allocation unless it says so."""
+    monkeypatch.delenv("SLURM_CPUS_PER_TASK", raising=False)
+
+
 _INIT_TEMPLATE = """{
   MT_Code_Name => {
     Output_dir => 'wbm/wbm_output/WBM_test',
@@ -106,17 +112,50 @@ def test_run_docker_argv(tmp_path):
     assert built.argv[:3] == ["docker", "run", "--rm"]
 
 
-def test_run_and_submit_share_resolution(tmp_path):
+def test_run_and_submit_share_resolution(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "16")
     snap = _make_snapshot(tmp_path)
     cfg = _config(tmp_path)
     _c1, sub = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), cfg)
     _c2, run = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), cfg)
     # same mounts, inner cmd, staging, and per-sim init content
     assert [(m.container, m.readonly) for m in sub.mounts] == [(m.container, m.readonly) for m in run.mounts]
-    assert sub.inner_cmd == run.inner_cmd
+    assert sub.inner_cmd == run.inner_cmd    # 16 cores in both: 8 threads
     assert set(sub.staged_dirs) == set(run.staged_dirs)
     assert [(c.src, c.dst) for c in sub.staged_copies] == [(c.src, c.dst) for c in run.staged_copies]
     assert _gen(sub, "wbm_test.init").content == _gen(run, "wbm_test.init").content
+
+
+def test_run_without_an_allocation_passes_no_thread_count(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_run(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", "/wbm/wbm_init/wbm_test.init"]
+    assert " -t " not in built.display
+    assert json.loads(_gen(built, "simulation.json").content)["wbm_threads"] is None
+
+
+@pytest.mark.parametrize("env, flag", [
+    ("1", ["-t", "1"]), ("7", ["-t", "7"]), ("8", ["-t", "8"]), ("26", ["-t", "8"]),
+])
+def test_run_threads_follow_slurm_cpus_per_task(tmp_path, monkeypatch, env, flag):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", env)
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_run(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", verbose=True), _config(tmp_path))
+    # before the init path, next to -v; the metadata's 16 recommended cores are not consulted
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", *flag, "-v", "/wbm/wbm_init/wbm_test.init"]
+    assert f"/wbm/model/wbm.pl {' '.join(flag)} -v /wbm/wbm_init/wbm_test.init" in built.display
+    assert json.loads(_gen(built, "simulation.json").content)["wbm_threads"] == int(flag[1])
+
+
+@pytest.mark.parametrize("env", ["", "0", "-2", "abc", "4x", "2.5", " "])
+def test_run_ignores_a_slurm_cpus_per_task_that_is_not_a_positive_integer(tmp_path, monkeypatch, env):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", env)
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_run(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", "/wbm/wbm_init/wbm_test.init"]
 
 
 def test_run_sidecar_mode_local(tmp_path):

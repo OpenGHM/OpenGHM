@@ -21,7 +21,7 @@ from openghm.sim import (
     SubmitOptions, _set_perl_key, build_persim_init, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
     list_simulations, find_simulation, resolve_job_id, read_sidecar,
     build_sacct_argv, parse_sacct, sacct_primary, build_scancel_argv,
-    slurm_log_path, tail_lines,
+    slurm_log_path, tail_lines, wbm_threads,
 )
 
 _INIT_TEMPLATE = """{
@@ -119,7 +119,8 @@ def test_submit_split_mounts_and_sif(tmp_path):
     assert _find(built, "/wbm/spool").readonly is False
     # per-sim wbm_init overrides the snapshot's
     assert _find(built, "/wbm/wbm_init").host == str(tmp_path / "out" / "sim1" / "wbm_init")
-    assert built.inner_cmd == ["/wbm/model/wbm.pl", "/wbm/wbm_init/wbm_test.init"]
+    # 16 recommended cores, so WBM gets its maximum of 8 threads
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", "-t", "8", "/wbm/wbm_init/wbm_test.init"]
     assert built.argv[0] == "sbatch"
 
 
@@ -356,7 +357,42 @@ def test_sbatch_script_has_slurm_directives(tmp_path):
     assert "#SBATCH --time=2:00:00" in sb
     assert "#SBATCH --account=abc123456" in sb
     assert "singularity exec -B " in sb
-    assert "wbm-v2-lite-2.0.0.sif /wbm/model/wbm.pl /wbm/wbm_init/wbm_test.init" in sb
+    assert "wbm-v2-lite-2.0.0.sif /wbm/model/wbm.pl -t 8 /wbm/wbm_init/wbm_test.init" in sb
+
+
+@pytest.mark.parametrize("cores, expected", [
+    (None, None), (0, None), (-3, None), (True, None), ("4", None),
+    (1, 1), (7, 7), (8, 8), (9, 8), (26, 8),
+])
+def test_wbm_threads(cores, expected):
+    assert wbm_threads(cores) == expected
+
+
+def _metadata_with_cores(cores):
+    md = json.loads(json.dumps(_METADATA))
+    md["simulation"]["recommendedCompute"]["cores"] = cores
+    return md
+
+
+@pytest.mark.parametrize("cores, flag", [(1, ["-t", "1"]), (4, ["-t", "4"]), (26, ["-t", "8"])])
+def test_submit_threads_follow_the_metadata_cores(tmp_path, cores, flag):
+    snap = _make_snapshot(tmp_path, metadata=_metadata_with_cores(cores))
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", verbose=True), _config(tmp_path))
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", *flag, "-v", "/wbm/wbm_init/wbm_test.init"]
+    sb = _gen(built, ".sbatch").content
+    assert f"#SBATCH --cpus-per-task={cores}" in sb
+    assert f"/wbm/model/wbm.pl {' '.join(flag)} -v /wbm/wbm_init/wbm_test.init" in sb   # shown to users
+    assert json.loads(_gen(built, "simulation.json").content)["wbm_threads"] == int(flag[1])
+
+
+def test_submit_threads_follow_the_cores_option(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "2")   # a submit does not read the environment
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", cores=3), _config(tmp_path))
+    assert built.inner_cmd == ["/wbm/model/wbm.pl", "-t", "3", "/wbm/wbm_init/wbm_test.init"]
+    assert "-t 3 /wbm/wbm_init/wbm_test.init" in _gen(built, ".sbatch").content
 
 
 def test_sidecar_records_provenance(tmp_path):
@@ -375,6 +411,8 @@ def test_sidecar_records_provenance(tmp_path):
     assert sidecar["user_info"] == "alice@x.edu"
     assert sidecar["submitted_at"] == "2026-07-05T00:00:00Z"
     assert sidecar["slurm_job_id"] is None
+    assert sidecar["cores"] == 16
+    assert sidecar["wbm_threads"] == 8
 
 
 def test_cwd_default(tmp_path, monkeypatch):

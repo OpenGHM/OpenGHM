@@ -267,9 +267,27 @@ They differ only in **where** the model runs:
 
 - **`sim run`** executes the container in the **foreground on this machine** — no
   SLURM. Best for small domains and testing; a big domain can take hours.
+  Inside a SLURM allocation (a gateway job runs it that way) it reads
+  `SLURM_CPUS_PER_TASK`; elsewhere WBM keeps its own thread default.
 - **`sim submit`** generates an `sbatch` script and submits it. Run `submit` and the
   management commands (`status`/`logs`/`cancel`, which call `sacct`/`scancel`) on a
   SLURM login node. `list` just reads the local sidecars.
+
+**WBM threads.** Both pass `wbm.pl` `-t N` (`wbm_threads` in `sim.py`): one thread
+per core the run holds, at most 8, which is all `wbm.pl` accepts. `submit` knows the
+cores because it writes `--cpus-per-task` itself (`--cores`, else
+`simulation.recommendedCompute.cores`); `run` reads `SLURM_CPUS_PER_TASK`, and
+passes no `-t` when that is unset or not a positive integer, so a laptop run keeps
+WBM's default of 4. The count used is recorded as `wbm_threads` in `simulation.json`
+(`null` for no `-t`). Measured on one Anvil node, both runs of each pair exiting 0
+with the same number of output files: the Global v1 snapshot, January 2000 after a
+one-month spinup, took 3887 s at `-t 8` and 4659 s at `-t 1` (job 21026529, 26
+cores held for its 34 to 35 GiB peak), 17% less time and 17% less allocation
+charge; the v2 CONUS tutorial took 858 s at `-t 8` and 849 s at `-t 1` (job
+21026015, 0.98 CPUs either way), so threads do nothing for it and it recommends 1
+core. The full 10-year Global run with its two 5-year spinup loops is not
+measured; the past full run (job 17037959, default 4 threads) averaged about 1.7
+CPUs.
 
 Full contract: [`../dev/openghm_cli_design.md`](../dev/openghm_cli_design.md),
 [`../dev/openghm_jobrun_params.md`](../dev/openghm_jobrun_params.md).

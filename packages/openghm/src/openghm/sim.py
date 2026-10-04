@@ -51,6 +51,8 @@ from .types import BuiltCommand, DirCopy, GeneratedFile, Mount
 
 # ── constants (mirror dev/openghm_jobrun_params.md) ───────────────────────────
 WBM_MODEL = "/wbm/model/wbm.pl"
+#: ``wbm.pl`` clamps ``-t`` to 8 (``wbm.pl`` lines 209-210, 289-291), so more is wasted.
+WBM_MAX_THREADS = 8
 METADATA_FILENAME = "metadata.json"
 
 _SIM_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -487,6 +489,25 @@ def _render_sbatch(
     ])
 
 
+def wbm_threads(cores: Optional[int]) -> Optional[int]:
+    """The ``-t`` value for ``wbm.pl`` given the cores the run holds, or None for no ``-t``.
+
+    One thread per core, capped at :data:`WBM_MAX_THREADS`. ``None`` or a non-positive
+    count means the core count is unknown, so WBM keeps its own default.
+    """
+    if not isinstance(cores, int) or isinstance(cores, bool) or cores < 1:
+        return None
+    return min(cores, WBM_MAX_THREADS)
+
+
+def _slurm_cpus_per_task() -> Optional[int]:
+    """``SLURM_CPUS_PER_TASK`` as a positive int; None if unset or not one."""
+    raw = os.environ.get("SLURM_CPUS_PER_TASK", "").strip()
+    if not (raw.isascii() and raw.isdigit()):
+        return None
+    return int(raw) or None
+
+
 # ── main builder ────────────────────────────────────────────────────────────
 
 
@@ -502,6 +523,7 @@ class _Resolved:
     ctx: RuntimeContext
     mounts: List[Mount]
     inner_cmd: List[str]
+    wbm_threads: Optional[int]
     exec_argv: List[str]
     exec_line: str
     workdir: str
@@ -530,8 +552,15 @@ def _resolve_run(
     runtime: Optional[str] = None,
     sif: Optional[str] = None,
     check_assets: bool = True,
+    slurm_script: bool,
 ) -> _Resolved:
-    """Resolve a snapshot folder + metadata into the shared plan for submit/run."""
+    """Resolve a snapshot folder + metadata into the shared plan for submit/run.
+
+    ``slurm_script`` says who owns the allocation, which decides the WBM thread
+    count: ``sim submit`` writes the sbatch script, so the cores it asks for are
+    the cores the run gets; ``sim run`` runs inside an allocation someone else
+    made (a gateway job), so it reads ``SLURM_CPUS_PER_TASK``.
+    """
     sim_id = opts.simulation_id
     if not sim_id or not _SIM_ID_RE.match(sim_id):
         raise OpenghmError("--id is required and must match [A-Za-z0-9._-]+")
@@ -597,14 +626,21 @@ def _resolve_run(
         Mount(posixpath.join(snap, "gdal_test_files"), "/wbm/gdal_test_files", True),
     ]
 
-    inner_cmd = [WBM_MODEL, *(["-v"] if opts.verbose else []), f"/wbm/wbm_init/{init_filename}"]
+    threads = wbm_threads(cores if slurm_script else _slurm_cpus_per_task())
+    inner_cmd = [
+        WBM_MODEL,
+        *(["-t", str(threads)] if threads else []),
+        *(["-v"] if opts.verbose else []),
+        f"/wbm/wbm_init/{init_filename}",
+    ]
     exec_argv = _wbm_exec_argv(ctx, mounts, inner_cmd)
     persim_init_content = build_persim_init(
         open(init_template_path, "r", encoding="utf-8").read(), sim_id, opts
     )
 
     return _Resolved(
-        ctx=ctx, mounts=mounts, inner_cmd=inner_cmd, exec_argv=exec_argv,
+        ctx=ctx, mounts=mounts, inner_cmd=inner_cmd, wbm_threads=threads,
+        exec_argv=exec_argv,
         exec_line=display_command(exec_argv), workdir=workdir, spool_dir=spool_dir,
         output_dir=output_dir, run_state_dir=run_state_dir, persim_wbm_init=persim_wbm_init,
         init_filename=init_filename, persim_init_content=persim_init_content, snap=snap,
@@ -626,6 +662,7 @@ def _base_sidecar(r: _Resolved, opts: SubmitOptions, sim_id: str, now: Optional[
         "model_input": r.model_input_id,
         "model_input_path": r.model_input_path,
         "cores": r.cores,
+        "wbm_threads": r.wbm_threads,
         "walltime": r.walltime,
         "account": r.account,
         "partition": r.partition,
@@ -660,7 +697,8 @@ def build_submit(
     ``check_assets=False`` skips the check that the pinned image and the linked
     model input are in their caches (a ``--dry-run`` prints the plan without them).
     """
-    r = _resolve_run(opts, config, runtime=runtime, sif=sif, check_assets=check_assets)
+    r = _resolve_run(
+        opts, config, runtime=runtime, sif=sif, check_assets=check_assets, slurm_script=True)
     init_file, copy, dirs = _persim_files(r)
 
     sbatch_content = _render_sbatch(
@@ -706,7 +744,8 @@ def build_run(
     argv is the container ``exec`` line itself — no sbatch script is generated and
     the job runs synchronously on this machine.
     """
-    r = _resolve_run(opts, config, runtime=runtime, sif=sif, check_assets=check_assets)
+    r = _resolve_run(
+        opts, config, runtime=runtime, sif=sif, check_assets=check_assets, slurm_script=False)
     init_file, copy, dirs = _persim_files(r)
 
     sidecar = _base_sidecar(r, opts, opts.simulation_id, now)
