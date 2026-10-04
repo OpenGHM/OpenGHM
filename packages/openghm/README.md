@@ -263,15 +263,39 @@ which gives the run an empty `output_base/<id>/spool`. `simulation.json` records
 `spool_mode` and `spool_dir`. **Two simulations must not share one snapshot's spool
 at the same time** (nothing stops them; use `--spool fresh` for the second).
 
-What building the spool costs inside a run, measured on one Anvil node (job
-21036757, the Global v1 snapshot, January 2000 after a one-month spinup, 26 cores,
-`-t 8`): 3385 s into an empty spool, which came out at 947 files and 15 GB, and
-2972 s for the same run reusing that spool, both exiting 0 with 54 output files.
-So the spool was at most 414 s, 12% of the run; at most, because the second run
-also had a warmer file cache. Building it ahead with forks (`build_spool.pl -f`,
-in both WBM versions' `utilities/`; v2's `wbm.pl -bldSpool` does it alongside the
-run, v1's has no such option) could save no more than that, and the toolkit does
-neither. How the share changes over a 10-year run is not measured.
+What the spool saves, measured on Anvil on 2026-10-04 with WBM's own per-day
+timing (`-bd`, `-bm`), each run twice on one node, into an empty spool and then
+reusing it, every run exiting 0. A day whose forcing is not yet spooled costs the
+warp and the write; a spooled day reads `.dat` files instead.
+
+- Global v1 (job 21040894, 26 cores, `-t 8`; a 10-day spinup that WBM ran as all of
+  January, then 10 run days): 52.7 s per spinup day building the spool, 39.8 s
+  reusing it, so about 13 s of a 53 s day; the step that gains is "Irrigation
+  Processing # 1" (461 s against 120 s over the 41 days), not "Read climate data"
+  (59 s against 9 s). Run days, which write output, took 52.8 and 53.4 s with the
+  spool in place either way. An earlier January run (job 21036757) saved 414 s over
+  31 days, the same 13 s a day. A fresh 10-year run builds each of its 3653
+  distinct dates once (the spinup's two loops and the run share 2000 to 2004), so
+  a prebuilt spool would save roughly 13 hours of the 4 d 15 h run, about 12%; an
+  estimate, not a measurement.
+- v2 tutorial (job 21040893, 1 core, the published two years after a one-year
+  spinup, 1097 days): 1762 s building the spool, 1084 s reusing it (1.6 s and
+  1.0 s a day).
+
+Building the spool ahead with forks (`build_spool.pl -f`; v1 writes a
+`build_spool_batch.pl` for its run into the output directory, v2's `wbm.pl
+-bldSpool` starts it alongside the run) could save no more than that, and the
+toolkit does neither.
+
+**A run that ends at once has not run.** WBM resumes from
+`WBM_run_state/<run id>.dat` when it exists. The published snapshots carry the
+state saved at the end of their run, so running in a snapshot folder that has it
+ends in seconds: the v2 tutorial with its published state stopped after 5 s with
+"Destination dataset is up to date! Nothing to do..." and wrote no `.nc`
+(job 21043201). `sim run` and `sim submit` always give a run an empty
+`WBM_run_state`, so it computes. The same directory also holds the state at the
+end of the spinup (`<run id>.spinup.dat`), which could skip a spinup that has not
+changed; the toolkit does not use it.
 
 They differ only in **where** the model runs:
 
