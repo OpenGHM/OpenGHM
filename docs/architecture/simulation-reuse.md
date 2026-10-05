@@ -116,11 +116,24 @@ What is known about resuming, measured on Wyoming on 2026-10-05:
   most 152 of 67,480 cells differed, and soil moisture was identical by 31
   December. Fractions of tracked components differed by up to 1 in a few
   cells, where the totals they divide are near zero.
-- A self-check that ran a one-month spinup fresh and then resumed the same
-  months from its own saved state (job 21089081) differed more, from the first
-  day: runoff by up to 0.4 mm/day in 1,000 to 1,500 cells on the days sampled.
-  Why is not known; that
-  spinup overlapped the run's own months, which no published run does.
+- A short run extended is close to the run done in one go, not identical
+  (jobs 21089734 to 21089736, each day from an empty spool): Wyoming from the
+  published end-of-spinup state through 2000, then a new run from its
+  end-of-run state for January and February 2001, against one run from
+  2000-01-01 to 2001-02-28. The two 2000s were bit-identical, so a run repeats
+  itself; the extended two months differed from the first day by at most
+  5.5e-4 mm/day in runoff, 2.6e-3 in discharge (of up to 2.4e4) and 7.7e-3 mm
+  in soil moisture, in 14 to 327 of 67,480 cells, and the soil-moisture
+  difference was down to one cell by the end of February. A tracked
+  component's soil-moisture fraction differed by up to 0.23. So WBM's saved
+  state does not carry everything it holds in memory, at a level close to
+  floating-point noise; a continued run is a continuation, not a bit-exact
+  replay.
+- An earlier self-check that resumed from a one-month spinup overlapping the
+  run's own months (job 21089081) differed more (runoff by up to 0.4 mm/day in
+  about 1,300 cells). Not the spool: reading every day from a spool is
+  bit-identical to building it (§4). Its spinup overlapped the run's months,
+  which no published run does, and it was not pursued.
 
 ### Compute
 
@@ -183,6 +196,18 @@ files to the same directory.
   (Global 480 GB, Wyoming 10 GB, as published). Evicting past a file cap is
   not built.
 
-What it saves, measured: about 13 s of a 53 s Global day whose spool is not yet
-built (roughly 12% of a fresh 10-year run, estimated), and 0.6 s of a 1.6 s v2
-day.
+What it changes and saves, measured:
+
+- **Nothing in the output.** Wyoming (v1) from 2000-01-01 to 2001-02-28 run
+  twice, once building every day and once reading every day from the first
+  run's spool: all 165 variables of both years bit-identical (jobs 21089734,
+  21089736). The v2 tutorial through `sim --spool cache`, two runs at once from
+  an empty cache, then a third with the cache full, against a `--spool fresh`
+  run: every output file bit-identical (job 21090004).
+- **The second run builds nothing.** In job 21090004 the first of the two
+  concurrent runs harvested 1,827 days, the second found all 1,827 already
+  there, and the third linked 1,827 and built none.
+- **Time:** the Wyoming run reading its spool took 1,090 s against 2,978 s
+  building it, 63% less; v2 9 min against 13.5 min. A Global day spends about
+  13 s of 53 s building its spool (roughly 12% of a fresh 10-year run,
+  estimated).

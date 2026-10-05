@@ -102,7 +102,7 @@ def test_a_submit_is_accepted_and_the_job_records_everything(client, db, draft, 
     # What slurmly was handed: the rendered body, for this snapshot and sim id.
     ((job, _, script),) = sent
     assert isinstance(job, JobDB) and job.sim_id == body["sim_id"]
-    assert f'--id {body["sim_id"]} --spool fresh' in script  # defaults: no overrides
+    assert f'--id {body["sim_id"]} --spool cache' in script  # defaults: no overrides
     assert f'OG_WORK_DIR={body["work_dir"]}' in script
     assert "snapshot fetch" in script and " ds-1 " in script
 
@@ -694,7 +694,7 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
     assert "#SBATCH --time=22:30" in directives
     assert "#SBATCH --account=ees260008" in directives
     assert not [d for d in directives if "--nodes" in d or "--ntasks" in d]
-    assert "--id sim-20260930-0a1b2c --spool fresh" in script
+    assert "--id sim-20260930-0a1b2c --spool cache" in script
     # `set -e`, then the quiet module preamble, then the body: a failed
     # `module load` stops the job, and nothing is printed on a good one.
     lines = script.splitlines()

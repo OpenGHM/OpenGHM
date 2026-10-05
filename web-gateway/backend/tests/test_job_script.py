@@ -102,7 +102,7 @@ trap 'OG_SIGNAL=HUP; exit 129' HUP
 echo "openghm $("$OPENGHM" --version) commit abc1234"
 mkdir -p "$CACHE/snapshots"
 step fetch flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}" --spool skip
-step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool fresh
+step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool cache
 OG_PHASE=check"""
 
 
@@ -136,7 +136,7 @@ def test_a_changed_period_and_variables_add_exactly_those_flags(v2):
     assert run_line == (
         f'step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" '
         f"--id {SIM_ID} --run-start 2000-06-01 --run-end 2001-06-30 "
-        "--output-vars 'runoff discharge' --spool fresh"
+        "--output-vars 'runoff discharge' --spool cache"
     )
 
 

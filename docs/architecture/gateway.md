@@ -425,7 +425,9 @@ for the public commit it was built from:
    `flock` on the GPFS scratch filesystem only locks within one node. The
    fetch verifies the tree, the linked model input and the pinned image, and
    downloads what is missing.
-2. `openghm sim run` on that tree, with `--id <sim_id>` and `--spool fresh`.
+2. `openghm sim run` on that tree, with `--id <sim_id>` and `--spool cache`:
+   the run links the days the shared spool cache holds and hands it the days
+   it built after exiting 0 ([simulation-reuse.md](simulation-reuse.md) §4).
    `--run-start`, `--run-end` and `--output-vars` are passed only when the
    draft differs from the snapshot's own values.
 
