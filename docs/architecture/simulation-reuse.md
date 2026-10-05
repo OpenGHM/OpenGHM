@@ -197,13 +197,23 @@ and what a gateway job passes):
   mode and `snapshot fetch` has no `--spool` option; it never downloads a
   `spool/`, so an old tree that lists one still fetches.
 
-**Target:**
-
-- **A cache with a cap.** Scratch purges files untouched for 30 days, and the
-  binding limit is the file count, not the size: x-openghm has 100 TB and
-  1 million files on scratch, and a 10-year spool is about 24,000 files
-  (Global 480 GB, Wyoming 10 GB, as published). Evicting past a file cap is
-  not built (open item 24).
+- **A cache with a cap** (`57d8bac`). The binding limit is scratch's file
+  count, not its size: x-openghm has 100 TB and 1 million files, shared with
+  the model-input cache, simulation output and slurmly's job directories, and
+  the quota is not to be raised (the user, 2026-10-06). A 10-year spool is
+  about 48,700 files with headers. Before a run fills its spool it reads the
+  scratch row of `myquota`; at 80% of the file limit or more it deletes whole
+  units, a variant's year or its `clim` unit (climatology, static, bias and
+  `_MinMax` files), until the projection is at 50% or less. Oldest last use
+  goes first, and among one day's units those S3 holds go before those only
+  the cache holds. A run leases its years before the fill and releases them
+  in the harvest; a lease ends at the run's walltime, and a leased unit is
+  never deleted. A link whose target is gone after linking is dropped, so WBM
+  builds that day. Each variant keeps a per-unit index (`<variant>/.units/<unit>.json`) of files,
+  bytes, last use and whether S3 holds it. Without `myquota`, nothing is
+  deleted. `openghm spool prune --dry-run` shows what would go; on Anvil it
+  read 59,700 of 1,000,000 files (6.0%) on 2026-10-06. Scratch's own 30-day
+  purge still applies on top.
 
 What it changes and saves, measured:
 
