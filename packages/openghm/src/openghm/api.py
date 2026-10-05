@@ -115,11 +115,15 @@ def run(
     synchronously on this machine. Records the exit code into the sim's
     ``simulation.json`` when actually run.
     """
-    from .sim import record_exit_code  # local import to keep module import light
+    from .sim import record_exit_code  # local imports to keep module import light
+    from .spool import run_cached
 
     config = load_config(path=config_path).config
     _ctx_, built = build_run(SubmitOptions(**kwargs), config, runtime=runtime, sif=sif, now=now)
-    result = run_command(built, dry_run=dry_run, capture=capture)
+    if built.spool and not dry_run:
+        result = run_cached(built, capture=capture)     # fill + link, run, harvest on exit 0
+    else:
+        result = run_command(built, dry_run=dry_run, capture=capture)
     if not result.dry_run:
         record_exit_code(built, result.exit_code or 0)
     return result

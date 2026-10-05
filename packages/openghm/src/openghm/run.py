@@ -33,16 +33,19 @@ def run_command(
     *,
     dry_run: bool = False,
     capture: bool = False,
+    stage: bool = True,
 ) -> RunResult:
     """Stage files and run ``cmd.argv``.
 
     ``dry_run`` returns the plan without staging or spawning. ``capture`` returns
-    stdout/stderr as strings instead of streaming to the terminal.
+    stdout/stderr as strings instead of streaming to the terminal. ``stage=False``
+    runs a command the caller has already staged.
     """
     if dry_run:
         return RunResult(dry_run=True, argv=cmd.argv, display=cmd.display)
 
-    stage_files(cmd)
+    if stage:
+        stage_files(cmd)
     if capture:
         proc = subprocess.run(cmd.argv, capture_output=True, text=True)
         return RunResult(

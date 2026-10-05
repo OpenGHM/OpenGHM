@@ -18,11 +18,15 @@ openghm_jobrun_params.md``):
   ``utilities``, ``gdal_test_files``, plus a **per-sim copy** of ``wbm_init``.
 - **write** (per-simulation scratch under ``<output_base>/<sim_id>/``):
   ``wbm_output``, ``WBM_run_state``.
-- **spool** (``--spool``): by default the snapshot's own ``spool/``, bound
-  read-write and created if absent, so a fetched spool is used in place and a
-  missing one is there afterwards. ``--spool fresh`` gives the run an empty
-  ``<output_base>/<sim_id>/spool`` instead. Two simulations sharing one snapshot's
-  spool at the same time is unsafe.
+- **spool** (``--spool``): by default ``cache``: the run's own
+  ``<output_base>/<sim_id>/spool`` (read-write), plus the cache's variant directory
+  bound read-only at ``/wbm/spool/.cache``, which the files the cache holds are
+  symlinked to; WBM builds the rest, and a run that exits 0 hands what it built to
+  the cache (see :mod:`openghm.spool`). ``--spool fresh`` gives the run an empty
+  ``<output_base>/<sim_id>/spool`` and shares nothing. ``--spool snapshot`` binds
+  the snapshot's own ``spool/``, read-write and created if absent, so a fetched
+  spool is used in place and a missing one is there afterwards; two simulations
+  sharing one snapshot's spool at the same time is unsafe.
 
 The model image is the one the snapshot pins (``uses.container``), looked up in
 the ``sif_dir`` cache; ``--sif`` overrides it. The model input is the one it links
@@ -41,13 +45,17 @@ import json
 import os
 import posixpath
 import re
+import shlex
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from . import assets
+from . import assets, fetch
 from .errors import OpenghmError
 from .runtime import RuntimeContext, display_command
-from .types import BuiltCommand, DirCopy, GeneratedFile, Mount
+from .types import (
+    SPOOL_CACHE_BIND, SPOOL_CACHE_LINK, BuiltCommand, DirCopy, GeneratedFile, Mount, SpoolPlan,
+)
 
 # ── constants (mirror dev/openghm_jobrun_params.md) ───────────────────────────
 WBM_MODEL = "/wbm/model/wbm.pl"
@@ -59,8 +67,9 @@ _SIM_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 #: ``sbatch`` prints "Submitted batch job <N>" on success.
 _JOBID_RE = re.compile(r"Submitted batch job (\d+)")
 SIDECAR_NAME = "simulation.json"
-#: ``--spool`` choices: the snapshot's own ``spool/``, or a per-simulation one.
-SPOOL_MODES = ("snapshot", "fresh")
+#: ``--spool`` choices: a per-simulation spool fed by (and feeding) the shared cache,
+#: an empty per-simulation one, or the snapshot's own ``spool/``.
+SPOOL_MODES = ("cache", "fresh", "snapshot")
 
 
 @dataclass
@@ -77,9 +86,12 @@ class SubmitOptions:
     account: Optional[str] = None
     partition: Optional[str] = None
     output_base: Optional[str] = None
-    #: ``snapshot`` → ``<snapshot>/spool`` (created if absent); ``fresh`` → an empty
-    #: per-simulation spool.
-    spool: str = "snapshot"
+    #: ``cache`` → a per-simulation spool linked to the shared cache and harvested
+    #: into it; ``fresh`` → an empty per-simulation spool; ``snapshot`` →
+    #: ``<snapshot>/spool`` (created if absent).
+    spool: str = "cache"
+    #: The init file in the snapshot's ``wbm_init/`` to run (default: the metadata's).
+    init: Optional[str] = None
     # init override allow-list
     run_start: Optional[str] = None
     run_end: Optional[str] = None
@@ -489,6 +501,22 @@ def _render_sbatch(
     ])
 
 
+def _spool_wrapped(r: _Resolved) -> str:
+    """The sbatch body's command lines: the container exec, and for ``--spool cache`` the
+    fill/link before it and the harvest after it, run on the compute node by this same
+    interpreter's ``openghm`` (``set -e`` ends the script on a failed exec, so a failed
+    run harvests nothing; a failed harvest does not fail the job)."""
+    if not r.spool_plan:
+        return r.exec_line
+    openghm = f"{shlex.quote(sys.executable)} -m openghm.cli.main spool"
+    workdir = shlex.quote(r.workdir)
+    return "\n".join([
+        f"{openghm} prepare {workdir}",
+        r.exec_line,
+        f"{openghm} harvest {workdir} || echo 'openghm: the spool harvest failed' >&2",
+    ])
+
+
 def wbm_threads(cores: Optional[int]) -> Optional[int]:
     """The ``-t`` value for ``wbm.pl`` given the cores the run holds, or None for no ``-t``.
 
@@ -543,6 +571,7 @@ class _Resolved:
     partition: str
     output_base: str
     spool_mode: str
+    spool_plan: Optional[SpoolPlan] = None
 
 
 def _resolve_run(
@@ -579,7 +608,7 @@ def _resolve_run(
             "snapshot spec (run `openghm snapshot validate` on this folder)"
         )
 
-    init_filename = simulation.get("init")
+    init_filename = opts.init or simulation.get("init")
     if not init_filename:
         raise OpenghmError("simulation.init is missing in metadata.json")
     init_template_path = os.path.join(snap, "wbm_init", init_filename)
@@ -610,6 +639,7 @@ def _resolve_run(
     workdir = posixpath.join(output_base, sim_id)
     persim_wbm_init = posixpath.join(workdir, "wbm_init")
     spool_dir = _snapshot_spool(snap) if opts.spool == "snapshot" else posixpath.join(workdir, "spool")
+    cached = opts.spool == "cache"
     output_dir = posixpath.join(workdir, "wbm_output")
     run_state_dir = posixpath.join(workdir, "WBM_run_state")
 
@@ -618,6 +648,7 @@ def _resolve_run(
         Mount(model_input_path, "/wbm/data", True),
         Mount(posixpath.join(model_input_path, "data_init"), "/wbm/data_init", True),
         Mount(spool_dir, "/wbm/spool", False),
+        *([Mount(posixpath.join(workdir, SPOOL_CACHE_LINK), SPOOL_CACHE_BIND, True)] if cached else []),
         Mount(output_dir, "/wbm/wbm_output", False),
         Mount(run_state_dir, "/wbm/WBM_run_state", False),
         Mount(persim_wbm_init, "/wbm/wbm_init", False),
@@ -638,6 +669,20 @@ def _resolve_run(
         open(init_template_path, "r", encoding="utf-8").read(), sim_id, opts
     )
 
+    spool_plan = None
+    if cached:
+        pin = None if sif else assets.spec_from_container((meta.get("uses") or {}).get("container") or {})
+        spool_plan = SpoolPlan(
+            sim_id=sim_id, workdir=workdir, snapshot=snap,
+            init_container=f"/wbm/wbm_init/{init_filename}", runtime=ctx.runtime, image=image,
+            image_digest=f"sha256:{pin.sha256}" if pin else None,
+            model_input_id=model_input_id, model_input_path=model_input_path,
+            cache_root=config.resolve_spool_cache(), s3_base=fetch.S3_BASE,
+            # what an init is evaluated under: every read-only bind, and the run's own init
+            eval_mounts=[(m.host, m.container) for m in mounts if m.readonly and m.container != SPOOL_CACHE_BIND]
+            + [(persim_wbm_init, "/wbm/wbm_init")],
+        )
+
     return _Resolved(
         ctx=ctx, mounts=mounts, inner_cmd=inner_cmd, wbm_threads=threads,
         exec_argv=exec_argv,
@@ -647,7 +692,7 @@ def _resolve_run(
         version=version, model_input_id=model_input_id,
         model_input_path=model_input_path, cores=cores, walltime=walltime,
         account=account, partition=partition, output_base=output_base,
-        spool_mode=opts.spool,
+        spool_mode=opts.spool, spool_plan=spool_plan,
     )
 
 
@@ -668,6 +713,9 @@ def _base_sidecar(r: _Resolved, opts: SubmitOptions, sim_id: str, now: Optional[
         "partition": r.partition,
         "spool_mode": r.spool_mode,
         "spool_dir": r.spool_dir,
+        # what `openghm spool prepare|harvest` acts on; its results are added to this
+        # file as `spool`, `spool_variant` and `spool_cache` (see openghm.spool)
+        **({"spool_plan": r.spool_plan.to_dict()} if r.spool_plan else {}),
         "user_info": opts.user_info,
         "submitted_at": now,
     }
@@ -680,6 +728,8 @@ def _persim_files(r: _Resolved) -> Tuple[GeneratedFile, DirCopy, List[str]]:
     )
     copy = DirCopy(posixpath.join(r.snap, "wbm_init"), r.persim_wbm_init)
     dirs = [r.spool_dir, r.output_dir, r.run_state_dir]
+    if r.spool_plan:
+        dirs.append(posixpath.join(r.spool_dir, posixpath.basename(SPOOL_CACHE_BIND)))   # its mount point
     return init_file, copy, dirs
 
 
@@ -703,7 +753,7 @@ def build_submit(
 
     sbatch_content = _render_sbatch(
         sim_id=opts.simulation_id, account=r.account, partition=r.partition, cores=r.cores,
-        walltime=r.walltime, workdir=r.workdir, exec_line=r.exec_line,
+        walltime=r.walltime, workdir=r.workdir, exec_line=_spool_wrapped(r),
     )
     sidecar = _base_sidecar(r, opts, opts.simulation_id, now)
     sidecar["mode"] = "slurm"
@@ -725,6 +775,7 @@ def build_submit(
         staged_dirs=dirs,
         staged_copies=[copy],
         display=display_command(["sbatch", sbatch_path]),
+        spool=r.spool_plan,
     )
     return r.ctx, built
 
@@ -766,6 +817,7 @@ def build_run(
         staged_dirs=dirs,
         staged_copies=[copy],
         display=r.exec_line,
+        spool=r.spool_plan,
     )
     return r.ctx, built
 

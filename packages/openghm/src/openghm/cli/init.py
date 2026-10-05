@@ -291,6 +291,7 @@ def _print_summary(console, config: Config, want_sim: bool) -> None:
     console.print(f"  runtime      {config.runtime}")
     console.print(f"  sif_dir      {config.sif_dir}")
     console.print(f"  model_input_dir {config.model_input_dir}")
+    console.print(f"  spool_cache  {config.spool_cache}")
     if want_sim:
         console.print(f"  output_base  {config.output_base}")
         console.print(f"  account      {config.account}")

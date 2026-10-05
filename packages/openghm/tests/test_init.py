@@ -57,6 +57,7 @@ def test_non_interactive_writes_config(tmp_path, capsys):
     assert data["runtime"] == "docker"
     assert data["output_base"] == "~/.openghm/runs"
     assert data["model_input_dir"] == "~/.openghm/model-inputs"
+    assert data["spool_cache"] == "~/.openghm/spools"
     assert "No images were downloaded" in capsys.readouterr().out
 
 
@@ -70,3 +71,9 @@ def test_model_input_path_is_under_the_cache_dir():
     cfg = Config(model_input_dir="/cache/mi")
     assert cfg.model_input_path("ab" * 32) == "/cache/mi/" + "ab" * 32
     assert Config().model_input_path("x") == os.path.expanduser("~/.openghm/model-inputs/x")
+
+
+def test_spool_cache_is_a_cache_root_beside_the_others():
+    assert Config().spool_cache == "~/.openghm/spools"
+    assert Config().resolve_spool_cache() == os.path.expanduser("~/.openghm/spools")
+    assert Config(spool_cache="/scratch/spools").resolve_spool_cache() == "/scratch/spools"

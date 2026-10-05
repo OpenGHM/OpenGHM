@@ -51,6 +51,11 @@ class Config:
     #: fetch``): each one is ``<model_input_dir>/<id>/``, shared by every snapshot
     #: that links it.
     model_input_dir: str = "~/.openghm/model-inputs"
+    #: Cache root for spool files (``sim run`` / ``sim submit`` with ``--spool cache``):
+    #: each variant is ``<spool_cache>/<model input id>/<network>/<variant>/``,
+    #: shared by every run of that variant. Keep it on the filesystem of
+    #: ``output_base``: a run's new files are moved into it by hard link.
+    spool_cache: str = "~/.openghm/spools"
     #: Image ref for the docker runtime (local builds).
     docker_image: str = "wbm-lite:latest"
 
@@ -109,6 +114,10 @@ class Config:
         """
         return os.path.join(os.path.expanduser(self.model_input_dir), model_input_id)
 
+    def resolve_spool_cache(self) -> str:
+        """The spool cache root, with ``~`` expanded."""
+        return os.path.expanduser(self.spool_cache)
+
     def resolve_output_base(self) -> str:
         """Per-sim work/output root, with ``~`` expanded."""
         return os.path.expanduser(self.output_base)
@@ -128,6 +137,7 @@ def _render_default_toml(c: Config) -> str:
             f'sif           = "{c.sif}"   # tools-lite image (network/spatial/temporal)',
             f'sif_dir       = "{c.sif_dir}"   # cache root for downloaded images',
             f'model_input_dir = "{c.model_input_dir}"   # cache root for downloaded model inputs',
+            f'spool_cache  = "{c.spool_cache}"   # cache root for spool files shared by runs (same filesystem as output_base)',
             f'docker_image  = "{c.docker_image}"',
             "",
             "# sim submit / sim run defaults (per-sim work/output root + SLURM):",

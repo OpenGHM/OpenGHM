@@ -83,7 +83,9 @@ and `wbm-v2-lite:2.0.0`. `sif` in the config (the tools image, for `network`,
 Requires Python ≥ 3.9. All dependencies are pure-Python (`click`, `rich`,
 `questionary`, and `tomli` on < 3.11), so installation needs no compiler — important
 for HPC. Images are cached under `sif_dir` (default `~/.openghm/sif`) and model
-inputs under `model_input_dir` (default `~/.openghm/model-inputs`); an existing
+inputs under `model_input_dir` (default `~/.openghm/model-inputs`); spool files shared
+between runs under `spool_cache` (default `~/.openghm/spools`; keep it on the filesystem
+of `output_base`, see [Simulations](#simulations-openghm-sim)); an existing
 Anvil shared install keeps working without `init`.
 
 ## Use as a library
@@ -150,7 +152,8 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
-| `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool snapshot\|fresh`; writes `simulation.json` |
+| `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh\|snapshot` (default `cache`); writes `simulation.json` |
+| `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
 | `openghm sim logs <id> [-f]` | slurm `.out`/`.err` | print or `--follow` (tail) the SLURM log |
@@ -255,13 +258,48 @@ the model input the snapshot links (`uses.modelInput.id`), found at
 `--dry-run` prints the plan without either. `simulation.json` records `model_input`
 and `model_input_path`.
 
-**Spool** (`--spool`): `snapshot` (the default) binds `<snapshot>/spool` read-write
-as `/wbm/spool` and creates it if absent, so a fetched spool is used in place
-(never copied) and a missing one is there after the run. It needs the snapshot
-folder to be writable; otherwise the command fails and suggests `--spool fresh`,
-which gives the run an empty `output_base/<id>/spool`. `simulation.json` records
-`spool_mode` and `spool_dir`. **Two simulations must not share one snapshot's spool
-at the same time** (nothing stops them; use `--spool fresh` for the second).
+**Spool** (`--spool`), what WBM reads in place of rebuilding a forcing day:
+
+- `cache` (the default): the run's own `output_base/<id>/spool`, read-write, shared
+  with other runs through a cache at `spool_cache`. One cache directory holds one
+  **variant**, `<spool_cache>/<model input id>/<network>/<variant>/`, laid out as
+  WBM lays out `<spool>/<network>/`. The variant is the first 16 hex characters of a
+  sha256 over the image digest the snapshot pins, the `SHA256SUMS` lines of its
+  `model/` and `utilities/`, the network file's sha256 (from the model input's
+  `SHA256SUMS`) and the run's final init as `perl` in the image evaluates it, minus
+  what only names or times the run (`ID`, `Comment`, `Project`, `Output_vars`,
+  `Output_dir`, `PostProcessing`, `spool_dir`, `MT_Code_Name.{MT_ID,Run_Start,Run_End,File_Size}`,
+  the spinup; `STRIPPED_KEYS` in `openghm/spool.py`). A different image, model code,
+  network file, dataset, patch value or projection is a different variant, a different
+  period, spinup, variable list, ID or output directory is not. `openghm spool variant
+  <snapshot>` prints it and its inputs.
+  Before WBM starts the run **fills** the cache from the bucket's
+  `spools/<model input id>/<network>/<variant>/` (anonymous HTTPS, only the days from
+  the spinup start to the year after the run end that the cache lacks; an empty
+  prefix or an unreachable bucket is not an error, WBM builds what is missing) and
+  **links** the cached days of those years into its own spool as symlinks, with the
+  variant directory bound read-only at `/wbm/spool/.cache` (a nested bind under
+  `/wbm/spool`; `output_base/<id>/spool-cache` is the symlink it is bound from,
+  pointed at the variant once the init is evaluated). WBM reads a linked day and builds
+  the others as regular files in its own spool. After WBM exits 0 each regular
+  `.dat`/`.dat.hdr` pair under a dataset directory moves into the variant directory
+  (`.hdr` first, by hard link, never overwriting: two runs that built the same day
+  both finish and the cache keeps one copy); `Cell_Table.dat`, the reservoir tifs and
+  other network-level files are per run and stay. A run that exits non-zero harvests
+  nothing. `simulation.json` records `spool_variant`, `spool_cache` and `spool`
+  (`downloaded`, `linked`, `failed`, `fill_error`, `harvested`, `already_present`,
+  in days) and the `spool_plan` that `sim submit`'s job script reads: it runs
+  `openghm spool prepare <sim dir>` before WBM and `openghm spool harvest <sim dir>`
+  after, on the compute node. The cache is not uploaded anywhere, and nothing evicts
+  from it.
+- `fresh`: an empty `output_base/<id>/spool`; nothing is shared (to check a cached
+  spool against a built one).
+- `snapshot`: binds `<snapshot>/spool` read-write as `/wbm/spool` and creates it if
+  absent, so a fetched spool is used in place (never copied). It needs the snapshot
+  folder to be writable, otherwise the command fails and suggests `--spool fresh`.
+  **Two simulations must not share one snapshot's spool at the same time.**
+
+`simulation.json` records `spool_mode` and `spool_dir`.
 
 What the spool saves, measured on Anvil on 2026-10-04 with WBM's own per-day
 timing (`-bd`, `-bm`), each run twice on one node, into an empty spool and then

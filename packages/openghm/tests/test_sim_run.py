@@ -196,10 +196,16 @@ def test_resolve_job_id_local_mode_is_clear_error(tmp_path):
 
 def test_run_spool_modes(tmp_path):
     snap = _make_snapshot(tmp_path)
-    _c, snapshot_run = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    _c, snapshot_run = build_run(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
     assert _find(snapshot_run, "/wbm/spool").host == str(snap / "spool")
     assert json.loads(_gen(snapshot_run, "simulation.json").content)["spool_mode"] == "snapshot"
     _c, fresh_run = build_run(
         SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
     assert _find(fresh_run, "/wbm/spool").host == str(tmp_path / "out" / "sim1" / "spool")
     assert json.loads(_gen(fresh_run, "simulation.json").content)["spool_mode"] == "fresh"
+    _c, cache_run = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))  # the default
+    assert _find(cache_run, "/wbm/spool").host == str(tmp_path / "out" / "sim1" / "spool")
+    assert _find(cache_run, "/wbm/spool/.cache").readonly is True
+    assert json.loads(_gen(cache_run, "simulation.json").content)["spool_mode"] == "cache"
+    assert cache_run.spool is not None and fresh_run.spool is None and snapshot_run.spool is None

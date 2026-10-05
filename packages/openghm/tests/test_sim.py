@@ -17,6 +17,7 @@ import pytest
 from openghm import Config, assets, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
+from openghm.types import SpoolPlan
 from openghm.sim import (
     SubmitOptions, _set_perl_key, build_persim_init, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
     list_simulations, find_simulation, resolve_job_id, read_sidecar,
@@ -99,7 +100,8 @@ def _gen(built, endswith):
 
 def test_submit_split_mounts_and_sif(tmp_path):
     snap = _make_snapshot(tmp_path)
-    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
 
     assert _ctx.image == str(tmp_path / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif")
     # reads come from the model input cache and the snapshot, bound read-only
@@ -126,7 +128,8 @@ def test_submit_split_mounts_and_sif(tmp_path):
 
 def test_submit_staging_lists(tmp_path):
     snap = _make_snapshot(tmp_path)
-    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
     base = str(tmp_path / "out" / "sim1")
     assert set(built.staged_dirs) == {str(snap / "spool"), f"{base}/wbm_output", f"{base}/WBM_run_state"}
     assert len(built.staged_copies) == 1
@@ -422,14 +425,75 @@ def test_cwd_default(tmp_path, monkeypatch):
     assert _find(built, "/wbm/data").host == str(tmp_path / "model-inputs" / ("2" * 64))
 
 
-# ── --spool snapshot | fresh ─────────────────────────────────────────────────
+# ── --spool cache | fresh | snapshot ─────────────────────────────────────────
+
+
+def test_spool_cache_is_the_default_and_binds_the_variant_read_only(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    (snap / "spool").mkdir()
+    cfg = _config(tmp_path)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), cfg)
+    base = str(tmp_path / "out" / "sim1")
+    # the run's own spool, writable, and the cache's variant directory read-only inside it
+    assert _find(built, "/wbm/spool").host == f"{base}/spool"
+    assert _find(built, "/wbm/spool").readonly is False
+    cache = _find(built, "/wbm/spool/.cache")
+    assert cache.readonly is True and cache.host == f"{base}/spool-cache"
+    # nested binds are applied in order, and the mount point exists on the host
+    order = [m.container for m in built.mounts]
+    assert order.index("/wbm/spool/.cache") > order.index("/wbm/spool")
+    assert f"{base}/spool/.cache" in built.staged_dirs and str(snap / "spool") not in built.staged_dirs
+    sidecar = json.loads(_gen(built, "simulation.json").content)
+    assert sidecar["spool_mode"] == "cache" and sidecar["spool_dir"] == f"{base}/spool"
+    plan = built.spool
+    assert plan.cache_root == str(Path("~/.openghm/spools").expanduser())    # Config's default
+    assert plan.model_input_id == "2" * 64 and plan.image_digest == "sha256:" + "a" * 64
+    assert plan.init_container == "/wbm/wbm_init/wbm_test.init"
+    assert SpoolPlan.from_dict(sidecar["spool_plan"]) == plan      # what `spool prepare <sim dir>` reads back
+    # an init is evaluated under the read-only binds and the run's own init, never the spool or the output
+    containers = [c for _h, c in plan.eval_mounts]
+    assert "/wbm/data" in containers and "/wbm/model" in containers and "/wbm/wbm_init" in containers
+    assert not any(c.startswith(("/wbm/spool", "/wbm/wbm_output", "/wbm/WBM_run_state")) for c in containers)
+
+
+def test_spool_cache_dir_comes_from_the_config(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    cfg = Config(**{**_config(tmp_path).__dict__, "spool_cache": str(tmp_path / "sp")})
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), cfg)
+    assert built.spool.cache_root == str(tmp_path / "sp")
+
+
+def test_spool_cache_submit_fills_and_harvests_on_the_compute_node(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    lines = _gen(built, ".sbatch").content.splitlines()
+    work = str(tmp_path / "out" / "sim1")
+    prep = next(i for i, l in enumerate(lines) if l.endswith(f"-m openghm.cli.main spool prepare {work}"))
+    ex = next(i for i, l in enumerate(lines) if l.startswith("singularity exec "))
+    harv = next(i for i, l in enumerate(lines) if f"-m openghm.cli.main spool harvest {work} ||" in l)
+    assert prep < ex < harv                       # set -e: a failed exec ends the job before the harvest
+    assert "set -euo pipefail" in lines
+    # the submit itself fills and links nothing
+    assert not (tmp_path / "out" / "sim1" / "spool").exists()
+
+
+@pytest.mark.parametrize("mode", ["fresh", "snapshot"])
+def test_other_spool_modes_have_no_cache_step(tmp_path, mode):
+    snap = _make_snapshot(tmp_path)
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool=mode), _config(tmp_path))
+    assert built.spool is None
+    assert "openghm.cli.main" not in _gen(built, ".sbatch").content
+    assert not any(m.container == "/wbm/spool/.cache" for m in built.mounts)
+    assert "spool_plan" not in json.loads(_gen(built, "simulation.json").content)
 
 
 def test_spool_snapshot_uses_existing_spool_in_place(tmp_path):
     snap = _make_snapshot(tmp_path)
     (snap / "spool").mkdir()
     (snap / "spool" / "cache.bin").write_bytes(b"x")
-    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
     stage_files(built)
     assert _find(built, "/wbm/spool").host == str(snap / "spool")
     assert (snap / "spool" / "cache.bin").read_bytes() == b"x"   # untouched, not copied
@@ -474,7 +538,8 @@ def test_spool_snapshot_not_writable_suggests_fresh(tmp_path, existing_spool):
     target.chmod(0o555)
     try:
         with pytest.raises(OpenghmError, match="--spool fresh"):
-            build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+            build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"),
+                         _config(tmp_path))
     finally:
         target.chmod(0o755)
 
@@ -493,7 +558,8 @@ def test_stage_files_creates_dirs_copies_and_init(tmp_path):
     snap = _make_snapshot(tmp_path)
     # a sibling file in wbm_init must survive the per-sim copy
     (snap / "wbm_init" / "shared.pm").write_text("1;\n", encoding="utf-8")
-    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
 
     stage_files(built)
     base = tmp_path / "out" / "sim1"

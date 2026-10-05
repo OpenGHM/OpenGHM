@@ -30,6 +30,7 @@ from ..sim import (
     build_scancel_argv, slurm_log_path, tail_lines,
 )
 from ..spatial import SpatialOptions, build_spatial
+from ..spool import harvest, plan_from_sim_dir, prepare, run_cached, variant
 from ..temporal import TemporalOptions, build_temporal
 from ..network import NetworkOptions
 from ..types import BuiltCommand
@@ -103,10 +104,11 @@ def output_options(f):
                      default=None, help="container runtime"),
         click.option("--sif", default=None, metavar="PATH",
                      help="WBM SIF path override (default: the image the snapshot pins, from sif_dir)"),
-        click.option("--spool", type=click.Choice(["snapshot", "fresh"]), default="snapshot",
+        click.option("--spool", type=click.Choice(["cache", "fresh", "snapshot"]), default="cache",
                      show_default=True,
-                     help="snapshot: use <snapshot>/spool in place (created if absent); "
-                          "fresh: an empty per-simulation spool"),
+                     help="cache: a per-simulation spool linked to the shared spool cache and "
+                          "harvested into it; fresh: an empty per-simulation spool, nothing shared; "
+                          "snapshot: use <snapshot>/spool in place (created if absent)"),
         click.option("--dry-run", "dry_run", is_flag=True,
                      help="print the generated init/sbatch script without submitting"),
         click.option("-v", "--verbose", is_flag=True,
@@ -386,7 +388,11 @@ def sim_run_cmd(**p) -> None:
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
                               check_assets=not p["dry_run"])
-        result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"])
+        if built.spool and not p["dry_run"]:
+            # fill + link before WBM, harvest after it exits 0
+            result = run_cached(built, capture=p["as_json"], log=lambda m: click.echo(m, err=True))
+        else:
+            result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"])
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
         raise SystemExit(2)
@@ -499,6 +505,84 @@ def sim_cancel_cmd(**p) -> None:
                        exit_code=proc.returncode, stderr=proc.stderr, as_json=p["as_json"])
     if proc.returncode:
         raise SystemExit(proc.returncode)
+
+
+@cli.group("spool")
+def spool_group() -> None:
+    """the spool cache that `sim --spool cache` runs share."""
+
+
+@spool_group.command("variant")
+@click.argument("path", default=".", metavar="[PATH]")
+@click.option("--init", "init", default=None, metavar="NAME",
+              help="init file in the snapshot's wbm_init/ (default: the metadata's)")
+@click.option("--run-start", "run_start", default=None, metavar="YYYY-MM-DD", help="init override: Run_Start")
+@click.option("--run-end", "run_end", default=None, metavar="YYYY-MM-DD", help="init override: Run_End")
+@click.option("--output-vars", "output_vars", default=None, help="init override: Output_vars")
+@click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
+@click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
+@click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
+@click.option("--config", "config_path", default=None, metavar="PATH",
+              help="config file (default: ~/.openghm/config.toml)")
+@click.option("--runtime", type=click.Choice(["singularity", "apptainer", "docker"]),
+              default=None, help="container runtime")
+@click.option("--sif", default=None, metavar="PATH",
+              help="WBM SIF path override (default: the image the snapshot pins, from sif_dir)")
+def spool_variant_cmd(**p) -> None:
+    """print a snapshot's spool variant and what it is made of, as JSON
+
+    Builds the run `sim run --spool cache` would (the same init, image and model
+    input) and evaluates its init in the image, without running WBM; stripped of
+    what only names or times the run, with the image digest, the model code and
+    the network file, that is the variant. Needs the pinned image and the linked
+    model input in their caches.
+    """
+    import tempfile
+
+    from ..run import stage_files
+
+    opts = SubmitOptions(
+        snapshot_dir=p["path"], simulation_id="variant", spool="cache", init=p["init"],
+        run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
+        spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
+    )
+    try:
+        cfg = load_config(path=p["config_path"]).config
+        with tempfile.TemporaryDirectory(prefix="openghm-variant-") as scratch:
+            opts.output_base = scratch      # the staged init and an empty spool, thrown away
+            _ctx, built = build_run(opts, cfg, runtime=p["runtime"], sif=p["sif"])
+            stage_files(built)
+            result = variant(built.spool).to_dict()
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    click.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+def _spool_step(step: Callable, sim_dir: str) -> None:
+    try:
+        step(plan_from_sim_dir(sim_dir), log=click.echo)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+
+
+@spool_group.command("prepare")
+@click.argument("sim_dir", metavar="SIM_DIR")
+def spool_prepare_cmd(sim_dir: str) -> None:
+    """fill the cache from S3 and link it into a simulation's spool (before WBM)
+
+    SIM_DIR is the simulation's work directory (<output_base>/<id>). `sim submit`
+    puts this in its job script, so it runs on the compute node.
+    """
+    _spool_step(prepare, sim_dir)
+
+
+@spool_group.command("harvest")
+@click.argument("sim_dir", metavar="SIM_DIR")
+def spool_harvest_cmd(sim_dir: str) -> None:
+    """move the spool files a simulation built into the cache (after WBM exited 0)"""
+    _spool_step(harvest, sim_dir)
 
 
 @cli.command("wizard")
@@ -758,3 +842,7 @@ def sif_pull_cmd(name: str, config_path: str, force: bool) -> None:
 
 def main() -> None:
     cli(prog_name="openghm")
+
+
+if __name__ == "__main__":   # `python -m openghm.cli.main`: what a `sim submit` job script runs
+    main()
