@@ -163,6 +163,11 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   [`leave-guard.ts`](lib/workspace/leave-guard.ts). Anything new that
   starts a simulation from a snapshot links to the new-simulation route; it does
   not call the derive action itself.
+- A draft its snapshot's published output already answers is not submitted:
+  Review shows the published files in place of the submit card, and "Run
+  anyway" reruns it through the submit confirmation
+  ([`published-answer-card.tsx`](components/workspace/published-answer-card.tsx)).
+  A failed check never blocks submitting.
 - A disabled action says why, both in a tooltip and in visible text.
 - Submit spends allocation, and Cancel and Delete cannot be undone, so each
   one confirms in an AlertDialog that says what will happen. The dialogs are

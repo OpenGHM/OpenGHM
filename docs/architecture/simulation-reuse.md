@@ -4,9 +4,10 @@ How a simulation avoids computing what is already published or already
 computed: the snapshot's own output, its saved run state, and the spool of
 warped inputs.
 
-**Status: target.** Nothing below runs yet. Today every submitted draft runs
-WBM from an empty run state into an empty spool, start to finish (section 1).
-Where a piece already exists, the text says so. The reasoning is
+**Status: target**, except where a section says it is built. A draft the
+snapshot answers is no longer queued (section 3, built 2026-10-05); every other
+submitted draft runs WBM from an empty run state into an empty spool, start to
+finish (section 1). The reasoning is
 [ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)
 (accepted 2026-10-05); the gateway as it runs is [gateway.md](gateway.md).
 
@@ -27,7 +28,9 @@ the snapshot's `simulation.temporalCoverage`, the output variables are chosen
 from the snapshot's list, and a submit naming a model input, a spatial domain or
 custom parameters is refused (`unsupported_fields`, open item 9). So **every run
 the gateway can submit today asks for output the snapshot already carries**: a
-period inside the published one, and variables among the published ones.
+period inside the published one, and variables among the published ones. Such
+a draft is now answered from that output instead of run (section 3), unless the
+person asks for a rerun.
 
 The cost of that, measured on Anvil (toolkit README, "WBM threads" and the
 spool measurement after it): a published Global run is 20 simulated years
@@ -74,19 +77,13 @@ from fields it already holds.
 
 ### Published
 
-The Review step says the results exist and links them; submitting is replaced
-by opening them. The published files are public on S3 under
-`snapshots/<id>/wbm_output/<run ID>/`: one `daily/wbm_<year>.nc` per year with
-every published variable, and `monthly/<variable>/` and `yearly/<variable>/`.
-A narrower period or fewer variables is a selection of those files, not a run.
-A deliberate rerun, to check that the snapshot reproduces its own output, stays
-possible as an explicit choice that says it uses allocation.
-Which run produced the published files differs by snapshot: v2's were
-replaced by a run of the published image (job 20909227) and a rerun matched
-them ([snapshot-layout.md](../reference/snapshot-layout.md),
+Built: [gateway.md](gateway.md), "A draft the snapshot already answers is not
+queued". Which run produced the published files differs by snapshot: v2's
+were replaced by a run of the published image (job 20909227) and a rerun
+matched them ([snapshot-layout.md](../reference/snapshot-layout.md),
 [metadata-format.md](../reference/metadata-format.md)); Global's and Wyoming's
-come from the lab's own runs and have not been reproduced. The results page
-says which.
+come from the lab's own runs and have not been reproduced. The results card
+does not say which yet.
 
 ### Continue
 

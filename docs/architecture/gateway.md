@@ -460,7 +460,29 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 `work_dir` (`ANVIL_OUTPUT_BASE/<sim_id>`) and slurmly's `remote_job_dir`
 (`ANVIL_REMOTE_BASE_DIR/jobs/…`).
 
+**A draft the snapshot already answers is not queued**
+([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)).
+`POST /repository/datasets/{id}/published-answer` takes a draft's parameters and
+model input and says whether the snapshot's published output answers it: no
+model input, spatial domain or custom parameters of its own, the period inside
+`simulation.temporalCoverage` (a later start included), and every variable
+among `simulation.outputVariables`. Otherwise it gives one reason code per
+difference. When it is answered it lists the public files that hold the
+answer: `<run>/daily/wbm_<year>.nc` for each asked year and
+`<run>/{monthly,yearly}/<variable>/wbm_<year>.nc` for each asked variable,
+read from an anonymous listing of `snapshots/<id>/wbm_output/`, which the
+process keeps once per snapshot (`web-gateway/backend/app/services/published_answer.py`). A year
+with no daily file makes the draft not answered (`published_output_missing`).
+The Review step asks it for the draft on screen, unsaved or stored, and shows
+those files with sizes and links in place of the submit card; "Run anyway"
+submits with `{"rerun": true}` after a confirmation that says it uses compute
+time. A failed check (502 `published_listing_unavailable`) never blocks
+submitting.
+
 **What submit refuses.**
+- A draft the snapshot answers, unless the body says `{"rerun": true}`: 409
+  `answered_by_published`, before the Anvil checks. A rerun is audited with
+  `rerun: true`. A listing that fails lets the submit through.
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
