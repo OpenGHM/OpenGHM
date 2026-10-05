@@ -23,6 +23,8 @@ from app.models.repository import (
     ModelInputResponse,
     OwnedModelInputItem,
     OwnedSnapshotItem,
+    PublishedAnswerRequest,
+    PublishedAnswerResponse,
     RepositoryListResponse,
     SnapshotCatalogueItem,
     SnapshotLinks,
@@ -31,7 +33,7 @@ from app.models.repository import (
     snapshot_links,
 )
 from app.models.user import TokenPayload
-from app.services import run_start
+from app.services import published_answer, run_start
 from app.services.catalogue import CatalogueQuery, build_catalogue, newest_registered_first
 
 router = APIRouter(prefix="/repository", tags=["repository"])
@@ -221,6 +223,42 @@ async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     return snapshot_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
+
+
+@router.post("/datasets/{dataset_id}/published-answer")
+async def get_published_answer(
+    dataset_id: str,
+    body: PublishedAnswerRequest,
+    _user: TokenPayload = Depends(require_permission(Permission.REPO_VIEW)),
+) -> PublishedAnswerResponse:
+    """Whether a draft of this snapshot is already answered by its published
+    output, and the public files that answer it (``published_answer``). A POST
+    because an unsaved draft has no id: the draft's parameters are the body.
+    Reads nothing a person could not read anonymously, so any signed-in user
+    may ask. 422 ``invalid_parameters`` for a period that is not two real dates
+    in order; 502 ``published_listing_unavailable`` when the bucket cannot be
+    listed (a submit is not blocked by that, see ``jobs.submit_simulation``)."""
+    db = get_db()
+    doc = await db["datasets"].find_one({"_id": dataset_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    try:
+        return await published_answer.answer(
+            dataset_id, doc["document"], body.parameters, body.model_input_id
+        )
+    except published_answer.InvalidPeriod as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_parameters", "message": str(exc)}
+        )
+    except published_answer.ListingUnavailable:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "published_listing_unavailable",
+                "message": "The published files could not be listed right now. "
+                "Try again in a few minutes.",
+            },
+        )
 
 
 @router.post("/datasets", status_code=201)

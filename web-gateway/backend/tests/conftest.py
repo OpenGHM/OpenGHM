@@ -20,7 +20,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
 from app.core import audit, authz
 from app.core.config import settings
-from app.services import job_live, run_start, slurm
+from app.services import job_live, published_answer, run_start, slurm
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +46,22 @@ def _no_s3_read(monkeypatch):
     run_start.reset()
     yield
     run_start.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_s3_listing(monkeypatch):
+    """No test lists Anvil S3 either: listing a snapshot's published output
+    fails, which a submit takes as "answer unknown" and blocks nothing. A test
+    that wants a listing replaces `published_answer._fetch_page`
+    (tests/test_published_answer.py)."""
+
+    async def no_network(client, prefix, token):
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(published_answer, "_fetch_page", no_network)
+    published_answer.reset()
+    yield
+    published_answer.reset()
 
 
 @pytest.fixture

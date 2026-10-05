@@ -41,6 +41,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from .generated.model_input import OpenGHMModelInputMetadata
 from .generated.model_input import Resolution as ModelInputResolution
 from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
+from .job import JobParameters
 
 
 #: Who may find an artifact in the catalogue. Separate from freezing: a
@@ -389,3 +390,62 @@ def model_input_links(document: dict[str, Any], *, base_url: str, bucket: str) -
         metadataUrl=f"{tree}metadata.json",
         sha256sumsUrl=f"{tree}SHA256SUMS",
     )
+
+
+# ---- published answer (mission 2026-10-05-a-published-draft-is-not-run) ----
+
+
+class PublishedAnswerRequest(BaseModel):
+    """What a draft asks of its snapshot, as the editor holds it: an unsaved
+    draft has no job id, so the parameters travel in the body."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    parameters: JobParameters
+    model_input_id: str | None = None
+
+
+class PublishedAnswerReason(BaseModel):
+    """Why a draft is not answered by the snapshot: a code the page switches
+    on and a sentence for the person."""
+
+    code: Literal[
+        "model_input_override",
+        "spatial_domain",
+        "custom_params",
+        "period_before_published_start",
+        "period_after_published_end",
+        "variables_not_published",
+        "published_output_missing",
+    ]
+    message: str
+
+
+class PublishedFile(BaseModel):
+    """One published file that answers the draft. ``variable`` is null for a
+    daily file, which holds every published variable."""
+
+    group: Literal["daily", "monthly", "yearly"]
+    variable: str | None
+    year: int
+    key: str
+    url: str
+    size: int
+
+
+class PublishedPeriod(BaseModel):
+    start: str
+    end: str
+
+
+class PublishedAnswerResponse(BaseModel):
+    """``reasons`` is empty when ``answered`` and ``files`` is empty when not.
+    ``period`` is the snapshot's published period (the run the files come
+    from), not the asked one; ``run_id`` is the run's folder under
+    ``wbm_output/`` (null when none was found)."""
+
+    answered: bool
+    reasons: list[PublishedAnswerReason]
+    period: PublishedPeriod | None
+    run_id: str | None
+    files: list[PublishedFile]

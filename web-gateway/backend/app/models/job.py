@@ -524,3 +524,12 @@ class JobLogResponse(BaseModel):
     next_offset: int = 0
     size: int = 0
     eof: bool = True
+
+
+class SubmitRequest(BaseModel):
+    """POST /jobs/{job_id}/submit body, optional. `rerun` says the person asked
+    for a run of a draft its snapshot already answers (the published output
+    covers it), to check the snapshot reproduces itself. Without it such a
+    draft is refused (`answered_by_published`, app.services.published_answer)."""
+
+    rerun: bool = False

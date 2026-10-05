@@ -44,10 +44,18 @@ from app.models.job import (
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
+    SubmitRequest,
     verdict_fields,
 )
 from app.models.user import TokenPayload
-from app.services import job_live, job_script, run_start, sbatch_refusal, slurm
+from app.services import (
+    job_live,
+    job_script,
+    published_answer,
+    run_start,
+    sbatch_refusal,
+    slurm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -665,6 +673,7 @@ def _sbatch_refusal_message(exc: Exception) -> str:
 )
 async def submit_simulation(
     job_id: str,
+    body: SubmitRequest | None = None,
     user: TokenPayload = Depends(require_submitter),
 ):
     db = get_db()
@@ -677,12 +686,6 @@ async def submit_simulation(
             "not_a_draft",
             f"Only a draft can be submitted; this simulation is {doc['status']}.",
         )
-    if not slurm.toolkit_configured():
-        raise _error(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "anvil_not_configured",
-            _ANVIL_NOT_CONFIGURED,
-        )
 
     envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
     if envelope is None:
@@ -693,6 +696,36 @@ async def submit_simulation(
         )
     snapshot = envelope["document"]
     job = JobDB(**doc)
+    rerun = body is not None and body.rerun
+
+    # A draft the snapshot's published output already answers is not queued
+    # (ADR 0029) unless the person asks for a rerun. Before the Anvil check, so
+    # it answers the same with or without Anvil. A bucket that cannot be listed
+    # blocks nothing, like the run-date checks below: the answer is unknown, and
+    # an unchecked submit is a rerun the person can still make on purpose.
+    if not rerun:
+        try:
+            answered = await published_answer.answer(
+                job.dataset_id, snapshot, job.parameters, job.model_input_id
+            )
+        except (published_answer.InvalidPeriod, published_answer.ListingUnavailable):
+            answered = None  # the checks below say what is wrong with the dates
+        if answered is not None and answered.answered:
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "answered_by_published",
+                "This snapshot's published results already answer this simulation, "
+                "so nothing was queued. Open the published files, or ask for a "
+                "rerun to check that the snapshot reproduces itself (it uses "
+                "allocation).",
+            )
+
+    if not slurm.toolkit_configured():
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "anvil_not_configured",
+            _ANVIL_NOT_CONFIGURED,
+        )
 
     fields = job_script.unsupported_fields(job.parameters, job.model_input_id, snapshot)
     if fields:
@@ -876,6 +909,7 @@ async def submit_simulation(
             "dataset_id": job.dataset_id,
             "slurm_job_id": submitted.slurm_job_id,
             "status": "SUBMITTED",
+            **({"rerun": True} if rerun else {}),
         },
     )
 
