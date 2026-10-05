@@ -308,8 +308,8 @@ def render_job_body(
     snapshots can link the same model input. `fetch_lock` must be on a
     filesystem where flock works across nodes: on Anvil that is /home (NFS),
     not /anvil (GPFS), where two jobs on different nodes held it at once.
-    The run shares a spool through the toolkit's spool cache (`--spool cache`),
-    which links the days the cache holds and harvests the days the run built
+    The simulation shares a spool through the toolkit's spool cache (`--spool cache`),
+    which links the days the cache holds and harvests the days the simulation built
     after it exits 0; the fetch brings no spool.
 
     `work_dir` is where `sim run` writes (`<output_base>/<sim_id>`, ADR 0023):
@@ -430,7 +430,7 @@ def with_headroom(walltime: str) -> str:
     """A snapshot's recommended walltime plus 50%, in SLURM's format, rounded
     up to a whole second and never over `MAX_WALLTIME_SECONDS` (what one job
     may use on Anvil): `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`,
-    `80:00:00` becomes `96:00:00`. A run of the v2 snapshot took 13:49 of its
+    `80:00:00` becomes `96:00:00`. A simulation of the v2 snapshot took 13:49 of its
     recommended 15:00, so the bare recommendation leaves no room. Applied only
     to a snapshot's value; a walltime the user chose is sent as given.
     A recommendation that is itself over the limit cannot be run in one job:
@@ -505,7 +505,7 @@ class RunOverrides:
 
 
 def run_overrides(parameters: JobParameters, snapshot: dict) -> RunOverrides:
-    """The flags that turn the snapshot's init into the draft's run, in the
+    """The flags that turn the snapshot's init into the draft's simulation, in the
     toolkit's formats: dates as `YYYY-MM-DD`, output variables as one
     space-separated string (WBM's `Output_vars` is whitespace-separated).
 

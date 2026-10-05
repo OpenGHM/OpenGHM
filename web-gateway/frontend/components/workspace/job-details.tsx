@@ -49,7 +49,7 @@ function Variables({ variables }: { variables: string[] }) {
 }
 
 /**
- * What the run was asked to do and where it ran, read-only once past DRAFT.
+ * What the simulation was asked to do and where it ran, read-only once past DRAFT.
  * Cores and walltime are what the job asked SLURM for: the draft's own choice,
  * else the model snapshot's recommendation worked out the way the submit does
  * (`effectiveCompute`, the backend's `resolve_compute`), marked as such. While

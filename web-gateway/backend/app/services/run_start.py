@@ -1,10 +1,10 @@
-"""What a snapshot's init asks of a run's dates, read before the job reaches the
-queue: where a run may start, and the multi-year aggregation window the run
+"""What a snapshot's init asks of a simulation's dates, read before the job reaches the
+queue: where a simulation may start, and the multi-year aggregation window the simulation
 must reach (`check_run_dates`).
 
-WBM writes the first step of a run into band 1 of an output file, so a run can
+WBM writes the first step of a simulation into band 1 of an output file, so a simulation can
 only start on the first day of a file. How much one file holds is the model's
-`File_Size` (in the `.init`'s `MT_Code_Name` block): with `'year'` a run starts
+`File_Size` (in the `.init`'s `MT_Code_Name` block): with `'year'` a simulation starts
 on January 1, with `'month'` on the first of a month. `openghm sim run` refuses
 any other start (`_check_run_start_alignment`, packages/openghm/src/openghm/
 sim.py), but only once the SLURM job runs, after a queue wait. This module reads
@@ -30,16 +30,16 @@ the v1 model shares: no v1 run was taken to the end (a v1 job started
 
 The aggregation window. With `TA_multi_year_start` and `TA_multi_year_timestep`
 both set in the init's `PostProcessing` block, WBM stops at start-up unless that
-year lies inside the run: `post_processing` in
+year lies inside the simulation: `post_processing` in
 `images/wbm-tools-lite/wbm/model/RIMS/WBM.pm` (line 4279) dies with "Aggregation
 multi-year start is outside of the run dates..." when the year is before the
 run's first year or after its last complete year (the year of `Run_End`, one
 less unless it is a December 31). The `Run` flag does not matter: Anvil job
-21016198 had `Run => 0` and died of it. So a run must start in or before that
+21016198 had `Run => 0` and died of it. So a simulation must start in or before that
 year and end on or after its December 31. This lives in the init and nowhere in
 the snapshot's metadata (`simulation` leaves `PostProcessing` out,
 docs/reference/metadata-format.md), hence this read. Only a date that differs
-from the snapshot's own is held to it: the published run passed, and the
+from the snapshot's own is held to it: the published simulation passed, and the
 toolkit (`_check_run_dates_vs_aggregation`) checks overrides only. A December 30
 end is let through: a 360-day calendar counts it as a year's last day, and the
 calendar is the forcing data's, not the init's, so WBM has the last word.
@@ -69,7 +69,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-#: `"year"`: a run starts on January 1. `"month"`: on the first of a month.
+#: `"year"`: a simulation starts on January 1. `"month"`: on the first of a month.
 #: `"none"`: the init was read and sets no rule (`File_Size 'day'`, another
 #: value, or no `File_Size` beside a `Time_Series` key). `None` (not in this alias): the
 #: init could not be read, which is not the same as having no rule.
@@ -122,7 +122,7 @@ def aggregation_start_year_from_init(content: str) -> int | None:
 
 @dataclass(frozen=True)
 class InitRules:
-    """What a snapshot's init asks of a run's dates, as read."""
+    """What a snapshot's init asks of a simulation's dates, as read."""
 
     alignment: RunStartAlignment
     #: The year multi-year aggregation starts in; None when the init sets none.
@@ -169,10 +169,10 @@ def nearest_valid_start(
 
 
 _RULE_TEXT = {
-    "year": "This snapshot's model writes one file per year, so a run must start on January 1.",
+    "year": "This snapshot's model writes one file per year, so a simulation must start on January 1.",
     "month": (
         "This snapshot's model writes one file per month, "
-        "so a run must start on the first day of a month."
+        "so a simulation must start on the first day of a month."
     ),
 }
 
@@ -184,9 +184,9 @@ def check_run_start(
     snapshot_start: str | None = None,
     snapshot_end: str | None = None,
 ) -> RunStartViolation | None:
-    """None when `start` may start a run, or when nothing is known to forbid it.
+    """None when `start` may start a simulation, or when nothing is known to forbid it.
 
-    A start equal to the snapshot's own is the published run's, which the
+    A start equal to the snapshot's own is the published simulation's, which the
     toolkit does not re-check (it checks only a `--run-start` override), so it
     is allowed here too. A value that is not an ISO date is not this check's to
     refuse: the submit's own date check does that."""
@@ -237,20 +237,20 @@ def aggregation_messages(
     # When the range is one date, say that date rather than "X to X".
     if snapshot_start and snapshot_start <= edge:
         start_text = (
-            f"a run must start on {edge}"
+            f"a simulation must start on {edge}"
             if snapshot_start == edge
-            else f"a run can start no later than {edge} (allowed: {snapshot_start} to {edge})"
+            else f"a simulation can start no later than {edge} (allowed: {snapshot_start} to {edge})"
         )
     else:
-        start_text = f"a run can start no later than {edge}"
+        start_text = f"a simulation can start no later than {edge}"
     if snapshot_end and edge <= snapshot_end:
         end_text = (
-            f"a run must end on {edge}"
+            f"a simulation must end on {edge}"
             if snapshot_end == edge
-            else f"a run must end on or after {edge} (allowed: {edge} to {snapshot_end})"
+            else f"a simulation must end on or after {edge} (allowed: {edge} to {snapshot_end})"
         )
     else:
-        end_text = f"a run must end on or after {edge}"
+        end_text = f"a simulation must end on or after {edge}"
     return {"start": f"{lead} {start_text}.", "end": f"{lead} {end_text}."}
 
 

@@ -1,6 +1,6 @@
 /**
  * What a snapshot allows of the run period, said once, as the hint under the
- * Start and End fields: where a run may start (`run-start.ts`), where it must
+ * Start and End fields: where a simulation may start (`run-start.ts`), where it must
  * end (`aggregation-window.ts`), and the period the snapshot covers. A date
  * that breaks one is told on its own field; this is the line that states the
  * constraint, so nothing else has to repeat it.

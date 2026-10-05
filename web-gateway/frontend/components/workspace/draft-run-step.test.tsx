@@ -377,7 +377,7 @@ describe("the draft run step: dates", () => {
   });
 
   it("flags an end the snapshot's multi-year aggregation cannot run with, on the End field", () => {
-    // 2000-01-01 .. 2001-12-31, aggregating from 2001: the run that failed on Anvil.
+    // 2000-01-01 .. 2001-12-31, aggregating from 2001: the simulation that failed on Anvil.
     const aggregated = fakeDataset({
       runStartAlignment: "year",
       aggregationStartYear: 2001,
@@ -585,20 +585,20 @@ describe("the draft run step: compute", () => {
   });
 });
 
-describe("the draft run step: a walltime the snapshot's reference run does not fit in", () => {
+describe("the draft run step: a walltime the snapshot's reference simulation does not fit in", () => {
   const long = { cores: 16, walltime: "111:30:00" };
 
   it("explains it next to the Walltime field, and shows the automatic one as the limit", () => {
     step({ recommended: long });
     // Visible with the fields closed.
-    const notice = screen.getByText(/reference run took about 111 h 30 min, more than the 96 h/);
+    const notice = screen.getByText(/reference simulation took about 111 h 30 min, more than the 96 h/);
     expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
     openCompute();
     expect(notice.textContent).toMatch(/Shorten the run period or set a walltime\./);
     // One line, with the long reason behind a button.
-    expect(screen.queryByText(/the run may be stopped when time runs out/)).toBeNull();
+    expect(screen.queryByText(/the simulation may be stopped when time runs out/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Why?" }));
-    expect(screen.getByText(/the run may be stopped when time runs out/)).toBeTruthy();
+    expect(screen.getByText(/the simulation may be stopped when time runs out/)).toBeTruthy();
     const walltime = screen.getByLabelText(/^Walltime/);
     expect(walltime.getAttribute("aria-describedby")).toContain(notice.closest("div")!.id);
     expect(walltime.getAttribute("placeholder")).toBe("96:00:00");
@@ -613,15 +613,15 @@ describe("the draft run step: a walltime the snapshot's reference run does not f
 
   it("says nothing for a recommendation that fits", () => {
     step();
-    expect(screen.queryByText(/reference run took/)).toBeNull();
+    expect(screen.queryByText(/reference simulation took/)).toBeNull();
     openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("00:22:30");
     expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
   });
 
-  it("only hints, without an error, at a walltime shorter than the reference run", () => {
+  it("only hints, without an error, at a walltime shorter than the reference simulation", () => {
     step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
-    expect(screen.getByText(/reference run took about 4 h 30 min/)).toBeTruthy();
+    expect(screen.getByText(/reference simulation took about 4 h 30 min/)).toBeTruthy();
     openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("aria-invalid")).not.toBe("true");
   });
@@ -635,15 +635,15 @@ describe("the draft run step: cores below the recommended count", () => {
     step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
     // In view with the fields closed.
     const note = warning()!;
-    expect(note.textContent).toContain("1 core is below the recommended 64: the run may run out of memory.");
+    expect(note.textContent).toContain("1 core is below the recommended 64: the simulation may run out of memory.");
     // The arithmetic is behind "Why?".
     expect(screen.queryByText(/enough memory for its run/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Why?" }));
     expect(screen.getByText(/On Anvil's shared partition memory comes with cores/).textContent).toBe(
-      "This model snapshot recommends 64 cores, enough memory for its run. " +
+      "This model snapshot recommends 64 cores, enough memory for its simulation. " +
         "On Anvil's shared partition memory comes with cores, about 1.9 GB each, " +
         "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
-        "the run may be stopped for running out of memory."
+        "the simulation may be stopped for running out of memory."
     );
     openCompute();
     const cores = screen.getByLabelText("Cores");

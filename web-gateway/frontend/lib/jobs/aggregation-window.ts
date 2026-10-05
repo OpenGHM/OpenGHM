@@ -3,7 +3,7 @@
  * and End fields.
  *
  * With `TA_multi_year_start` and `TA_multi_year_timestep` set in its init, WBM
- * stops at start-up unless that year lies inside the run: the run must start in
+ * stops at start-up unless that year lies inside the simulation: the run must start in
  * or before the year and end on or after its December 31. The backend reads the
  * year from the init once and sends it as `Dataset.aggregationStartYear`
  * (`DatasetDetailResponse` in app/models/repository.py); `check_run_dates` in
@@ -42,15 +42,15 @@ export function aggregationMessages(
   const start =
     snapshotStart && snapshotStart <= edge
       ? snapshotStart === edge
-        ? `a run must start on ${edge}`
-        : `a run can start no later than ${edge} (allowed: ${snapshotStart} to ${edge})`
-      : `a run can start no later than ${edge}`;
+        ? `a simulation must start on ${edge}`
+        : `a simulation can start no later than ${edge} (allowed: ${snapshotStart} to ${edge})`
+      : `a simulation can start no later than ${edge}`;
   const end =
     snapshotEnd && edge <= snapshotEnd
       ? snapshotEnd === edge
-        ? `a run must end on ${edge}`
-        : `a run must end on or after ${edge} (allowed: ${edge} to ${snapshotEnd})`
-      : `a run must end on or after ${edge}`;
+        ? `a simulation must end on ${edge}`
+        : `a simulation must end on or after ${edge} (allowed: ${edge} to ${snapshotEnd})`
+      : `a simulation must end on or after ${edge}`;
   return { start: `${lead} ${start}.`, end: `${lead} ${end}.` };
 }
 
@@ -69,7 +69,7 @@ export function aggregationFieldMessages(
 /**
  * Which of the two dates break the window; nothing when `year` is null (no
  * window, or the init could not be read). A date equal to the snapshot's own is
- * the published run's and passes; a value that is not a real date is the date
+ * the published simulation's and passes; a value that is not a real date is the date
  * field's to refuse. December 30 passes: a 360-day calendar's last day, which
  * the init does not announce, so WBM decides.
  */

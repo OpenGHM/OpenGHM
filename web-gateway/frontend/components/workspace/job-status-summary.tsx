@@ -82,7 +82,7 @@ function Bar({
 /**
  * RUNNING/COMPLETING — how far WBM has simulated and how much of the walltime
  * is used (ADR 0027). The walltime bar is an upper bound on the wait, not work
- * done, and is drawn thin and captioned as that; the run bar is drawn
+ * done, and is drawn thin and captioned as that; the simulation bar is drawn
  * only when WBM's own log gives a fraction.
  */
 function RunningBody() {
@@ -112,7 +112,7 @@ function RunningBody() {
             {words.percent !== null && (
               <Bar
                 percent={words.percent}
-                label="Run progress"
+                label="Simulation progress"
                 valueText={words.headline}
                 barClass="bg-primary"
               />
@@ -315,7 +315,7 @@ export function JobStatusSummary({
   const headline = useHeadline(job, viewerEmail, shown);
   const failure = view.failure ?? job.failure;
   const failureCopy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
-  // A failed run reads amber when it hit a limit, grey when it was not its
+  // A failed simulation reads amber when it hit a limit, grey when it was not its
   // owner's doing, and red otherwise.
   const hue = HUE[shown === "FAILED" ? TONE_HUE[failureCopy.tone] : shown];
   const active = !isTerminalStatus(status);

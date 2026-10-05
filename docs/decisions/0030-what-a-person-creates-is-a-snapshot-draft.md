@@ -30,9 +30,12 @@ nothing else.**
   its status say, so the button does not repeat it.
 - **Status `DRAFT` is shown as "Editing".** The word "draft" now names the
   thing at every status, so it cannot also name one status.
-- **A submitted draft's execution is its run** (Queued, Running, Completed,
-  Failed, Cancelled). "Cancel run", "Run progress", and the permission is
-  "submit runs". "Job" stays the internal and SLURM word.
+- **A submitted draft's execution is its simulation** (Queued, Running,
+  Completed, Failed, Cancelled), one per snapshot draft. The verb stays "run":
+  "Run settings", "run on Anvil". The noun is "simulation": "Cancel
+  simulation", "Simulation progress", and the permission is "Can run
+  simulations", which now matches the stored field `can_run_simulations`.
+  "Job" stays the internal and SLURM word.
 - **"Simulation" is kept** for one WBM execution, for the spec's and
   `metadata.json`'s `simulation` block, for the toolkit (`openghm sim`,
   `simulation.json`), and for the landing page's marketing copy.
@@ -44,12 +47,12 @@ nothing else.**
 ## Consequences
 
 - The UI says snapshot draft everywhere a person used to read simulation
-  (My snapshot drafts, New snapshot, Delete snapshot draft, Can submit
-  runs), and the frontend files and symbols that meant the workspace thing
+  (My snapshot drafts, New snapshot, Delete snapshot draft, Can run
+  simulations), and the frontend files and symbols that meant the workspace thing
   are renamed `draft-*`. `job-*` components keep their names, as they mirror
   the backend's job.
-- [`../glossary.md`](../glossary.md) defines snapshot draft and run, and
-  narrows simulation. The architecture and reference documents use the new
+- [`../glossary.md`](../glossary.md) defines snapshot draft and simulation (its
+  execution on Anvil, and nothing else). The architecture and reference documents use the new
   words.
 - Accepted ADRs keep their text, and their filenames keep "simulation".
   ADRs 0001 to 0029 are read with this one: where one says *simulation* for the

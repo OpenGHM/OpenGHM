@@ -100,9 +100,9 @@ describe("a recommendation over the limit for one job", () => {
     expect(walltimeOverLimit(unset, null)).toBeNull();
   });
 
-  it("says how long the reference run took, what one job may use, and what to do", () => {
+  it("says how long the reference simulation took, what one job may use, and what to do", () => {
     expect(describeWalltimeOverLimit(111 * 3600 + 30 * 60)).toBe(
-      "This model snapshot's reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out)."
+      "This model snapshot's reference simulation took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out)."
     );
   });
 
@@ -143,10 +143,10 @@ describe("a recommendation over the limit for one job", () => {
     expect(automaticWalltimeLabel(true)).toBe("the limit for one job");
   });
 
-  it("hints, softly, at a walltime shorter than the reference run", () => {
+  it("hints, softly, at a walltime shorter than the reference simulation", () => {
     const rec = snapshot("4:30:00");
     expect(describeWalltimeBelowReference({ cores: null, walltime: "02:00:00" }, rec)).toMatch(
-      /reference run took about 4 h 30 min/
+      /reference simulation took about 4 h 30 min/
     );
     expect(describeWalltimeBelowReference({ cores: null, walltime: "04:30:00" }, rec)).toBeNull();
     expect(describeWalltimeBelowReference({ cores: null, walltime: "08:00:00" }, rec)).toBeNull();
@@ -237,16 +237,16 @@ describe("describeCoresBelowRecommended", () => {
 
   it("warns, with the numbers, when cores are below the recommended count", () => {
     expect(describeCoresBelowRecommended(cores(1), rec)).toBe(
-      "This model snapshot recommends 64 cores, enough memory for its run. " +
+      "This model snapshot recommends 64 cores, enough memory for its simulation. " +
         "On Anvil's shared partition memory comes with cores, about 1.9 GB each, " +
         "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
-        "the run may be stopped for running out of memory."
+        "the simulation may be stopped for running out of memory."
     );
   });
 
   it("builds the numbers from the values, and says cores in the plural", () => {
     const text = describeCoresBelowRecommended(cores(3), { cores: 16, walltime: "15:00" });
-    expect(text).toContain("recommends 16 cores, enough memory for its run");
+    expect(text).toContain("recommends 16 cores, enough memory for its simulation");
     expect(text).toContain("so 16 cores gives about 30.3 GB and 3 cores only about 5.7 GB:");
   });
 

@@ -152,9 +152,9 @@ describe("a queued job", () => {
     render(summary(live("PENDING"), { live: QUEUED }));
     const cancel = screen.getByRole("button", { name: "Cancel" });
     fireEvent.click(cancel);
-    expect(await screen.findByText("Cancel this run?")).toBeTruthy();
+    expect(await screen.findByText("Cancel this simulation?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
-    await waitFor(() => expect(screen.queryByText("Cancel this run?")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Cancel this simulation?")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(cancel));
   });
 
@@ -172,7 +172,7 @@ describe("a running job", () => {
     expect(container.textContent).toContain("Simulating 2001-03-04 · run 2000-01-01 → 2001-12-31 · 59 %");
 
     const bars = screen.getAllByRole("progressbar");
-    expect(bars.map((b) => b.getAttribute("aria-label"))).toEqual(["Run progress", "Walltime used"]);
+    expect(bars.map((b) => b.getAttribute("aria-label"))).toEqual(["Simulation progress", "Walltime used"]);
     expect(bars[0].getAttribute("aria-valuenow")).toBe("59");
     expect(bars[1].getAttribute("aria-valuenow")).toBe("18");
     // Elapsed against walltime is labelled as such, with no percentage of its own.
@@ -256,7 +256,7 @@ describe("a completed job", () => {
     expect(text).toContain(job.work_dir!);
     expect(text).toContain(`${job.output!.file_count} files`);
     expect(text).toMatch(/Anvil deletes these files around \w+ \d+, \d{4} if unused — copy what you need\./);
-    // Nothing publishes a run, and nothing here says it might.
+    // Nothing publishes a simulation, and nothing here says it might.
     expect(text).not.toMatch(/publish|illustrative|not wired/i);
     expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Show file list/ })).toBeTruthy();
@@ -265,7 +265,7 @@ describe("a completed job", () => {
 
   it("shows only the purge notice when the files are gone", () => {
     const { container } = render(summary(previewDraftJob("completed:purged")));
-    expect(container.textContent).toContain("purge removed this run");
+    expect(container.textContent).toContain("purge removed this simulation");
     expect(container.textContent).not.toContain("Results on Anvil scratch");
   });
 
@@ -330,7 +330,7 @@ describe("a failed job", () => {
   it("falls back to the stored reason for a job with no verdict", () => {
     const job = { ...previewDraftJob("failed:wbm_error"), failure: null, status_reason: "old reason" };
     const html = renderToString(summary(job));
-    expect(html).toContain("The run failed");
+    expect(html).toContain("The simulation failed");
     expect(html).toContain("old reason");
   });
 
@@ -343,7 +343,7 @@ describe("a failed job", () => {
 describe("a cancelled job", () => {
   it("says you, someone else, and Anvil", () => {
     const you = previewDraftJob("cancelled:user", { viewerEmail: "me@purdue.edu" });
-    expect(renderToString(summary(you, { viewerEmail: "me@purdue.edu" }))).toContain("You cancelled this run");
+    expect(renderToString(summary(you, { viewerEmail: "me@purdue.edu" }))).toContain("You cancelled this simulation");
     const other = previewDraftJob("cancelled:other");
     expect(renderToString(summary(other, { viewerEmail: "me@purdue.edu" }))).toContain(
       "Cancelled by colleague@example.test"

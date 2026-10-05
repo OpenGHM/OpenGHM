@@ -18,7 +18,7 @@ import type { Job } from "@/lib/jobs/types";
 /**
  * The snapshot drafts as one card of rows, each row a link to the snapshot draft: its
  * name with, under it, the title of the snapshot it is based on (one line,
- * cut with an ellipsis, the whole title on hover) and, when the run is shorter
+ * cut with an ellipsis, the whole title on hover) and, when the simulation is shorter
  * than the snapshot's coverage, the period it ran; its status, when it was last
  * updated, and a visible Delete once it can be deleted. From `sm` up
  * the rows sit in columns under a small header; on a phone each row stacks (name

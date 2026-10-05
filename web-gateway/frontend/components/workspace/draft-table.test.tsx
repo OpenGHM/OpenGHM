@@ -80,7 +80,7 @@ describe("the snapshot draft list", () => {
     expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);
   });
 
-  it("adds the run period after the title only for a run shorter than the snapshot covers", () => {
+  it("adds the run period after the title only for a simulation shorter than the snapshot covers", () => {
     render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
     expect(within(items()[0]).queryByText(/Run 2000/)).toBeNull();
     const note = within(items()[1]).getByText(/Run 2000–2005/);

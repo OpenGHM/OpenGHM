@@ -61,8 +61,8 @@ function Warning({ id, short, why }: { id?: string; short: string; why: string }
  * What is wrong stays in view whether the fields are open or not. Two
  * warnings, each one line with the long reason behind "Why": cores below what
  * the snapshot recommends (memory comes with cores), and a snapshot whose
- * reference run is longer than one job may be, with no walltime set; and a
- * walltime shorter than the reference run, as a quiet note. A value that is
+ * reference simulation is longer than one job may be, with no walltime set; and a
+ * walltime shorter than the reference simulation, as a quiet note. A value that is
  * refused (here or by the server) keeps the fields open, with its message
  * under the field.
  */

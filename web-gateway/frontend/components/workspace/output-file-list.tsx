@@ -6,12 +6,12 @@ import type { OutputFile } from "@/lib/jobs/types";
 import { formatBytes } from "@/lib/workspace/format";
 import { groupManifest, limitRows } from "@/lib/workspace/manifest";
 
-/** Rows drawn at once. A run can write thousands of files; the rest are counted. */
+/** Rows drawn at once. A simulation can write of files; the rest are counted. */
 const MAX_ROWS = 300;
 
 /**
- * A finished run's files, collapsed until asked for and grouped by top folder
- * (`daily/`, `monthly/`, ...). Paths are relative to the run's directory.
+ * A finished simulation's files, collapsed until asked for and grouped by top folder
+ * (`daily/`, `monthly/`, ...). Paths are relative to the simulation's directory.
  * `fileCount` is the real total, which can exceed `files` when the manifest
  * was cut short.
  */

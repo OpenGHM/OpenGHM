@@ -231,7 +231,7 @@ function CacheSection({ data }: { data: AnvilScratchResponse }) {
       </p>
       {data.variants.length === 0 ? (
         <EmptyState title="The spool cache is empty.">
-          Nothing is held on scratch. A run that needs forcing data fills it again.
+          Nothing is held on scratch. A simulation that needs forcing data fills it again.
         </EmptyState>
       ) : (
         <div className="rounded-lg border">
@@ -455,7 +455,7 @@ export function AnvilScratchCard() {
             (preview.skipped_leased > 0
               ? `${plural(preview.skipped_leased, "year", "years")} in use by running jobs ${preview.skipped_leased === 1 ? "is" : "are"} kept. `
               : "No year is in use by a running job. ") +
-            "Cleared days are downloaded from S3 again, or rebuilt by the next run that needs them. " +
+            "Cleared days are downloaded from S3 again, or rebuilt by the next simulation that needs them. " +
             "Nothing outside the spool cache is touched: simulation output and model inputs stay."
           }
           confirmLabel="Clear spool cache"

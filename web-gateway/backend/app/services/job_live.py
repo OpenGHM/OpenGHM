@@ -270,7 +270,7 @@ def parse_progress(
 ) -> dict | None:
     """Progress from the last line of `text` that WBM's per-day output has the
     shape of (ADR 0027), or None when there is none. The fraction is given for
-    the run phase only, from the run's first and last day."""
+    the run phase only, from the simulation's first and last day."""
     start, end = _date(run_start), _date(run_end)
     for line in reversed(text.splitlines()):
         loop = loops = None

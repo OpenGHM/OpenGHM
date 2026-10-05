@@ -56,7 +56,7 @@ function FileRow({ file, label }: { file: PublishedFile; label: string }) {
  * with its year, its size and a plain link to the public file. Nothing here
  * runs anything. The card says that files are per year and that a daily file
  * holds every published variable, so what is listed can be wider than what the
- * draft asked for; and, when the draft starts later than the published run, that
+ * draft asked for; and, when the draft starts later than the published simulation, that
  * these years come from that run.
  */
 export function PublishedAnswerCard({
@@ -86,7 +86,7 @@ export function PublishedAnswerCard({
       </CardHeader>
       <CardContent className="space-y-5 pt-5 pb-6">
         <p className="text-sm text-foreground">
-          This model snapshot already publishes the results this run would compute, so there is nothing
+          This model snapshot already publishes the results this simulation would compute, so there is nothing
           to submit. Download them below.
         </p>
 
@@ -101,7 +101,7 @@ export function PublishedAnswerCard({
           )}
           {answer.run_id && (
             <div className="rounded-lg bg-muted px-3 py-2.5">
-              <dt className="text-xs text-muted-foreground">Run</dt>
+              <dt className="text-xs text-muted-foreground">Simulation</dt>
               <dd className="break-all font-mono text-sm font-medium text-foreground">{answer.run_id}</dd>
             </div>
           )}
@@ -109,7 +109,7 @@ export function PublishedAnswerCard({
 
         {startsLater && (
           <p className="text-sm text-muted-foreground">
-            Your run starts later than the published one. These years come from the published run, whose
+            Your simulation starts later than the published one. These years come from the published simulation, whose
             spinup began earlier.
           </p>
         )}

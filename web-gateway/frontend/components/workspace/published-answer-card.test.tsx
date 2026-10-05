@@ -36,11 +36,11 @@ const ANSWER: PublishedAnswer = {
 const section = (name: string) => screen.getByRole("region", { name });
 
 describe("PublishedAnswerCard", () => {
-  it("names the published period and the run it comes from", () => {
+  it("names the published period and the simulation it comes from", () => {
     render(<PublishedAnswerCard answer={ANSWER} draftStart="2000-01-01" />);
     expect(screen.getByRole("heading", { name: "Results already published" })).toBeTruthy();
     expect(screen.getByText("Published period").nextElementSibling?.textContent).toBe("2000-01-01 → 2001-12-31");
-    expect(screen.getByText("Run").nextElementSibling?.textContent).toBe("WBM_test");
+    expect(screen.getByText("Simulation").nextElementSibling?.textContent).toBe("WBM_test");
   });
 
   it("groups the files as Daily, Monthly and Yearly, in that order, each with its count", () => {
@@ -99,14 +99,14 @@ describe("PublishedAnswerCard", () => {
     expect(screen.getByText(/Files are per year, and a daily file holds every published variable/)).toBeTruthy();
   });
 
-  it("does not say the years come from an earlier run when the draft starts with the published run", () => {
+  it("does not say the years come from an earlier simulation when the draft starts with the published simulation", () => {
     render(<PublishedAnswerCard answer={ANSWER} draftStart="2000-01-01" />);
     expect(screen.queryByText(/spinup began earlier/)).toBeNull();
   });
 
-  it("says the years come from the published run when the draft starts later", () => {
+  it("says the years come from the published simulation when the draft starts later", () => {
     render(<PublishedAnswerCard answer={ANSWER} draftStart="2001-03-01" />);
-    expect(screen.getByText(/These years come from the published run, whose spinup began earlier/)).toBeTruthy();
+    expect(screen.getByText(/These years come from the published simulation, whose spinup began earlier/)).toBeTruthy();
   });
 
   it("leaves a group out when it has no files", () => {

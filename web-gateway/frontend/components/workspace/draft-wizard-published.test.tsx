@@ -183,14 +183,14 @@ describe("Review, for a stored draft", () => {
     expect(screen.getByText(/couldn't check/)).toBeTruthy();
   });
 
-  it("says the years come from the published run when the draft starts later than it", async () => {
+  it("says the years come from the published simulation when the draft starts later than it", async () => {
     publishedAnswer.mockResolvedValue({ ok: true, data: { ...ANSWERED, period: { start: "2000-01-01", end: "2001-12-31" } } });
     stored();
     await screen.findByRole("heading", { name: "Results already published" });
     expect(screen.getByText(/whose spinup began earlier/)).toBeTruthy();
   });
 
-  it("does not say it when the draft starts with the published run", async () => {
+  it("does not say it when the draft starts with the published simulation", async () => {
     stored();
     await screen.findByRole("heading", { name: "Results already published" });
     expect(screen.queryByText(/whose spinup began earlier/)).toBeNull();

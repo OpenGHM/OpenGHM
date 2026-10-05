@@ -15,7 +15,7 @@ export function secondsBetween(fromIso: string | null, toIso: string | null): nu
 }
 
 /** A span for a sentence: `42 s` under a minute, then whole minutes (`14 min`,
- *  `1 h 5 min`). A queue wait or a run does not need the seconds. */
+ *  `1 h 5 min`). A queue wait or a simulation does not need the seconds. */
 export function shortDuration(totalSeconds: number): string {
   return totalSeconds < 60
     ? `${Math.max(0, Math.floor(totalSeconds))} s`

@@ -121,7 +121,7 @@ def test_a_year_rule_wants_january_first():
         violation = run_start.check_run_start("year", bad)
         assert violation is not None, bad
         assert violation.message.startswith(
-            "This snapshot's model writes one file per year, so a run must start on January 1."
+            "This snapshot's model writes one file per year, so a simulation must start on January 1."
         )
 
 
@@ -144,7 +144,7 @@ def test_a_start_that_is_not_a_date_is_left_to_the_date_check():
 
 
 def test_the_snapshots_own_start_is_not_rechecked_like_the_toolkit():
-    # The toolkit checks a --run-start override only; the published start is the published run's.
+    # The toolkit checks a --run-start override only; the published start is the published simulation's.
     assert run_start.check_run_start("year", "2000-03-01", snapshot_start="2000-03-01") is None
 
 
@@ -281,7 +281,7 @@ def test_a_patch_with_a_start_the_rule_forbids_is_a_422_and_changes_nothing(clie
     detail = r.json()["detail"]
     assert detail["code"] == "run_start_not_aligned"
     assert detail["message"].startswith(
-        "This snapshot's model writes one file per year, so a run must start on January 1."
+        "This snapshot's model writes one file per year, so a simulation must start on January 1."
     )
     assert detail["suggested_start"] == "2000-01-01"
     assert db.jobs.docs["job-1"]["parameters"]["temporal_range_start"] == "2000-01-01"

@@ -35,8 +35,8 @@ org-chart rank baked into every call site. `repository:manage` is defined and
 no endpoint uses it — the catalogue is seed data
 ([gateway.md §4](gateway.md#4-where-state-lives)).
 
-**Submitting a run needs more than a role**
-([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every run spends
+**Running a simulation needs more than a role**
+([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every simulation spends
 the one shared SLURM allocation, so the routes that create or submit a job do
 not trust the token. They read the user's document at call time, through
 `require_active_user` (a snapshot draft: derive and duplicate) and `require_submitter`
@@ -44,7 +44,7 @@ not trust the token. They read the user's document at call time, through
 
 - **A submit needs:**
   - `is_active` and `email_verified`;
-  - role `admin` or `staff`, or role `user` with `can_run_simulations: true` (the "Can submit runs" switch
+  - role `admin` or `staff`, or role `user` with `can_run_simulations: true` (the "Can run simulations" switch
     on the user's page; the stored field keeps its name).
     Only an admin sets that flag, on `PATCH /users/{id}`, and the change is
     audited as `user_admin_updated`.

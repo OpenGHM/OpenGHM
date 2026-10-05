@@ -19,7 +19,7 @@ import {
 import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 // A snapshot with three output variables, 2001 as its coverage, and a model
-// that writes one file a year, so a run may only start on January 1.
+// that writes one file a year, so a simulation may only start on January 1.
 const NAMES = ["discharge", "runoff", "streamAge"];
 const dataset = fakeDataset({
   runStartAlignment: "year",
@@ -473,7 +473,7 @@ describe("submitProblems", () => {
   });
 
   describe("the snapshot's multi-year aggregation", () => {
-    // 2000-01-01 .. 2004-12-31 here; aggregation starts in 2001, so a run must
+    // 2000-01-01 .. 2004-12-31 here; aggregation starts in 2001, so a simulation must
     // start in or before 2001 and end on or after 2001-12-31.
     const aggregated: DraftContext = { snapshotState: "found", dataset: { ...dataset, aggregationStartYear: 2001 } };
 
@@ -484,7 +484,7 @@ describe("submitProblems", () => {
           field: "end",
           step: "run",
           message:
-            "This snapshot's model also aggregates its results over multi-year periods that begin in 2001, so a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).",
+            "This snapshot's model also aggregates its results over multi-year periods that begin in 2001, so a simulation must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).",
         },
       ]);
     });
@@ -493,7 +493,7 @@ describe("submitProblems", () => {
       const local = edited(ok, { params: { temporal_range_start: "2002-01-01", temporal_range_end: "2003-12-31" } });
       const found = problems(local, aggregated);
       expect(found.map((p) => p.field)).toEqual(["start"]);
-      expect(found[0].message).toContain("a run can start no later than 2001-12-31");
+      expect(found[0].message).toContain("a simulation can start no later than 2001-12-31");
     });
 
     it("lists nothing for dates that reach the year, or when the snapshot has no window", () => {
@@ -509,7 +509,7 @@ describe("submitProblems", () => {
     });
   });
 
-  describe("the snapshot's reference run is longer than one job may be", () => {
+  describe("the snapshot's reference simulation is longer than one job may be", () => {
     const withWalltime = (walltime: string): DraftContext => ({
       snapshotState: "found",
       dataset: {
@@ -528,7 +528,7 @@ describe("submitProblems", () => {
           field: "walltime",
           step: "run",
           message:
-            "The reference run took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period or set a walltime.",
+            "The reference simulation took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period or set a walltime.",
         },
       ]);
       expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);

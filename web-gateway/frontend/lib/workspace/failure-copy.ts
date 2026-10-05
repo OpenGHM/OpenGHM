@@ -9,7 +9,7 @@ export type NextStep =
   | "contact_admin"
   | "none";
 
-/** `danger`: something in this run's own setup. `warning`: a limit it hit.
+/** `danger`: something in this simulation's own setup. `warning`: a limit it hit.
  *  `neutral`: not caused by the input, or a deliberate stop. */
 export type FailureTone = "danger" | "warning" | "neutral";
 
@@ -26,7 +26,7 @@ export interface FailureCopy {
  *
  * Plain copy: what happened, and what to do. `body` is the fallback for a job
  * whose verdict carries no `message` (an old document); when there is one, the
- * card shows the message instead, because it names the facts of the run. So
+ * card shows the message instead, because it names the facts of the simulation. So
  * `body` must read on its own, and refer to nothing shown next to it.
  */
 export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
@@ -37,7 +37,7 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
     tone: "danger",
   },
   run_refused: {
-    title: "The run was refused before it started",
+    title: "The simulation was refused before it started",
     body: "The toolkit checked the model snapshot and this snapshot draft's settings and refused to start WBM.",
     nextStep: "new_draft",
     tone: "danger",
@@ -118,7 +118,7 @@ export function offersNewDraft(step: NextStep): boolean {
 /** A FAILED job that carries no verdict: it ended before the gateway recorded
  *  causes. The card shows the reason the job stored, if any, in place of `body`. */
 export const UNRECORDED_FAILURE_COPY: FailureCopy = {
-  title: "The run failed",
+  title: "The simulation failed",
   body: "This job failed before the gateway recorded why. The job's logs may say more.",
   nextStep: "new_draft",
   tone: "danger",

@@ -32,7 +32,7 @@ export default function WorkspaceError({
         >
           <p className="font-medium text-status-failed">Something went wrong loading this page.</p>
           <p className="text-sm text-destructive">
-            A run that is already in progress is not affected. Try again, or go
+            A simulation that is already in progress is not affected. Try again, or go
             back to your list.
           </p>
           {error.digest && <p className="text-xs text-status-failed">Reference: {error.digest}</p>}

@@ -73,7 +73,7 @@ describe("the row delete button", () => {
   it("offers no dropdown menu and no Open or Cancel", () => {
     setup("RUNNING");
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.queryByText("Cancel run")).toBeNull();
+    expect(screen.queryByText("Cancel simulation")).toBeNull();
   });
 
   it("opens the confirmation for a draft, which names nothing on Anvil", async () => {

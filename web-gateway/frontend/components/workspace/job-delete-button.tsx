@@ -27,7 +27,7 @@ export function JobDeleteButton({
 }: {
   jobId: string;
   isDraft: boolean;
-  /** The run's output directory on Anvil. */
+  /** The simulation's output directory on Anvil. */
   workDir: string | null;
   /** slurmly's directory: the batch script and its logs. */
   remoteJobDir: string | null;

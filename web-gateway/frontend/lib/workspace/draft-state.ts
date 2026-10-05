@@ -494,7 +494,7 @@ export function submitProblems(
     add("custom", "Custom parameters can't run yet. Remove them to submit.");
   }
 
-  // The snapshot's reference run is longer than one job may be: a submit
+  // The snapshot's reference simulation is longer than one job may be: a submit
   // refuses it (`walltime_over_limit`) unless the draft sets a walltime.
   const over = walltimeOverLimit(local.slurm, ctx.dataset?.simulation.recommendedCompute ?? null);
   if (over !== null) add("walltime", describeWalltimeOverLimitShort(over));

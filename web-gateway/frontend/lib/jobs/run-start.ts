@@ -1,9 +1,9 @@
 /**
- * Where a run of a snapshot may start, for the Start date field.
+ * Where a simulation of a snapshot may start, for the Start date field.
  *
- * WBM writes a run's first step into band 1 of an output file, so a run can
+ * WBM writes a simulation's first step into band 1 of an output file, so a simulation can
  * only start on the first day of a file. How much one file holds is the model's
- * `File_Size`: with `year` a run starts on January 1, with `month` on the first
+ * `File_Size`: with `year` a simulation starts on January 1, with `month` on the first
  * of a month. The backend reads that from the snapshot's init once and sends it
  * as `Dataset.runStartAlignment` (`DatasetDetailResponse` in
  * app/models/repository.py); `check_run_start` in app/services/run_start.py
@@ -19,8 +19,8 @@ export type RunStartAlignment = "year" | "month" | "none" | null;
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const RULE_TEXT = {
-  year: "This model snapshot's model writes one file per year, so a run must start on January 1.",
-  month: "This model snapshot's model writes one file per month, so a run must start on the first day of a month.",
+  year: "This model snapshot's model writes one file per year, so a simulation must start on January 1.",
+  month: "This model snapshot's model writes one file per month, so a simulation must start on the first day of a month.",
 } as const;
 
 /** The rule in a few words, for under the Start field. */
@@ -89,8 +89,8 @@ export interface RunStartProblem {
 }
 
 /**
- * Null when `start` may start a run, or when nothing is known to forbid it.
- * The snapshot's own start is the published run's and is allowed: the toolkit
+ * Null when `start` may start a simulation, or when nothing is known to forbid it.
+ * The snapshot's own start is the published simulation's and is allowed: the toolkit
  * checks a start override only. A value that is not a full date is not this
  * check's to refuse (the date field and the backend's date check do that).
  */

@@ -1,5 +1,5 @@
 /**
- * The one thing a snapshot draft's list row says about its run besides the title of
+ * The one thing a snapshot draft's list row says about its simulation besides the title of
  * the snapshot it is based on: the period it ran, when that is news.
  *
  * Pure: no I/O. `lib/jobs/run-notes.ts` reads the snapshots for a page of rows.
@@ -11,8 +11,8 @@ const YEAR_START = /^(\d{4})-01-01$/;
 const YEAR_END = /^(\d{4})-12-31$/;
 
 /**
- * The period a run covers, from its two dates: "2000–2001" when it runs from a
- * January 1 to a December 31 (the usual run), otherwise the dates themselves,
+ * The period a simulation covers, from its two dates: "2000–2001" when it runs from a
+ * January 1 to a December 31 (the usual simulation), otherwise the dates themselves,
  * "2000-03-01 → 2000-12-31", so a partial year is never rounded to a whole
  * one. Null while either date is not set (a draft that has not got that far).
  */
@@ -26,7 +26,7 @@ export function runPeriodLabel(start: string | null | undefined, end: string | n
 
 /**
  * "Run 2000–2005" when the snapshot draft runs a shorter period than its snapshot
- * covers, else null: a run of the whole period has nothing to add to the
+ * covers, else null: a simulation of the whole period has nothing to add to the
  * snapshot's title. With no snapshot to compare against (it left the repository
  * or could not be read) the period is said, since nothing says it is the whole.
  * Null too while the dates are not set.

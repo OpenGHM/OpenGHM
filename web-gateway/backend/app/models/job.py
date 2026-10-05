@@ -79,7 +79,7 @@ ModelInputState = Literal["inherited", "chosen", "inherited-missing"]
 
 
 class SpatialDomain(BaseModel):
-    """Optional bounding-box subset for the run."""
+    """Optional bounding-box subset for the simulation."""
 
     north: float
     south: float
@@ -528,7 +528,7 @@ class JobLogResponse(BaseModel):
 
 class SubmitRequest(BaseModel):
     """POST /jobs/{job_id}/submit body, optional. `rerun` says the person asked
-    for a run of a draft its snapshot already answers (the published output
+    for a simulation of a draft its snapshot already answers (the published output
     covers it), to check the snapshot reproduces itself. Without it such a
     draft is refused (`answered_by_published`, app.services.published_answer)."""
 

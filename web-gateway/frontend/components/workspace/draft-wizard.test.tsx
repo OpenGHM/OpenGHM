@@ -1108,7 +1108,7 @@ describe("submitting", () => {
     expect(screen.queryByText(/saves automatically/)).toBeNull();
   });
 
-  it("opens the run's page when it goes through", async () => {
+  it("opens the simulation's page when it goes through", async () => {
     submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     wizard();
     confirm(await openSubmitDialog());
@@ -1187,9 +1187,9 @@ describe("submitting", () => {
   });
 
   it("cannot be started while the draft needs attention", () => {
-    wizard({ blockedReason: "Your account has not been approved to submit runs." });
+    wizard({ blockedReason: "Your account has not been approved to run simulations." });
     expect((screen.getByRole("button", { name: "Submit to Anvil" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Your account has not been approved to submit runs.")).toBeTruthy();
+    expect(screen.getByText("Your account has not been approved to run simulations.")).toBeTruthy();
   });
 });
 

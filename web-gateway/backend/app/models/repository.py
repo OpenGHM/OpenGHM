@@ -142,12 +142,12 @@ class DatasetDetailResponse(DatasetResponse):
     is not computed for every row of the list.
     """
 
-    #: Where a run of this snapshot may start (``app.services.run_start``):
+    #: Where a simulation of this snapshot may start (``app.services.run_start``):
     #: ``"year"`` January 1, ``"month"`` the first of a month, ``"none"`` the
     #: init was read and sets no rule, ``null`` the init could not be read, so
     #: nothing is known and nothing is blocked.
     runStartAlignment: Literal["year", "month", "none"] | None = None
-    #: The year the init's multi-year aggregation starts in, which the run
+    #: The year the init's multi-year aggregation starts in, which the simulation
     #: must reach (``run_start.check_run_dates``); ``null`` when the init sets
     #: none or could not be read, and then nothing is blocked.
     aggregationStartYear: int | None = None
@@ -440,8 +440,8 @@ class PublishedPeriod(BaseModel):
 
 class PublishedAnswerResponse(BaseModel):
     """``reasons`` is empty when ``answered`` and ``files`` is empty when not.
-    ``period`` is the snapshot's published period (the run the files come
-    from), not the asked one; ``run_id`` is the run's folder under
+    ``period`` is the snapshot's published period (the simulation the files come
+    from), not the asked one; ``run_id`` is the simulation's folder under
     ``wbm_output/`` (null when none was found)."""
 
     answered: bool

@@ -46,7 +46,7 @@ const BASE_SLURM: Job["slurm_config"] = {
 
 /**
  * A snapshot draft in a given state, with the fields that state would actually
- * have — a queued run has no `started_at`, a failed one has a `status_reason`,
+ * have — a queued simulation has no `started_at`, a failed one has a `status_reason`,
  * and only a finished one has an `output_s3_key`.
  */
 export function fakeDraft(status: JobStatus, overrides: Partial<Job> = {}): Job {
@@ -182,7 +182,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:125",
     failure: {
       phase: "run",
-      message: "The job ran out of memory and Anvil stopped it. Reduce what the run asks for or request more resources, then submit again.",
+      message: "The job ran out of memory and Anvil stopped it. Reduce what the simulation asks for or request more resources, then submit again.",
       excerpt: null,
     },
   },

@@ -62,15 +62,15 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _UNSUPPORTED_REASONS = {
     "model_input_id": (
         "model_input_override",
-        "A different model input than the snapshot's own needs a new run.",
+        "A different model input than the snapshot's own needs a new simulation.",
     ),
     "parameters.spatial_domain": (
         "spatial_domain",
-        "A spatial domain other than the snapshot's own needs a new run.",
+        "A spatial domain other than the snapshot's own needs a new simulation.",
     ),
     "parameters.custom_params": (
         "custom_params",
-        "Custom parameters change the model, so they need a new run.",
+        "Custom parameters change the model, so they need a new simulation.",
     ),
 }
 
@@ -191,16 +191,16 @@ def _reasons(
         reasons.append(
             PublishedAnswerReason(
                 code="period_before_published_start",
-                message=f"The published run starts on {published_start}; "
-                "an earlier start needs a new run.",
+                message=f"The published simulation starts on {published_start}; "
+                "an earlier start needs a new simulation.",
             )
         )
     if published_end and end > date.fromisoformat(published_end):
         reasons.append(
             PublishedAnswerReason(
                 code="period_after_published_end",
-                message=f"The published run ends on {published_end}; "
-                "a later end needs a new run.",
+                message=f"The published simulation ends on {published_end}; "
+                "a later end needs a new simulation.",
             )
         )
     published = [v["name"] for v in simulation.get("outputVariables") or []]
@@ -209,8 +209,8 @@ def _reasons(
         reasons.append(
             PublishedAnswerReason(
                 code="variables_not_published",
-                message=f"The published run does not hold {', '.join(missing)}; "
-                "a variable it does not hold needs a new run.",
+                message=f"The published simulation does not hold {', '.join(missing)}; "
+                "a variable it does not hold needs a new simulation.",
             )
         )
     return reasons

@@ -76,7 +76,7 @@ def gateway_execution_profiles() -> dict[str, ExecutionProfile]:
     """slurmly's execution profiles with a quiet module preamble.
 
     The job's stderr is shown as written, so the preamble must not write to it
-    on a good run: Lmod's "modules were not unloaded" notice (the sticky `xalt`
+    on a good simulation: Lmod's "modules were not unloaded" notice (the sticky `xalt`
     survives `module purge`) and `module list`'s table would be its first
     lines on every job. `-q` silences Lmod's warnings only; an error (an
     unknown module) is still printed and still returns non-zero, and slurmly
@@ -196,7 +196,7 @@ def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str
 
     Cores are the recommendation as it is. A walltime the draft chose is sent
     as written; the snapshot's is sent with 50% headroom (`with_headroom`),
-    because the recommendation is what a run took, not what it is safe to ask
+    because the recommendation is what a simulation took, not what it is safe to ask
     for. Both are SLURM `--time` syntax: `15:00` is fifteen minutes.
     """
     recommended = snapshot.get("simulation", {}).get("recommendedCompute") or {}
@@ -824,7 +824,7 @@ def _check_work_dir(doc: dict, work_dir: str) -> None:
         or ".." in work_dir.split("/")
         or work_dir != posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
     ):
-        raise RefusedPath(f"{work_dir!r} is not this run's directory under the output base")
+        raise RefusedPath(f"{work_dir!r} is not this simulation's directory under the output base")
 
 
 def removable_paths(doc: dict) -> tuple[str | None, str | None]:
@@ -1047,7 +1047,7 @@ async def read_log_bytes(path: str, offset: int, limit: int) -> tuple[int, bytes
 
 
 # A wbm log's path is found from the init files when the job has not ended.
-# Exit 4: no init names this run's output directory.
+# Exit 4: no init names this simulation's output directory.
 _NO_INIT = 4
 _RESOLVE_WBM_LOG = r"""
 cd {work} 2>/dev/null && cd wbm_init 2>/dev/null || exit 3

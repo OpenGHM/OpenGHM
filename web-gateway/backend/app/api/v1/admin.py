@@ -248,7 +248,7 @@ async def clear_spool_cache(
     body: SpoolCacheClearRequest = SpoolCacheClearRequest(),
     user: TokenPayload = Depends(require_permission(Permission.SYSTEM_MANAGE)),
 ):
-    """Delete every unit of the spool cache that no active run holds
+    """Delete every unit of the spool cache that no active simulation holds
     (`openghm spool prune --all`), whatever the quota says. Leased units are
     kept and counted in `skipped_leased`; the cache refills from S3 on the next
     run that needs it. `dry_run` reports what would go and deletes nothing, and

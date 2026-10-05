@@ -158,7 +158,7 @@ def test_an_active_job_must_be_cancelled_first(client, db, anvil, status):
     assert response.status_code == 409
     assert response.json()["detail"] == {
         "code": "job_active",
-        "message": "Cancel the run before deleting this snapshot draft.",
+        "message": "Cancel the simulation before deleting this snapshot draft.",
     }
     assert "job-1" in db.jobs.docs
     assert anvil.commands == []

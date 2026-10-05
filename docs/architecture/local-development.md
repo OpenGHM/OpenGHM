@@ -76,7 +76,7 @@ project (`-p something-else`) rather than wiping your own database.
 **The seed holds two accounts**, the sign-in page's "Dev quick login" buttons:
 `admin@openghm.dev` and `user@openghm.dev`, ids `dev-admin-001` and
 `dev-user-001`. Both are email-verified, and the user has
-`can_run_simulations`, so the quick-login User can submit a run. Their
+`can_run_simulations`, so the quick-login User can run simulations. Their
 ids are deliberately not the mock-auth identities' (`mock-*-001`), which the
 backend never lets submit. A volume seeded before the ids changed keeps the old
 ones until `just migrate-seed-users` is run once against it; it moves the
@@ -92,7 +92,7 @@ still come from `.env`). Without the key nothing changes, and a submit answers
 `503 anvil_not_configured`. Calling `docker compose -f
 deploy/local/docker-compose.yml` by hand leaves the file out and recreates the
 backend without it: every log read then fails with "Anvil could not be reached".
-The run is charged to the shared allocation and writes under the same scratch
+A simulation is charged to the shared allocation and writes under the same scratch
 directories as the dev cluster, so keep local test runs short.
 
 ## Why `just -n` over every recipe, and not a grep

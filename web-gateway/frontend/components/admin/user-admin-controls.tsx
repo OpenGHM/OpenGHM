@@ -149,7 +149,7 @@ export function StatusControl({
   );
 }
 
-/** The "Can submit runs" switch. Flipping it does not apply it: it opens a
+/** The "Can run simulations" switch. Flipping it does not apply it: it opens a
  *  dialog that says what the change does, and the switch stays where it was
  *  unless the change is confirmed. What each side says is what the backend
  *  does: the flag is read when a job is submitted, so revoking it stops new
@@ -201,18 +201,18 @@ export function RunPermissionControl({
       <ConfirmActionDialog
         open={open}
         onOpenChange={setOpen}
-        title={grant ? `Let ${user.name} submit runs?` : `Stop ${user.name} from submitting runs?`}
+        title={grant ? `Let ${user.name} run simulations?` : `Stop ${user.name} from running simulations?`}
         description={
           grant
-            ? "They can submit runs, and each one they submit spends the shared compute allocation. They also need a verified email address."
-            : "They can't submit new runs, but can still create and edit snapshot drafts. Runs already submitted keep going."
+            ? "They can run simulations, and each one they run spends the shared compute allocation. They also need a verified email address."
+            : "They can't run new simulations, but can still create and edit snapshot drafts. Simulations already submitted keep running."
         }
         confirmLabel={grant ? "Allow running" : "Stop running"}
         pendingLabel={grant ? "Allowing…" : "Stopping…"}
         cancelLabel={grant ? "Don't allow" : "Keep allowed"}
         destructive={!grant}
         successMessage={
-          grant ? `${user.name} can now submit runs.` : `${user.name} can no longer submit runs.`
+          grant ? `${user.name} can now run simulations.` : `${user.name} can no longer run simulations.`
         }
         failureMessage="Couldn't change the run permission. Try again. If it keeps failing, the service may be unavailable."
         onConfirm={async () => {

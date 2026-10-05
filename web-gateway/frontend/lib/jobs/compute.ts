@@ -53,7 +53,7 @@ export function formatSlurmTime(total: number): string {
  *  `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`, `80:00:00` becomes
  *  `96:00:00`. This is what the backend asks SLURM for when a draft has no
  *  walltime of its own (`with_headroom` in app/services/job_script.py): the
- *  recommendation is what a run took, not what it is safe to ask for. Null if
+ *  recommendation is what a simulation took, not what it is safe to ask for. Null if
  *  `value` is not a SLURM time. */
 export function withHeadroom(value: string): string | null {
   const seconds = parseSlurmTime(value);
@@ -112,18 +112,18 @@ export function walltimeOverLimit(
 
 /** What to tell a person when `walltimeOverLimit` applies: why, and what to do. */
 export function describeWalltimeOverLimit(seconds: number): string {
-  return `This model snapshot's reference run took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period, or set a walltime yourself (the run may be stopped when time runs out).`;
+  return `This model snapshot's reference simulation took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out).`;
 }
 
 /** `describeWalltimeOverLimit` in one line, for under the field: the facts, and
- *  the way out. The reason it matters ("the run may be stopped") is the long
+ *  the way out. The reason it matters ("the simulation may be stopped") is the long
  *  form's, offered beside it. */
 export function describeWalltimeOverLimitShort(seconds: number): string {
-  return `The reference run took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period or set a walltime.`;
+  return `The reference simulation took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period or set a walltime.`;
 }
 
 /** A softer hint for a walltime the draft chose that is shorter than the
- *  reference run took, or null. It does not block anything: a shorter run
+ *  reference simulation took, or null. It does not block anything: a shorter run
  *  period needs less time. */
 export function describeWalltimeBelowReference(
   config: SlurmConfig,
@@ -135,7 +135,7 @@ export function describeWalltimeBelowReference(
   if (!chosen || reference === null) return null;
   const seconds = Number(chosen[1]) * 3600 + Number(chosen[2]) * 60 + Number(chosen[3]);
   if (seconds <= 0 || seconds >= reference) return null;
-  return `The model snapshot's reference run took about ${describeHours(reference)}. If this run needs longer than your walltime, it may be stopped when time runs out.`;
+  return `The model snapshot's reference simulation took about ${describeHours(reference)}. If this simulation needs longer than your walltime, it may be stopped when time runs out.`;
 }
 
 /** Memory SLURM gives one core on Anvil's `shared` partition, in MB. Verified
@@ -163,7 +163,7 @@ export function sharedMemoryGb(cores: number): string {
 /** A hint for a draft whose cores are below the number the snapshot
  *  recommends, or null. Memory on the shared partition comes with the cores
  *  (`ANVIL_SHARED_MB_PER_CORE`), so fewer cores than recommended may not give
- *  the run enough memory. It is not an error and blocks nothing: a smaller
+ *  the simulation enough memory. It is not an error and blocks nothing: a smaller
  *  run period or domain may fit. Null when the draft leaves cores to the
  *  recommendation, when the snapshot has none, when cores are at or above it,
  *  and when they are not a whole number from 1 (`validateSlurmConfig` says so
@@ -176,11 +176,11 @@ export function describeCoresBelowRecommended(
   if (cores === null || !recommended || !Number.isInteger(cores) || cores < 1) return null;
   if (!Number.isInteger(recommended.cores) || cores >= recommended.cores) return null;
   return (
-    `This model snapshot recommends ${recommended.cores} cores, enough memory for its run. ` +
+    `This model snapshot recommends ${recommended.cores} cores, enough memory for its simulation. ` +
     `On Anvil's shared partition memory comes with cores, about ${sharedMemoryGb(1)} GB each, ` +
     `so ${recommended.cores} cores gives about ${sharedMemoryGb(recommended.cores)} GB ` +
     `and ${cores} ${cores === 1 ? "core" : "cores"} only about ${sharedMemoryGb(cores)} GB: ` +
-    `the run may be stopped for running out of memory.`
+    `the simulation may be stopped for running out of memory.`
   );
 }
 
@@ -192,7 +192,7 @@ export function describeCoresBelowRecommendedShort(
 ): string | null {
   if (describeCoresBelowRecommended(config, recommended) === null || !recommended) return null;
   const cores = config.cores as number;
-  return `${cores} ${cores === 1 ? "core is" : "cores are"} below the recommended ${recommended.cores}: the run may run out of memory.`;
+  return `${cores} ${cores === 1 ? "core is" : "cores are"} below the recommended ${recommended.cores}: the simulation may run out of memory.`;
 }
 
 /** What the automatic walltime is, in a few words after the value: the
@@ -311,11 +311,11 @@ export function submitBlockedReason(
     return "Your account has been deactivated. Contact an administrator.";
   }
   if (!profile.email_verified) {
-    return "Verify your email address to submit runs. Check your inbox for the link.";
+    return "Verify your email address to run simulations. Check your inbox for the link.";
   }
   const exempt = profile.role === "admin" || profile.role === "staff";
   if (!exempt && !(profile.role === "user" && profile.can_run_simulations)) {
-    return "Ask an administrator to allow you to submit runs. You can still prepare and save drafts.";
+    return "Ask an administrator to allow you to run simulations. You can still prepare and save drafts.";
   }
   return null;
 }

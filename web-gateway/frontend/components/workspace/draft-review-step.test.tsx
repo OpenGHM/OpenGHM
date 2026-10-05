@@ -191,7 +191,7 @@ describe("DraftReviewStep: the summary", () => {
   it("says the low-cores warning once, under Cores, in one line, and only then", () => {
     const BIG = { cores: 64, walltime: "15:00" };
     review({ recommended: BIG, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
-    const note = within(row("Cores")).getByText("1 core is below the recommended 64: the run may run out of memory.");
+    const note = within(row("Cores")).getByText("1 core is below the recommended 64: the simulation may run out of memory.");
     expect(note.className).toContain("text-warning");
     expect(screen.queryByText(/On Anvil's shared partition/)).toBeNull();
 
@@ -294,13 +294,13 @@ describe("DraftReviewStep: published results", () => {
     expect(within(row("Run period")).getByText("2001-03-01 → 2001-06-30")).toBeTruthy();
   });
 
-  it("says the years come from the published run when the draft starts later than it", () => {
-    // LOCAL starts 2001-03-01; the published run starts 2001-01-01.
+  it("says the years come from the published simulation when the draft starts later than it", () => {
+    // LOCAL starts 2001-03-01; the published simulation starts 2001-01-01.
     review({ publishedAnswer: answered });
     expect(screen.getByText(/whose spinup began earlier/)).toBeTruthy();
   });
 
-  it("leaves that out when the draft starts where the published run does", () => {
+  it("leaves that out when the draft starts where the published simulation does", () => {
     review({
       publishedAnswer: answered,
       local: { ...LOCAL, parameters: { ...LOCAL.parameters, temporal_range_start: "2001-01-01" } },

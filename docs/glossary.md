@@ -5,12 +5,11 @@ Terms this project uses without re-explaining them.
 | Term | Meaning |
 |---|---|
 | **snapshot** | one folder that reproduces one WBM simulation — code, run configuration, a link to the inputs, and the output it produced |
-| **simulation** | one execution of WBM — what a snapshot reproduces, what a run performs, and what the spec's `simulation` block describes. Not the thing a person creates in the workspace ([ADR 0030](decisions/0030-what-a-person-creates-is-a-snapshot-draft.md)) |
-| **snapshot draft** | what a person creates in the gateway's workspace: edited (status `DRAFT`, shown as "Editing"), submitted, run, and later published as a snapshot. A `jobs` document in the backend; "draft" alone once it is clear |
-| **run** | the execution of a submitted snapshot draft on Anvil — Queued, Running, then Completed, Failed or Cancelled. "Job" is the internal and SLURM word for it |
+| **simulation** | one execution of WBM — what a snapshot reproduces, what a submitted snapshot draft performs on Anvil (Queued, Running, then Completed, Failed or Cancelled), and what the spec's `simulation` block describes. "Job" is the internal and SLURM word for it. Not the snapshot draft itself ([ADR 0030](decisions/0030-what-a-person-creates-is-a-snapshot-draft.md)) |
+| **snapshot draft** | what a person creates in the gateway's workspace: edited (status `DRAFT`, shown as "Editing"), submitted, run on Anvil, and later published as a snapshot. A `jobs` document in the backend; "draft" alone once it is clear |
 | **model input** | the data a simulation mounts, published on its own outside any snapshot and linked by id (axis 3). Called `raw_data` until [ADR 0015](decisions/0015-model-input-is-a-published-artifact.md) |
 | **minted id** | an artifact's identifier — 256 random bits assigned once at publish, unique but not derived from the bytes ([ADR 0014](decisions/0014-identity-is-a-minted-id.md)) |
-| **spool** | WBM's cache of input data resampled onto the model grid — large, regenerable; kept per model input, network and variant, shared by runs, not part of a snapshot |
+| **spool** | WBM's cache of input data resampled onto the model grid — large, regenerable; kept per model input, network and variant, shared by simulations, not part of a snapshot |
 | **Apptainer** | the container runtime on Anvil (formerly Singularity; `singularity` is a symlink to it) |
 | **SIF** | Singularity Image Format — one file that is the whole container |
 | **squashfs** | the compressed read-only filesystem inside a SIF; it embeds timestamps, which is why a rebuild is not bit-identical |

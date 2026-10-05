@@ -31,7 +31,7 @@ export const snapshotHref = (datasetId: string) => `/repository/${encodeURICompo
  * - `unavailable`: the fetch failed, so nothing is known about it and the checks
  *   that need it are off (the backend still makes them).
  *
- * With `modelInput` the facts end with the model input the run uses, by name
+ * With `modelInput` the facts end with the model input the simulation uses, by name
  * when the catalogue has it. A model input the draft carries of its own (only
  * the API can set one: the toolkit has no option for it, so a submit refuses
  * it) is a warning with a way back, `onRevert`; its button is the field the
@@ -145,7 +145,7 @@ export function DraftBasis({
       {ctx.snapshotState === "unavailable" && (
         <p className="text-xs text-muted-foreground">
           We couldn&apos;t load this model snapshot, so the checks that need it are off here (the
-          period it covers, where a run may start, the recommended compute). Reload the page to try
+          period it covers, where a simulation may start, the recommended compute). Reload the page to try
           again.
         </p>
       )}

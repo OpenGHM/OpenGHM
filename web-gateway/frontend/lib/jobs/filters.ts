@@ -46,7 +46,7 @@ export const STATUS_TABS: StatusTab[] = [
     count: "completed",
     empty: {
       title: "Nothing has finished yet",
-      hint: "Snapshot drafts whose run finished are listed here, with their results.",
+      hint: "Snapshot drafts whose simulation finished are listed here, with their results.",
     },
   },
   {
@@ -54,8 +54,8 @@ export const STATUS_TABS: StatusTab[] = [
     value: "FAILED",
     count: "failed",
     empty: {
-      title: "No failed runs",
-      hint: "None of your runs has failed.",
+      title: "No failed simulations",
+      hint: "None of your simulations has failed.",
     },
   },
   {
@@ -63,8 +63,8 @@ export const STATUS_TABS: StatusTab[] = [
     value: "CANCELLED",
     count: "cancelled",
     empty: {
-      title: "No cancelled runs",
-      hint: "Runs you cancel are listed here.",
+      title: "No cancelled simulations",
+      hint: "Snapshot drafts whose simulation you cancel are listed here.",
     },
   },
 ];

@@ -44,7 +44,7 @@ export function DuplicateDraftButton({
 }: {
   jobId: string;
   label?: string;
-  /** `default`: the page's one emphasised action (a failed run). `outline`: a quieter one. */
+  /** `default`: the page's one emphasised action (a failed simulation). `outline`: a quieter one. */
   variant?: "default" | "outline";
   Icon?: LucideIcon;
   className?: string;

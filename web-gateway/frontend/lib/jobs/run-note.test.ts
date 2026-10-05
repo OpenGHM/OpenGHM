@@ -33,11 +33,11 @@ describe("runNote", () => {
       parameters: { ...fakeDraft("COMPLETED").parameters, temporal_range_start: start, temporal_range_end: end },
     });
 
-  it("is null when the run is the whole period the snapshot covers", () => {
+  it("is null when the simulation is the whole period the snapshot covers", () => {
     expect(runNote(job("2000-01-01", "2009-12-31"), snapshot())).toBeNull();
   });
 
-  it("says the run period when the run is part of what the snapshot covers", () => {
+  it("says the run period when the simulation is part of what the snapshot covers", () => {
     expect(runNote(job("2000-01-01", "2005-12-31"), snapshot())).toBe("Run 2000–2005");
     expect(runNote(job("2000-03-01", "2009-12-31"), snapshot())).toBe("Run 2000-03-01 → 2009-12-31");
   });

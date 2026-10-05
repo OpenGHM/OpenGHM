@@ -1,5 +1,5 @@
 """The multi-year aggregation window (app/services/run_start.py `check_run_dates`):
-what the init asks of a run's dates, GET /repository/datasets/{id}, and the
+what the init asks of a simulation's dates, GET /repository/datasets/{id}, and the
 422 a submit gives for dates WBM would stop on.
 
 The init text is the real `wbm_init/wbm_test.init` of the published v2.0.0
@@ -96,7 +96,7 @@ def test_the_run_that_failed_on_anvil_is_refused_on_its_end():
     assert violation.earliest_end == "2001-12-31"
     assert violation.message == (
         "This snapshot's model also aggregates its results over multi-year periods "
-        "that begin in 2001, so a run must end on 2001-12-31."
+        "that begin in 2001, so a simulation must end on 2001-12-31."
     )
 
 
@@ -105,14 +105,14 @@ def test_a_start_after_the_window_year_is_refused_and_names_the_range():
     assert violation is not None
     assert violation.fields == ("start",)
     assert violation.latest_start == "2001-12-31"
-    assert "a run can start no later than 2001-12-31 (allowed: 2000-01-01 to 2001-12-31)." in violation.message
+    assert "a simulation can start no later than 2001-12-31 (allowed: 2000-01-01 to 2001-12-31)." in violation.message
 
 
 def test_both_dates_can_break_it_and_the_message_says_both():
     violation = run_start.check_run_dates(2001, "2002-01-01", "2000-06-30")
     assert violation.fields == ("start", "end")
     assert "no later than 2001-12-31." in violation.message
-    assert violation.message.endswith("a run must end on or after 2001-12-31.")
+    assert violation.message.endswith("a simulation must end on or after 2001-12-31.")
 
 
 @pytest.mark.parametrize(
@@ -150,21 +150,21 @@ def test_a_value_that_is_not_a_date_is_left_to_the_date_check():
 def test_the_range_is_left_out_where_the_coverage_cannot_hold_it():
     # A window year past the snapshot's end: no end inside the coverage satisfies it.
     sentences = run_start.aggregation_messages(2005, snapshot_start="2000-01-01", snapshot_end="2001-12-31")
-    assert sentences["end"].endswith("a run must end on or after 2005-12-31.")
+    assert sentences["end"].endswith("a simulation must end on or after 2005-12-31.")
     assert "allowed" in sentences["start"]
 
 
 def test_a_one_date_range_is_said_as_a_date_not_as_x_to_x():
     # The coverage ends on the window's last day: the only end is that day.
     sentences = run_start.aggregation_messages(2001, snapshot_start="2000-01-01", snapshot_end="2001-12-31")
-    assert sentences["end"].endswith("a run must end on 2001-12-31.")
+    assert sentences["end"].endswith("a simulation must end on 2001-12-31.")
     assert "to 2001-12-31 to" not in sentences["end"]
     # A wider coverage keeps the range.
     wide = run_start.aggregation_messages(2001, snapshot_start="2000-01-01", snapshot_end="2004-12-31")
-    assert wide["end"].endswith("a run must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).")
+    assert wide["end"].endswith("a simulation must end on or after 2001-12-31 (allowed: 2001-12-31 to 2004-12-31).")
     # The start's range is one date only when the coverage begins on the window's last day.
     one = run_start.aggregation_messages(2001, snapshot_start="2001-12-31", snapshot_end="2004-12-31")
-    assert one["start"].endswith("a run must start on 2001-12-31.")
+    assert one["start"].endswith("a simulation must start on 2001-12-31.")
 
 
 def test_the_gateway_and_the_toolkit_agree_on_which_dates_are_refused():
@@ -278,7 +278,7 @@ def test_the_shortened_run_that_failed_on_anvil_is_a_422_before_anything_is_sent
     assert detail["fields"] == ["end"]
     assert detail["aggregation_start_year"] == 2001
     assert detail["earliest_end"] == "2001-12-31"
-    assert detail["message"].endswith("so a run must end on 2001-12-31.")
+    assert detail["message"].endswith("so a simulation must end on 2001-12-31.")
     assert db.jobs.docs["job-1"]["status"] == "DRAFT"
     assert db.jobs.docs["job-1"].get("sim_id") is None
 

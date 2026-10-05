@@ -645,7 +645,7 @@ describe("Submit from Review", () => {
     expect(unload.defaultPrevented).toBe(false);
   });
 
-  it("submits the draft it created, and opens the run's page", async () => {
+  it("submits the draft it created, and opens the simulation's page", async () => {
     submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     wizard({ step: "review" });
     confirm(await openSubmitDialog());

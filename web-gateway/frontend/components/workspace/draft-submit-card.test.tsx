@@ -91,7 +91,7 @@ describe("DraftSubmitCard: what it says", () => {
 
   it("is off while something is in the way, lists it, and takes you to the field", () => {
     const problems: SubmitProblem[] = [
-      { step: "review", message: "You are not permitted to submit runs yet." },
+      { step: "review", message: "You are not permitted to run simulations yet." },
       { field: "start", step: "run", message: "Choose a start date that exists." },
     ];
     card({ problems });
@@ -104,7 +104,7 @@ describe("DraftSubmitCard: what it says", () => {
     const items = screen.getAllByRole("listitem");
     expect(items).toHaveLength(2);
     // A problem of the whole draft has no field to go to.
-    expect(items[0].textContent).toContain("You are not permitted to submit runs yet.");
+    expect(items[0].textContent).toContain("You are not permitted to run simulations yet.");
     expect(within(items[0]).queryByRole("button")).toBeNull();
     expect(items[1].textContent).toContain("Start date: Choose a start date that exists.");
     fireEvent.click(within(items[1]).getByRole("button", { name: "Fix start date" }));
@@ -276,7 +276,7 @@ describe("DraftSubmitCard: long refusals", () => {
 
   it("shows the backend's sentence for walltime_over_limit as it is", async () => {
     const message =
-      "This model snapshot's reference run took about 111 h 30 min, and one job may use at most 96 h. Shorten the run period, or set a walltime yourself.";
+      "This model snapshot's reference simulation took about 111 h 30 min, and one job may use at most 96 h. Shorten the run period, or set a walltime yourself.";
     submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "walltime_over_limit" });
     card();
     await openDialog();
@@ -389,7 +389,7 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
 
   it("words a refusal, closes the dialog, unlocks the page and tells the wizard to load the draft again", async () => {
     await confirmWith({ ok: false, reason: "error", message: "raw", code: "active_job_limit" });
-    expect(screen.getByRole("alert").textContent).toContain("You already have the most active runs you can have");
+    expect(screen.getByRole("alert").textContent).toContain("You already have the most active simulations you can have");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(calls).toEqual(["flush", "suspend", "submitting:true", "submitting:false"]);
     expect(onSubmitted).not.toHaveBeenCalled();

@@ -155,18 +155,18 @@ describe("the run-permission switch", () => {
   function renderSwitch(checked: boolean, disabled = false) {
     render(
       <>
-        <span id="run-label">Can submit runs</span>
+        <span id="run-label">Can run simulations</span>
         <RunPermissionControl user={ada} checked={checked} disabled={disabled} labelledBy="run-label" />
       </>
     );
-    return screen.getByRole("switch", { name: "Can submit runs" }) as HTMLButtonElement;
+    return screen.getByRole("switch", { name: "Can run simulations" }) as HTMLButtonElement;
   }
 
   it("says what granting does, and applies nothing until confirmed", async () => {
     const sw = renderSwitch(false);
     fireEvent.click(sw);
-    expect(await screen.findByText("Let Ada Lovelace submit runs?")).toBeTruthy();
-    expect(screen.getByText(/each one they submit spends the shared compute allocation/)).toBeTruthy();
+    expect(await screen.findByText("Let Ada Lovelace run simulations?")).toBeTruthy();
+    expect(screen.getByText(/each one they run spends the shared compute allocation/)).toBeTruthy();
     expect(updateUser).not.toHaveBeenCalled();
     expect(sw.getAttribute("aria-checked")).toBe("false");
   });
@@ -178,7 +178,7 @@ describe("the run-permission switch", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Allow running" }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(updateUser).toHaveBeenCalledWith("u1", { can_run_simulations: true });
-    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can now submit runs.");
+    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can now run simulations.");
     // Until the refreshed page brings the new value, the switch keeps it.
     expect(sw.getAttribute("aria-checked")).toBe("true");
   });
@@ -186,9 +186,9 @@ describe("the run-permission switch", () => {
   it("says what revoking does to jobs already submitted", async () => {
     const sw = renderSwitch(true);
     fireEvent.click(sw);
-    expect(await screen.findByText("Stop Ada Lovelace from submitting runs?")).toBeTruthy();
-    expect(screen.getByText(/can't submit new runs/)).toBeTruthy();
-    expect(screen.getByText(/Runs already submitted keep going\./)).toBeTruthy();
+    expect(await screen.findByText("Stop Ada Lovelace from running simulations?")).toBeTruthy();
+    expect(screen.getByText(/can't run new simulations/)).toBeTruthy();
+    expect(screen.getByText(/Simulations already submitted keep running\./)).toBeTruthy();
     expect(updateUser).not.toHaveBeenCalled();
   });
 
@@ -199,7 +199,7 @@ describe("the run-permission switch", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Stop running" }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(updateUser).toHaveBeenCalledWith("u1", { can_run_simulations: false });
-    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can no longer submit runs.");
+    expect(toast.success).toHaveBeenCalledWith("Ada Lovelace can no longer run simulations.");
     expect(sw.getAttribute("aria-checked")).toBe("false");
   });
 

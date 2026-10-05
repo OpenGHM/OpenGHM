@@ -22,7 +22,7 @@ export function effectiveModelInputId(
  * app/api/v1/jobs.py). `undefined` is still looking, `null` is not held (or
  * there is no id, or the lookup failed), a `ModelInput` is found.
  *
- * It is display only: a run fetches the snapshot's model input by its id and
+ * It is display only: a simulation fetches the snapshot's model input by its id and
  * never reads the catalogue. The draft wizard calls this once, so that step 2
  * and the review step say the same thing.
  */

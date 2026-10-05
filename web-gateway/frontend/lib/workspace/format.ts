@@ -28,7 +28,7 @@ export function formatBytesSI(n: number): string {
 
 export const RETENTION_DAYS = 30;
 
-/** The day Anvil's purge may take a finished run's files, counting from when
+/** The day Anvil's purge may take a finished simulation's files, counting from when
  *  the job ended. `null` when the end time is not known. The purge counts from
  *  the last access or modification, so this is the earliest, not a promise. */
 export function purgeAround(completedAt: string | null): string | null {

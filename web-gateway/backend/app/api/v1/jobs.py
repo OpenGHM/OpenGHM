@@ -296,7 +296,7 @@ def _duplicate_document(
     snapshot, slug, about, model input, parameters, compute), never from the
     source's own document: every SLURM, verdict, cancel and files field, `sim_id`
     (the sparse unique index would refuse a second one) and `orphan_sim_ids` (the
-    sweep runs scancel on them) belong to the run that was, and a field added to a
+    sweep runs scancel on them) belong to the simulation that was, and a field added to a
     job later is left out of a copy until someone decides it belongs in one.
     `dataset_title` is read from the snapshot again by the caller, not copied."""
     about = copy.deepcopy(source.get("about"))
@@ -595,8 +595,8 @@ def _not_a_draft(current: str) -> HTTPException:
 
 
 async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -> None:
-    """422 when the snapshot's model cannot start a run on `start` (WBM writes a
-    run's first step into band 1 of an output file, so a start must be the first
+    """422 when the snapshot's model cannot start a simulation on `start` (WBM writes a
+    simulation's first step into band 1 of an output file, so a start must be the first
     day of one). Answered here, before the queue, instead of by the toolkit once
     the job runs; the toolkit's own check stays as the last line. A rule that
     cannot be read blocks nothing."""
@@ -649,7 +649,7 @@ async def _refuse_dates_outside_aggregation(
 
 
 _ANVIL_NOT_CONFIGURED = (
-    "This gateway is not set up to submit runs to Anvil yet. "
+    "This gateway is not set up to run simulations on Anvil yet. "
     "Ask an administrator. Your draft is unchanged."
 )
 _ANVIL_UNREACHABLE = (
@@ -743,10 +743,10 @@ async def submit_simulation(
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "walltime_over_limit",
-            "This model snapshot's reference run took about "
+            "This model snapshot's reference simulation took about "
             f"{job_script.describe_hours(over)}, and one job may use at most "
             f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, or set a "
-            "walltime yourself (a run that needs longer may be stopped when time "
+            "walltime yourself (a simulation that needs longer may be stopped when time "
             "runs out).",
             recommended_seconds=over,
             limit_seconds=MAX_WALLTIME_SECONDS,
@@ -973,7 +973,7 @@ async def delete_simulation(
         raise _error(
             status.HTTP_409_CONFLICT,
             "job_active",
-            "Cancel the run before deleting this snapshot draft.",
+            "Cancel the simulation before deleting this snapshot draft.",
         )
     await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
     await log_event(
@@ -1239,7 +1239,7 @@ async def cancel_job(
     return _status_response(await db.jobs.find_one({"_id": job_id}))
 
 
-_CANCELLED_BY_USER = "You cancelled this run."
+_CANCELLED_BY_USER = "You cancelled this simulation."
 _CANCEL_REQUEST_FIELDS = ("cancel_requested_at", "cancel_requested_by", "cancel_requested_by_email")
 
 
@@ -1255,7 +1255,7 @@ def _job_changed() -> HTTPException:
     return _error(
         status.HTTP_409_CONFLICT,
         "job_changed",
-        "This snapshot draft changed while its run was being cancelled. Reload it and try again.",
+        "This snapshot draft changed while its simulation was being cancelled. Reload it and try again.",
     )
 
 

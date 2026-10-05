@@ -45,7 +45,7 @@ export interface JobFailure {
   excerpt: string | null;
 }
 
-/** `purged`: Anvil's 30-day scratch purge removed the run's work directory. */
+/** `purged`: Anvil's 30-day scratch purge removed the simulation's work directory. */
 export type FilesState = "present" | "purged";
 
 export interface OutputFile {
@@ -102,7 +102,7 @@ export interface JobParameters {
 
 // ─── The published answer to a draft ─────────────────────────────────────────
 
-/** Which folder of the published run a file is in. */
+/** Which folder of the published simulation a file is in. */
 export type PublishedFileGroup = "daily" | "monthly" | "yearly";
 
 /** One published output file that answers a draft. `variable` is null for a

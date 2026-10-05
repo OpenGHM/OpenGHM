@@ -44,7 +44,7 @@ async function run<T>(
 
 /**
  * Submit a DRAFT to Anvil (ADR 0025). Owner only, and only for a user an
- * administrator has allowed to submit runs (ADR 0024). Nothing runs until
+ * administrator has allowed to run simulations (ADR 0024). Nothing runs until
  * this succeeds; if Anvil does not take it the draft stays a draft and the
  * failure comes back as `{ reason: "error", code, message }`.
  *

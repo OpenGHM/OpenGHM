@@ -67,7 +67,7 @@ describe("the detail page", () => {
     expect(screen.queryByText("HPC Configuration")).toBeNull();
   });
 
-  it("keeps the retry in one place on a failed run: the summary has the retry, the header the snapshot and Delete", () => {
+  it("keeps the retry in one place on a failed simulation: the summary has the retry, the header the snapshot and Delete", () => {
     renderDetail("failed:wbm_error");
     expect(screen.getAllByRole("button", { name: "Try again with these settings" })).toHaveLength(1);
     expect(screen.getAllByRole("link", { name: "New from this model snapshot" })).toHaveLength(1);

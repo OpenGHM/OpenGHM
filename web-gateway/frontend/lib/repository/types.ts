@@ -33,12 +33,12 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
   licenseUrl: string;
   /** `runtime.generatedAt`, exposed at the top level too — the default sort key. */
   generatedAt: string;
-  /** Where a run of this snapshot may start, read from its init by the single
+  /** Where a simulation of this snapshot may start, read from its init by the single
    *  snapshot route only (`DatasetDetailResponse`): `year` January 1, `month`
    *  the first of a month, `none` no rule, `null` the init could not be read.
    *  Absent on a list row. */
   runStartAlignment?: "year" | "month" | "none" | null;
-  /** The year the init's multi-year aggregation starts in, which a run must
+  /** The year the init's multi-year aggregation starts in, which a simulation must
    *  reach (`lib/jobs/aggregation-window.ts`); `null` when the init sets none
    *  or could not be read. Absent on a list row. */
   aggregationStartYear?: number | null;

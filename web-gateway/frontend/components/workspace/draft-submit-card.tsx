@@ -334,7 +334,7 @@ export function DraftSubmitCard({
             <AlertDialogDescription>
               {rerun
                 ? "This result is already published. Running it again checks that it reproduces, and uses compute time on your allocation. Check the summary first."
-                : "This starts the run and spends compute time. Check the summary first."}
+                : "This starts the simulation and spends compute time. Check the summary first."}
             </AlertDialogDescription>
           </AlertDialogHeader>
 

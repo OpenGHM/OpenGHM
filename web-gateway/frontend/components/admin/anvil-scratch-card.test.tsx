@@ -229,7 +229,7 @@ describe("clearing the spool cache", () => {
     expect(text).toContain("4,745 files");
     expect(text).toContain("2.0 GB");
     expect(text).toContain("2 years in use by running jobs are kept");
-    expect(text).toContain("downloaded from S3 again, or rebuilt by the next run that needs them");
+    expect(text).toContain("downloaded from S3 again, or rebuilt by the next simulation that needs them");
     expect(text).toContain("Nothing outside the spool cache is touched: simulation output and model inputs stay.");
   });
 

@@ -14,15 +14,15 @@ export function describeSubmitFailure(
 ): string {
   switch (failure.code) {
     case "not_permitted_to_run":
-      return "You are not permitted to submit runs yet. Ask an administrator to allow you to submit runs.";
+      return "You are not permitted to run simulations yet. Ask an administrator to allow you to run simulations.";
     case "active_job_limit":
-      return "You already have the most active runs you can have. Wait for one to finish, or cancel one, then submit again.";
+      return "You already have the most active simulations you can have. Wait for one to finish, or cancel one, then submit again.";
     case "unsupported_fields":
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
         .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
     case "walltime_over_limit":
-      // The backend's sentence says how long the reference run took, what one
+      // The backend's sentence says how long the reference simulation took, what one
       // job may use, and what to change.
       return failure.message;
     case "answered_by_published":

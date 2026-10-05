@@ -153,7 +153,7 @@ this write path replaced it.
 
 A `jobs` document is a **snapshot draft** ([ADR 0030](../decisions/0030-what-a-person-creates-is-a-snapshot-draft.md)):
 mutable while its `status` is `DRAFT` (shown as "Editing"), read-only from the
-moment it is submitted, and its execution is its **run** (mission
+moment it is submitted, and its execution is its **simulation** (mission
 `2026-09-20-simulations`, private). The API, the collection and the status
 values keep the `jobs` and `DRAFT` names. Two routes create one, both as a draft, both for an active account
 that is not a guest (`require_active_user`): `POST /api/v1/jobs/derive/{dataset_id}`
@@ -167,7 +167,7 @@ built by the same code, with an empty `id`, and stores nothing and writes no
 audit event. The new-snapshot-draft screen shows it until the user saves, so the
 defaults stay defined in the backend. A copy takes the snapshot,
 slug, `about` (a name it has gets " (copy)"; one it lacks stays absent), model
-input, parameters and compute, and nothing of the run. A new draft has no name:
+input, parameters and compute, and nothing of the simulation. A new draft has no name:
 "Untitled (<first 8 of the id>)" is what the header and the list show for one,
 computed in the frontend and never stored, and the wizard asks for the name at
 the top of Run settings.
@@ -175,7 +175,7 @@ the top of Run settings.
 `PATCH /api/v1/jobs/{id}` writes only while `status` is `DRAFT`: the update's
 own filter carries the status, so once it has moved past `DRAFT`, or a submit
 lands between the read and the write, the answer is `409 not_a_draft` and a
-finished run's own record cannot be rewritten. `about` is merged key by key (a
+finished simulation's own record cannot be rewritten. `about` is merged key by key (a
 key sent as `null` is removed, `about: null` clears the block), `parameters`
 replaces the stored object and cannot be `null`, and `slurm_config` changes the
 fields sent. A start date is checked (below) only when it differs from the
@@ -191,7 +191,7 @@ a step that does not exist yet ([open items
 list *publish a snapshot draft as a snapshot*).
 
 A draft's start date is checked against where its snapshot's model may start a
-run. WBM writes a run's first step into band 1 of an output file, so a run can
+simulation. WBM writes a simulation's first step into band 1 of an output file, so a simulation can
 only start on the first day of one: with `File_Size 'year'` in the init, on
 January 1, with `'month'`, on the first of a month. An init that sets neither
 `File_Size` nor `Time_Series` is `'year'` too, WBM's default
@@ -214,14 +214,14 @@ field, which keeps Submit off.
 `422 run_start_not_aligned` for the same start. A rule that cannot be read
 blocks nothing, and the toolkit's own check stays as the last line.
 
-The same init also limits the run's *end*. With `TA_multi_year_start` and
+The same init also limits the simulation's *end*. With `TA_multi_year_start` and
 `TA_multi_year_timestep` both set in its `PostProcessing` block, WBM stops at
-start-up unless that year lies inside the run: `post_processing` in
+start-up unless that year lies inside the simulation: `post_processing` in
 `images/wbm-tools-lite/wbm/model/RIMS/WBM.pm` (line 4279) dies with "Aggregation
 multi-year start is outside of the run dates..." when the year is before the
 run's first year or after its last complete year, whatever the block's `Run`
 flag (Anvil job 21016198, `Run => 0`, ran the v2.0.0 snapshot from 2000-01-01 to
-2000-12-31 and died of it; the snapshot's aggregation starts in 2001). So a run
+2000-12-31 and died of it; the snapshot's aggregation starts in 2001). So a simulation
 must start in or before that year and end on or after its December 31. Snapshot
 metadata does not hold `PostProcessing`, so the gateway reads the year from the
 same init read, once per snapshot id, and sends it as `aggregationStartYear` on
@@ -234,7 +234,7 @@ range, and says "must end on 2001-12-31" rather than "(allowed: X to X)" when th
 coverage leaves one date; the gateway words it the same way
 (`aggregation_messages`). The save is not refused:
 an edit stores whatever the person is part-way through typing. A date equal to
-the snapshot's own is not held to it (the published run passed), and December 30
+the snapshot's own is not held to it (the published simulation passed), and December 30
 is let through, as a 360-day calendar's last day that the init does not
 announce. `openghm sim run` and `sim submit` check the same rule on a
 `--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
@@ -381,7 +381,7 @@ config file states this in a comment, and there is no S3 client in
 `requirements.txt` to contradict it. The one object it reads itself is a
 snapshot's init, with a plain `httpx` GET of the public URL
 (`web-gateway/backend/app/services/run_start.py`), to learn what the init asks of
-a run's dates.
+a simulation's dates.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
@@ -398,7 +398,7 @@ Download card.
 The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
 has, with every artifact under a prefix
 ([`../reference/s3-layout.md`](../reference/s3-layout.md)). There is
-deliberately no output-bucket setting. A run's output stays on Anvil
+deliberately no output-bucket setting. A simulation's output stays on Anvil
 scratch and reaches S3 only when it is published as a snapshot
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)), so there is
 no job-output link to return.
@@ -437,7 +437,7 @@ Each step runs through a `step` wrapper that records its exit code, and an
 `EXIT` trap (with `TERM`, `INT` and `HUP` trapped too) writes `outcome.json`
 into slurmly's job directory with the toolkit venv's Python
 ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)). The record
-holds the phase reached, each step's exit code, whether the run was staged,
+holds the phase reached, each step's exit code, whether the simulation was staged,
 the WBM markers (`All Done!`, `Failed to warp`, `Nothing to do`) and log tail,
 and the output manifest. The script exits non-zero when those facts are not a
 success, so SLURM's state agrees. The body's schema is the docstring of
@@ -454,8 +454,8 @@ SLURM is asked for `--cpus-per-task` and `--time`:
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
 (`MaxMemPerCPU`, read from Anvil on 2026-10-02), and WBM takes at most 8 threads
-(the toolkit passes one per core, so a run holding more cores than that leaves the
-rest idle): the snapshot's recommended core count is there for the memory. A run given
+(the toolkit passes one per core, so a simulation holding more cores than that leaves the
+rest idle): the snapshot's recommended core count is there for the memory. A simulation given
 fewer cores than that may be killed for running out of memory. The wizard shows a one-line warning for that
 (`describeCoresBelowRecommendedShort`, with the arithmetic behind "Why?"), not an
 error: Submit stays on and the backend does not check it.
@@ -490,7 +490,7 @@ submitting.
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
-- A start date the snapshot's model cannot start a run on: 422
+- A start date the snapshot's model cannot start a simulation on: 422
   `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
   the snapshot's period.
 - Run dates outside the snapshot's multi-year aggregation window (above): 422
@@ -499,7 +499,7 @@ submitting.
   names the allowed range. A window that cannot be read blocks nothing.
 - A draft with no walltime of its own whose snapshot's recommended walltime is
   by itself over 96 h, which no single job can run: 422 `walltime_over_limit`,
-  before any SSH or SLURM call. Its message gives the reference run's time and
+  before any SSH or SLURM call. Its message gives the reference simulation's time and
   says to shorten the run period or set a walltime. A walltime the draft set is
   sent as given and is not refused here. The frontend mirrors both rules
   (`withHeadroom`, `submitProblems`): Run settings shows a one-line warning with a
@@ -572,7 +572,7 @@ job only), "New from this model snapshot" and "Delete snapshot draft"; a light
 header like the Data Repository's), one full-width status summary
 (`job-status-summary.tsx`) that changes with the live status, the Logs, and a
 compact Details section. The summary is the only place with a state's main
-action: Cancel run while it is queued or running, "Try again with these settings"
+action: Cancel simulation while it is queued or running, "Try again with these settings"
 after a failure or a cancel. That button and "Duplicate" are the one copy action
 (`POST /jobs/{id}/duplicate`), shown once: the header has it only where the
 summary does not. A completed job's results (scratch path, file counts, when

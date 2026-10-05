@@ -86,7 +86,7 @@ async function DraftList({
     redirect(listHref(statusFilter, jobData.total_pages));
   }
 
-  // Whether a run is shorter than its snapshot's coverage needs the snapshot,
+  // Whether a simulation is shorter than its snapshot's coverage needs the snapshot,
   // which the job does not carry: read here, once per distinct snapshot.
   const notes = jobData ? await runNotes(jobData.items) : {};
   const hasRows = !!jobData && jobData.items.length > 0;

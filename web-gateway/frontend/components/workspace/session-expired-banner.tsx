@@ -39,7 +39,7 @@ export function SessionExpiredBanner({ className }: { className?: string }) {
         <div className="space-y-0.5">
           <p className="font-medium">Your session has expired.</p>
           <p className="text-xs text-warning">
-            Sign in again to keep going. Runs that are already in progress
+            Sign in again to keep going. Simulations that are already in progress
             keep running on Anvil while you are signed out.
           </p>
         </div>
