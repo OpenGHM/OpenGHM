@@ -1,5 +1,5 @@
 /**
- * Saving a simulation that so far exists only in the browser (`/workspace/new/
+ * Saving a snapshot draft that so far exists only in the browser (`/workspace/new/
  * <snapshot id>`): create the stored DRAFT, then put what the person changed
  * into it. No React and no server action of its own: the two calls are
  * injected, so the rules (one draft per saver, what a half-saved result says)
@@ -18,7 +18,7 @@
  *   stored draft does not hold (`notSaved`) and why (`patchError`), and the
  *   caller opens the draft anyway. Only a failed create is `ok: false`.
  */
-import type { ActionResult, Job, SimulationUpdateRequest } from "@/lib/jobs/types";
+import type { ActionResult, Job, DraftUpdateRequest } from "@/lib/jobs/types";
 import {
   buildDraftPatch,
   refuseGroups,
@@ -32,10 +32,10 @@ import {
 import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
 
 export interface SaveNewDraftDeps {
-  /** `deriveSimulation`: creates the stored draft. */
+  /** `deriveDraft`: creates the stored draft. */
   derive: (datasetId: string) => Promise<ActionResult<Job>>;
-  /** `updateSimulation`: saves a patch into it. */
-  update: (jobId: string, patch: SimulationUpdateRequest) => Promise<ActionResult<Job>>;
+  /** `updateDraft`: saves a patch into it. */
+  update: (jobId: string, patch: DraftUpdateRequest) => Promise<ActionResult<Job>>;
 }
 
 export type SaveNewDraftFailure =

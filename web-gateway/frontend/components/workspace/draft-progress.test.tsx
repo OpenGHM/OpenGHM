@@ -50,7 +50,7 @@ describe("DraftProgress", () => {
     );
   });
 
-  it("links the steps of a simulation that is not saved yet to /workspace/new/<snapshot>, by hrefFor", () => {
+  it("links the steps of a snapshot draft that is not saved yet to /workspace/new/<snapshot>, by hrefFor", () => {
     const onSelectStep = vi.fn();
     render(
       <DraftProgress

@@ -51,7 +51,7 @@ _PHASE: dict[str, str] = {
 # a fact of the run are built in `_message`.
 _MESSAGE: dict[str, str] = {
     "fetch_failed": (
-        "The snapshot could not be downloaded to Anvil, so the simulation never "
+        "The snapshot could not be downloaded to Anvil, so the run never "
         "started. Try again; if it keeps failing, the snapshot's files may be "
         "unavailable."
     ),
@@ -61,13 +61,13 @@ _MESSAGE: dict[str, str] = {
     ),
     "out_of_memory": (
         "The job ran out of memory and Anvil stopped it. Reduce what the "
-        "simulation asks for or request more resources, then submit again."
+        "run asks for or request more resources, then submit again."
     ),
     "node_failure": (
         "Anvil lost the job. This is not a problem with your input. Submit "
         "again."
     ),
-    "cancelled_by_user": "You cancelled this simulation.",
+    "cancelled_by_user": "You cancelled this run.",
     "cancelled_by_system": (
         "Anvil or an administrator cancelled this job. It was not cancelled "
         "from OpenGHM."
@@ -233,7 +233,7 @@ def _failure(
 def _message(cause: str, *, detail: str | None, code: int | None, state: str | None) -> str:
     if cause == "run_refused":
         why = detail or "the snapshot or its configuration is not valid"
-        return f"The toolkit refused to run this simulation: {why}. Check the snapshot's settings and submit again."
+        return f"The toolkit refused to start this run: {why}. Check the snapshot's settings and submit again."
     if cause == "wbm_error":
         if detail:
             return f"WBM stopped with an error (exit code {code}): {detail}"

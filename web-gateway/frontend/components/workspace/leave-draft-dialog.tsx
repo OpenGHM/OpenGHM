@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 /**
  * Asked when someone with unsaved settings leaves the draft wizard (a link, or
  * the browser's Back or Forward): save them and go on, drop them and go on, or
- * stay. For a simulation
+ * stay. For a snapshot draft
  * that is not stored yet, saving makes it a draft ("Save as draft"); for a
  * stored draft it saves the changes ("Save draft"). A controlled dialog that stays open while the save is in flight, like
  * the app's other confirmations.
@@ -52,7 +52,7 @@ export function LeaveDraftDialog({
           <AlertDialogDescription>
             {stored
               ? "This draft has changes that are not saved. If you leave now, they are lost. Save the draft to keep them."
-              : "This simulation is not saved yet. If you leave now, the settings you chose are lost. Save it as a draft to keep them in My Simulations."}
+              : "This snapshot draft is not saved yet. If you leave now, the settings you chose are lost. Save it as a draft to keep them in My snapshot drafts."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

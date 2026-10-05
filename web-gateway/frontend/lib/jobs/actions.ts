@@ -12,8 +12,8 @@ import type {
   JobStatusResponse,
   LogStream,
   PublishedAnswer,
-  SimulationDeriveRequest,
-  SimulationUpdateRequest,
+  DraftDeriveRequest,
+  DraftUpdateRequest,
 } from "@/lib/jobs/types";
 
 type ApiClient = Awaited<ReturnType<typeof getApiClient>>;
@@ -44,7 +44,7 @@ async function run<T>(
 
 /**
  * Submit a DRAFT to Anvil (ADR 0025). Owner only, and only for a user an
- * administrator has allowed to run simulations (ADR 0024). Nothing runs until
+ * administrator has allowed to submit runs (ADR 0024). Nothing runs until
  * this succeeds; if Anvil does not take it the draft stays a draft and the
  * failure comes back as `{ reason: "error", code, message }`.
  *
@@ -55,7 +55,7 @@ async function run<T>(
  * Its own 60 s timeout: the backend opens an SSH session to Anvil and uploads
  * the script before it answers, which the 10 s default does not allow for.
  */
-export async function submitSimulation(
+export async function submitDraft(
   jobId: string,
   opts?: { rerun?: boolean }
 ): Promise<ActionResult<Job>> {
@@ -76,7 +76,7 @@ export async function submitSimulation(
 /**
  * Whether the snapshot's published output already answers a draft with these
  * parameters, and the public files that do. It takes the parameters rather than
- * a job id so that a new simulation, which is not stored yet, can ask too.
+ * a job id so that a new snapshot draft, which is not stored yet, can ask too.
  * Any signed-in user may ask (the files are public). Failures: `not_found` is
  * an unknown snapshot; a 502 `published_listing_unavailable` comes back as
  * `{ reason: "error", code, status }`, and callers treat every failure as "could
@@ -122,13 +122,13 @@ export async function fetchJobs(
 }
 
 /**
- * Create a new DRAFT simulation pre-filled from a published snapshot
- * (T4/T9) — the only creation path for a simulation. The source dataset is
+ * Create a new snapshot draft (status DRAFT) pre-filled from a published snapshot
+ * (T4/T9) — the only creation path for a snapshot draft. The source dataset is
  * only ever read.
  */
-export async function deriveSimulation(
+export async function deriveDraft(
   datasetId: string,
-  request: SimulationDeriveRequest = {}
+  request: DraftDeriveRequest = {}
 ): Promise<ActionResult<Job>> {
   return run(async (client) => {
     const res = await client.post<Job>(
@@ -140,8 +140,8 @@ export async function deriveSimulation(
 }
 
 /**
- * The draft `deriveSimulation` would create from a snapshot, without creating
- * it: nothing is stored. The new-simulation wizard (`/workspace/new/<id>`) is
+ * The draft `deriveDraft` would create from a snapshot, without creating
+ * it: nothing is stored. The new snapshot draft wizard (`/workspace/new/<id>`) is
  * seeded with it and keeps everything in the browser until the user saves.
  * Its `id` carries no meaning (the backend sends an empty string): never use
  * it as a job id. `not_found` means the snapshot is not in the repository.
@@ -156,13 +156,13 @@ export async function previewDraft(datasetId: string): Promise<ActionResult<Job>
 }
 
 /**
- * Create a new DRAFT from one of the caller's own simulations, whatever its
+ * Create a new DRAFT from one of the caller's own snapshot drafts, whatever its
  * status: the second creation path. The source is only ever read. A source
  * whose model snapshot has left the repository answers
  * `{ reason: "error", code: "snapshot_not_found" }` and nothing is created;
  * `not_found` means the source is missing or not the caller's.
  */
-export async function duplicateSimulation(jobId: string): Promise<ActionResult<Job>> {
+export async function duplicateDraft(jobId: string): Promise<ActionResult<Job>> {
   return run(async (client) => {
     const res = await client.post<Job>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/duplicate`
@@ -172,14 +172,14 @@ export async function duplicateSimulation(jobId: string): Promise<ActionResult<J
 }
 
 /**
- * Edit a simulation while it is still a DRAFT. The backend returns 409
+ * Edit a snapshot draft while it is still a DRAFT. The backend returns 409
  * once the status has moved past DRAFT — callers should check
  * `job.status` before offering the control rather than relying on this
  * throwing.
  */
-export async function updateSimulation(
+export async function updateDraft(
   jobId: string,
-  request: SimulationUpdateRequest
+  request: DraftUpdateRequest
 ): Promise<ActionResult<Job>> {
   return run(async (client) => {
     const res = await client.patch<Job>(
@@ -238,13 +238,13 @@ export async function cancelJob(
 }
 
 /**
- * Delete a simulation: a draft, or one that has ended. Removes the job's two
+ * Delete a snapshot draft: a draft, or one that has ended. Removes the job's two
  * directories on Anvil and then the record (ADR 0026). On any failure the
- * simulation still exists, and `code` says why: `job_active` (409, cancel it
+ * snapshot draft still exists, and `code` says why: `job_active` (409, cancel it
  * first), `refused_path` (409), `anvil_unreachable` (503) or `cleanup_failed`
  * (502). `not_found` means it is already gone.
  */
-export async function deleteSimulation(jobId: string): Promise<ActionResult<null>> {
+export async function deleteDraft(jobId: string): Promise<ActionResult<null>> {
   return run(async (client) => {
     await client.delete(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
     return null;
@@ -276,7 +276,7 @@ export async function fetchJobLog(
 }
 
 /**
- * Fetch aggregate simulation counts for the listing hero. Same userId
+ * Fetch aggregate snapshot draft counts for the listing hero. Same userId
  * scoping rules as fetchJobs (see above).
  */
 export async function fetchJobStats(userId?: string): Promise<JobStatsResponse> {

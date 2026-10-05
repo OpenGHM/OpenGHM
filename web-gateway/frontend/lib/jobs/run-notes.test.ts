@@ -4,7 +4,7 @@ vi.mock("@/lib/repository/actions", () => ({ fetchDatasetById: vi.fn() }));
 
 import { fetchDatasetById } from "@/lib/repository/actions";
 import { runNotes } from "@/lib/jobs/run-notes";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 function covering(start: string, end: string) {
   const base = fakeDataset();
@@ -12,10 +12,10 @@ function covering(start: string, end: string) {
 }
 
 const ran = (id: string, datasetId: string, start: string, end: string) =>
-  fakeSimulation("COMPLETED", {
+  fakeDraft("COMPLETED", {
     id,
     dataset_id: datasetId,
-    parameters: { ...fakeSimulation("COMPLETED").parameters, temporal_range_start: start, temporal_range_end: end },
+    parameters: { ...fakeDraft("COMPLETED").parameters, temporal_range_start: start, temporal_range_end: end },
   });
 
 describe("runNotes", () => {

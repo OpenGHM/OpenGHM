@@ -76,7 +76,7 @@ project (`-p something-else`) rather than wiping your own database.
 **The seed holds two accounts**, the sign-in page's "Dev quick login" buttons:
 `admin@openghm.dev` and `user@openghm.dev`, ids `dev-admin-001` and
 `dev-user-001`. Both are email-verified, and the user has
-`can_run_simulations`, so the quick-login User can submit a simulation. Their
+`can_run_simulations`, so the quick-login User can submit a run. Their
 ids are deliberately not the mock-auth identities' (`mock-*-001`), which the
 backend never lets submit. A volume seeded before the ids changed keeps the old
 ones until `just migrate-seed-users` is run once against it; it moves the

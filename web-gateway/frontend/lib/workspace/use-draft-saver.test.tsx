@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
-import type { ActionResult, Job, PartialAbout, SimulationUpdateRequest } from "@/lib/jobs/types";
+import type { ActionResult, Job, PartialAbout, DraftUpdateRequest } from "@/lib/jobs/types";
 
-vi.mock("@/lib/jobs/actions", () => ({ updateSimulation: vi.fn() }));
+vi.mock("@/lib/jobs/actions", () => ({ updateDraft: vi.fn() }));
 
-import { updateSimulation } from "@/lib/jobs/actions";
+import { updateDraft } from "@/lib/jobs/actions";
 import { clearDraftCache, readDraftCache } from "@/lib/workspace/draft-cache";
 import { fromJob, type DraftContext, type DraftLocal } from "@/lib/workspace/draft-state";
 import { useDraftSaver, type FlushResult } from "@/lib/workspace/use-draft-saver";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
-const update = vi.mocked(updateSimulation);
+const update = vi.mocked(updateDraft);
 
 const dataset = fakeDataset({
   runStartAlignment: "year",
@@ -27,7 +27,7 @@ const FOUND: DraftContext = { dataset, snapshotState: "found" };
 // No snapshot to check a start against: only the server can refuse one.
 const UNCHECKED: DraftContext = { dataset: null, snapshotState: "unavailable" };
 
-const JOB = fakeSimulation("DRAFT", {
+const JOB = fakeDraft("DRAFT", {
   id: "job-1",
   updated_at: "2026-10-01T12:00:00.000Z",
   parameters: {
@@ -48,7 +48,7 @@ function fakeServer(initial: Job = JOB) {
     get current() {
       return current;
     },
-    impl: async (_id: string, patch: SimulationUpdateRequest): Promise<ActionResult<Job>> => {
+    impl: async (_id: string, patch: DraftUpdateRequest): Promise<ActionResult<Job>> => {
       n += 1;
       let about: PartialAbout | null = current.about;
       if (patch.about !== undefined) {

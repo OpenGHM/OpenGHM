@@ -77,21 +77,21 @@ export function CancelJobDialog({
         onCancelled(result.data);
         toast.success(
           isTerminalStatus(result.data.status)
-            ? "Simulation cancelled."
+            ? "Run cancelled."
             : "Cancel requested. SLURM will confirm shortly."
         );
       } else if (result.reason === "session_expired") {
         onSessionExpired?.();
-        toast.error("Your session has expired. Sign in to cancel this simulation.");
+        toast.error("Your session has expired. Sign in to cancel this run.");
       } else if (result.reason === "not_found") {
-        toast.error("This simulation no longer exists.");
+        toast.error("This snapshot draft no longer exists.");
       } else {
-        toast.error(result.message || "Failed to cancel the simulation.");
+        toast.error(result.message || "Failed to cancel the run.");
         if (result.status === 409) onConflict?.();
       }
     } catch {
       onOpenChange(false);
-      toast.error("Failed to cancel the simulation.");
+      toast.error("Failed to cancel the run.");
     } finally {
       setBusy(false);
     }
@@ -106,7 +106,7 @@ export function CancelJobDialog({
     >
       <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel this simulation?</AlertDialogTitle>
+          <AlertDialogTitle>Cancel this run?</AlertDialogTitle>
           <AlertDialogDescription>
             SLURM stops it; the work so far is kept until you delete it.
           </AlertDialogDescription>
@@ -131,7 +131,7 @@ export function CancelJobDialog({
                 Cancelling…
               </>
             ) : (
-              "Cancel simulation"
+              "Cancel run"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

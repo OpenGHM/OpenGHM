@@ -8,7 +8,7 @@ export interface AdminUser {
   organization: string | null;
   email_verified: boolean;
   is_active: boolean;
-  /** ADR 0024: lets a role `user` submit a simulation. Admin and staff are
+  /** ADR 0024: lets a role `user` submit a snapshot draft. Admin and staff are
    *  always permitted and a guest never is, whatever this says. */
   can_run_simulations: boolean;
   created_at: string | null;

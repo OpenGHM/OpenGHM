@@ -2,8 +2,8 @@ import { Mail } from "lucide-react";
 import type { PartialAbout } from "@/lib/jobs/types";
 import { TagChips } from "@/components/repository/tag-chips";
 
-/** Read-only display of a simulation's `about` block, once it can no
- * longer be edited (past DRAFT). Renders nothing if the simulation was
+/** Read-only display of a snapshot draft's `about` block, once it can no
+ * longer be edited (past DRAFT). Renders nothing if the snapshot draft was
  * never given a description — about is optional right up to submission. */
 export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
   if (!about || Object.keys(about).length === 0) return null;

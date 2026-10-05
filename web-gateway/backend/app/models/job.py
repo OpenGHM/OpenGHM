@@ -1,6 +1,6 @@
 """Pydantic models for HPC job submission, status tracking, and API contracts.
 
-A *simulation* (mission 2026-09-20-simulations) is this same document, one
+A *snapshot draft* (mission 2026-09-20-simulations) is this same document, one
 shape with a status rather than a second collection: a "DRAFT" status
 precedes the existing SLURM lifecycle, and the routes in
 `app/api/v1/jobs.py` — not a separate model — enforce which fields may
@@ -28,7 +28,7 @@ JobStatus = Literal[
     "CANCELLED",
 ]
 
-#: A simulation's `about` block, editable one field at a time while it is a
+#: A snapshot draft's `about` block, editable one field at a time while it is a
 #: draft — derived from the generated `OpenGHMCitationBlock` (rule 4) rather
 #: than hand-restated, the way the abandoned snapshot-drafts mission's
 #: `PartialSnapshotMetadata` was for the whole document. Only `about` needs
@@ -63,9 +63,9 @@ FailureCause = Literal[
 FilesState = Literal["present", "purged"]
 
 #: The three states `app.api.v1.jobs._resolve_model_input` (T1) can produce
-#: for "which model input does this simulation use" — distinguished at the
+#: for "which model input does this snapshot draft use" — distinguished at the
 #: source rather than reconstructed in the UI (mission 2026-09-21, plan.md):
-#:   - "chosen": the simulation carries its own `model_input_id` override.
+#:   - "chosen": the snapshot draft carries its own `model_input_id` override.
 #:   - "inherited": no override; the base snapshot's `uses.modelInput.id`
 #:     resolves to a `model_inputs` catalogue entry.
 #:   - "inherited-missing": no override; that id is not in the catalogue —
@@ -79,7 +79,7 @@ ModelInputState = Literal["inherited", "chosen", "inherited-missing"]
 
 
 class SpatialDomain(BaseModel):
-    """Optional bounding-box subset for the simulation."""
+    """Optional bounding-box subset for the run."""
 
     north: float
     south: float
@@ -88,7 +88,7 @@ class SpatialDomain(BaseModel):
 
 
 class JobParameters(BaseModel):
-    """User-configured simulation parameters."""
+    """User-configured run parameters."""
 
     temporal_range_start: str = Field(..., description="ISO date, e.g. 2000-01-01")
     temporal_range_end: str = Field(..., description="ISO date, e.g. 2010-12-31")
@@ -184,7 +184,7 @@ class JobDB(BaseModel):
     """Shape of a document stored in the MongoDB jobs collection."""
 
     id: str = Field(alias="_id")
-    # Only a submitted simulation has a real one (`_generate_sim_id`, minted
+    # Only a submitted snapshot draft has a real one (`_generate_sim_id`, minted
     # by `submit_job`) — a draft document omits the field entirely rather
     # than defaulting it to `""`, because `db.jobs`'s `sim_id` index is
     # `unique=True, sparse=True`: sparse only excludes a *missing* field, so
@@ -196,14 +196,14 @@ class JobDB(BaseModel):
     dataset_title: str
 
     # Descriptive half a citable snapshot will eventually need (spec.md's
-    # "Two entities, not three") — present from the moment a simulation is
-    # created as a draft, editable only while it stays one.
+    # "Two entities, not three") — present from the moment a snapshot draft is
+    # created, editable only while it stays one.
     slug: str | None = None
     about: PartialAbout | None = None
 
-    # Which published model input this simulation runs against, overriding
+    # Which published model input this snapshot draft runs against, overriding
     # the one its base snapshot (`dataset_id`) cites. Absent/None means
-    # "inherit from the base snapshot" — every simulation created before
+    # "inherit from the base snapshot" — every snapshot draft created before
     # this mission is exactly that, so no migration and no behaviour change
     # for anything already stored. Resolving the *effective* id (and which
     # of the three states produced it) is `app.api.v1.jobs._resolve_model_input`
@@ -288,9 +288,9 @@ class JobDB(BaseModel):
 
 class SimulationDeriveRequest(BaseModel):
     """POST /jobs/derive/{dataset_id} body — everything else about a new
-    simulation is inherited from the snapshot named in the path, so the
+    snapshot draft is inherited from the snapshot named in the path, so the
     only thing left to say up front is what to call it. Out of scope:
-    starting a simulation from scratch (spec.md) — there is no route that
+    starting a snapshot draft from scratch (spec.md) — there is no route that
     takes a bare `dataset_id` here."""
 
     model_config = {"protected_namespaces": ()}
@@ -305,7 +305,7 @@ class SimulationDeriveRequest(BaseModel):
 class SimulationUpdateRequest(BaseModel):
     """PATCH /jobs/{job_id} body. Every field is optional and only the ones
     supplied are changed — an auto-save posting what changed, not a full
-    replacement. Refused once the simulation has moved past `DRAFT`
+    replacement. Refused once the snapshot draft has moved past `DRAFT`
     (app/api/v1/jobs.py)."""
 
     model_config = {"protected_namespaces": ()}
@@ -413,9 +413,9 @@ class JobResponse(JobVerdictFields):
     #: means "inherits from the base snapshot", regardless of what
     #: `effective_model_input_state` below says.
     model_input_id: str | None = None
-    #: The model input this simulation actually uses, resolved by
+    #: The model input this snapshot draft actually uses, resolved by
     #: `app.api.v1.jobs._resolve_model_input` (T1) — and which of the three
-    #: states produced it. Only resolved on single-simulation routes
+    #: states produced it. Only resolved on single-draft routes
     #: (derive, get, patch); `None` on the list route, which does not fan
     #: out a per-row resolve (plan.md's second risk).
     effective_model_input_id: str | None = None
@@ -494,7 +494,7 @@ class JobStatusResponse(JobVerdictFields):
 
 
 class JobStatsResponse(BaseModel):
-    """Aggregate counts: the simulation list's tabs (one per bucket) and the
+    """Aggregate counts: the snapshot draft list's tabs (one per bucket) and the
     admin dashboard cards (`total`, `running`, `completed`, `failed`).
 
     `running` is every active status (`ACTIVE_STATUSES`), not just RUNNING."""

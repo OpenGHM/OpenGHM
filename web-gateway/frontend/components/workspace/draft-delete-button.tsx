@@ -4,16 +4,16 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DeleteSimulationDialog } from "@/components/workspace/delete-simulation-dialog";
+import { DeleteDraftDialog } from "@/components/workspace/delete-draft-dialog";
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 
 /**
- * A list row's one action: delete the simulation, once it is a draft or has
+ * A list row's one action: delete the snapshot draft, once it is a draft or has
  * ended. A visible, muted icon button that turns red on hover and on focus
  * (never a hidden menu), above the row's stretched link. It opens
- * `DeleteSimulationDialog`, which asks, then refreshes the list. Opening a
- * simulation is the name link's job, and cancelling one is the simulation
+ * `DeleteDraftDialog`, which asks, then refreshes the list. Opening a
+ * snapshot draft is the name link's job, and cancelling one is the snapshot draft
  * page's.
  *
  * For an active job the backend would answer 409 `job_active`, so there is no
@@ -24,7 +24,7 @@ import { isTerminalStatus } from "@/lib/jobs/types";
  * trigger, and Radix returns focus only to a Trigger it knows; so the dialog's
  * `onCloseAutoFocus` puts it back on the button.
  */
-export function SimulationDeleteButton({
+export function DraftDeleteButton({
   job,
   name,
   onSessionExpired,
@@ -51,13 +51,13 @@ export function SimulationDeleteButton({
         type="button"
         variant="ghost"
         size="icon-lg"
-        aria-label={isDraft ? `Delete draft ${name}` : `Delete ${name}`}
+        aria-label={`Delete snapshot draft ${name}`}
         className="relative z-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive"
         onClick={() => setOpen(true)}
       >
         <Trash2 aria-hidden="true" />
       </Button>
-      <DeleteSimulationDialog
+      <DeleteDraftDialog
         open={open}
         onOpenChange={setOpen}
         jobId={job.id}

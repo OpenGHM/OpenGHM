@@ -5,18 +5,18 @@ import Link from "next/link";
 import { JobStatusDot } from "@/components/jobs/job-status-badge";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
-import { COLUMNS } from "@/components/workspace/simulation-columns";
-import { SimulationDeleteButton } from "@/components/workspace/simulation-delete-button";
+import { COLUMNS } from "@/components/workspace/draft-columns";
+import { DraftDeleteButton } from "@/components/workspace/draft-delete-button";
 import { matchesQuery } from "@/components/workspace/search-field";
-import { useSimulationSearch } from "@/components/workspace/simulation-search";
+import { useDraftSearch } from "@/components/workspace/draft-search";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { displayName, listName } from "@/lib/jobs/display-name";
-import { simulationSource } from "@/lib/jobs/simulation-source";
+import { draftSource } from "@/lib/jobs/draft-source";
 import { kindLabel } from "@/lib/repository/catalogue-format";
 import type { Job } from "@/lib/jobs/types";
 
 /**
- * The simulations as one card of rows, each row a link to the simulation: its
+ * The snapshot drafts as one card of rows, each row a link to the snapshot draft: its
  * name with, under it, the title of the snapshot it is based on (one line,
  * cut with an ellipsis, the whole title on hover) and, when the run is shorter
  * than the snapshot's coverage, the period it ran; its status, when it was last
@@ -27,11 +27,11 @@ import type { Job } from "@/lib/jobs/types";
  *
  * The row is one link by way of its name's stretched `::after`, with Delete
  * above it. It filters on what the list's search box says
- * (`SimulationSearchProvider`), over the rows it is given. A client component,
+ * (`DraftSearchProvider`), over the rows it is given. A client component,
  * because it owns the sign-in banner that a row's Delete shows when the session
  * has ended, and reads the search box.
  */
-export function SimulationTable({
+export function DraftTable({
   jobs,
   runNotes = {},
   moreThanOnePage = false,
@@ -45,7 +45,7 @@ export function SimulationTable({
 }) {
   const [sessionExpired, setSessionExpired] = useState(false);
   const expire = () => setSessionExpired(true);
-  const { query, setQuery } = useSimulationSearch();
+  const { query, setQuery } = useDraftSearch();
 
   const rows = jobs.filter((job) => matchesQuery(displayName(job), query));
 
@@ -69,9 +69,9 @@ export function SimulationTable({
 
       {rows.length === 0 ? (
         <div className="px-4 py-12 text-center">
-          <p className="text-sm font-medium text-foreground">No simulation matches &ldquo;{query.trim()}&rdquo;</p>
+          <p className="text-sm font-medium text-foreground">No snapshot draft matches &ldquo;{query.trim()}&rdquo;</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {moreThanOnePage ? "Only the simulations on this page were searched." : "Check the spelling, or clear the search."}
+            {moreThanOnePage ? "Only the snapshot drafts on this page were searched." : "Check the spelling, or clear the search."}
           </p>
           <button
             type="button"
@@ -82,11 +82,11 @@ export function SimulationTable({
           </button>
         </div>
       ) : (
-        <ul aria-label="Simulations" className="divide-y">
+        <ul aria-label="Snapshot drafts" className="divide-y">
           {rows.map((job) => {
             const name = displayName(job);
             const shown = listName(job);
-            const source = simulationSource(job);
+            const source = draftSource(job);
             const runNote = runNotes[job.id];
             return (
               <li
@@ -127,7 +127,7 @@ export function SimulationTable({
                 </div>
 
                 <div className="col-start-2 row-span-2 row-start-1 justify-self-end sm:col-auto sm:row-auto sm:row-span-1">
-                  <SimulationDeleteButton job={job} name={name} onSessionExpired={expire} />
+                  <DraftDeleteButton job={job} name={name} onSessionExpired={expire} />
                 </div>
               </li>
             );

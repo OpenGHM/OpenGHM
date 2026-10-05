@@ -3,7 +3,7 @@ import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/aut
 import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { StartProgress } from "@/components/workspace/draft-progress";
-import { PageHeader, SimulationBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { StartFrom } from "@/components/workspace/start-from";
 import { fetchJobs } from "@/lib/jobs/actions";
 import { fetchModelInputIds, fetchSnapshots } from "@/lib/repository/actions";
@@ -14,10 +14,10 @@ import type { CatalogueResponse } from "@/lib/repository/types";
  * Step 1 of the draft wizard (ADR 0028): choose a model snapshot. The server
  * reads what the screen needs once: the picker's first result for the URL's
  * search and filters, and which snapshots the caller has based a recent
- * simulation on (the first page of their simulations), for the "Used before"
+ * snapshot draft on (the first page of their snapshot drafts), for the "Used before"
  * mark.
  */
-export default async function NewSimulationPage({
+export default async function NewDraftPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -49,8 +49,8 @@ export default async function NewSimulationPage({
       <Header />
       <main className={WORKSPACE_MAIN}>
         <PageHeader
-          top={<SimulationBreadcrumb current="New simulation" />}
-          title="New simulation"
+          top={<DraftBreadcrumb current="New snapshot draft" />}
+          title="New snapshot draft"
           meta={<p className="mt-2.5 text-sm text-muted-foreground">Start from a published model snapshot</p>}
         >
           <StartProgress />

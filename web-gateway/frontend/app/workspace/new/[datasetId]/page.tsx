@@ -13,14 +13,14 @@ import type { DraftContext } from "@/lib/workspace/draft-state";
 import { parseStep } from "@/lib/workspace/draft-wizard";
 
 /**
- * A new simulation, before it exists (ADR 0028): the draft wizard on a
+ * A new snapshot draft, before it exists (ADR 0028): the draft wizard on a
  * snapshot's defaults, with nothing stored. The server reads the draft the
  * snapshot would give (`previewDraft`) and the snapshot itself; from there
  * everything the person chooses stays in the browser until "Save as draft" (or
  * Submit) creates the stored draft and opens it at `/workspace/<id>`.
- * `?step=run|review`, Run settings when absent: a new simulation opens there.
+ * `?step=run|review`, Run settings when absent: a new snapshot draft opens there.
  */
-export default async function NewSimulationFromSnapshotPage({
+export default async function NewDraftFromSnapshotPage({
   params,
   searchParams,
 }: {

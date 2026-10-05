@@ -225,7 +225,7 @@ describe("the empty state", () => {
     expect(screen.getByText("Nothing published yet")).toBeTruthy();
     expect(
       screen.getByText(
-        "When a simulation finishes, you will be able to publish it as a model snapshot from its page."
+        "When a snapshot draft's run finishes, you will be able to publish it as a model snapshot from its page."
       )
     ).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();

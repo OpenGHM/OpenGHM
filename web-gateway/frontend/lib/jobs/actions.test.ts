@@ -7,7 +7,7 @@ const { patch, post, getApiClient } = vi.hoisted(() => {
 });
 vi.mock("@/lib/api-client", () => ({ getApiClient }));
 
-import { duplicateSimulation, publishedAnswer, submitSimulation, updateSimulation } from "./actions";
+import { duplicateDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
@@ -25,7 +25,7 @@ describe("a failed PATCH, read by describeFailure", () => {
         { loc: ["body", "slurm_config", "cores"], msg: "Input should be less than or equal to 128", type: "less_than_equal" },
       ])
     );
-    await expect(updateSimulation("j", {})).resolves.toEqual({
+    await expect(updateDraft("j", {})).resolves.toEqual({
       ok: false,
       reason: "error",
       message: "Value error, walltime must be HH:MM:SS",
@@ -42,7 +42,7 @@ describe("a failed PATCH, read by describeFailure", () => {
         { loc: ["body", "parameters"], msg: "c" },
       ])
     );
-    const result = await updateSimulation("j", {});
+    const result = await updateDraft("j", {});
     expect(result).toMatchObject({ ok: false, reason: "error", message: "a", fields: ["parameters.variables.0", "parameters"] });
   });
 
@@ -50,27 +50,27 @@ describe("a failed PATCH, read by describeFailure", () => {
     patch.mockRejectedValue(
       refused(422, [{ msg: "no location" }, { loc: [], msg: "empty" }, { loc: ["query", "page"], msg: "bad page" }, null, "text"])
     );
-    const result = await updateSimulation("j", {});
+    const result = await updateDraft("j", {});
     expect(result).toMatchObject({ message: "no location", fields: ["query.page"] });
   });
 
   it("falls back to the error's own words when the array holds no message", async () => {
     patch.mockRejectedValue(refused(422, []));
-    const result = await updateSimulation("j", {});
+    const result = await updateDraft("j", {});
     expect(result).toMatchObject({ ok: false, reason: "error", message: "Request failed.", status: 422 });
     expect(result).not.toHaveProperty("fields", expect.anything());
   });
 
   it("still reads a plain string detail", async () => {
     patch.mockRejectedValue(refused(500, "Internal error"));
-    await expect(updateSimulation("j", {})).resolves.toMatchObject({ message: "Internal error", status: 500 });
+    await expect(updateDraft("j", {})).resolves.toMatchObject({ message: "Internal error", status: 500 });
   });
 
   it("still reads { code, message } and the fields of an unsupported_fields refusal", async () => {
     patch.mockRejectedValue(
       refused(422, { code: "unsupported_fields", message: "Cannot run yet", fields: ["parameters.spatial_domain"] })
     );
-    await expect(updateSimulation("j", {})).resolves.toMatchObject({
+    await expect(updateDraft("j", {})).resolves.toMatchObject({
       message: "Cannot run yet",
       code: "unsupported_fields",
       fields: ["parameters.spatial_domain"],
@@ -82,7 +82,7 @@ describe("a failed PATCH, read by describeFailure", () => {
     patch.mockRejectedValue(
       refused(422, { code: "run_start_not_aligned", message: "Start on January 1.", suggested_start: "2001-01-01" })
     );
-    await expect(updateSimulation("j", {})).resolves.toMatchObject({
+    await expect(updateDraft("j", {})).resolves.toMatchObject({
       code: "run_start_not_aligned",
       message: "Start on January 1.",
       suggestedStart: "2001-01-01",
@@ -91,29 +91,29 @@ describe("a failed PATCH, read by describeFailure", () => {
 
   it("answers 401 as an ended session and 404 as not found", async () => {
     patch.mockRejectedValueOnce(refused(401));
-    await expect(updateSimulation("j", {})).resolves.toEqual({ ok: false, reason: "session_expired" });
+    await expect(updateDraft("j", {})).resolves.toEqual({ ok: false, reason: "session_expired" });
     patch.mockRejectedValueOnce(refused(404));
-    await expect(updateSimulation("j", {})).resolves.toEqual({ ok: false, reason: "not_found" });
+    await expect(updateDraft("j", {})).resolves.toEqual({ ok: false, reason: "not_found" });
   });
 
   it("answers a 409 not_a_draft with its code", async () => {
     patch.mockRejectedValue(refused(409, { code: "not_a_draft", message: "Only a draft can be edited." }));
-    await expect(updateSimulation("j", {})).resolves.toMatchObject({ status: 409, code: "not_a_draft" });
+    await expect(updateDraft("j", {})).resolves.toMatchObject({ status: 409, code: "not_a_draft" });
   });
 
   it("answers a failure with no response as the error's message, without a status", async () => {
     patch.mockRejectedValue(new Error("timeout of 10000ms exceeded"));
-    const result = await updateSimulation("j", {});
+    const result = await updateDraft("j", {});
     expect(result).toMatchObject({ ok: false, reason: "error", message: "timeout of 10000ms exceeded" });
     expect(result).toHaveProperty("status", undefined);
   });
 });
 
-describe("duplicateSimulation", () => {
+describe("duplicateDraft", () => {
   it("POSTs to the job's duplicate route and returns the new draft", async () => {
     const draft = { id: "new-1", status: "DRAFT" };
     post.mockResolvedValue({ data: draft });
-    await expect(duplicateSimulation("job/1")).resolves.toEqual({ ok: true, data: draft });
+    await expect(duplicateDraft("job/1")).resolves.toEqual({ ok: true, data: draft });
     expect(post).toHaveBeenCalledWith("/api/v1/jobs/job%2F1/duplicate");
   });
 
@@ -121,7 +121,7 @@ describe("duplicateSimulation", () => {
     post.mockRejectedValue(
       refused(422, { code: "snapshot_not_found", message: "The model snapshot is no longer in the repository." })
     );
-    await expect(duplicateSimulation("j")).resolves.toMatchObject({
+    await expect(duplicateDraft("j")).resolves.toMatchObject({
       ok: false,
       reason: "error",
       code: "snapshot_not_found",
@@ -131,28 +131,28 @@ describe("duplicateSimulation", () => {
 
   it("answers 404 as not found and 401 as an ended session", async () => {
     post.mockRejectedValueOnce(refused(404, "Job not found"));
-    await expect(duplicateSimulation("j")).resolves.toEqual({ ok: false, reason: "not_found" });
+    await expect(duplicateDraft("j")).resolves.toEqual({ ok: false, reason: "not_found" });
     post.mockRejectedValueOnce(refused(401));
-    await expect(duplicateSimulation("j")).resolves.toEqual({ ok: false, reason: "session_expired" });
+    await expect(duplicateDraft("j")).resolves.toEqual({ ok: false, reason: "session_expired" });
   });
 });
 
-describe("submitSimulation", () => {
+describe("submitDraft", () => {
   it("sends no body for an ordinary submit", async () => {
     post.mockResolvedValue({ data: { id: "job/1" } });
-    await expect(submitSimulation("job/1")).resolves.toEqual({ ok: true, data: { id: "job/1" } });
+    await expect(submitDraft("job/1")).resolves.toEqual({ ok: true, data: { id: "job/1" } });
     expect(post).toHaveBeenCalledWith("/api/v1/jobs/job%2F1/submit");
   });
 
   it("sends no body for rerun: false either", async () => {
     post.mockResolvedValue({ data: {} });
-    await submitSimulation("j", { rerun: false });
+    await submitDraft("j", { rerun: false });
     expect(post).toHaveBeenCalledWith("/api/v1/jobs/j/submit");
   });
 
   it("sends { rerun: true } when asked for a rerun", async () => {
     post.mockResolvedValue({ data: {} });
-    await submitSimulation("j", { rerun: true });
+    await submitDraft("j", { rerun: true });
     expect(post).toHaveBeenCalledWith("/api/v1/jobs/j/submit", { rerun: true });
   });
 
@@ -160,7 +160,7 @@ describe("submitSimulation", () => {
     post.mockRejectedValue(
       refused(409, { code: "answered_by_published", message: "The published results answer this draft." })
     );
-    await expect(submitSimulation("j")).resolves.toMatchObject({
+    await expect(submitDraft("j")).resolves.toMatchObject({
       ok: false,
       reason: "error",
       status: 409,

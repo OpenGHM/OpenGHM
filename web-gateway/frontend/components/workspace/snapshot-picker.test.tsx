@@ -44,7 +44,7 @@ afterEach(() => {
 const FILTERS = catalogueFilters();
 
 const LONG_TITLE =
-  "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
+  "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
 
 /** A snapshot of model `version`, covering `start`–`end` (years). */
 const named = (id: string, name: string, version: string, years: [string, string], tags: Dataset["about"]["tags"] = ["test"]) => {

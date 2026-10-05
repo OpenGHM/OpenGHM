@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { displayName, listName } from "@/lib/jobs/display-name";
-import { fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDraft } from "@/lib/workspace/fixtures";
 
-const job = (overrides: Parameters<typeof fakeSimulation>[1]) =>
-  fakeSimulation("DRAFT", { id: "0123456789abcdef", sim_id: "", slug: null, about: null, ...overrides });
+const job = (overrides: Parameters<typeof fakeDraft>[1]) =>
+  fakeDraft("DRAFT", { id: "0123456789abcdef", sim_id: "", slug: null, about: null, ...overrides });
 
 describe("displayName", () => {
   it("prefers the name its owner gave", () => {

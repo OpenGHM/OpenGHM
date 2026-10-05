@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * The Save button of the draft wizard, in the header and under Run settings:
- * "Save as draft" for a simulation that is not stored yet (the one way it
+ * "Save as draft" for a snapshot draft that is not stored yet (the one way it
  * becomes a draft apart from Submit), "Save draft" for a stored one. Both are
  * the same button. Disabled with a `reason` it says why, in a tooltip on its
  * wrapper (a disabled button shows none of its own) and to a screen reader.
@@ -64,7 +64,7 @@ export function SaveDraftButton({
 }
 
 /**
- * What the header says about a simulation that is not saved yet, where a stored
+ * What the header says about a snapshot draft that is not saved yet, where a stored
  * draft's `SaveStatus` says where saving stands. Nothing here is saved
  * unless the person asks, so "Saved" is never shown for the edits on screen:
  * only once a draft exists (a submit that asked for one) and holds all of them.

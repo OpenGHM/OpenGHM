@@ -21,7 +21,7 @@ import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { UserRoleStatusCard } from "@/components/admin/user-role-status-card";
 import { UserSessionsTable } from "@/components/admin/user-sessions-table";
 import { UsersTable } from "@/components/admin/users-table";
-import { SimulationCard } from "@/components/jobs/simulation-card";
+import { DraftCard } from "@/components/jobs/draft-card";
 
 afterEach(cleanup);
 
@@ -123,7 +123,7 @@ describe("dates in the admin pages are <time> elements", () => {
     expect(container.textContent).toContain("Last used");
   });
 
-  it("the simulation card on a user's page prints the date", () => {
+  it("the snapshot draft card on a user's page prints the date", () => {
     const job = {
       id: "j1",
       sim_id: "sim-1",
@@ -135,7 +135,7 @@ describe("dates in the admin pages are <time> elements", () => {
       completed_at: null,
       cancel_requested_at: null,
     } as unknown as Job;
-    const { container } = render(<SimulationCard job={job} />);
+    const { container } = render(<DraftCard job={job} />);
     expect(times(container)).toEqual([WHEN]);
   });
 });

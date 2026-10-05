@@ -17,17 +17,17 @@ const SearchContext = createContext<SearchState>({ query: "", setQuery: () => {}
  * are siblings, so the text lives here, above both; the tabs are links, so a
  * click on one keeps what was typed.
  */
-export function SimulationSearchProvider({ children }: { children: React.ReactNode }) {
+export function DraftSearchProvider({ children }: { children: React.ReactNode }) {
   const [query, setQuery] = useState("");
   return <SearchContext.Provider value={{ query, setQuery }}>{children}</SearchContext.Provider>;
 }
 
-export function useSimulationSearch(): SearchState {
+export function useDraftSearch(): SearchState {
   return useContext(SearchContext);
 }
 
-/** The list's search box: filters the loaded page by simulation name. */
-export function SimulationSearchInput({ className }: { className?: string }) {
-  const { query, setQuery } = useSimulationSearch();
-  return <SearchField value={query} onChange={setQuery} label="Search simulations by name" className={className} />;
+/** The list's search box: filters the loaded page by snapshot draft name. */
+export function DraftSearchInput({ className }: { className?: string }) {
+  const { query, setQuery } = useDraftSearch();
+  return <SearchField value={query} onChange={setQuery} label="Search snapshot drafts by name" className={className} />;
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { simulationSource } from "@/lib/jobs/simulation-source";
+import { draftSource } from "@/lib/jobs/draft-source";
 
-describe("simulationSource", () => {
+describe("draftSource", () => {
   it("is the base snapshot, linking to its repository page", () => {
-    expect(simulationSource({ dataset_id: "ds-1", dataset_title: "Dataset one" })).toEqual({
+    expect(draftSource({ dataset_id: "ds-1", dataset_title: "Dataset one" })).toEqual({
       kind: "snapshot",
       id: "ds-1",
       title: "Dataset one",
@@ -12,6 +12,6 @@ describe("simulationSource", () => {
   });
 
   it("encodes the id in the href, as the catalogue does", () => {
-    expect(simulationSource({ dataset_id: "a b/c", dataset_title: "T" }).href).toBe("/repository/a%20b%2Fc");
+    expect(draftSource({ dataset_id: "a b/c", dataset_title: "T" }).href).toBe("/repository/a%20b%2Fc");
   });
 });

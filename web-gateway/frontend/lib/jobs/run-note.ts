@@ -1,5 +1,5 @@
 /**
- * The one thing a simulation's list row says about its run besides the title of
+ * The one thing a snapshot draft's list row says about its run besides the title of
  * the snapshot it is based on: the period it ran, when that is news.
  *
  * Pure: no I/O. `lib/jobs/run-notes.ts` reads the snapshots for a page of rows.
@@ -25,7 +25,7 @@ export function runPeriodLabel(start: string | null | undefined, end: string | n
 }
 
 /**
- * "Run 2000–2005" when the simulation runs a shorter period than its snapshot
+ * "Run 2000–2005" when the snapshot draft runs a shorter period than its snapshot
  * covers, else null: a run of the whole period has nothing to add to the
  * snapshot's title. With no snapshot to compare against (it left the repository
  * or could not be read) the period is said, since nothing says it is the whole.

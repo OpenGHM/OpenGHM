@@ -105,7 +105,7 @@ export default async function AdminOverviewPage() {
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="py-4">
               <p className="font-medium text-slate-900">Site-wide jobs →</p>
-              <p className="text-sm text-slate-500">All simulations across users.</p>
+              <p className="text-sm text-slate-500">All snapshot drafts across users.</p>
             </CardContent>
           </Card>
         </Link>

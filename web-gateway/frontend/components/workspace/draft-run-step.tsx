@@ -40,7 +40,7 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
 
 /**
  * Step 2, "Run settings": what the draft is based on (a small card), then one
- * card whose first part is the simulation's name and description (the first
+ * card whose first part is the snapshot draft's name and description (the first
  * thing a new draft asks for, so the Name takes focus when it has none and
  * `autoFocusName` is set), followed by the run period, the output variables,
  * and cores and walltime. Most people keep the defaults, so the last two are a line saying
@@ -98,7 +98,7 @@ export function DraftRunStep({
   /** The draft's own model input; null inherits the snapshot's. */
   modelInputId: string | null;
   resolvedModelInput: ModelInput | null | undefined;
-  /** What the Name input holds: empty until the user names the simulation. */
+  /** What the Name input holds: empty until the user names the snapshot draft. */
   name: string;
   description: string;
   /** Focus the Name input when the step opens (a new draft nobody has named). */
@@ -214,7 +214,7 @@ export function DraftRunStep({
               id={`${id}-description`}
               value={description}
               rows={2}
-              placeholder="What is this simulation for?"
+              placeholder="What is this snapshot draft for?"
               {...draftField("description")}
               aria-describedby={serverErrors.description ? `${id}-description-error` : undefined}
               aria-invalid={serverErrors.description ? true : undefined}

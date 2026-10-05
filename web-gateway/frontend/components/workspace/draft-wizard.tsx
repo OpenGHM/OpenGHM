@@ -18,13 +18,13 @@ import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { LeaveDraftDialog } from "@/components/workspace/leave-draft-dialog";
 import { NewDraftStatus, SaveDraftButton } from "@/components/workspace/new-draft-controls";
-import { PageHeader, SimulationBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure } from "@/components/workspace/submit-summary";
-import { fetchJob, submitSimulation } from "@/lib/jobs/actions";
+import { fetchJob, submitDraft } from "@/lib/jobs/actions";
 import { displayName } from "@/lib/jobs/display-name";
-import { simulationSource } from "@/lib/jobs/simulation-source";
+import { draftSource } from "@/lib/jobs/draft-source";
 import type { ActionFailure, ActionResult, Job, SubmitError } from "@/lib/jobs/types";
 import { newerJob, writeDraftCache } from "@/lib/workspace/draft-cache";
 import {
@@ -55,7 +55,7 @@ import { usePublishedAnswer } from "@/lib/workspace/use-published-answer";
 import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
 
 /** Which draft the wizard edits: one that is stored (`/workspace/<id>`, saved as
- *  it is edited), or a new simulation that exists only in this browser until
+ *  it is edited), or a new snapshot draft that exists only in this browser until
  *  the person saves it (`/workspace/new/<snapshot id>`). */
 export type WizardMode = { kind: "saved" } | { kind: "new"; datasetId: string };
 
@@ -141,7 +141,7 @@ function stepFromLocation(fallback?: DraftStep): DraftStep {
  *   on the strip and listed beside the Submit button. An address that still says
  *   `?step=model` (the step this replaced) is rewritten to `?step=run`.
  *
- * `mode` `new` is a simulation nobody has saved: `job` is the draft the server
+ * `mode` `new` is a snapshot draft nobody has saved: `job` is the draft the server
  * would create (it has no id), everything stays in the browser, and "Save as
  * draft" (or Submit) creates the stored draft.
  */
@@ -222,7 +222,7 @@ function WizardBody({
   const searchParams = useSearchParams();
   const newDatasetId = mode.kind === "new" ? mode.datasetId : null;
   const isNew = newDatasetId !== null;
-  // A new simulation has no job id (the preview's is meaningless): its steps
+  // A new snapshot draft has no job id (the preview's is meaningless): its steps
   // are addressed by the snapshot, and it opens on Run settings.
   const jobId = isNew ? "" : initialJob.id;
   const datasetId = newDatasetId ?? initialJob.dataset_id;
@@ -258,7 +258,7 @@ function WizardBody({
   }, []);
 
   // Nothing is saved by itself, in either mode: `saver.flush()` is the one thing that
-  // sends, from a button. A new simulation is not stored, so the hook is off for it.
+  // sends, from a button. A new snapshot draft is not stored, so the hook is off for it.
   const saver = useDraftSaver({ jobId, initialSaved: initialJob, local, ctx, disabled: isNew });
   const { flush, suspend, resume } = saver;
   const modelInput = useCatalogueModelInput(effectiveModelInputId(local.modelInputId, ctx.dataset));
@@ -349,7 +349,7 @@ function WizardBody({
     latest.current = { clean, savedAt: saver.saved.updated_at };
   });
   useEffect(() => {
-    // Nothing is stored for a new simulation: there is nothing to go stale.
+    // Nothing is stored for a new snapshot draft: there is nothing to go stale.
     if (isNew) return;
     const onVisible = async () => {
       if (document.visibilityState !== "visible" || !latest.current.clean) return;
@@ -376,12 +376,12 @@ function WizardBody({
   );
 
   const recommended = recommendedComputeFor(ctx.dataset);
-  const source = simulationSource({ dataset_id: datasetId, dataset_title: initialJob.dataset_title });
-  const name = isNew ? local.name.trim() || "New simulation" : liveName(local.name, initialJob);
+  const source = draftSource({ dataset_id: datasetId, dataset_title: initialJob.dataset_title });
+  const name = isNew ? local.name.trim() || "New snapshot draft" : liveName(local.name, initialJob);
   const index = DRAFT_STEPS.indexOf(step);
 
   // ── Saving, and leaving ───────────────────────────────────────────────────
-  // Saving is always a button: nothing is sent by itself. A new simulation is
+  // Saving is always a button: nothing is sent by itself. A new snapshot draft is
   // created by `newDraft` (inert for a stored draft); a stored one is saved by
   // `saver.flush()`. Once a save created the new draft, `saved` is what the
   // server holds, and "unsaved" is measured against that.
@@ -391,10 +391,10 @@ function WizardBody({
   // Set once a save or a submit went through and the page is on its way to the
   // draft: from then on nothing is asked about leaving, and nothing is saved twice.
   const [departing, setDeparting] = useState(false);
-  // Unsaved work is what leaving would lose: a new simulation that differs from
+  // Unsaved work is what leaving would lose: a new snapshot draft that differs from
   // what the server would create, a stored draft with a difference waiting or a
   // withheld field. The wizard's own step links are not leaving. A stored
-  // draft's saver already asks the browser; a new simulation's guard does.
+  // draft's saver already asks the browser; a new snapshot draft's guard does.
   const guard = useLeaveGuard({
     active: (isNew ? dirty : saver.unsaved) && !departing,
     ownPath,
@@ -407,7 +407,7 @@ function WizardBody({
    *  browser's Back or Forward is traversed to. */
   const follow = (go: LeaveTarget) => guard.proceed(go, (href) => router.push(href));
 
-  /** Save the new simulation as a draft and go on: to its own page (`go` null,
+  /** Save the new snapshot draft and go on: to its own page (`go` null,
    *  on the step showing) or to `go`. A draft that came out without some of the
    *  settings is still the draft: it opens, and a toast says what is missing.
    *  False when nothing was created, and the page then says why. */
@@ -507,7 +507,7 @@ function WizardBody({
     submitFailure.current = null;
     const id = newDraft.created()?.id;
     if (!id) return { ok: false, reason: "error", message: "The draft was not created." };
-    const result = opts ? await submitSimulation(id, opts) : await submitSimulation(id);
+    const result = opts ? await submitDraft(id, opts) : await submitDraft(id);
     if (!result.ok) {
       submitFailure.current = result;
       if (isAnsweredRefusal(result)) refreshAnswer();
@@ -518,7 +518,7 @@ function WizardBody({
   // know (the check was out of date or had failed): ask again, and the answer
   // card replaces the submit card.
   const storedSubmit = async (id: string, opts?: { rerun?: boolean }): Promise<ActionResult<Job>> => {
-    const result = opts ? await submitSimulation(id, opts) : await submitSimulation(id);
+    const result = opts ? await submitDraft(id, opts) : await submitDraft(id);
     if (!result.ok && isAnsweredRefusal(result)) refreshAnswer();
     return result;
   };
@@ -633,7 +633,7 @@ function WizardBody({
   return (
     <main className={WORKSPACE_MAIN}>
       <PageHeader
-        top={<SimulationBreadcrumb current={name} />}
+        top={<DraftBreadcrumb current={name} />}
         title={name}
         badge={
           isNew ? (
@@ -733,7 +733,7 @@ function WizardBody({
             >
               <p className="flex items-start gap-2 font-medium">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                This simulation was submitted or changed elsewhere
+                This snapshot draft was submitted or changed elsewhere
               </p>
               <Button
                 type="button"
@@ -761,7 +761,7 @@ function WizardBody({
                 variant="outline"
                 className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
               >
-                <Link href="/workspace">Go to My Simulations</Link>
+                <Link href="/workspace">Go to My snapshot drafts</Link>
               </Button>
             </div>
           )}

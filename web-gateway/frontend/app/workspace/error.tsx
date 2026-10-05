@@ -32,7 +32,7 @@ export default function WorkspaceError({
         >
           <p className="font-medium text-status-failed">Something went wrong loading this page.</p>
           <p className="text-sm text-destructive">
-            A simulation that is already running is not affected. Try again, or go
+            A run that is already in progress is not affected. Try again, or go
             back to your list.
           </p>
           {error.digest && <p className="text-xs text-status-failed">Reference: {error.digest}</p>}
@@ -41,7 +41,7 @@ export default function WorkspaceError({
               Try again
             </Button>
             <Button asChild variant="ghost" className="min-h-10">
-              <Link href="/workspace">My Simulations</Link>
+              <Link href="/workspace">My snapshot drafts</Link>
             </Button>
           </div>
         </div>

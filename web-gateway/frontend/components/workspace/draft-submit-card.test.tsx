@@ -7,10 +7,10 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/workspace/job-1" }));
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
-import { fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDraft } from "@/lib/workspace/fixtures";
 
 // What the server holds after the flush: not what the page's props said.
-const SAVED = fakeSimulation("DRAFT", {
+const SAVED = fakeDraft("DRAFT", {
   id: "job-1",
   dataset_title: "Saved snapshot title",
   parameters: {
@@ -22,7 +22,7 @@ const SAVED = fakeSimulation("DRAFT", {
   },
   slurm_config: { cores: 8, walltime: "02:00:00" },
 });
-const SUBMITTED = fakeSimulation("PENDING", { id: "job-1" });
+const SUBMITTED = fakeDraft("PENDING", { id: "job-1" });
 const RECOMMENDED = { cores: 16, walltime: "15:00" };
 
 const flush = vi.fn<() => Promise<FlushResult>>();
@@ -91,7 +91,7 @@ describe("DraftSubmitCard: what it says", () => {
 
   it("is off while something is in the way, lists it, and takes you to the field", () => {
     const problems: SubmitProblem[] = [
-      { step: "review", message: "You are not permitted to run simulations yet." },
+      { step: "review", message: "You are not permitted to submit runs yet." },
       { field: "start", step: "run", message: "Choose a start date that exists." },
     ];
     card({ problems });
@@ -104,7 +104,7 @@ describe("DraftSubmitCard: what it says", () => {
     const items = screen.getAllByRole("listitem");
     expect(items).toHaveLength(2);
     // A problem of the whole draft has no field to go to.
-    expect(items[0].textContent).toContain("You are not permitted to run simulations yet.");
+    expect(items[0].textContent).toContain("You are not permitted to submit runs yet.");
     expect(within(items[0]).queryByRole("button")).toBeNull();
     expect(items[1].textContent).toContain("Start date: Choose a start date that exists.");
     fireEvent.click(within(items[1]).getByRole("button", { name: "Fix start date" }));
@@ -389,7 +389,7 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
 
   it("words a refusal, closes the dialog, unlocks the page and tells the wizard to load the draft again", async () => {
     await confirmWith({ ok: false, reason: "error", message: "raw", code: "active_job_limit" });
-    expect(screen.getByRole("alert").textContent).toContain("You already have the most active simulations you can have");
+    expect(screen.getByRole("alert").textContent).toContain("You already have the most active runs you can have");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(calls).toEqual(["flush", "suspend", "submitting:true", "submitting:false"]);
     expect(onSubmitted).not.toHaveBeenCalled();
@@ -401,16 +401,16 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("says a simulation that is gone is gone", async () => {
+  it("says a snapshot draft that is gone is gone", async () => {
     await confirmWith({ ok: false, reason: "not_found" });
-    expect(screen.getByRole("alert").textContent).toContain("This simulation no longer exists.");
+    expect(screen.getByRole("alert").textContent).toContain("This snapshot draft no longer exists.");
   });
 
-  it("says when the request itself failed and that My Simulations should be checked", async () => {
+  it("says when the request itself failed and that My snapshot drafts should be checked", async () => {
     await confirmWith(new Error("timeout of 60000ms exceeded"));
     const text = screen.getByRole("alert").textContent ?? "";
     expect(text).toContain("Could not confirm the submit: timeout of 60000ms exceeded.");
-    expect(text).toContain("Check My Simulations");
+    expect(text).toContain("Check My snapshot drafts");
   });
 
   it("checks the server after a lost answer, and takes the success path when the job is no longer a draft", async () => {
@@ -533,7 +533,7 @@ describe("DraftSubmitCard: a rerun of published results", () => {
   it("keeps the ordinary card's words when it is not a rerun", async () => {
     card();
     await openDialog();
-    expect(within(dialog()).getByRole("heading", { name: "Submit this simulation to Anvil?" })).toBeTruthy();
+    expect(within(dialog()).getByRole("heading", { name: "Submit this snapshot draft to Anvil?" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Run anyway" })).toBeNull();
   });
 });

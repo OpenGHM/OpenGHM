@@ -118,7 +118,7 @@ function SnapshotCard({
 /**
  * The model snapshots the Start screen offers, as a grid of cards: three across
  * on a wide screen, one on a phone. The ones the user has already based a
- * simulation on (`usedIds`) carry a "Used before" mark, and with `usedFirst`
+ * snapshot draft on (`usedIds`) carry a "Used before" mark, and with `usedFirst`
  * come first, in the order they were given; there is no separate list for them.
  */
 export function SnapshotGrid({
@@ -137,7 +137,7 @@ export function SnapshotGrid({
   usedFirst: boolean;
   /** Details: open the sheet for this snapshot. */
   onDetails: (dataset: Dataset) => void;
-  /** The card: start a new simulation from this snapshot. */
+  /** The card: start a new snapshot draft from this snapshot. */
   onSelect: (dataset: Dataset) => void;
   /** The snapshot whose page is opening, if any. */
   pendingId: string | null;

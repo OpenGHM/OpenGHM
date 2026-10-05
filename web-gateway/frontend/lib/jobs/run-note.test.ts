@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Dataset } from "@/lib/repository/types";
 
 import { runNote, runPeriodLabel } from "@/lib/jobs/run-note";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 function snapshot(start = "2000-01-01", end = "2009-12-31"): Dataset {
   const base = fakeDataset();
@@ -29,8 +29,8 @@ describe("runPeriodLabel", () => {
 
 describe("runNote", () => {
   const job = (start: string, end: string) =>
-    fakeSimulation("COMPLETED", {
-      parameters: { ...fakeSimulation("COMPLETED").parameters, temporal_range_start: start, temporal_range_end: end },
+    fakeDraft("COMPLETED", {
+      parameters: { ...fakeDraft("COMPLETED").parameters, temporal_range_start: start, temporal_range_end: end },
     });
 
   it("is null when the run is the whole period the snapshot covers", () => {

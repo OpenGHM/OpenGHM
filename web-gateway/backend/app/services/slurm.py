@@ -207,7 +207,7 @@ def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str
     if not cores or not walltime:
         raise SubmitInputError(
             "The snapshot does not say how many cores and how much time it needs, "
-            "and the simulation does not either."
+            "and the snapshot draft does not either."
         )
     return int(cores), str(walltime)
 
@@ -824,7 +824,7 @@ def _check_work_dir(doc: dict, work_dir: str) -> None:
         or ".." in work_dir.split("/")
         or work_dir != posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
     ):
-        raise RefusedPath(f"{work_dir!r} is not this simulation's directory under the output base")
+        raise RefusedPath(f"{work_dir!r} is not this run's directory under the output base")
 
 
 def removable_paths(doc: dict) -> tuple[str | None, str | None]:
@@ -1047,7 +1047,7 @@ async def read_log_bytes(path: str, offset: int, limit: int) -> tuple[int, bytes
 
 
 # A wbm log's path is found from the init files when the job has not ended.
-# Exit 4: no init names this simulation's output directory.
+# Exit 4: no init names this run's output directory.
 _NO_INIT = 4
 _RESOLVE_WBM_LOG = r"""
 cd {work} 2>/dev/null && cd wbm_init 2>/dev/null || exit 3
@@ -1095,7 +1095,7 @@ async def log_path(doc: dict, stream: str) -> str | None:
     stdout and stderr are slurmly's, in the job's own directory. The WBM log
     is `<work_dir>/<outcome.wbm.log>` once the job has ended, else the path
     stored on the job, else the log of the init whose `Output_dir` is this
-    simulation's (stored when found). A transport failure raises."""
+    run's (stored when found). A transport failure raises."""
     if stream in ("stdout", "stderr"):
         remote_dir = doc.get("remote_job_dir")
         if not remote_dir:

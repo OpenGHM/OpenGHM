@@ -1,6 +1,6 @@
 import type { JobStatsResponse } from "@/lib/jobs/types";
 
-/** One tab of the simulation list. The filter is the backend's `status`
+/** One tab of the snapshot draft list. The filter is the backend's `status`
  *  query (`GET /jobs`), so a tab is a link, not client state. */
 export interface StatusTab {
   label: string;
@@ -18,17 +18,17 @@ export const STATUS_TABS: StatusTab[] = [
     value: undefined,
     count: "total",
     empty: {
-      title: "No simulations yet",
-      hint: "Select a model snapshot to run your first simulation.",
+      title: "No snapshot drafts yet",
+      hint: "Select a model snapshot to start your first snapshot draft.",
     },
   },
   {
-    label: "Draft",
+    label: "Editing",
     value: "DRAFT",
     count: "draft",
     empty: {
-      title: "No drafts",
-      hint: "A draft is a simulation you have set up but not submitted. Start one from a model snapshot.",
+      title: "Nothing being edited",
+      hint: "Snapshot drafts you are still editing are listed here. Start one from a model snapshot.",
     },
   },
   {
@@ -37,7 +37,7 @@ export const STATUS_TABS: StatusTab[] = [
     count: "running",
     empty: {
       title: "Nothing running",
-      hint: "Submitted simulations wait and run here. Submit a draft, or start a new simulation.",
+      hint: "Submitted snapshot drafts wait and run here. Submit one, or start a new snapshot draft.",
     },
   },
   {
@@ -46,7 +46,7 @@ export const STATUS_TABS: StatusTab[] = [
     count: "completed",
     empty: {
       title: "Nothing has finished yet",
-      hint: "Simulations that run to the end are listed here, with their results.",
+      hint: "Snapshot drafts whose run finished are listed here, with their results.",
     },
   },
   {
@@ -54,7 +54,7 @@ export const STATUS_TABS: StatusTab[] = [
     value: "FAILED",
     count: "failed",
     empty: {
-      title: "No failed simulations",
+      title: "No failed runs",
       hint: "None of your runs has failed.",
     },
   },
@@ -63,8 +63,8 @@ export const STATUS_TABS: StatusTab[] = [
     value: "CANCELLED",
     count: "cancelled",
     empty: {
-      title: "No cancelled simulations",
-      hint: "Simulations you cancel are listed here.",
+      title: "No cancelled runs",
+      hint: "Runs you cancel are listed here.",
     },
   },
 ];

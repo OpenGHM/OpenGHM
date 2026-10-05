@@ -32,7 +32,7 @@ function Strip({ children }: { children: React.ReactNode }) {
  * The three steps of the draft wizard as a slim light strip under the title:
  * "Start from" is done (a check) and is not a link (a draft's starting point
  * cannot change; the header says what it was, once). The other two are links to
- * `/workspace/<id>?step=...` (or what `hrefFor` says, for a simulation that is not
+ * `/workspace/<id>?step=...` (or what `hrefFor` says, for a snapshot draft that is not
  * saved yet); a plain click is handed to `onSelectStep`, which is
  * how the wizard changes step without a page load, and anything else (middle
  * click, a new tab) follows the href. The current one is filled and bold, and has
@@ -51,7 +51,7 @@ export function DraftProgress({
 }: {
   /** The stored draft whose steps these are. */
   jobId?: string;
-  /** The address of a step, for a simulation that has no job id yet
+  /** The address of a step, for a snapshot draft that has no job id yet
    *  (`newStepHref`). Wins over `jobId`. */
   hrefFor?: (step: DraftStep) => string;
   current: DraftStep;

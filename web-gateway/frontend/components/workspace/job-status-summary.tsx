@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { CancelJobDialog } from "@/components/workspace/cancel-job-dialog";
 import { CompletedResults } from "@/components/workspace/completed-results";
-import { DuplicateSimulationButton } from "@/components/workspace/duplicate-simulation-button";
+import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { FailedDetails } from "@/components/workspace/failed-details";
 import { JobTimeline } from "@/components/workspace/job-timeline";
@@ -82,7 +82,7 @@ function Bar({
 /**
  * RUNNING/COMPLETING — how far WBM has simulated and how much of the walltime
  * is used (ADR 0027). The walltime bar is an upper bound on the wait, not work
- * done, and is drawn thin and captioned as that; the simulation bar is drawn
+ * done, and is drawn thin and captioned as that; the run bar is drawn
  * only when WBM's own log gives a fraction.
  */
 function RunningBody() {
@@ -112,7 +112,7 @@ function RunningBody() {
             {words.percent !== null && (
               <Bar
                 percent={words.percent}
-                label="Simulation progress"
+                label="Run progress"
                 valueText={words.headline}
                 barClass="bg-primary"
               />
@@ -248,7 +248,7 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
       return {
         Icon: Ban,
         title: "Cancelling",
-        sub: "SLURM has been asked to stop this simulation. It stays Cancelling until SLURM confirms.",
+        sub: "SLURM has been asked to stop this snapshot draft. It stays Cancelling until SLURM confirms.",
       };
     case "COMPLETED": {
       const ran = secondsBetween(view.slurm_start ?? startedAt, view.slurm_end ?? completedAt);
@@ -281,7 +281,7 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
       };
     }
     default:
-      return { Icon: Hourglass, title: submittedAt ? "Submitted" : "Draft", sub: null };
+      return { Icon: Hourglass, title: submittedAt ? "Submitted" : "Editing", sub: null };
   }
 }
 
@@ -398,9 +398,9 @@ export function JobStatusSummary({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="min-w-0 text-sm text-muted-foreground">
               {(view.files ?? job.files) !== "purged" &&
-                "Any files it wrote stay on Anvil until you delete this simulation or Anvil's 30-day purge removes them."}
+                "Any files it wrote stay on Anvil until you delete this snapshot draft or Anvil's 30-day purge removes them."}
             </p>
-            <DuplicateSimulationButton jobId={job.id} variant="outline" />
+            <DuplicateDraftButton jobId={job.id} variant="outline" />
           </div>
         </div>
       )}

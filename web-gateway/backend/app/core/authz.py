@@ -49,7 +49,7 @@ def require_permission(*required: Permission):
 
 
 # ---------------------------------------------------------------------------
-# Who may run a simulation (ADR 0024)
+# Who may submit a run (ADR 0024)
 # ---------------------------------------------------------------------------
 #
 # `require_permission` above trusts the role in the JWT, which is fine for
@@ -150,22 +150,22 @@ async def require_submitter(user: CurrentUser) -> TokenPayload:
     if is_mock_identity(user.sub):
         raise _refuse(
             "mock_identity",
-            "Development mock accounts cannot run simulations. "
+            "Development mock accounts cannot submit runs. "
             "Sign in with a real account.",
         )
     doc, role = await _load_account(user)
     if not doc.get("email_verified", False):
         raise _refuse(
             "email_not_verified",
-            "Verify your email address before running a simulation. "
+            "Verify your email address before submitting a run. "
             "Check your inbox for the verification link.",
         )
     exempt = role in (Role.ADMIN, Role.STAFF)
     if not (exempt or (role == Role.USER and doc.get("can_run_simulations", False))):
         raise _refuse(
             "not_permitted_to_run",
-            "You are not permitted to run simulations. "
-            "Ask an administrator for permission to run simulations.",
+            "You are not permitted to submit runs. "
+            "Ask an administrator for permission to submit runs.",
         )
     if not exempt:
         limit = settings.JOB_MAX_ACTIVE_PER_USER

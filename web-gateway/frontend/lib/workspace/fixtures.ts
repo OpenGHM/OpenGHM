@@ -8,7 +8,7 @@
  * produce it, and component tests build their inputs from it. No real page
  * imports this module, and none may: a real page shows what the backend says.
  *
- * What is *not* invented is shape. Simulations are `Job`, logs are
+ * What is *not* invented is shape. Snapshot drafts are `Job`, logs are
  * one string per stream, and any snapshot or model-input metadata comes from the
  * generated spec types. A field name that does not exist in the spec does not
  * exist here either, so the preview cannot drift from the real page.
@@ -45,11 +45,11 @@ const BASE_SLURM: Job["slurm_config"] = {
 };
 
 /**
- * A simulation in a given state, with the fields that state would actually
+ * A snapshot draft in a given state, with the fields that state would actually
  * have — a queued run has no `started_at`, a failed one has a `status_reason`,
  * and only a finished one has an `output_s3_key`.
  */
-export function fakeSimulation(status: JobStatus, overrides: Partial<Job> = {}): Job {
+export function fakeDraft(status: JobStatus, overrides: Partial<Job> = {}): Job {
   const submitted = status === "DRAFT" ? null : iso(3 * HOUR);
   const started =
     status === "DRAFT" || status === "PENDING" || status === "SUBMITTED"
@@ -182,7 +182,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:125",
     failure: {
       phase: "run",
-      message: "The job ran out of memory and Anvil stopped it. Reduce what the simulation asks for or request more resources, then submit again.",
+      message: "The job ran out of memory and Anvil stopped it. Reduce what the run asks for or request more resources, then submit again.",
       excerpt: null,
     },
   },
@@ -241,7 +241,7 @@ function fakeOutput(): OutputManifest {
  * finished one its directories on Anvil. `viewerEmail` is who is looking, so
  * "cancelled by you" can be shown as such.
  */
-export function previewSimulation(
+export function previewDraftJob(
   key: string,
   { overrides = {}, viewerEmail = null }: { overrides?: Partial<Job>; viewerEmail?: string | null } = {}
 ): Job {
@@ -251,7 +251,7 @@ export function previewSimulation(
 
   const build = (): Job => {
     if (kind === "cancelling") {
-      return fakeSimulation("RUNNING", {
+      return fakeDraft("RUNNING", {
         work_dir: FAKE_WORK_DIR,
         remote_job_dir: FAKE_JOB_DIR,
         cancel_requested_at: iso(2 * 60_000),
@@ -260,7 +260,7 @@ export function previewSimulation(
     }
 
     if (kind === "completed") {
-      const base = fakeSimulation("COMPLETED", {
+      const base = fakeDraft("COMPLETED", {
         ...onAnvil,
         slurm_state: "COMPLETED",
         slurm_exit_code: "0:0",
@@ -276,7 +276,7 @@ export function previewSimulation(
     if (kind === "failed") {
       const cause = (variant ?? "wbm_error") as keyof typeof FAILURE_FIXTURES;
       const f = FAILURE_FIXTURES[cause] ?? FAILURE_FIXTURES.wbm_error;
-      return fakeSimulation("FAILED", {
+      return fakeDraft("FAILED", {
         ...onAnvil,
         slurm_state: f.slurm_state,
         slurm_exit_code: f.slurm_exit_code,
@@ -287,7 +287,7 @@ export function previewSimulation(
 
     if (kind === "cancelled") {
       const bySystem = variant === "system";
-      return fakeSimulation("CANCELLED", {
+      return fakeDraft("CANCELLED", {
         ...onAnvil,
         slurm_state: bySystem ? "CANCELLED by 8013088" : "CANCELLED by 2100",
         slurm_exit_code: "0:0",
@@ -304,7 +304,7 @@ export function previewSimulation(
       });
     }
 
-    return fakeSimulation(kind.toUpperCase() as JobStatus);
+    return fakeDraft(kind.toUpperCase() as JobStatus);
   };
 
   return { ...build(), ...overrides };

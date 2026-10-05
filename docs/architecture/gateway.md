@@ -104,7 +104,7 @@ that nothing else declares one.
 | Collection | Holds |
 |---|---|
 | `users` | accounts; `email` is unique |
-| `jobs` | one document per **simulation** — draft or submitted, including the SLURM ids once it runs |
+| `jobs` | one document per **snapshot draft** — editing or submitted, including the SLURM ids once it runs |
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
 | `pending_sso_signups` | half-finished SSO sign-ups, 30-minute TTL |
 | `audit_events` | append-only, `auth` and `job` categories |
@@ -151,18 +151,20 @@ not appropriate for a public instance — and was the collection's *only*
 writer, so removing it rather than scrubbing it left nothing behind until
 this write path replaced it.
 
-A `jobs` document is a **simulation**: mutable while its `status` is `DRAFT`,
-read-only from the moment it is submitted (mission `2026-09-20-simulations`,
-private). Two routes create one, both as a draft, both for an active account
+A `jobs` document is a **snapshot draft** ([ADR 0030](../decisions/0030-what-a-person-creates-is-a-snapshot-draft.md)):
+mutable while its `status` is `DRAFT` (shown as "Editing"), read-only from the
+moment it is submitted, and its execution is its **run** (mission
+`2026-09-20-simulations`, private). The API, the collection and the status
+values keep the `jobs` and `DRAFT` names. Two routes create one, both as a draft, both for an active account
 that is not a guest (`require_active_user`): `POST /api/v1/jobs/derive/{dataset_id}`
 pre-fills it from a published snapshot's parameters, and
 `POST /api/v1/jobs/{id}/duplicate` copies the settings of one of the caller's
-own simulations, whatever its status (`422 snapshot_not_found` when its snapshot
+own snapshot drafts, whatever its status (`422 snapshot_not_found` when its snapshot
 has left the repository). Neither starts one from nothing, which would need a
 model-input catalogue the gateway does not have yet. `GET /api/v1/jobs/derive/{dataset_id}`
 previews the draft the POST would create: it answers with the same fields,
 built by the same code, with an empty `id`, and stores nothing and writes no
-audit event. The new-simulation screen shows it until the user saves, so the
+audit event. The new-snapshot-draft screen shows it until the user saves, so the
 defaults stay defined in the backend. A copy takes the snapshot,
 slug, `about` (a name it has gets " (copy)"; one it lacks stays absent), model
 input, parameters and compute, and nothing of the run. A new draft has no name:
@@ -180,13 +182,13 @@ fields sent. A start date is checked (below) only when it differs from the
 stored one. An edit writes no audit event.
 
 `DELETE` removes a draft, or a finished job together with its files on Anvil
-(§5); an active job gets `409 job_active`. A simulation and a snapshot are
+(§5); an active job gets `409 job_active`. A snapshot draft and a snapshot are
 deliberately not the same document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
 and `slurmJobId`, none of which a draft can honestly carry, and a
-finished simulation is not itself in `datasets` until someone publishes it —
+finished snapshot draft is not itself in `datasets` until someone publishes it —
 a step that does not exist yet ([open items
 9](../reference/open-items.md) and [10](../reference/open-items.md); **Next**
-list *publish a simulation as a snapshot*).
+list *publish a snapshot draft as a snapshot*).
 
 A draft's start date is checked against where its snapshot's model may start a
 run. WBM writes a run's first step into band 1 of an output file, so a run can
@@ -239,7 +241,7 @@ announce. `openghm sim run` and `sim submit` check the same rule on a
 stop before staging.
 
 A draft's `model_input_id` is optional and, while `DRAFT`, editable —
-mission `2026-09-21-choose-a-model-input`. Absent means the simulation
+mission `2026-09-21-choose-a-model-input`. Absent means the snapshot draft
 inherits whichever model input its base snapshot's own `uses.modelInput.id`
 names; set, it overrides that. `_resolve_effective_model_input()` in
 `web-gateway/backend/app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
@@ -403,7 +405,7 @@ no job-output link to return.
 
 ### Jobs — SSH, and no queue
 
-A simulation is created as a DRAFT (`POST /jobs/derive/{dataset_id}` or
+A snapshot draft is created as a DRAFT (`POST /jobs/derive/{dataset_id}` or
 `POST /jobs/{id}/duplicate`) and edited with PATCH, including its `slurm_config`
 (cores, walltime).
 `POST /jobs/{id}/submit` then **awaits the SLURM submission in the request**.
@@ -564,13 +566,13 @@ never at once.
 
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
-simulation's own name with its status, the title of the snapshot it is based on
+snapshot draft's own name with its status, the title of the snapshot it is based on
 in one line, and once the job has ended the buttons "Duplicate" (a completed
-job only), "New from this model snapshot" and "Delete simulation"; a light
+job only), "New from this model snapshot" and "Delete snapshot draft"; a light
 header like the Data Repository's), one full-width status summary
 (`job-status-summary.tsx`) that changes with the live status, the Logs, and a
 compact Details section. The summary is the only place with a state's main
-action: Cancel while it is queued or running, "Try again with these settings"
+action: Cancel run while it is queued or running, "Try again with these settings"
 after a failure or a cancel. That button and "Duplicate" are the one copy action
 (`POST /jobs/{id}/duplicate`), shown once: the header has it only where the
 summary does not. A completed job's results (scratch path, file counts, when
@@ -620,7 +622,7 @@ Anvil purges scratch files untouched for 30 days, and a daily check sets
 
 Nothing uploads output, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
-writes to Anvil scratch, and the output stays there. Publishing a simulation
+writes to Anvil scratch, and the output stays there. Publishing a snapshot draft
 as a snapshot is the step that uploads it, and that step is not written yet.
 
 ## 6. What is absent, and not by oversight
@@ -646,8 +648,8 @@ staff read it at `GET /admin/audit-log`. Every event carries a category,
 because the streams
 have nothing in common: `auth` is low-volume and security-relevant (sign-in
 success and failure, registration, password reset, role and status changes, SSO
-account creation and linking), `job` is operational (a draft created as
-`simulation_derived` or `simulation_duplicated`, submission, cancellation, SLURM
+account creation and linking), `job` is operational (a snapshot draft created as
+`simulation_derived` or `simulation_duplicated` (the event ids keep the old word), submission, cancellation, SLURM
 transitions, deletion), `system` is an admin changing shared infrastructure
 (`spool_cache_cleared`, with the counts; a dry run writes nothing).
 
@@ -668,7 +670,7 @@ a job uses, and return its JSON; the gateway keeps no copy of the cache's layout
 --json`: the scratch quota in files and bytes, the cache per variant, the
 unexpired leases, and `checked_at`. `POST /api/v1/admin/anvil/spool-cache/clear`
 (`system:manage`, body `{"dry_run": false}`) runs `spool prune --all --json`,
-which deletes every unit no running simulation holds, and writes a
+which deletes every unit no running job holds, and writes a
 `spool_cache_cleared` audit event unless it was a dry run. Both are asked of
 Anvil on every call and send `retry_safe`: a status read and a second delete
 are harmless. Errors are `{"code", "message"}`: 503 `anvil_not_configured`

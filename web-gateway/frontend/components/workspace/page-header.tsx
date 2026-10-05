@@ -24,11 +24,11 @@ export function Eyebrow({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * "My Simulations / <current>": where a simulation's own page (and the wizard)
+ * "My snapshot drafts / <current>": where a snapshot draft's own page (and the wizard)
  * sits. The first part links to the list; the last is the page, which is the
  * current one and is not a link.
  */
-export function SimulationBreadcrumb({ current }: { current: string }) {
+export function DraftBreadcrumb({ current }: { current: string }) {
   return (
     <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted-foreground">
       <ol className="flex min-w-0 items-center gap-2">
@@ -37,7 +37,7 @@ export function SimulationBreadcrumb({ current }: { current: string }) {
             href="/workspace"
             className="rounded outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            My Simulations
+            My snapshot drafts
           </Link>
         </li>
         <li aria-hidden="true" className="shrink-0">

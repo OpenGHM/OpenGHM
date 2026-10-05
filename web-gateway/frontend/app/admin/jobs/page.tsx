@@ -25,7 +25,7 @@ export default async function AdminJobsPage({
 
   return (
     <AdminPage>
-      <SectionHeader title="Jobs" description="Simulations across every user." />
+      <SectionHeader title="Jobs" description="Snapshot drafts across every user." />
 
       {userId && (
         <div className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600">

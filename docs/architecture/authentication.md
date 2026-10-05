@@ -35,23 +35,24 @@ org-chart rank baked into every call site. `repository:manage` is defined and
 no endpoint uses it — the catalogue is seed data
 ([gateway.md §4](gateway.md#4-where-state-lives)).
 
-**Running a simulation needs more than a role**
+**Submitting a run needs more than a role**
 ([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every run spends
 the one shared SLURM allocation, so the routes that create or submit a job do
 not trust the token. They read the user's document at call time, through
-`require_active_user` (a draft: derive and duplicate) and `require_submitter`
+`require_active_user` (a snapshot draft: derive and duplicate) and `require_submitter`
 (a submit) in `authz.py`.
 
 - **A submit needs:**
   - `is_active` and `email_verified`;
-  - role `admin` or `staff`, or role `user` with `can_run_simulations: true`.
+  - role `admin` or `staff`, or role `user` with `can_run_simulations: true` (the "Can submit runs" switch
+    on the user's page; the stored field keeps its name).
     Only an admin sets that flag, on `PATCH /users/{id}`, and the change is
     audited as `user_admin_updated`.
   - no more than `JOB_MAX_ACTIVE_PER_USER` active jobs. Admin and staff are
     exempt.
 - **A mock identity** (`security.py`'s `MOCK_USERS`) never submits, in any
   environment, even if a user document carries its id. It has no document
-  unless someone creates one, so it cannot create drafts either
+  unless someone creates one, so it cannot create snapshot drafts either
   (`account_not_found`).
 - **Refusals** carry `detail = {code, message}`:
   - 403: `mock_identity`, `account_not_found`, `account_inactive`,

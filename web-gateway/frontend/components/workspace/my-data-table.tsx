@@ -50,7 +50,7 @@ function KindLabel({ kind }: { kind: MineItem["kind"] }) {
  * one line cut with an ellipsis and whole on hover, then a mono line of its
  * short id and coverage; its type, who can find it, and when
  * it was published). From `sm` up the rows sit in columns under a small header;
- * on a phone each stacks, so nothing scrolls sideways. It is the simulation
+ * on a phone each stacks, so nothing scrolls sideways. It is the snapshot draft
  * list's look, so the two Workspace pages read as one.
  *
  * The selected kind is the URL's `?kind=` (`useSearchParams`); the tabs push

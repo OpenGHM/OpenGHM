@@ -480,7 +480,7 @@ def describe_hours(seconds: int) -> str:
 
 
 def snapshot_defaults(snapshot: dict) -> JobParameters:
-    """The parameters a new simulation starts with, read from a snapshot's
+    """The parameters a new snapshot draft starts with, read from a snapshot's
     `simulation` block: the temporal coverage and output variables it was run
     with. The one place these defaults are derived — the draft is created from
     it (`jobs._derive_simulation_parameters`) and the submit compares against

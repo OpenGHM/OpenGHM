@@ -4,14 +4,14 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 afterEach(cleanup);
 
 const dataset = fakeDataset({ id: "snap-1" });
 
 const LOCAL: DraftLocal = fromJob(
-  fakeSimulation("DRAFT", {
+  fakeDraft("DRAFT", {
     about: { name: "My run", description: "A test" },
     parameters: {
       temporal_range_start: "2001-03-01",

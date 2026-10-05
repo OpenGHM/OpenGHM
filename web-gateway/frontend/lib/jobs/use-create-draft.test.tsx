@@ -4,15 +4,15 @@ import type { ActionResult, Job } from "@/lib/jobs/types";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
-vi.mock("@/lib/jobs/actions", () => ({ duplicateSimulation: vi.fn() }));
+vi.mock("@/lib/jobs/actions", () => ({ duplicateDraft: vi.fn() }));
 
-import { duplicateSimulation } from "@/lib/jobs/actions";
+import { duplicateDraft } from "@/lib/jobs/actions";
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
-import { fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDraft } from "@/lib/workspace/fixtures";
 
-const duplicate = vi.mocked(duplicateSimulation);
+const duplicate = vi.mocked(duplicateDraft);
 
-const created = fakeSimulation("DRAFT", { id: "new-draft" });
+const created = fakeDraft("DRAFT", { id: "new-draft" });
 const ok: ActionResult<Job> = { ok: true, data: created };
 
 function deferred<T>() {
@@ -34,7 +34,7 @@ describe("useCreateDraft", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("duplicateFrom creates from the simulation and opens the new draft at its first step", async () => {
+  it("duplicateFrom creates from the snapshot draft and opens the new draft at its first step", async () => {
     duplicate.mockResolvedValue(ok);
     const { result } = renderHook(() => useCreateDraft());
     await act(async () => result.current.duplicateFrom("job-1"));
@@ -111,7 +111,7 @@ describe("useCreateDraft", () => {
     duplicate.mockResolvedValueOnce({ ok: false, reason: "not_found" });
     const { result } = renderHook(() => useCreateDraft());
     await act(async () => result.current.duplicateFrom("job-1"));
-    expect(result.current.error).toEqual({ kind: "error", message: "That simulation no longer exists." });
+    expect(result.current.error).toEqual({ kind: "error", message: "That snapshot draft no longer exists." });
   });
 
   it("returns a thrown error in state instead of throwing", async () => {

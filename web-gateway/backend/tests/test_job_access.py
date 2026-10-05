@@ -82,7 +82,7 @@ ROUTES: dict[str, tuple[str, str, dict | None, str | None]] = {
     "derive": ("POST", "/api/v1/jobs/derive/ds-1", {}, None),
     # The preview of what `derive` stores: the same gate, nothing written.
     "derive_preview": ("GET", "/api/v1/jobs/derive/ds-1", None, None),
-    # The owner copies a simulation of any status; the copy is a new draft.
+    # The owner copies a snapshot draft of any status; the copy is a new draft.
     "duplicate": ("POST", "/api/v1/jobs/{id}/duplicate", None, "RUNNING"),
     "get": ("GET", "/api/v1/jobs/{id}", None, "RUNNING"),
     "status": ("GET", "/api/v1/jobs/{id}/status", None, "RUNNING"),

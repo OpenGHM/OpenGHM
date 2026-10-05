@@ -165,7 +165,7 @@ export interface SubmitError {
   at: string;
 }
 
-// ─── `about` — a simulation's citation block, editable one field at a time
+// ─── `about` — a snapshot draft's citation block, editable one field at a time
 // while it is a DRAFT. Derived from the generated `OpenGHMCitationBlock`
 // (rule 4) rather than restated — mirrors app/models/job.py's PartialAbout
 // on the backend. ────────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ export type AboutUpdate = { [K in keyof PartialAbout]?: PartialAbout[K] | null }
 
 // ─── API models ──────────────────────────────────────────────────────────────
 
-/** GET /jobs/stats: one count per tab of the simulation list, and the admin
+/** GET /jobs/stats: one count per tab of the snapshot draft list, and the admin
  *  cards. `running` is every active status (pending, submitted, running,
  *  completing), so it is the Active tab's count. */
 export interface JobStatsResponse {
@@ -233,7 +233,7 @@ export interface JobListResponse {
 }
 
 /** POST /jobs/derive/{dataset_id} body. */
-export interface SimulationDeriveRequest {
+export interface DraftDeriveRequest {
   slug?: string | null;
   /** Optional model-input override, set at creation time instead of only
    *  by a later PATCH. Absent means inherit from the base snapshot, same
@@ -242,8 +242,8 @@ export interface SimulationDeriveRequest {
 }
 
 /** PATCH /jobs/{job_id} body — only the fields supplied are changed.
- * Refused (409) once the simulation has moved past DRAFT. */
-export interface SimulationUpdateRequest {
+ * Refused (409) once the snapshot draft has moved past DRAFT. */
+export interface DraftUpdateRequest {
   slug?: string | null;
   /** Merged key by key into the stored block; `null` for the whole block
    *  clears it. */

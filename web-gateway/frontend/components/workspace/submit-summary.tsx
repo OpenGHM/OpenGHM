@@ -14,9 +14,9 @@ export function describeSubmitFailure(
 ): string {
   switch (failure.code) {
     case "not_permitted_to_run":
-      return "You are not permitted to run simulations yet. Ask an administrator to allow you to run simulations.";
+      return "You are not permitted to submit runs yet. Ask an administrator to allow you to submit runs.";
     case "active_job_limit":
-      return "You already have the most active simulations you can have. Wait for one to finish, or cancel one, then submit again.";
+      return "You already have the most active runs you can have. Wait for one to finish, or cancel one, then submit again.";
     case "unsupported_fields":
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
@@ -28,7 +28,7 @@ export function describeSubmitFailure(
     case "answered_by_published":
       return "The model snapshot already publishes these results, so nothing was run. Use Run anyway if you want to run it again.";
     case "not_a_draft":
-      return "This simulation was already submitted or was changed in the meantime. Reload the page to see where it stands.";
+      return "This snapshot draft was already submitted or was changed in the meantime. Reload the page to see where it stands.";
     default:
       // anvil_unreachable, sbatch_rejected, anvil_not_configured,
       // email_not_verified, account_inactive, invalid_parameters, ...

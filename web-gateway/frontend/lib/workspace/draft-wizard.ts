@@ -16,7 +16,7 @@ export const DRAFT_STEPS = ["run", "review"] as const;
 export type DraftStep = (typeof DRAFT_STEPS)[number];
 
 /** The step a stored draft opens at when `?step=` is missing or not one of
- *  ours. (A new simulation passes "run" instead: it opens on Run settings.) */
+ *  ours. (A new snapshot draft passes "run" instead: it opens on Run settings.) */
 const DEFAULT_STEP: DraftStep = "review";
 
 export const START_STEP_LABEL = "Start from";
@@ -54,7 +54,7 @@ export function stepHref(id: string, step: DraftStep | typeof RETIRED_STEP): str
   return `/workspace/${encodeURIComponent(id)}?step=${target}`;
 }
 
-/** The address of a step of a simulation that is not saved yet:
+/** The address of a step of a snapshot draft that is not saved yet:
  *  `/workspace/new/<snapshot id>?step=...`. The same two steps as a stored
  *  draft's, under the snapshot's id because there is no job id. */
 export function newStepHref(datasetId: string, step: DraftStep): string {

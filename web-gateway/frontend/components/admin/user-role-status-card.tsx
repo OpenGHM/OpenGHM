@@ -95,7 +95,7 @@ export function UserRoleStatusCard({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
               <span id="run-permission-label" className="text-sm text-slate-500">
-                Can run simulations
+                Can submit runs
               </span>
               <RunPermissionControl
                 user={user}
@@ -106,10 +106,10 @@ export function UserRoleStatusCard({
               />
             </div>
             <p id="run-permission-help" className="text-xs text-slate-500">
-              Admin and staff can always run simulations. A user needs this switch on. Each
+              Admin and staff can always submit runs. A user needs this switch on. Each
               run spends the shared compute allocation.
               {runImplicit && " Always permitted for this role."}
-              {runNever && " A guest can never run simulations."}
+              {runNever && " A guest can never submit runs."}
             </p>
           </div>
           {isSelf && (

@@ -29,7 +29,7 @@ export function pushOnPlainClick(href: string) {
  * nothing. Next's router follows a native pushState, so `useSearchParams`
  * sees the new URL, and back and forward step through the selections.
  *
- * Drawn as the simulation list's filter is (`segmented.ts`). On a phone the
+ * Drawn as the snapshot draft list's filter is (`segmented.ts`). On a phone the
  * control scrolls inside itself; the page never does.
  */
 export function MyDataKindTabs({

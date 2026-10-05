@@ -1,26 +1,26 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ActionResult, Job, PartialAbout, SimulationUpdateRequest } from "@/lib/jobs/types";
+import type { ActionResult, Job, PartialAbout, DraftUpdateRequest } from "@/lib/jobs/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 
-const { updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, replace, refresh, toast } = vi.hoisted(() => ({
-  updateSimulation: vi.fn(),
+const { updateDraft, fetchJob, submitDraft, deleteDraft, push, replace, refresh, toast } = vi.hoisted(() => ({
+  updateDraft: vi.fn(),
   fetchJob: vi.fn(),
-  submitSimulation: vi.fn(),
-  deleteSimulation: vi.fn(),
+  submitDraft: vi.fn(),
+  deleteDraft: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 vi.mock("@/lib/jobs/actions", () => ({
-  updateSimulation,
+  updateDraft,
   fetchJob,
-  submitSimulation,
-  deleteSimulation,
-  deriveSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
+  submitDraft,
+  deleteDraft,
+  deriveDraft: vi.fn(),
+  duplicateDraft: vi.fn(),
 }));
 // These tests are about saving and submitting: no published results are looked
 // up (draft-wizard-published.test.tsx covers the lookup).
@@ -40,7 +40,7 @@ vi.mock("next/navigation", () => ({
 
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache, readDraftCache, writeDraftCache } from "@/lib/workspace/draft-cache";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 beforeAll(() => {
@@ -55,7 +55,7 @@ const dataset = fakeDataset({ runStartAlignment: "none" });
 const yearly = fakeDataset({ runStartAlignment: "year" });
 const FOUND: DraftContext = { dataset, snapshotState: "found" };
 
-const JOB = fakeSimulation("DRAFT", {
+const JOB = fakeDraft("DRAFT", {
   id: "job-1",
   dataset_id: dataset.id,
   dataset_title: "Fake Snapshot",
@@ -74,7 +74,7 @@ const JOB = fakeSimulation("DRAFT", {
 function fakeServer(initial: Job = JOB) {
   let current = initial;
   let n = 0;
-  return async (_id: string, patch: SimulationUpdateRequest): Promise<ActionResult<Job>> => {
+  return async (_id: string, patch: DraftUpdateRequest): Promise<ActionResult<Job>> => {
     n += 1;
     const about = Object.fromEntries(
       Object.entries({ ...(current.about ?? {}), ...(patch.about ?? {}) }).filter(([, v]) => v != null)
@@ -92,12 +92,12 @@ function fakeServer(initial: Job = JOB) {
 beforeEach(() => {
   clearDraftCache();
   window.history.replaceState(null, "", "/workspace/job-1?step=review");
-  updateSimulation.mockReset();
-  updateSimulation.mockImplementation(fakeServer());
+  updateDraft.mockReset();
+  updateDraft.mockImplementation(fakeServer());
   fetchJob.mockReset();
   fetchJob.mockResolvedValue({ ok: true, data: JOB });
-  submitSimulation.mockReset();
-  deleteSimulation.mockReset();
+  submitDraft.mockReset();
+  deleteDraft.mockReset();
   push.mockReset();
   replace.mockReset();
   refresh.mockReset();
@@ -181,19 +181,19 @@ describe("the header", () => {
 });
 
 describe("the page", () => {
-  it("has the breadcrumb, the name, a Draft badge, the snapshot link and the steps", () => {
+  it("has the breadcrumb, the name, an Editing badge, the snapshot link and the steps", () => {
     wizard();
-    expect(screen.getByRole("link", { name: "My Simulations" }).getAttribute("href")).toBe("/workspace");
+    expect(screen.getByRole("link", { name: "My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
     const h1 = screen.getByRole("heading", { level: 1 });
     expect(h1.textContent).toBe("Untitled (job-1)");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Untitled (job-1)");
-    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("Editing")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Based on Fake Snapshot" }).getAttribute("href")).toBe(
       `/repository/${dataset.id}`
     );
     expect(screen.getByRole("navigation", { name: "Steps" })).toBeTruthy();
     expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
-    expect(button("Delete draft")).not.toBeNull();
+    expect(button("Delete snapshot draft")).not.toBeNull();
   });
 
   it("follows the name as it is typed, and falls back to the slug, then to a placeholder", () => {
@@ -266,7 +266,7 @@ describe("the step", () => {
   it("saves nothing just by being opened", async () => {
     wizard({ step: "run" });
     await pause(1_000);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("has no Back on Run settings (the draft's start cannot change) and no Next on Review", () => {
@@ -493,13 +493,13 @@ describe("saving is a button", () => {
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
     expect(saveButtons().every((b) => !b.disabled)).toBe(true);
     await pause(1_500);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
   it("Save draft sends the edit in one request, shows Saving… and then Saved, and says so in a toast", async () => {
     let answer!: (r: ActionResult<Job>) => void;
-    updateSimulation.mockReturnValue(new Promise((r) => (answer = r)));
+    updateDraft.mockReturnValue(new Promise((r) => (answer = r)));
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
@@ -508,8 +508,8 @@ describe("saving is a button", () => {
     expect(saveButtons().every((b) => b.disabled)).toBe(true);
     await act(async () => answer({ ok: true, data: { ...JOB, about: { name: "Colorado" }, updated_at: "2026-10-01T12:00:05.000Z" } }));
 
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
     expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
@@ -541,7 +541,7 @@ describe("saving is a button", () => {
     expect(saveButtons()).toHaveLength(2);
     type("Colorado");
     fireEvent.click(saveButtons()[1]);
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
     fireEvent.click(button("Next")!);
     expect(saveButtons()).toHaveLength(1);
   });
@@ -552,7 +552,7 @@ describe("saving is a button", () => {
     pressSave();
     pressSave();
     await settle();
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledTimes(1);
     expect(toast.success).toHaveBeenCalledTimes(1);
   });
 
@@ -571,7 +571,7 @@ describe("saving is a button", () => {
     expect(heading()).toBe("Run settings");
     fireEvent.click(button("Next")!);
     await pause(1_500);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
   });
 
@@ -583,7 +583,7 @@ describe("saving is a button", () => {
     fireEvent(window, new Event("pagehide"));
     await pause(1_500);
     hold("visible");
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("closing the page without saving sends nothing", async () => {
@@ -591,7 +591,7 @@ describe("saving is a button", () => {
     type("Colorado");
     view.unmount();
     await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 });
 
@@ -601,19 +601,19 @@ describe("Ctrl/Cmd+S", () => {
     type("Colorado");
     const event = keydown({ key: "s", ctrlKey: true });
     expect(event.defaultPrevented).toBe(true);
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(saveButtons()[0].disabled).toBe(true));
 
     type("Colorado 2");
     expect(keydown({ key: "S", metaKey: true }).defaultPrevented).toBe(true);
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(2));
   });
 
   it("still keeps the browser's dialog away when there is nothing to save, and sends nothing", async () => {
     wizard({ step: "run" });
     expect(keydown({ key: "s", ctrlKey: true }).defaultPrevented).toBe(true);
     await settle();
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("is only the plain chord: Ctrl+Shift+S, Alt and a bare S are left alone", () => {
@@ -622,7 +622,7 @@ describe("Ctrl/Cmd+S", () => {
     expect(keydown({ key: "s", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
     expect(keydown({ key: "s", ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
     expect(keydown({ key: "s" }).defaultPrevented).toBe(false);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("is stopped when the page is gone from under it: the listener is removed on unmount", () => {
@@ -637,7 +637,7 @@ describe("leaving a stored draft", () => {
 
   it("asks nothing while nothing is unsaved: links just go, and the browser is not asked", () => {
     wizard({ step: "run" });
-    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(false);
+    expect(click(screen.getByRole("link", { name: "My snapshot drafts" }))).toBe(false);
     expect(screen.queryByRole("alertdialog")).toBeNull();
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
@@ -647,7 +647,7 @@ describe("leaving a stored draft", () => {
   it("holds back a link click once something is unsaved, and offers Save draft, Discard changes and Keep editing", async () => {
     wizard({ step: "run" });
     type("Colorado");
-    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(true);
+    expect(click(screen.getByRole("link", { name: "My snapshot drafts" }))).toBe(true);
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog.textContent).toContain("Leave without saving?");
     expect(within(dialog).getByRole("button", { name: "Save draft" })).toBeTruthy();
@@ -672,7 +672,7 @@ describe("leaving a stored draft", () => {
     expect(heading()).toBe("Review & submit");
     fireEvent.click(button("Back")!);
     type("");
-    expect(click(screen.getByRole("link", { name: "My Simulations" }))).toBe(false);
+    expect(click(screen.getByRole("link", { name: "My snapshot drafts" }))).toBe(false);
   });
 
   it("Keep editing closes it, goes nowhere and keeps the edit", async () => {
@@ -684,7 +684,7 @@ describe("leaving a stored draft", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(push).not.toHaveBeenCalled();
     expect(nameInput().value).toBe("Colorado");
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("Discard changes goes to the link without saving", async () => {
@@ -695,7 +695,7 @@ describe("leaving a stored draft", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Discard changes" }));
     expect(push).toHaveBeenCalledWith("/repository?q=wbm");
     await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     // Nothing asks about the navigation that is under way.
     expect(click(outsideLink("/workspace"))).toBe(false);
   });
@@ -707,13 +707,13 @@ describe("leaving a stored draft", () => {
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/repository"));
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
   });
 
   it("stays when the save fails: the dialog closes, the edit and the failure are on the page", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
     wizard({ step: "run" });
     type("Colorado");
     click(outsideLink("/repository"));
@@ -759,7 +759,7 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     expect(at()).toBe(RUN);
     expect(nav.index).toBe(1);
     expect(nav.entries).toHaveLength(2);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("Keep editing stays with the edit, and a later Back asks again", async () => {
@@ -770,7 +770,7 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(at()).toBe(RUN);
     expect(nameInput().value).toBe("Colorado");
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     await press(-1);
     await screen.findByRole("alertdialog");
   });
@@ -783,7 +783,7 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     await waitFor(() => expect(at()).toBe("/workspace"));
     expect(nav.index).toBe(0);
     await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("Save draft saves it, then goes where Back was going", async () => {
@@ -792,14 +792,14 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     await press(-1);
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(at()).toBe("/workspace"));
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
     expect(push).not.toHaveBeenCalled();
   });
 
   it("stays when the save fails: the dialog closes, the address is the draft's, the failure is on the page", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
     wizard({ step: "run" });
     type("Colorado");
     await press(-1);
@@ -849,23 +849,23 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
 
 describe("the status and the button for each state", () => {
   it("failed: Couldn't save with Retry, which does not retry by itself", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
     expect(await screen.findByText("Couldn't save")).toBeTruthy();
     await pause(3_000);
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledTimes(1);
 
-    updateSimulation.mockImplementation(fakeServer());
+    updateDraft.mockImplementation(fakeServer());
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText("Couldn't save")).toBeNull());
     expect(screen.getByText("Your changes are saved.")).toBeTruthy();
   });
 
   it("refused: names the field, and the button is off with its reason", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Too many cores", status: 422, fields: ["slurm_config.cores"] });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Too many cores", status: 422, fields: ["slurm_config.cores"] });
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
@@ -877,7 +877,7 @@ describe("the status and the button for each state", () => {
 
 describe("when the draft cannot be saved", () => {
   it("says the session expired, and keeps what was typed", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "session_expired" });
+    updateDraft.mockResolvedValue({ ok: false, reason: "session_expired" });
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
@@ -888,11 +888,11 @@ describe("when the draft cannot be saved", () => {
   });
 
   it("says it was submitted or changed elsewhere, and Reload asks the server for the page again", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Only drafts can be edited", status: 409 });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Only drafts can be edited", status: 409 });
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
-    const banner = await screen.findByText("This simulation was submitted or changed elsewhere");
+    const banner = await screen.findByText("This snapshot draft was submitted or changed elsewhere");
     expect(banner.closest('[role="alert"]')).not.toBeNull();
     expect(refresh).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
@@ -900,12 +900,12 @@ describe("when the draft cannot be saved", () => {
   });
 
   it("says it was deleted, with a way back to the list", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "not_found" });
+    updateDraft.mockResolvedValue({ ok: false, reason: "not_found" });
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
     expect(await screen.findByText("This draft was deleted")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Go to My Simulations" }).getAttribute("href")).toBe("/workspace");
+    expect(screen.getByRole("link", { name: "Go to My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
     expect(screen.getByText("Not saved")).toBeTruthy();
   });
 
@@ -917,24 +917,24 @@ describe("when the draft cannot be saved", () => {
 });
 
 async function openDeleteDialog() {
-  fireEvent.click(screen.getByRole("button", { name: "Delete draft" }));
-  await screen.findByText("Delete this draft?");
+  fireEvent.click(screen.getByRole("button", { name: "Delete snapshot draft" }));
+  await screen.findByText("Delete this snapshot draft?");
 }
 
 describe("deleting the draft", () => {
   it("stops saving, deletes, and goes to the list", async () => {
-    deleteSimulation.mockResolvedValue({ ok: true, data: null });
+    deleteDraft.mockResolvedValue({ ok: true, data: null });
     wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
-    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete draft" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete snapshot draft" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace"));
     expect(push).toHaveBeenCalledTimes(1);
-    expect(deleteSimulation).toHaveBeenCalledWith("job-1");
+    expect(deleteDraft).toHaveBeenCalledWith("job-1");
 
     // The edit that was waiting is not sent after the draft is gone.
     await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("allows saving again when the dialog is cancelled, and saves nothing by itself", async () => {
@@ -948,25 +948,25 @@ describe("deleting the draft", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() => expect(screen.getByText("Unsaved changes")).toBeTruthy());
     await pause(1_500);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(saveButtons()[0].disabled).toBe(false);
     pressSave();
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
     expect(push).not.toHaveBeenCalled();
-    expect(deleteSimulation).not.toHaveBeenCalled();
+    expect(deleteDraft).not.toHaveBeenCalled();
   });
 
   it("allows saving again, and says why, when the delete is refused", async () => {
-    deleteSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Anvil can't be reached." });
+    deleteDraft.mockResolvedValue({ ok: false, reason: "error", message: "Anvil can't be reached." });
     wizard({ step: "run" });
     type("Colorado");
     await openDeleteDialog();
-    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete draft" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete snapshot draft" }));
     expect(await screen.findByText("Anvil can't be reached.")).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText("Unsaved changes")).toBeTruthy());
     await pause(1_500);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 });
 
@@ -986,7 +986,7 @@ describe("coming back to the tab", () => {
     expect(fetchJob).toHaveBeenCalledWith("job-1");
     // It is the new baseline: nothing to save.
     await pause(1_000);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
 
@@ -1085,21 +1085,21 @@ describe("submitting", () => {
     fireEvent.click(button("Next")!);
     const dialog = await openSubmitDialog();
     // The flush ran before the dialog opened.
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
     expect(dialog.textContent).toContain("Fake Snapshot");
     expect(dialog.textContent).toContain("2001-01-01 to 2001-12-31");
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
     // Cancelling leaves saving available, and sends nothing by itself.
     fireEvent.click(button("Back")!);
     type("Colorado 2");
     await pause(1_200);
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledTimes(1);
     pressSave();
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(2));
   });
 
   it("says Submit saves the changes first, not that the draft saves itself", () => {
@@ -1109,17 +1109,17 @@ describe("submitting", () => {
   });
 
   it("opens the run's page when it goes through", async () => {
-    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     wizard();
     confirm(await openSubmitDialog());
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/job-1"));
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(submitSimulation).toHaveBeenCalledWith("job-1");
+    expect(submitDraft).toHaveBeenCalledWith("job-1");
   });
 
   it("switches the inputs off while it is submitting", async () => {
     let answer!: (r: ActionResult<Job>) => void;
-    submitSimulation.mockReturnValue(new Promise((r) => (answer = r)));
+    submitDraft.mockReturnValue(new Promise((r) => (answer = r)));
     wizard();
     confirm(await openSubmitDialog());
     const editRunPeriod = () => screen.getByRole("button", { name: "Edit run period", hidden: true });
@@ -1130,7 +1130,7 @@ describe("submitting", () => {
   });
 
   it("saves again after a submit that failed, without remounting, and shows why", async () => {
-    submitSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Anvil said no", code: "sbatch_rejected" });
+    submitDraft.mockResolvedValue({ ok: false, reason: "error", message: "Anvil said no", code: "sbatch_rejected" });
     fetchJob.mockResolvedValue({
       ok: true,
       data: { ...JOB, last_submit_error: { code: "sbatch_rejected", message: "Anvil said no", at: "2026-10-01T12:05:00Z" } },
@@ -1143,32 +1143,32 @@ describe("submitting", () => {
     // The same controls: nothing was remounted, and they work again.
     expect(screen.getByRole("button", { name: "Edit run period" })).toBe(edit);
     await waitFor(() => expect((edit.closest("fieldset") as HTMLFieldSetElement).disabled).toBe(false));
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
 
     fireEvent.click(edit);
     type("After the failure");
     await pause(1_200);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     pressSave();
-    await waitFor(() => expect(updateSimulation).toHaveBeenCalledTimes(1));
-    expect(updateSimulation.mock.calls[0][1]).toEqual({ about: { name: "After the failure", description: null } });
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
+    expect(updateDraft.mock.calls[0][1]).toEqual({ about: { name: "After the failure", description: null } });
     expect(replace).not.toHaveBeenCalled();
   });
 
   it("does not save behind a submit that is out", async () => {
     let answer!: (r: ActionResult<Job>) => void;
-    submitSimulation.mockReturnValue(new Promise((r) => (answer = r)));
+    submitDraft.mockReturnValue(new Promise((r) => (answer = r)));
     wizard();
     confirm(await openSubmitDialog());
-    await waitFor(() => expect(submitSimulation).toHaveBeenCalled());
+    await waitFor(() => expect(submitDraft).toHaveBeenCalled());
     expect(screen.getByText("Saving is paused")).toBeTruthy();
     await pause(1_000);
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     await act(async () => answer({ ok: true, data: SUBMITTED }));
   });
 
   it("takes the success path when the answer did not come but the job moved on", async () => {
-    submitSimulation.mockRejectedValue(new Error("timed out"));
+    submitDraft.mockRejectedValue(new Error("timed out"));
     fetchJob.mockResolvedValue({ ok: true, data: { ...JOB, status: "PENDING" } });
     wizard();
     confirm(await openSubmitDialog());
@@ -1179,7 +1179,7 @@ describe("submitting", () => {
   });
 
   it("keeps the 'could not confirm' message when the job is still a draft", async () => {
-    submitSimulation.mockRejectedValue(new Error("timed out"));
+    submitDraft.mockRejectedValue(new Error("timed out"));
     wizard();
     confirm(await openSubmitDialog());
     await waitFor(() => expect(screen.getAllByRole("alert").some((a) => a.textContent?.includes("Could not confirm"))).toBe(true));
@@ -1187,9 +1187,9 @@ describe("submitting", () => {
   });
 
   it("cannot be started while the draft needs attention", () => {
-    wizard({ blockedReason: "Your account has not been approved to run simulations." });
+    wizard({ blockedReason: "Your account has not been approved to submit runs." });
     expect((screen.getByRole("button", { name: "Submit to Anvil" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Your account has not been approved to run simulations.")).toBeTruthy();
+    expect(screen.getByText("Your account has not been approved to submit runs.")).toBeTruthy();
   });
 });
 
@@ -1229,7 +1229,7 @@ describe("after a submit went through: the page that does not follow", () => {
 
   /** Submit, with the wizard staying on screen (the mocked router does nothing). */
   async function submitAndStay() {
-    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     const view = wizard();
     fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
     const dialog = await screen.findByRole("alertdialog");
@@ -1250,7 +1250,7 @@ describe("after a submit went through: the page that does not follow", () => {
       />
     );
     expect(screen.getByRole("alert").textContent).toContain("The last submit didn't go through");
-    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
@@ -1342,7 +1342,7 @@ describe("after a submit went through: the page that does not follow", () => {
   });
 
   it("does the same hard navigation after a lost answer once the job turns out to be submitted", async () => {
-    submitSimulation.mockRejectedValue(new Error("timed out"));
+    submitDraft.mockRejectedValue(new Error("timed out"));
     fetchJob.mockResolvedValue({ ok: true, data: SUBMITTED });
     wizard();
     fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));

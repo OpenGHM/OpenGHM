@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { duplicateSimulation } from "@/lib/jobs/actions";
+import { duplicateDraft } from "@/lib/jobs/actions";
 import type { ActionResult, Job } from "@/lib/jobs/types";
 import { stepHref } from "@/lib/workspace/draft-wizard";
 
@@ -13,9 +13,9 @@ type CreateDraftError =
   | { kind: "error"; message: string; code?: string };
 
 /**
- * Creates a stored draft at once from one of the caller's own simulations
+ * Creates a stored draft at once from one of the caller's own snapshot drafts
  * (`duplicateFrom`: "Duplicate" and "Try again with these settings"). A new
- * simulation from a snapshot is not stored until the person saves it
+ * snapshot draft from a snapshot is not stored until the person saves it
  * (`/workspace/new/<snapshot id>`). Success opens the new draft's first step;
  * failures are returned in `error`, never thrown.
  *
@@ -52,7 +52,7 @@ export function useCreateDraft() {
         setPending(false);
         setError({
           kind: "error",
-          message: thrown instanceof Error ? thrown.message : "Couldn't create the simulation.",
+          message: thrown instanceof Error ? thrown.message : "Couldn't create the snapshot draft.",
         });
       }
     },
@@ -60,7 +60,7 @@ export function useCreateDraft() {
   );
 
   const duplicateFrom = useCallback(
-    (jobId: string) => create(() => duplicateSimulation(jobId), "That simulation no longer exists."),
+    (jobId: string) => create(() => duplicateDraft(jobId), "That snapshot draft no longer exists."),
     [create]
   );
 

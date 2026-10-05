@@ -108,7 +108,7 @@ async def scratch_status() -> ScratchStatusResponse:
 
 async def clear_spool_cache(*, dry_run: bool) -> SpoolCacheClearResponse:
     """`openghm spool prune --all --json` (with `--dry-run` when asked) on
-    Anvil: every unit no running simulation holds is deleted. Run twice it does
+    Anvil: every unit no active run holds is deleted. Run twice it does
     the same thing, so a dropped connection may re-send it."""
     command = _toolkit_command("spool", "prune", "--all", *(["--dry-run"] if dry_run else []))
     data = await _run_json(

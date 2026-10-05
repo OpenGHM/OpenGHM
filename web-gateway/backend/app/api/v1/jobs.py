@@ -108,7 +108,7 @@ def _resolve_model_input(
 async def _resolve_effective_model_input(doc: dict) -> tuple[str | None, ModelInputState]:
     """`_resolve_model_input`'s Mongo-fetching half — kept separate so the
     decision itself stays pure and testable. Only called for a single
-    simulation (derive/get/patch), never per-row from `list_jobs`
+    snapshot draft (derive/get/patch), never per-row from `list_jobs`
     (plan.md's second risk: N resolves on the list page)."""
     db = get_db()
     # `datasets`/`model_inputs` documents are envelopes since mission
@@ -224,7 +224,7 @@ async def _get_job_for(
 
 
 def _is_editable(doc: dict) -> bool:
-    """A simulation may only be created, edited or deleted through the
+    """A snapshot draft may only be created, edited or deleted through the
     draft routes while it is still a draft (spec.md: "becomes read-only the
     moment it is submitted"). Pure — no Mongo, no request — so the refusal
     rule is testable directly (tests/test_jobs_drafts.py)."""
@@ -317,7 +317,7 @@ def _duplicate_document(
 
 
 def _derive_simulation_parameters(dataset_doc: dict) -> JobParameters:
-    """Build a new simulation's parameters from a published catalogue entry
+    """Build a new snapshot draft's parameters from a published catalogue entry
     (T4): the temporal coverage and output variables it was run with become
     the starting point a user overrides, rather than a blank form. Pure —
     takes a plain dict, returns a new model, touches no Mongo — the source
@@ -343,10 +343,10 @@ def _job_scope_query(user: TokenPayload, user_id: str | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# POST /jobs/derive/{dataset_id}  —  New simulation from a snapshot
+# POST /jobs/derive/{dataset_id}  —  New snapshot draft from a snapshot
 # ---------------------------------------------------------------------------
 #
-# One of the two ways a simulation is created (the other is the duplicate
+# One of the two ways a snapshot draft is created (the other is the duplicate
 # route below; spec.md, "Out of scope": starting one from scratch needs a
 # model-input catalogue the gateway does not have yet). It is created as a
 # draft — no Slurm submission happens here — inheriting its dataset, title and
@@ -420,7 +420,7 @@ async def derive_simulation(
 
 
 # GET /jobs/derive/{dataset_id} previews what the POST above would store, for
-# the new-simulation screen that shows a simulation until the user saves it.
+# the new-snapshot-draft screen that shows a snapshot draft until the user saves it.
 # Nothing is written and nothing is audited. `id` is "" (JobResponse.id is a
 # plain str): there is no job to point at. Declared before `GET /{job_id}` so
 # "derive" is never read as a job id (that route has one path segment, this one
@@ -438,11 +438,11 @@ async def preview_derived_simulation(
 
 
 # ---------------------------------------------------------------------------
-# POST /jobs/{job_id}/duplicate  —  New draft from a simulation of one's own
+# POST /jobs/{job_id}/duplicate  —  New draft from a snapshot draft of one's own
 # ---------------------------------------------------------------------------
 #
 # The second creation path: a new draft that starts from the settings of one of
-# the caller's own simulations, whatever its status. Owner only, like edit and
+# the caller's own snapshot drafts, whatever its status. Owner only, like edit and
 # delete; the copy is the caller's, and the source is read, never written.
 
 
@@ -462,7 +462,7 @@ async def duplicate_simulation(
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "snapshot_not_found",
-            "The model snapshot this simulation is based on is no longer in the "
+            "The model snapshot this snapshot draft is based on is no longer in the "
             "repository, so it can't be copied.",
         )
 
@@ -503,7 +503,7 @@ async def update_simulation(
 ):
     db = get_db()
     # No "any" edit permission: mutating someone else's private, unpublished
-    # simulation is out of scope (see app.core.roles), so the owner alone
+    # snapshot draft is out of scope (see app.core.roles), so the owner alone
     # passes — and everyone else, JOB_VIEW_ANY holders included, gets the
     # same 404 as for a missing id.
     doc = await _get_job_for(job_id, user, None)
@@ -570,7 +570,7 @@ async def update_simulation(
 # POST /jobs/{job_id}/submit  —  Run a draft on Anvil
 # ---------------------------------------------------------------------------
 #
-# The one way a simulation reaches SLURM (ADR 0025): the owner's DRAFT becomes
+# The one way a snapshot draft reaches SLURM (ADR 0025): the owner's DRAFT becomes
 # a slurmly batch job whose body fetches the snapshot and runs `openghm sim
 # run`. The draft is claimed first with a conditional update, so two submits
 # cannot both pass; if Anvil then refuses or cannot be reached, it is handed
@@ -590,7 +590,7 @@ def _not_a_draft(current: str) -> HTTPException:
     return _error(
         status.HTTP_409_CONFLICT,
         "not_a_draft",
-        f"Only a draft can be edited; this simulation is {current}.",
+        f"Only a snapshot draft that is still being edited can be changed; this one is {current}.",
     )
 
 
@@ -649,7 +649,7 @@ async def _refuse_dates_outside_aggregation(
 
 
 _ANVIL_NOT_CONFIGURED = (
-    "This gateway is not set up to run simulations on Anvil yet. "
+    "This gateway is not set up to submit runs to Anvil yet. "
     "Ask an administrator. Your draft is unchanged."
 )
 _ANVIL_UNREACHABLE = (
@@ -684,7 +684,7 @@ async def submit_simulation(
         raise _error(
             status.HTTP_409_CONFLICT,
             "not_a_draft",
-            f"Only a draft can be submitted; this simulation is {doc['status']}.",
+            f"Only a snapshot draft that is still being edited can be submitted; this one is {doc['status']}.",
         )
 
     envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
@@ -692,7 +692,7 @@ async def submit_simulation(
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "snapshot_not_found",
-            "The snapshot this simulation is based on is no longer in the repository.",
+            "The snapshot this snapshot draft is based on is no longer in the repository.",
         )
     snapshot = envelope["document"]
     job = JobDB(**doc)
@@ -714,7 +714,7 @@ async def submit_simulation(
             raise _error(
                 status.HTTP_409_CONFLICT,
                 "answered_by_published",
-                "This snapshot's published results already answer this simulation, "
+                "This snapshot's published results already answer this snapshot draft, "
                 "so nothing was queued. Open the published files, or ask for a "
                 "rerun to check that the snapshot reproduces itself (it uses "
                 "allocation).",
@@ -805,7 +805,7 @@ async def submit_simulation(
         raise _error(
             status.HTTP_409_CONFLICT,
             "not_a_draft",
-            "This simulation was changed or already submitted. Reload it and try again.",
+            "This snapshot draft was changed or already submitted. Reload it and try again.",
         )
     job = JobDB(**(await db.jobs.find_one({"_id": job_id})))
 
@@ -951,10 +951,10 @@ async def _return_to_draft(
 
 
 # ---------------------------------------------------------------------------
-# DELETE /jobs/{job_id}  —  Delete a draft or a finished simulation
+# DELETE /jobs/{job_id}  —  Delete a snapshot draft, edited or finished
 # ---------------------------------------------------------------------------
 #
-# A draft has nothing on Anvil. A finished simulation leaves two directories
+# A draft has nothing on Anvil. A finished snapshot draft leaves two directories
 # there (ADR 0026), and its owner's delete removes both before the document:
 # a document that outlived its files could no longer say where they were.
 
@@ -973,7 +973,7 @@ async def delete_simulation(
         raise _error(
             status.HTTP_409_CONFLICT,
             "job_active",
-            "Cancel the simulation before deleting it.",
+            "Cancel the run before deleting this snapshot draft.",
         )
     await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
     await log_event(
@@ -998,7 +998,7 @@ async def _remove_files_of(doc: dict) -> list[str]:
         raise _error(
             status.HTTP_409_CONFLICT,
             "refused_path",
-            "This simulation's files are not where the gateway expects them, so it "
+            "This snapshot draft's files are not where the gateway expects them, so it "
             "removed nothing. Ask an administrator.",
         )
     except slurm.CleanupFailed as exc:
@@ -1006,7 +1006,7 @@ async def _remove_files_of(doc: dict) -> list[str]:
         raise _error(
             status.HTTP_502_BAD_GATEWAY,
             "cleanup_failed",
-            "Anvil could not remove this simulation's files, so it was not deleted. "
+            "Anvil could not remove this snapshot draft's files, so it was not deleted. "
             "Try again.",
         )
     except (slurm.AnvilNotConfigured, SlurmlyError, OSError, asyncio.TimeoutError) as exc:
@@ -1239,7 +1239,7 @@ async def cancel_job(
     return _status_response(await db.jobs.find_one({"_id": job_id}))
 
 
-_CANCELLED_BY_USER = "You cancelled this simulation."
+_CANCELLED_BY_USER = "You cancelled this run."
 _CANCEL_REQUEST_FIELDS = ("cancel_requested_at", "cancel_requested_by", "cancel_requested_by_email")
 
 
@@ -1255,7 +1255,7 @@ def _job_changed() -> HTTPException:
     return _error(
         status.HTTP_409_CONFLICT,
         "job_changed",
-        "This simulation changed while it was being cancelled. Reload it and try again.",
+        "This snapshot draft changed while its run was being cancelled. Reload it and try again.",
     )
 
 

@@ -1,7 +1,7 @@
 /**
  * The states the design preview can show. `/dev/workspace/<key>`
  * (`app/dev/workspace/[state]`) renders the job detail page from a fixture
- * (`previewSimulation` in lib/workspace/fixtures.ts) instead of a fetch, so each
+ * (`previewDraftJob` in lib/workspace/fixtures.ts) instead of a fetch, so each
  * status and each verdict cause can be reviewed without making Anvil produce
  * it. The fixtures are the preview's and the tests' data: only that route
  * uses them, and it answers 404 in production. No real page imports them.

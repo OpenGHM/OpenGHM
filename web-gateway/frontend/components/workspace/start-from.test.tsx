@@ -1,15 +1,15 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-const { deriveSimulation, duplicateSimulation, fetchJobs, fetchSnapshots, fetchModelInputIds, push } = vi.hoisted(() => ({
-  deriveSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
+const { deriveDraft, duplicateDraft, fetchJobs, fetchSnapshots, fetchModelInputIds, push } = vi.hoisted(() => ({
+  deriveDraft: vi.fn(),
+  duplicateDraft: vi.fn(),
   fetchJobs: vi.fn(),
   fetchSnapshots: vi.fn(),
   fetchModelInputIds: vi.fn(),
   push: vi.fn(),
 }));
-vi.mock("@/lib/jobs/actions", () => ({ deriveSimulation, duplicateSimulation, fetchJobs }));
+vi.mock("@/lib/jobs/actions", () => ({ deriveDraft, duplicateDraft, fetchJobs }));
 vi.mock("@/lib/repository/actions", () => ({ fetchSnapshots, fetchModelInputIds }));
 // The address bar is the router: what a test pushes is what `useSearchParams` reads.
 vi.mock("next/navigation", () => ({
@@ -55,7 +55,7 @@ function start(over: Partial<React.ComponentProps<typeof StartFrom>> = {}) {
 const snapshotButton = (title: string) => screen.getByRole("button", { name: title });
 
 beforeEach(() => {
-  for (const m of [deriveSimulation, duplicateSimulation, fetchJobs, fetchSnapshots, fetchModelInputIds, push]) m.mockReset();
+  for (const m of [deriveDraft, duplicateDraft, fetchJobs, fetchSnapshots, fetchModelInputIds, push]) m.mockReset();
   fetchModelInputIds.mockResolvedValue(new Set());
   window.history.replaceState(null, "", "/workspace/new");
 });
@@ -68,20 +68,20 @@ describe("Start from", () => {
     expect(window.location.search).toBe("");
   });
 
-  it("does not offer to copy a simulation: that is done from the simulation's own page", () => {
+  it("does not offer to copy a snapshot draft: that is done from the snapshot draft's own page", () => {
     start();
-    expect(screen.queryByText(/Copy a simulation/)).toBeNull();
+    expect(screen.queryByText(/Copy a snapshot draft/)).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Where to start from" })).toBeNull();
-    expect(screen.queryByRole("list", { name: "Your simulations" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Your snapshot drafts" })).toBeNull();
     expect(fetchJobs).not.toHaveBeenCalled();
-    expect(duplicateSimulation).not.toHaveBeenCalled();
+    expect(duplicateDraft).not.toHaveBeenCalled();
   });
 
   it("ignores ?from=copy: the snapshot grid is what there is", () => {
     window.history.replaceState(null, "", "/workspace/new?from=copy");
     start();
     expect(screen.getByRole("list", { name: "Model snapshots" })).toBeTruthy();
-    expect(screen.queryByText(/Copy a simulation/)).toBeNull();
+    expect(screen.queryByText(/Copy a snapshot draft/)).toBeNull();
   });
 
   it("offers no model input mode: nothing that cannot be chosen is shown", () => {
@@ -127,13 +127,13 @@ describe("the snapshot grid", () => {
 });
 
 describe("a model snapshot", () => {
-  it("opens Run settings of a new simulation from a click on its card, and creates nothing", () => {
+  it("opens Run settings of a new snapshot draft from a click on its card, and creates nothing", () => {
     start();
     fireEvent.click(snapshotButton("Used Snapshot"));
     expect(push).toHaveBeenCalledWith("/workspace/new/snap-used?step=run");
     expect(push).toHaveBeenCalledTimes(1);
-    expect(deriveSimulation).not.toHaveBeenCalled();
-    expect(duplicateSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
+    expect(duplicateDraft).not.toHaveBeenCalled();
   });
 
   it("opens the same from the Select in a snapshot's Details sheet, which closes first", async () => {
@@ -142,7 +142,7 @@ describe("a model snapshot", () => {
     const sheet = await screen.findByRole("dialog");
     fireEvent.click(within(sheet).getByRole("button", { name: /select/i }));
     expect(push).toHaveBeenCalledWith("/workspace/new/snap-listed?step=run");
-    expect(deriveSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 

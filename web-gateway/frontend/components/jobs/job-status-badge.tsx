@@ -3,7 +3,7 @@ import { HUE } from "@/lib/jobs/status-hue";
 
 /** The words for each status, for the badge and for announcements. */
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
-  DRAFT: "Draft",
+  DRAFT: "Editing",
   PENDING: "Pending",
   SUBMITTED: "Submitted",
   RUNNING: "Running",

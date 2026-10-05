@@ -4,7 +4,7 @@ Salvaged from the abandoned ``2026-09-20-snapshot-drafts`` mission's
 ``app/models/draft.py`` (see that mission's ``plan.md`` *Salvage* table) and
 generalised: it is no longer tied to snapshots or drafts, only to the one
 real problem it solves — a spec-shaped block (``about``, in this mission)
-needs an editable, partially-filled form before a simulation is submitted,
+needs an editable, partially-filled form before a snapshot draft is submitted,
 and hand-restating the generated model's fields would violate rule 4 (one
 source of truth).
 

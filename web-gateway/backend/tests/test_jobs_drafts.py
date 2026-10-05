@@ -1,4 +1,4 @@
-"""app.api.v1.jobs — the simulation draft lifecycle added by mission
+"""app.api.v1.jobs — the snapshot draft lifecycle added by mission
 2026-09-20-simulations: ownership isolation, the edit-past-draft refusal,
 and deriving from a snapshot without touching it.
 
@@ -93,7 +93,7 @@ def test_owner_can_access_their_own_job():
 
 def test_second_user_cannot_access_by_id():
     """The core isolation guarantee: a second, unprivileged user cannot
-    fetch another user's simulation by its id."""
+    fetch another user's snapshot draft by its id."""
     assert _can_access_job(_job("alice"), BOB, Permission.JOB_VIEW_ANY) is False
 
 
@@ -107,7 +107,7 @@ def test_is_owner_true_only_for_the_owner():
 
 
 def test_view_any_does_not_imply_edit_ownership():
-    """JOB_VIEW_ANY lets staff *see* another user's simulation (an
+    """JOB_VIEW_ANY lets staff *see* another user's snapshot draft (an
     operator's dashboard), but app.core.roles deliberately grants no
     JOB_EDIT_ANY / JOB_DELETE_ANY — mutating someone else's private,
     unpublished work is out of scope. The edit/delete routes check
@@ -116,7 +116,7 @@ def test_view_any_does_not_imply_edit_ownership():
     assert _is_owner(_job("alice"), STAFF) is False
 
 
-# ---- _is_editable: a simulation past draft refuses edits ------------------
+# ---- _is_editable: a snapshot draft past editing refuses edits ------------------
 
 
 def test_draft_is_editable():
@@ -222,7 +222,7 @@ def test_mongo_calls_resolves_a_direct_subscript_write():
 
 def test_jobs_module_never_writes_datasets():
     """`datasets` is the catalogue (published snapshots, rule 1). Deriving a
-    simulation legitimately reads it (`POST /jobs/derive/{dataset_id}` —
+    snapshot draft legitimately reads it (`POST /jobs/derive/{dataset_id}` —
     that's the whole point), but nothing in this module writes to it.
     Checked via an AST walk of the real calls made on `db`; anything the
     walk cannot attribute to a collection fails this test rather than
@@ -237,7 +237,7 @@ def test_jobs_module_never_writes_datasets():
     assert calls["datasets"] == {"find_one"}  # sanity: derive really does read it
 
 
-# ---- deriving a simulation from a catalogue entry (T4) --------------------
+# ---- deriving a snapshot draft from a catalogue entry (T4) --------------------
 
 
 def _dataset_doc(name: str) -> dict:
@@ -588,10 +588,10 @@ def test_resolve_clearing_an_override_returns_to_inherited():
     assert cleared == (V2_MODEL_INPUT_ID, "inherited")
 
 
-# ---- a submitted simulation refuses a model-input change ------------------
+# ---- a submitted snapshot draft refuses a model-input change ------------------
 
 
-def test_submitted_simulation_is_not_editable_even_just_for_the_model_input():
+def test_submitted_snapshot_draft_is_not_editable_even_just_for_the_model_input():
     """No new rule (tasks.md T3): setting or clearing `model_input_id` is
     just another field on `SimulationUpdateRequest`, guarded by the same
     `_is_editable` every other draft field already goes through."""

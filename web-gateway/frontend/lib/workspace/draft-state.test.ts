@@ -16,7 +16,7 @@ import {
   type DraftLocal,
   type ServerRefusals,
 } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 // A snapshot with three output variables, 2001 as its coverage, and a model
 // that writes one file a year, so a run may only start on January 1.
@@ -38,7 +38,7 @@ const GONE: DraftContext = { dataset: null, snapshotState: "gone" };
 const UNAVAILABLE: DraftContext = { dataset: null, snapshotState: "unavailable" };
 
 const draft = (overrides: Partial<Job> = {}): Job =>
-  fakeSimulation("DRAFT", {
+  fakeDraft("DRAFT", {
     parameters: {
       temporal_range_start: "2001-01-01",
       temporal_range_end: "2003-12-31",

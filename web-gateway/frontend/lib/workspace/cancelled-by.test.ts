@@ -15,7 +15,7 @@ describe("cancelledBy", () => {
         },
         "me@purdue.edu"
       )
-    ).toBe("You cancelled this simulation");
+    ).toBe("You cancelled this run");
   });
 
   it("names someone else", () => {

@@ -5,7 +5,7 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DeriveSimulationButton } from "@/components/workspace/derive-simulation-button";
+import { DeriveDraftButton } from "@/components/workspace/derive-draft-button";
 import {
   ArrowLeft,
   Calendar,
@@ -107,7 +107,7 @@ export default async function DatasetDetailPage({
               </Link>
             </Button>
             <div className="flex flex-wrap items-center gap-3">
-              <DeriveSimulationButton datasetId={dataset.id} />
+              <DeriveDraftButton datasetId={dataset.id} />
             </div>
           </div>
 

@@ -8,10 +8,10 @@ import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { LinkPending } from "@/components/ui/link-pending";
 import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
-import { SimulationListSkeleton } from "@/components/workspace/simulation-list-skeleton";
-import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
-import { SimulationSearchInput, SimulationSearchProvider } from "@/components/workspace/simulation-search";
-import { SimulationTable } from "@/components/workspace/simulation-table";
+import { DraftListSkeleton } from "@/components/workspace/draft-list-skeleton";
+import { DraftListTabs } from "@/components/workspace/draft-list-tabs";
+import { DraftSearchInput, DraftSearchProvider } from "@/components/workspace/draft-search";
+import { DraftTable } from "@/components/workspace/draft-table";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
 import { runNotes } from "@/lib/jobs/run-notes";
@@ -36,15 +36,15 @@ export default async function WorkspacePage({
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className={WORKSPACE_MAIN}>
-        <WorkspaceHeader section="simulations" />
+        <WorkspaceHeader section="drafts" />
 
         <div className={cn(WORKSPACE_CONTAINER, "flex-1 py-6 sm:py-8")}>
           {/* Not keyed by the URL: a click on a tab or a page link is a
               transition, so the list on screen stays until the next one is
               ready, and the link that was clicked shows a spinner if that
               takes a while. The skeleton is only for the first load. */}
-          <Suspense fallback={<SimulationListSkeleton />}>
-            <SimulationList here={here} page={page} statusFilter={statusFilter} />
+          <Suspense fallback={<DraftListSkeleton />}>
+            <DraftList here={here} page={page} statusFilter={statusFilter} />
           </Suspense>
         </div>
       </main>
@@ -55,7 +55,7 @@ export default async function WorkspacePage({
 
 /** The tab bar and what it selects. Async, so the page around it (and the
  *  skeleton) is on screen while the backend answers. */
-async function SimulationList({
+async function DraftList({
   here,
   page,
   statusFilter,
@@ -92,10 +92,10 @@ async function SimulationList({
   const hasRows = !!jobData && jobData.items.length > 0;
 
   return (
-    <SimulationSearchProvider>
+    <DraftSearchProvider>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SimulationListTabs active={tab} stats={statsData} />
-        {hasRows && <SimulationSearchInput className="sm:w-72" />}
+        <DraftListTabs active={tab} stats={statsData} />
+        {hasRows && <DraftSearchInput className="sm:w-72" />}
       </div>
 
       {!jobData ? (
@@ -105,7 +105,7 @@ async function SimulationList({
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="font-medium">Couldn&apos;t load your simulations.</p>
+            <p className="font-medium">Couldn&apos;t load your snapshot drafts.</p>
             <p>
               Nothing was changed.{" "}
               <Link href={here} className="font-medium underline underline-offset-2">
@@ -120,7 +120,7 @@ async function SimulationList({
             <Play className="size-6 text-muted-foreground" aria-hidden="true" />
           </div>
           <p className="mb-1 text-sm font-medium text-foreground">
-            {tab ? tab.empty.title : "No simulations found"}
+            {tab ? tab.empty.title : "No snapshot drafts found"}
           </p>
           <p className="mx-auto mb-6 max-w-sm text-sm text-muted-foreground">
             {tab ? tab.empty.hint : "This filter matches nothing. Pick one of the tabs above."}
@@ -129,19 +129,19 @@ async function SimulationList({
             <Button asChild size="sm" className="min-h-10 sm:min-h-8">
               <Link href="/workspace/new">
                 <Plus className="mr-1.5 size-4" />
-                New simulation
+                New snapshot draft
               </Link>
             </Button>
             {statusFilter && (
               <Button asChild size="sm" variant="ghost" className="min-h-10 sm:min-h-8">
-                <Link href={listHref(undefined)}>Show all simulations</Link>
+                <Link href={listHref(undefined)}>Show all snapshot drafts</Link>
               </Button>
             )}
           </div>
         </div>
       ) : (
         <div className="mt-4">
-          <SimulationTable
+          <DraftTable
             jobs={jobData.items}
             runNotes={notes}
             moreThanOnePage={jobData.total_pages > 1}
@@ -199,6 +199,6 @@ async function SimulationList({
           )}
         </div>
       )}
-    </SimulationSearchProvider>
+    </DraftSearchProvider>
   );
 }

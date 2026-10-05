@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { updateSimulation } from "@/lib/jobs/actions";
+import { updateDraft } from "@/lib/jobs/actions";
 import type { ActionResult, Job } from "@/lib/jobs/types";
 import { writeDraftCache } from "@/lib/workspace/draft-cache";
 import {
@@ -179,7 +179,7 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
       host.commit({ inflight: true, failure: null });
       let result: ActionResult<Job>;
       try {
-        result = await updateSimulation(latest.jobId, patch);
+        result = await updateDraft(latest.jobId, patch);
       } catch (error) {
         result = {
           ok: false,
@@ -332,7 +332,7 @@ export function useDraftSaver({
   initialSaved: Job;
   local: DraftLocal;
   ctx: DraftContext;
-  /** Save nothing while true: the draft is not stored (a new simulation). */
+  /** Save nothing while true: the draft is not stored (a new snapshot draft). */
   disabled?: boolean;
 }): UseDraftSaver {
   const localKey = useMemo(() => canonicalKey(local, ctx), [local, ctx]);

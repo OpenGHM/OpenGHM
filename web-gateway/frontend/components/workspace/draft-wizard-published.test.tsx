@@ -3,12 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { ActionResult, Job, PublishedAnswer } from "@/lib/jobs/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
-const { deriveSimulation, updateSimulation, fetchJob, submitSimulation, publishedAnswer, push, replace, refresh, toast } =
+const { deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, push, replace, refresh, toast } =
   vi.hoisted(() => ({
-    deriveSimulation: vi.fn(),
-    updateSimulation: vi.fn(),
+    deriveDraft: vi.fn(),
+    updateDraft: vi.fn(),
     fetchJob: vi.fn(),
-    submitSimulation: vi.fn(),
+    submitDraft: vi.fn(),
     publishedAnswer: vi.fn(),
     push: vi.fn(),
     replace: vi.fn(),
@@ -16,13 +16,13 @@ const { deriveSimulation, updateSimulation, fetchJob, submitSimulation, publishe
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   }));
 vi.mock("@/lib/jobs/actions", () => ({
-  deriveSimulation,
-  updateSimulation,
+  deriveDraft,
+  updateDraft,
   fetchJob,
-  submitSimulation,
+  submitDraft,
   publishedAnswer,
-  deleteSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
+  deleteDraft: vi.fn(),
+  duplicateDraft: vi.fn(),
 }));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
@@ -36,7 +36,7 @@ vi.mock("next/navigation", () => ({
 
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache } from "@/lib/workspace/draft-cache";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -57,7 +57,7 @@ const PARAMETERS = {
   custom_params: null,
 };
 /** A stored draft. */
-const STORED = fakeSimulation("DRAFT", {
+const STORED = fakeDraft("DRAFT", {
   id: "job-1",
   dataset_id: dataset.id,
   dataset_title: "Fake Snapshot",
@@ -65,7 +65,7 @@ const STORED = fakeSimulation("DRAFT", {
   parameters: PARAMETERS,
   slurm_config: { cores: 8, walltime: "02:00:00" },
 });
-/** What the server would create for a new simulation: no id. */
+/** What the server would create for a new snapshot draft: no id. */
 const PREVIEW: Job = { ...STORED, id: "" };
 const CREATED: Job = { ...STORED, id: "new-1", updated_at: "2026-10-01T12:00:01.000Z" };
 
@@ -107,13 +107,13 @@ const fresh = (step: "run" | "review" = "review") => {
 
 beforeEach(() => {
   clearDraftCache();
-  for (const m of [deriveSimulation, updateSimulation, fetchJob, submitSimulation, publishedAnswer, push, replace, refresh]) {
+  for (const m of [deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, push, replace, refresh]) {
     m.mockReset();
   }
   for (const m of Object.values(toast)) m.mockReset();
   publishedAnswer.mockResolvedValue({ ok: true, data: ANSWERED });
-  deriveSimulation.mockResolvedValue({ ok: true, data: CREATED });
-  updateSimulation.mockImplementation(async (): Promise<ActionResult<Job>> => ({ ok: true, data: CREATED }));
+  deriveDraft.mockResolvedValue({ ok: true, data: CREATED });
+  updateDraft.mockImplementation(async (): Promise<ActionResult<Job>> => ({ ok: true, data: CREATED }));
   fetchJob.mockResolvedValue({ ok: true, data: STORED });
 });
 afterEach(() => {
@@ -164,7 +164,7 @@ describe("Review, for a stored draft", () => {
       status: 502,
       code: "published_listing_unavailable",
     });
-    submitSimulation.mockResolvedValue({ ok: true, data: { ...STORED, status: "PENDING" } });
+    submitDraft.mockResolvedValue({ ok: true, data: { ...STORED, status: "PENDING" } });
     stored();
     expect(await screen.findByRole("button", { name: "Submit to Anvil" })).toBeTruthy();
     expect(screen.getByText(/couldn't check whether this is already published/)).toBeTruthy();
@@ -173,7 +173,7 @@ describe("Review, for a stored draft", () => {
     fireEvent.click(submitButton()!);
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
-    await waitFor(() => expect(submitSimulation).toHaveBeenCalledWith("job-1"));
+    await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("job-1"));
   });
 
   it("treats a network failure like a failed check", async () => {
@@ -197,18 +197,18 @@ describe("Review, for a stored draft", () => {
   });
 
   it("Run anyway saves, confirms with copy about rerunning and allocation, and submits with rerun: true", async () => {
-    submitSimulation.mockResolvedValue({ ok: true, data: { ...STORED, status: "PENDING" } });
+    submitDraft.mockResolvedValue({ ok: true, data: { ...STORED, status: "PENDING" } });
     stored();
     await screen.findByRole("heading", { name: "Results already published" });
     fireEvent.click(runAnyway());
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog.textContent).toContain("already published");
     expect(dialog.textContent).toContain("compute time");
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Run anyway" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/job-1"));
-    expect(submitSimulation).toHaveBeenCalledTimes(1);
-    expect(submitSimulation).toHaveBeenCalledWith("job-1", { rerun: true });
+    expect(submitDraft).toHaveBeenCalledTimes(1);
+    expect(submitDraft).toHaveBeenCalledWith("job-1", { rerun: true });
   });
 
   it("Cancel in that dialog runs nothing", async () => {
@@ -218,13 +218,13 @@ describe("Review, for a stored draft", () => {
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
   });
 
   it("shows the results card when a submit is refused as answered (the page was out of step)", async () => {
     publishedAnswer.mockResolvedValueOnce({ ok: true, data: NOT_ANSWERED });
     publishedAnswer.mockResolvedValueOnce({ ok: true, data: ANSWERED });
-    submitSimulation.mockResolvedValue({
+    submitDraft.mockResolvedValue({
       ok: false,
       reason: "error",
       status: 409,
@@ -237,7 +237,7 @@ describe("Review, for a stored draft", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
     expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledTimes(2);
-    expect(submitSimulation).toHaveBeenCalledWith("job-1");
+    expect(submitDraft).toHaveBeenCalledWith("job-1");
     expect(screen.getByRole("button", { name: "Run anyway" })).toBeTruthy();
     expect(submitButton()).toBeNull();
   });
@@ -254,13 +254,13 @@ describe("Review, for a stored draft", () => {
   });
 });
 
-describe("Review, for a new simulation that is not saved", () => {
+describe("Review, for a new snapshot draft that is not saved", () => {
   it("asks with the preview's parameters and shows the results card; nothing is saved by looking", async () => {
     fresh();
     expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledWith(dataset.id, PARAMETERS, null);
-    expect(deriveSimulation).not.toHaveBeenCalled();
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(screen.getByText("Not saved")).toBeTruthy();
   });
 
@@ -270,24 +270,24 @@ describe("Review, for a new simulation that is not saved", () => {
     const save = screen.getAllByRole("button", { name: "Save as draft" })[0] as HTMLButtonElement;
     expect(save.disabled).toBe(false);
     fireEvent.click(save);
-    await waitFor(() => expect(deriveSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(deriveDraft).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=review"));
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
   });
 
   it("Run anyway saves the draft first, then submits it with rerun: true", async () => {
-    submitSimulation.mockResolvedValue({ ok: true, data: { ...CREATED, status: "PENDING" } });
+    submitDraft.mockResolvedValue({ ok: true, data: { ...CREATED, status: "PENDING" } });
     fresh();
     await screen.findByRole("heading", { name: "Results already published" });
     fireEvent.click(runAnyway());
     const dialog = await screen.findByRole("alertdialog");
     // The draft was created for the confirmation, not before the click.
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(submitDraft).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Run anyway" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1"));
-    expect(submitSimulation).toHaveBeenCalledWith("new-1", { rerun: true });
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(submitDraft).toHaveBeenCalledWith("new-1", { rerun: true });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
   });
 
   it("shows the submit card, with a note, when the check fails", async () => {
@@ -308,7 +308,7 @@ describe("Review, for a new simulation that is not saved", () => {
 
   it("a submit refused as answered saves the draft and opens it on Review, where the answer shows", async () => {
     publishedAnswer.mockResolvedValueOnce({ ok: true, data: NOT_ANSWERED });
-    submitSimulation.mockResolvedValue({
+    submitDraft.mockResolvedValue({
       ok: false,
       reason: "error",
       status: 409,

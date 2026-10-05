@@ -6,10 +6,10 @@ import type { Job, JobLive, JobStatus } from "@/lib/jobs/types";
 vi.mock("@/lib/jobs/actions", () => ({
   pollJobStatus: vi.fn(),
   cancelJob: vi.fn(),
-  deleteSimulation: vi.fn(),
-  deriveSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
-  submitSimulation: vi.fn(),
+  deleteDraft: vi.fn(),
+  deriveDraft: vi.fn(),
+  duplicateDraft: vi.fn(),
+  submitDraft: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("next/navigation", () => ({
@@ -19,7 +19,7 @@ vi.mock("next/navigation", () => ({
 
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
-import { previewSimulation } from "@/lib/workspace/fixtures";
+import { previewDraftJob } from "@/lib/workspace/fixtures";
 import { FAILED_CAUSES, PREVIEW_GROUPS } from "@/lib/workspace/preview";
 import { FAILURE_COPY } from "@/lib/workspace/failure-copy";
 
@@ -97,7 +97,7 @@ function summary(job: Job, { live = null, viewerEmail = null }: { live?: JobLive
 }
 
 function live(status: JobStatus, over: Partial<Job> = {}) {
-  return previewSimulation(status.toLowerCase(), {
+  return previewDraftJob(status.toLowerCase(), {
     overrides: {
       submitted_at: "2026-09-30T12:00:00Z",
       started_at: status === "RUNNING" ? "2026-09-30T12:00:00Z" : null,
@@ -152,9 +152,9 @@ describe("a queued job", () => {
     render(summary(live("PENDING"), { live: QUEUED }));
     const cancel = screen.getByRole("button", { name: "Cancel" });
     fireEvent.click(cancel);
-    expect(await screen.findByText("Cancel this simulation?")).toBeTruthy();
+    expect(await screen.findByText("Cancel this run?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
-    await waitFor(() => expect(screen.queryByText("Cancel this simulation?")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Cancel this run?")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(cancel));
   });
 
@@ -172,7 +172,7 @@ describe("a running job", () => {
     expect(container.textContent).toContain("Simulating 2001-03-04 · run 2000-01-01 → 2001-12-31 · 59 %");
 
     const bars = screen.getAllByRole("progressbar");
-    expect(bars.map((b) => b.getAttribute("aria-label"))).toEqual(["Simulation progress", "Walltime used"]);
+    expect(bars.map((b) => b.getAttribute("aria-label"))).toEqual(["Run progress", "Walltime used"]);
     expect(bars[0].getAttribute("aria-valuenow")).toBe("59");
     expect(bars[1].getAttribute("aria-valuenow")).toBe("18");
     // Elapsed against walltime is labelled as such, with no percentage of its own.
@@ -241,7 +241,7 @@ describe("the freshness line", () => {
     const first = render(summary(live("RUNNING")));
     expect(first.container.textContent).toContain("Checking with SLURM…");
     cleanup();
-    const over = render(summary(previewSimulation("completed")));
+    const over = render(summary(previewDraftJob("completed")));
     expect(over.container.textContent).not.toContain("SLURM…");
     expect(over.container.textContent).not.toContain("Checked with SLURM");
   });
@@ -249,7 +249,7 @@ describe("the freshness line", () => {
 
 describe("a completed job", () => {
   it("says how long it ran and shows the path, the manifest and the retention line", () => {
-    const job = previewSimulation("completed");
+    const job = previewDraftJob("completed");
     const { container } = render(summary(job));
     expect(screen.getByRole("heading", { name: "Completed in 1 h" })).toBeTruthy();
     const text = container.textContent ?? "";
@@ -264,20 +264,20 @@ describe("a completed job", () => {
   });
 
   it("shows only the purge notice when the files are gone", () => {
-    const { container } = render(summary(previewSimulation("completed:purged")));
+    const { container } = render(summary(previewDraftJob("completed:purged")));
     expect(container.textContent).toContain("purge removed this run");
     expect(container.textContent).not.toContain("Results on Anvil scratch");
   });
 
   it("is honest about an old job with no record of its output", () => {
-    const { container } = render(summary(previewSimulation("completed:legacy")));
+    const { container } = render(summary(previewDraftJob("completed:legacy")));
     expect(container.textContent).toContain("before the gateway recorded what it wrote");
   });
 });
 
 describe("a failed job", () => {
   it.each(FAILED_CAUSES)("%s shows its title and the backend's message", (cause) => {
-    const job = previewSimulation(`failed:${cause}`);
+    const job = previewDraftJob(`failed:${cause}`);
     const html = renderToString(summary(job));
     expect(html).toContain(escape(FAILURE_COPY[cause].title));
     expect(html).toContain(escape(job.failure!.message));
@@ -286,7 +286,7 @@ describe("a failed job", () => {
   });
 
   it("opens a short excerpt, and keeps a long one behind Show log excerpt", () => {
-    const base = previewSimulation("failed:out_of_memory");
+    const base = previewDraftJob("failed:out_of_memory");
     const slurmLine = "error: Detected 1 oom_kill event in StepId=1.batch. Some of the step tasks have been OOM Killed.";
     const shortHtml = renderToString(summary({ ...base, failure: { ...base.failure!, excerpt: slurmLine } }));
     expect(shortHtml).toContain("<pre");
@@ -302,66 +302,66 @@ describe("a failed job", () => {
   });
 
   it("offers to try again right there, and says to pick a longer walltime after a timeout", () => {
-    render(summary(previewSimulation("failed:timeout")));
+    render(summary(previewDraftJob("failed:timeout")));
     expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
     expect(screen.getByText(/longer walltime/)).toBeTruthy();
     expect(screen.queryByText("Start a new draft")).toBeNull();
   });
 
   it("offers nothing to retry after a cause that has no next step", () => {
-    const job = previewSimulation("failed:wbm_error");
+    const job = previewDraftJob("failed:wbm_error");
     const none = { ...job, failure: { ...job.failure!, cause: "cancelled_by_user" as const } };
     expect(renderToString(summary(none))).not.toContain("Try again with these settings");
   });
 
   it("shows the backend's message and not the per-cause body", () => {
-    const job = previewSimulation("failed:out_of_memory");
+    const job = previewDraftJob("failed:out_of_memory");
     const html = renderToString(summary(job));
     expect(html).toContain(escape(job.failure!.message));
     expect(html).not.toContain(escape(FAILURE_COPY.out_of_memory.body));
   });
 
   it.each(FAILED_CAUSES)("shows the per-cause body when %s has no message", (cause) => {
-    const base = previewSimulation(`failed:${cause}`);
+    const base = previewDraftJob(`failed:${cause}`);
     const html = renderToString(summary({ ...base, failure: { ...base.failure!, message: "" } }));
     expect(html).toContain(escape(FAILURE_COPY[cause].body));
   });
 
   it("falls back to the stored reason for a job with no verdict", () => {
-    const job = { ...previewSimulation("failed:wbm_error"), failure: null, status_reason: "old reason" };
+    const job = { ...previewDraftJob("failed:wbm_error"), failure: null, status_reason: "old reason" };
     const html = renderToString(summary(job));
     expect(html).toContain("The run failed");
     expect(html).toContain("old reason");
   });
 
   it("is an amber warning when a limit was hit, and red otherwise", () => {
-    expect(renderToString(summary(previewSimulation("failed:timeout")))).toContain("border-l-status-running");
-    expect(renderToString(summary(previewSimulation("failed:wbm_error")))).toContain("border-l-status-failed");
+    expect(renderToString(summary(previewDraftJob("failed:timeout")))).toContain("border-l-status-running");
+    expect(renderToString(summary(previewDraftJob("failed:wbm_error")))).toContain("border-l-status-failed");
   });
 });
 
 describe("a cancelled job", () => {
   it("says you, someone else, and Anvil", () => {
-    const you = previewSimulation("cancelled:user", { viewerEmail: "me@purdue.edu" });
-    expect(renderToString(summary(you, { viewerEmail: "me@purdue.edu" }))).toContain("You cancelled this simulation");
-    const other = previewSimulation("cancelled:other");
+    const you = previewDraftJob("cancelled:user", { viewerEmail: "me@purdue.edu" });
+    expect(renderToString(summary(you, { viewerEmail: "me@purdue.edu" }))).toContain("You cancelled this run");
+    const other = previewDraftJob("cancelled:other");
     expect(renderToString(summary(other, { viewerEmail: "me@purdue.edu" }))).toContain(
       "Cancelled by colleague@example.test"
     );
-    const system = previewSimulation("cancelled:system");
+    const system = previewDraftJob("cancelled:system");
     expect(renderToString(summary(system, { viewerEmail: "me@purdue.edu" }))).toContain(
       "Cancelled by Anvil or an administrator"
     );
   });
 
   it("offers to try again with these settings, not to start over from the snapshot", () => {
-    render(summary(previewSimulation("cancelled:user")));
+    render(summary(previewDraftJob("cancelled:user")));
     expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
     expect(screen.queryByText("Start a new draft")).toBeNull();
   });
 
   it("renders the same twice, so hydration has nothing to disagree about", () => {
-    const job = previewSimulation("cancelled:user", { overrides: { cancel_requested_at: "2026-09-30T10:00:00Z" } });
+    const job = previewDraftJob("cancelled:user", { overrides: { cancel_requested_at: "2026-09-30T10:00:00Z" } });
     expect(renderToString(summary(job))).toBe(renderToString(summary(job)));
   });
 });
@@ -369,7 +369,7 @@ describe("a cancelled job", () => {
 describe("every preview", () => {
   const all = PREVIEW_GROUPS.flatMap((g) => g.options);
   it.each(all.map((o) => o.key))("builds a job for %s, and the summary renders it", (key) => {
-    const job = previewSimulation(key);
+    const job = previewDraftJob(key);
     expect(job.status).toBe(all.find((o) => o.key === key)!.status);
     expect(() => renderToString(summary(job))).not.toThrow();
   });

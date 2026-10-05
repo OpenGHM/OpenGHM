@@ -1,28 +1,28 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ActionResult, Job, SimulationUpdateRequest } from "@/lib/jobs/types";
+import type { ActionResult, Job, DraftUpdateRequest } from "@/lib/jobs/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 
-const { deriveSimulation, updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, replace, refresh, toast } =
+const { deriveDraft, updateDraft, fetchJob, submitDraft, deleteDraft, push, replace, refresh, toast } =
   vi.hoisted(() => ({
-    deriveSimulation: vi.fn(),
-    updateSimulation: vi.fn(),
+    deriveDraft: vi.fn(),
+    updateDraft: vi.fn(),
     fetchJob: vi.fn(),
-    submitSimulation: vi.fn(),
-    deleteSimulation: vi.fn(),
+    submitDraft: vi.fn(),
+    deleteDraft: vi.fn(),
     push: vi.fn(),
     replace: vi.fn(),
     refresh: vi.fn(),
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   }));
 vi.mock("@/lib/jobs/actions", () => ({
-  deriveSimulation,
-  updateSimulation,
+  deriveDraft,
+  updateDraft,
   fetchJob,
-  submitSimulation,
-  deleteSimulation,
-  duplicateSimulation: vi.fn(),
+  submitDraft,
+  deleteDraft,
+  duplicateDraft: vi.fn(),
 }));
 // These tests are about saving and submitting: no published results are looked
 // up (draft-wizard-published.test.tsx covers the lookup).
@@ -41,7 +41,7 @@ vi.mock("next/navigation", () => ({
 
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache } from "@/lib/workspace/draft-cache";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 beforeAll(() => {
@@ -57,7 +57,7 @@ const FOUND: DraftContext = { dataset, snapshotState: "found" };
 const BASE_PATH = `/workspace/new/${dataset.id}`;
 
 /** The draft the server would create: its defaults, and no id. */
-const PREVIEW = fakeSimulation("DRAFT", {
+const PREVIEW = fakeDraft("DRAFT", {
   id: "",
   dataset_id: dataset.id,
   dataset_title: "Fake Snapshot",
@@ -78,7 +78,7 @@ const CREATED: Job = { ...PREVIEW, id: "new-1", updated_at: "2026-10-01T12:00:01
 function updateImpl(initial: Job = CREATED) {
   let current = initial;
   let n = 1;
-  return async (_id: string, patch: SimulationUpdateRequest): Promise<ActionResult<Job>> => {
+  return async (_id: string, patch: DraftUpdateRequest): Promise<ActionResult<Job>> => {
     n += 1;
     current = {
       ...current,
@@ -92,12 +92,12 @@ function updateImpl(initial: Job = CREATED) {
 
 beforeEach(() => {
   clearDraftCache();
-  for (const m of [deriveSimulation, updateSimulation, fetchJob, submitSimulation, deleteSimulation, push, replace, refresh]) {
+  for (const m of [deriveDraft, updateDraft, fetchJob, submitDraft, deleteDraft, push, replace, refresh]) {
     m.mockReset();
   }
   for (const m of Object.values(toast)) m.mockReset();
-  deriveSimulation.mockResolvedValue({ ok: true, data: CREATED });
-  updateSimulation.mockImplementation(updateImpl());
+  deriveDraft.mockResolvedValue({ ok: true, data: CREATED });
+  updateDraft.mockImplementation(updateImpl());
   fetchJob.mockResolvedValue({ ok: true, data: CREATED });
 });
 afterEach(() => {
@@ -151,11 +151,11 @@ function click(el: Element): boolean {
   return heldBack;
 }
 
-describe("a new simulation: what the page says", () => {
-  it("opens on Run settings, titled New simulation, badged Not saved, with no id anywhere", () => {
+describe("a new snapshot draft: what the page says", () => {
+  it("opens on Run settings, titled New snapshot draft, badged Not saved, with no id anywhere", () => {
     wizard();
     expect(heading()).toBe("Run settings");
-    expect(h1()).toBe("New simulation");
+    expect(h1()).toBe("New snapshot draft");
     expect(screen.getByText("Not saved")).toBeTruthy();
     expect(screen.queryByText("Draft")).toBeNull();
     expect(screen.getByText("Not saved yet")).toBeTruthy();
@@ -163,17 +163,17 @@ describe("a new simulation: what the page says", () => {
     expect(document.body.textContent).not.toContain("Untitled");
     expect(screen.getByRole("link", { name: "Based on Fake Snapshot" }).getAttribute("href")).toBe(`/repository/${dataset.id}`);
     // Nothing that belongs to a stored draft.
-    expect(screen.queryByRole("button", { name: "Delete draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete snapshot draft" })).toBeNull();
     expect(screen.getByRole("link", { name: "Cancel" }).getAttribute("href")).toBe("/workspace");
   });
 
-  it("follows the name as it is typed, and goes back to New simulation when it is cleared", () => {
+  it("follows the name as it is typed, and goes back to New snapshot draft when it is cleared", () => {
     wizard();
     type("  Colorado basin ");
     expect(h1()).toBe("Colorado basin");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Colorado basin");
     type("   ");
-    expect(h1()).toBe("New simulation");
+    expect(h1()).toBe("New snapshot draft");
   });
 
   it("focuses the empty Name on open", () => {
@@ -209,7 +209,7 @@ describe("a new simulation: what the page says", () => {
   });
 });
 
-describe("a new simulation: nothing is saved by itself", () => {
+describe("a new snapshot draft: nothing is saved by itself", () => {
   it("sends nothing while it is edited, however long it waits, and not when the step changes", async () => {
     wizard();
     type("Colorado");
@@ -218,8 +218,8 @@ describe("a new simulation: nothing is saved by itself", () => {
     nameInput().focus();
     nameInput().blur();
     await pause(1_500);
-    expect(deriveSimulation).not.toHaveBeenCalled();
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     expect(fetchJob).not.toHaveBeenCalled();
     expect(screen.getByText("Not saved yet")).toBeTruthy();
   });
@@ -241,10 +241,10 @@ describe("Save as draft", () => {
     type("Colorado");
     fireEvent.click(saveButtons()[0]);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(deriveSimulation).toHaveBeenCalledWith(dataset.id);
-    expect(updateSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(deriveDraft).toHaveBeenCalledWith(dataset.id);
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -260,30 +260,30 @@ describe("Save as draft", () => {
     wizard();
     fireEvent.click(saveButtons()[0]);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
   });
 
   it("is off with a spinner while it saves, and never creates two drafts from a double click", async () => {
     let answer!: (r: ActionResult<Job>) => void;
-    deriveSimulation.mockReturnValue(new Promise((r) => (answer = r)));
+    deriveDraft.mockReturnValue(new Promise((r) => (answer = r)));
     wizard();
     type("Colorado");
     const [header, bottom] = saveButtons();
     fireEvent.click(header);
     fireEvent.click(header);
     fireEvent.click(bottom);
-    await waitFor(() => expect(deriveSimulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(deriveDraft).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Saving…" })).toHaveLength(2));
     expect(saveButtons().every((b) => b.disabled)).toBe(true);
     await act(async () => answer({ ok: true, data: CREATED }));
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
     // Still off while the page opens the draft.
     expect(saveButtons().every((b) => b.disabled)).toBe(true);
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
   });
 
   it("shows a failed create under the header, keeps every input and stays on the page", async () => {
-    deriveSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
+    deriveDraft.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
     wizard();
     type("Colorado");
     fireEvent.click(saveButtons()[0]);
@@ -296,14 +296,14 @@ describe("Save as draft", () => {
     expect(screen.getByText("Not saved yet")).toBeTruthy();
 
     // Trying again creates it.
-    deriveSimulation.mockResolvedValue({ ok: true, data: CREATED });
+    deriveDraft.mockResolvedValue({ ok: true, data: CREATED });
     fireEvent.click(saveButtons()[0]);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the sign-in banner for an ended session", async () => {
-    deriveSimulation.mockResolvedValue({ ok: false, reason: "session_expired" });
+    deriveDraft.mockResolvedValue({ ok: false, reason: "session_expired" });
     wizard();
     fireEvent.click(saveButtons()[0]);
     expect(await screen.findByText("Your session has expired.")).toBeTruthy();
@@ -312,7 +312,7 @@ describe("Save as draft", () => {
   });
 
   it("opens the draft even when its settings could not be saved, and says which", async () => {
-    updateSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
+    updateDraft.mockResolvedValue({ ok: false, reason: "error", message: "Server error", status: 503 });
     wizard();
     type("Colorado");
     fireEvent.click(saveButtons()[0]);
@@ -324,7 +324,7 @@ describe("Save as draft", () => {
   });
 });
 
-describe("Ctrl/Cmd+S in a new simulation", () => {
+describe("Ctrl/Cmd+S in a new snapshot draft", () => {
   const keydown = (init: KeyboardEventInit) => {
     const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
     act(() => void document.dispatchEvent(event));
@@ -337,13 +337,13 @@ describe("Ctrl/Cmd+S in a new simulation", () => {
     expect(keydown({ key: "s", metaKey: true }).defaultPrevented).toBe(true);
     keydown({ key: "s", ctrlKey: true });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
     expect(replace).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("leaving a new simulation", () => {
+describe("leaving a new snapshot draft", () => {
   it("asks nothing before anything has changed: Cancel and links just go", () => {
     wizard();
     expect(click(screen.getByRole("link", { name: "Cancel" }))).toBe(false);
@@ -394,7 +394,7 @@ describe("leaving a new simulation", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(push).not.toHaveBeenCalled();
     expect(nameInput().value).toBe("Colorado");
-    expect(deriveSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
   });
 
   it("Discard changes goes to the link and creates nothing", async () => {
@@ -404,8 +404,8 @@ describe("leaving a new simulation", () => {
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Discard changes" }));
     expect(push).toHaveBeenCalledWith("/repository?q=wbm");
-    expect(deriveSimulation).not.toHaveBeenCalled();
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     // The prompt is off from here on: nothing asks about this navigation.
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
@@ -419,14 +419,14 @@ describe("leaving a new simulation", () => {
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save as draft" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/repository"));
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
     expect(replace).not.toHaveBeenCalled();
   });
 
   it("stays on the page, with the error, when the save from the dialog fails to create", async () => {
-    deriveSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
+    deriveDraft.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
     wizard();
     type("Colorado");
     click(outsideLink("/repository"));
@@ -450,7 +450,7 @@ describe("leaving a new simulation", () => {
   });
 });
 
-describe("leaving a new simulation with the browser's Back and Forward", () => {
+describe("leaving a new snapshot draft with the browser's Back and Forward", () => {
   const RUN = `${BASE_PATH}?step=run`;
   const REVIEW = `${BASE_PATH}?step=review`;
   const at = () => window.location.pathname + window.location.search;
@@ -499,7 +499,7 @@ describe("leaving a new simulation with the browser's Back and Forward", () => {
     expect(at()).toBe(RUN);
     expect(heading()).toBe("Run settings");
     expect(nameInput().value).toBe("Colorado");
-    expect(deriveSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
 
     await press(-1);
     await screen.findByRole("alertdialog");
@@ -515,8 +515,8 @@ describe("leaving a new simulation with the browser's Back and Forward", () => {
     await waitFor(() => expect(at()).toBe("/workspace"));
     expect(nav.index).toBe(0);
     expect(nav.entries).toHaveLength(2);
-    expect(deriveSimulation).not.toHaveBeenCalled();
-    expect(updateSimulation).not.toHaveBeenCalled();
+    expect(deriveDraft).not.toHaveBeenCalled();
+    expect(updateDraft).not.toHaveBeenCalled();
     // Nothing asks about the move, the browser included.
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
@@ -530,15 +530,15 @@ describe("leaving a new simulation with the browser's Back and Forward", () => {
     await press(-1);
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Save as draft" }));
     await waitFor(() => expect(at()).toBe("/workspace"));
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
   it("stays, with the error, when the save from the dialog fails", async () => {
-    deriveSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
+    deriveDraft.mockResolvedValue({ ok: false, reason: "error", message: "Backend exploded" });
     history();
     wizard();
     type("Colorado");
@@ -631,13 +631,13 @@ describe("Submit from Review", () => {
     type("Colorado");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     const dialog = await openSubmitDialog();
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
     expect(dialog.textContent).toContain("Fake Snapshot");
     expect(dialog.textContent).toContain("2001-01-01 to 2001-12-31");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
     // The draft exists and holds the name: leaving now loses nothing, so nothing asks.
     expect(screen.getByText("Draft saved")).toBeTruthy();
     const unload = new Event("beforeunload", { cancelable: true });
@@ -646,13 +646,13 @@ describe("Submit from Review", () => {
   });
 
   it("submits the draft it created, and opens the run's page", async () => {
-    submitSimulation.mockResolvedValue({ ok: true, data: SUBMITTED });
+    submitDraft.mockResolvedValue({ ok: true, data: SUBMITTED });
     wizard({ step: "review" });
     confirm(await openSubmitDialog());
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1"));
-    expect(submitSimulation).toHaveBeenCalledWith("new-1");
-    expect(submitSimulation).toHaveBeenCalledTimes(1);
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(submitDraft).toHaveBeenCalledWith("new-1");
+    expect(submitDraft).toHaveBeenCalledTimes(1);
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
     // Nothing asks about leaving a page that has been submitted.
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
@@ -660,33 +660,33 @@ describe("Submit from Review", () => {
   });
 
   it("opens the saved draft on Review, and says so, when the submit did not go through", async () => {
-    submitSimulation.mockResolvedValue({ ok: false, reason: "error", message: "Anvil said no", code: "sbatch_rejected" });
+    submitDraft.mockResolvedValue({ ok: false, reason: "error", message: "Anvil said no", code: "sbatch_rejected" });
     wizard({ step: "review" });
     confirm(await openSubmitDialog());
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=review"));
     expect(toast.error).toHaveBeenCalledWith("Your draft was saved, but it was not submitted. Anvil said no");
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
   });
 
   it("does not submit, and does not create twice, when the draft could not be saved", async () => {
-    deriveSimulation.mockResolvedValueOnce({ ok: false, reason: "error", message: "Backend exploded" });
+    deriveDraft.mockResolvedValueOnce({ ok: false, reason: "error", message: "Backend exploded" });
     wizard({ step: "review" });
     fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
     await waitFor(() =>
       expect(screen.getAllByRole("alert").some((a) => a.textContent?.includes("could not be saved, so nothing was submitted"))).toBe(true)
     );
     expect(screen.getAllByRole("alert").some((a) => a.textContent?.includes("Backend exploded"))).toBe(true);
-    expect(submitSimulation).not.toHaveBeenCalled();
+    expect(submitDraft).not.toHaveBeenCalled();
     expect(screen.queryByRole("alertdialog")).toBeNull();
 
     // Again: creates it this time, once.
     const dialog = await openSubmitDialog();
-    expect(deriveSimulation).toHaveBeenCalledTimes(2);
+    expect(deriveDraft).toHaveBeenCalledTimes(2);
     expect(dialog).toBeTruthy();
   });
 
   it("a retry after the settings could not be sent finds the draft and does not derive again", async () => {
-    updateSimulation
+    updateDraft
       .mockResolvedValueOnce({ ok: false, reason: "error", message: "Server error", status: 503 })
       .mockImplementation(updateImpl());
     wizard();
@@ -699,7 +699,7 @@ describe("Submit from Review", () => {
 
     const dialog = await openSubmitDialog();
     expect(dialog).toBeTruthy();
-    expect(deriveSimulation).toHaveBeenCalledTimes(1);
-    expect(updateSimulation).toHaveBeenCalledTimes(2);
+    expect(deriveDraft).toHaveBeenCalledTimes(1);
+    expect(updateDraft).toHaveBeenCalledTimes(2);
   });
 });

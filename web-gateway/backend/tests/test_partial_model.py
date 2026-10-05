@@ -4,7 +4,7 @@ Salvaged from the abandoned ``2026-09-20-snapshot-drafts`` mission
 (``tests/test_draft_model.py``, T1) and retargeted: these tests exercised
 ``PartialSnapshotMetadata`` (a partial view of the *whole* generated
 snapshot), which no longer exists as a production type now that a
-simulation only needs a partial ``about`` (``app.models.job.PartialAbout``).
+snapshot draft only needs a partial ``about`` (``app.models.job.PartialAbout``).
 The mechanism being pinned — nested/list partials, ``constr`` metadata
 surviving, enums still validating, ``extra="forbid"`` — is exactly the same,
 so it is tested here directly against the full generated

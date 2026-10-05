@@ -37,7 +37,7 @@ class UserDB(BaseModel):
     reset_token_hash: str | None = None
     reset_token_expires_at: datetime | None = None
     is_active: bool = True
-    # Whether a `role: user` may submit a simulation (ADR 0024). Only an
+    # Whether a `role: user` may submit a run (ADR 0024). Only an
     # administrator sets it. admin and staff are permitted implicitly, so it
     # matters for role `user` alone. Legacy documents carry no such key: absent
     # means False.

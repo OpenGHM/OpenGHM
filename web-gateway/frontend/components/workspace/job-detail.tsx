@@ -10,7 +10,7 @@ import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
 
 /**
  * The job detail page below the site header: the header (breadcrumb, the
- * simulation's name and status, the title of the snapshot it is based on, the actions) and, in the order a person
+ * snapshot draft's name and status, the title of the snapshot it is based on, the actions) and, in the order a person
  * reads it, the status summary (is it running, did it work, why not, where are
  * the results), the logs, and the details of the run. One view for two routes:
  * the real page (`app/workspace/[id]`) renders it from the backend, and the

@@ -7,7 +7,7 @@ import type { Dataset } from "@/lib/repository/types";
 afterEach(cleanup);
 
 const LONG_TITLE =
-  "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
+  "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
 
 function snapshot(id: string, name: string, over: { version?: string; end?: string; tags?: Dataset["about"]["tags"] } = {}) {
   const base = fakeDataset();
@@ -28,7 +28,7 @@ const TUTORIAL = snapshot("tutorial", "WBM v2.0.0 simulation as tutorial: [CONUS
   end: "2001-12-31",
   tags: ["tutorial"],
 });
-const WYOMING = snapshot("wyoming", "WBM v1.0.0 Wyoming_tracking simulation");
+const WYOMING = snapshot("wyoming", "WBM v1.0.0 Wyoming_tracking snapshot draft");
 
 function grid(over: Partial<React.ComponentProps<typeof SnapshotGrid>> = {}) {
   const onSelect = vi.fn();

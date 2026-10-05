@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { Job } from "@/lib/jobs/types";
 
-vi.mock("@/lib/jobs/actions", () => ({ cancelJob: vi.fn(), deleteSimulation: vi.fn() }));
+vi.mock("@/lib/jobs/actions", () => ({ cancelJob: vi.fn(), deleteDraft: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -10,10 +10,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 import {
-  SimulationSearchInput,
-  SimulationSearchProvider,
-} from "@/components/workspace/simulation-search";
-import { SimulationTable } from "@/components/workspace/simulation-table";
+  DraftSearchInput,
+  DraftSearchProvider,
+} from "@/components/workspace/draft-search";
+import { DraftTable } from "@/components/workspace/draft-table";
 
 afterEach(cleanup);
 
@@ -38,14 +38,14 @@ function job(id: string, status: Job["status"], over: Partial<Job> = {}): Job {
 
 const NOTES = { b: "Run 2000–2005" };
 
-const items = () => within(screen.getByRole("list", { name: "Simulations" })).getAllByRole("listitem");
+const items = () => within(screen.getByRole("list", { name: "Snapshot drafts" })).getAllByRole("listitem");
 
-describe("the simulation list", () => {
+describe("the snapshot draft list", () => {
   it("is one card of rows with a small header, not a table", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
     expect(screen.queryByRole("table")).toBeNull();
     expect(items()).toHaveLength(1);
-    const card = screen.getByRole("list", { name: "Simulations" }).parentElement!;
+    const card = screen.getByRole("list", { name: "Snapshot drafts" }).parentElement!;
     expect(card.className).toContain("rounded-xl");
     expect(card.className).toContain("bg-card");
     // The header is for the eye: every row names its own fields for a screen reader.
@@ -53,7 +53,7 @@ describe("the simulation list", () => {
   });
 
   it("makes the whole row a link: the name's link is stretched over it", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     const row = items()[0];
     const link = within(row).getByRole("link", { name: "Run a" });
     expect(link.getAttribute("href")).toBe("/workspace/a");
@@ -66,8 +66,8 @@ describe("the simulation list", () => {
   });
 
   it("puts the title of the snapshot under the name, in one line with the whole title on hover", () => {
-    const title = "WBM v1.0.0 Global_tracking simulation for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
-    render(<SimulationTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} runNotes={NOTES} />);
+    const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
+    render(<DraftTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} runNotes={NOTES} />);
     const line = within(items()[0]).getByText(title);
     expect(line.getAttribute("title")).toBe(title);
     expect(line.className).toContain("truncate");
@@ -76,31 +76,31 @@ describe("the simulation list", () => {
   });
 
   it("makes up no name for the snapshot: nothing but its title and the run note is there", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);
   });
 
   it("adds the run period after the title only for a run shorter than the snapshot covers", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
     expect(within(items()[0]).queryByText(/Run 2000/)).toBeNull();
     const note = within(items()[1]).getByText(/Run 2000–2005/);
     expect(note.className).toContain("shrink-0");
   });
 
   it("does not print a Model Snapshot badge on every row", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
     expect(screen.queryByText("Model Snapshot")).toBeNull();
   });
 
   it("keeps the row, with the title and no run note, for a job with no note", () => {
-    render(<SimulationTable jobs={[job("z", "COMPLETED")]} runNotes={{}} />);
+    render(<DraftTable jobs={[job("z", "COMPLETED")]} runNotes={{}} />);
     expect(within(items()[0]).getByRole("link", { name: "Run z" })).toBeTruthy();
     expect(within(items()[0]).getByText("Dataset one")).toBeTruthy();
     expect(within(items()[0]).queryByText(/Run 2/)).toBeNull();
   });
 
   it("shows the status as a dot and a word in its colour, not as a bordered badge", () => {
-    render(<SimulationTable jobs={[job("a", "FAILED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "FAILED")]} runNotes={NOTES} />);
     const word = within(items()[0]).getByText("Failed");
     expect(word.className).toContain("text-status-failed");
     expect(word.className).not.toContain("border");
@@ -108,20 +108,20 @@ describe("the simulation list", () => {
   });
 
   it("prints the update time as a TimeStamp with its absolute time on hover", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
     const time = items()[0].querySelector("time");
     expect(time?.getAttribute("datetime")).toBe("2026-09-30T12:00:00Z");
     expect(time?.getAttribute("title")).toBeTruthy();
   });
 
   it("falls back to the creation time for a job that has never been updated", () => {
-    render(<SimulationTable jobs={[job("a", "DRAFT", { updated_at: null })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "DRAFT", { updated_at: null })]} runNotes={NOTES} />);
     expect(items()[0].querySelector("time")?.getAttribute("datetime")).toBe("2026-09-30T10:00:00Z");
   });
 
   it("stacks on a phone with the same markup: one list, no second copy and no table", () => {
-    render(<SimulationTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} runNotes={NOTES} />);
-    expect(screen.getAllByRole("list", { name: "Simulations" })).toHaveLength(1);
+    render(<DraftTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} runNotes={NOTES} />);
+    expect(screen.getAllByRole("list", { name: "Snapshot drafts" })).toHaveLength(1);
     // Name and meta, then status and time, with Delete beside them; from sm up they are columns.
     expect(items()[0].className).toContain("sm:grid-cols-[");
     expect(items()[0].className).toContain("grid-cols-[minmax(0,1fr)_auto]");
@@ -129,7 +129,7 @@ describe("the simulation list", () => {
 
   it("names an untitled draft 'Untitled draft', with the start of its id apart and muted", () => {
     render(
-      <SimulationTable
+      <DraftTable
         jobs={[job("0123456789abcdef", "DRAFT", { about: null, slug: null, sim_id: "" })]}
         runNotes={NOTES}
       />
@@ -140,12 +140,12 @@ describe("the simulation list", () => {
     expect(id.className).toContain("font-mono");
     expect(id.className).toContain("text-muted-foreground");
     // The delete button still names the draft in full.
-    expect(within(row).getByRole("button", { name: "Delete draft Untitled (01234567)" })).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Delete snapshot draft Untitled (01234567)" })).toBeTruthy();
   });
 
   it("names an untitled job by its slug, then its sim id", () => {
     render(
-      <SimulationTable
+      <DraftTable
         jobs={[job("a", "DRAFT", { about: null, slug: "my-slug" }), job("b", "DRAFT", { about: null })]}
         runNotes={NOTES}
       />
@@ -156,21 +156,21 @@ describe("the simulation list", () => {
 
   it("offers a visible Delete on a draft and an ended job, never on an active one, and no menu", () => {
     render(
-      <SimulationTable
+      <DraftTable
         jobs={[job("a", "RUNNING"), job("b", "DRAFT"), job("c", "FAILED"), job("d", "COMPLETING")]}
         runNotes={NOTES}
       />
     );
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Delete draft Run b",
-      "Delete Run c",
+      "Delete snapshot draft Run b",
+      "Delete snapshot draft Run c",
     ]);
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("keeps Delete above the row's link, muted until hover or focus", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
-    const button = screen.getByRole("button", { name: "Delete Run a" });
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    const button = screen.getByRole("button", { name: "Delete snapshot draft Run a" });
     expect(button.className).toContain("z-10");
     expect(button.className).toContain("text-muted-foreground");
     expect(button.className).toContain("hover:text-destructive");
@@ -178,24 +178,24 @@ describe("the simulation list", () => {
   });
 
   it("opens the delete confirmation from a row's button without navigating", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete Run a" }));
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete snapshot draft Run a" }));
     expect(screen.getByRole("alertdialog")).toBeTruthy();
-    expect(screen.getByText("Delete this simulation?")).toBeTruthy();
+    expect(screen.getByText("Delete this snapshot draft?")).toBeTruthy();
   });
 });
 
 describe("the list's search", () => {
   function setup(jobs: Job[], moreThanOnePage = false) {
     return render(
-      <SimulationSearchProvider>
-        <SimulationSearchInput />
-        <SimulationTable jobs={jobs} runNotes={NOTES} moreThanOnePage={moreThanOnePage} />
-      </SimulationSearchProvider>
+      <DraftSearchProvider>
+        <DraftSearchInput />
+        <DraftTable jobs={jobs} runNotes={NOTES} moreThanOnePage={moreThanOnePage} />
+      </DraftSearchProvider>
     );
   }
   const type = (text: string) =>
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search simulations by name" }), { target: { value: text } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search snapshot drafts by name" }), { target: { value: text } });
 
   it("filters the loaded rows by name as you type, in any case", () => {
     setup([job("a", "COMPLETED", { about: { name: "CONUS tutorial" } }), job("b", "FAILED", { about: { name: "Global run" } })]);
@@ -209,8 +209,8 @@ describe("the list's search", () => {
   it("says nothing matches, and Clear search brings the rows back", () => {
     setup([job("a", "COMPLETED")]);
     type("zzz");
-    expect(screen.getByText(/No simulation matches/)).toBeTruthy();
-    expect(screen.queryByRole("list", { name: "Simulations" })).toBeNull();
+    expect(screen.getByText(/No snapshot draft matches/)).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Snapshot drafts" })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
     expect(items()).toHaveLength(1);
   });
@@ -218,7 +218,7 @@ describe("the list's search", () => {
   it("says it looked only at this page when the list has more pages", () => {
     setup([job("a", "COMPLETED")], true);
     type("zzz");
-    expect(screen.getByText("Only the simulations on this page were searched.")).toBeTruthy();
+    expect(screen.getByText("Only the snapshot drafts on this page were searched.")).toBeTruthy();
   });
 
   it("clears on Escape", () => {
@@ -230,7 +230,7 @@ describe("the list's search", () => {
   });
 
   it("is left alone when the table is rendered without a search box", () => {
-    render(<SimulationTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     expect(items()).toHaveLength(1);
   });
 });

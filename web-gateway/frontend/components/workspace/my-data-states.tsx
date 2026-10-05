@@ -11,7 +11,7 @@ export function MyDataEmpty() {
       </div>
       <p className="mb-1 text-sm font-medium text-foreground">Nothing published yet</p>
       <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-        When a simulation finishes, you will be able to publish it as a model snapshot from
+        When a snapshot draft&apos;s run finishes, you will be able to publish it as a model snapshot from
         its page.
       </p>
     </div>

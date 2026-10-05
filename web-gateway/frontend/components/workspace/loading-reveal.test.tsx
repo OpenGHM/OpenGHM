@@ -6,15 +6,15 @@ vi.mock("@/components/landing/footer", () => ({ Footer: () => <footer>site foote
 
 import JobDetailLoading from "@/app/workspace/[id]/loading";
 import { ListSkeleton, OverviewSkeleton } from "@/components/admin/admin-skeletons";
-import { SimulationListSkeleton } from "./simulation-list-skeleton";
+import { DraftListSkeleton } from "./draft-list-skeleton";
 
 afterEach(cleanup);
 
 // A skeleton that carries `reveal-delayed` is invisible for the first 300 ms
 // (app/globals.css), so a load that is fast enough shows no placeholder at all.
 describe("skeletons wait before they show", () => {
-  it("the simulation list's", () => {
-    render(<SimulationListSkeleton />);
+  it("the snapshot draft list's", () => {
+    render(<DraftListSkeleton />);
     expect(screen.getByRole("status").className).toContain("reveal-delayed");
   });
 
@@ -30,7 +30,7 @@ describe("skeletons wait before they show", () => {
     render(<JobDetailLoading />);
     const header = screen.getByText("site header");
     const footer = screen.getByText("site footer");
-    const body = screen.getByRole("status", { name: "Loading simulation" }).closest(".reveal-delayed")!;
+    const body = screen.getByRole("status", { name: "Loading snapshot draft" }).closest(".reveal-delayed")!;
     expect(body).not.toBeNull();
     expect(body.contains(header)).toBe(false);
     expect(body.contains(footer)).toBe(false);

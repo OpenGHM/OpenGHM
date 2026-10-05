@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ActionResult, Job, SimulationUpdateRequest } from "@/lib/jobs/types";
+import type { ActionResult, Job, DraftUpdateRequest } from "@/lib/jobs/types";
 import { fromJob, type DraftContext, type DraftLocal } from "@/lib/workspace/draft-state";
 import { createNewDraftSaver, describeNotSaved, SNAPSHOT_GONE } from "@/lib/workspace/save-new-draft";
-import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
 
 const dataset = fakeDataset({ runStartAlignment: "year" });
 const CTX: DraftContext = { dataset, snapshotState: "found" };
 
 /** The draft the server creates from a snapshot: its defaults, with an id. */
-const created = fakeSimulation("DRAFT", {
+const created = fakeDraft("DRAFT", {
   id: "draft-1",
   dataset_id: dataset.id,
   about: null,
@@ -37,7 +37,7 @@ function deps(over: { derive?: ReturnType<typeof vi.fn>; update?: ReturnType<typ
   const derive = over.derive ?? vi.fn(async () => ok(created));
   const update =
     over.update ??
-    vi.fn(async (_id: string, patch: SimulationUpdateRequest) => ok(named(created, patch.about?.name ?? null)));
+    vi.fn(async (_id: string, patch: DraftUpdateRequest) => ok(named(created, patch.about?.name ?? null)));
   return { derive, update, saver: createNewDraftSaver({ derive, update }) };
 }
 
@@ -142,7 +142,7 @@ describe("a create that works and a fill that does not", () => {
     const update = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, reason: "error", message: "Server error", status: 503 })
-      .mockImplementationOnce(async (_id: string, patch: SimulationUpdateRequest) => ok(named(created, patch.about?.name ?? null)));
+      .mockImplementationOnce(async (_id: string, patch: DraftUpdateRequest) => ok(named(created, patch.about?.name ?? null)));
     const { derive, saver } = deps({ update });
     const local = { ...base(), name: "Run A" };
 
@@ -167,7 +167,7 @@ describe("a create that works and a fill that does not", () => {
         code: "run_start_not_aligned",
         suggestedStart: "2002-01-01",
       })
-      .mockImplementationOnce(async (_id: string, patch: SimulationUpdateRequest) => ok(named(created, patch.about?.name ?? null, 2)));
+      .mockImplementationOnce(async (_id: string, patch: DraftUpdateRequest) => ok(named(created, patch.about?.name ?? null, 2)));
     // The client's own rule is off for this one (no snapshot to check against), so the server decides.
     const local = {
       ...base(),

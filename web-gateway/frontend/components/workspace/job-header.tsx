@@ -6,8 +6,8 @@ import { Copy, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobStatusBadge, STATUS_LABEL } from "@/components/jobs/job-status-badge";
 import { ActionError } from "@/components/workspace/action-error";
-import { DuplicateSimulationButton } from "@/components/workspace/duplicate-simulation-button";
-import { PageHeader, SimulationBreadcrumb } from "@/components/workspace/page-header";
+import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
+import { PageHeader, DraftBreadcrumb } from "@/components/workspace/page-header";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -40,7 +40,7 @@ function StatusAnnouncer({ status }: { status: DisplayStatus }) {
 
 /**
  * The page's header, the same shape as the draft wizard's and the Data
- * Repository's: breadcrumb, the simulation's own name with its status, one
+ * Repository's: breadcrumb, the snapshot draft's own name with its status, one
  * muted line saying which snapshot it is based on (its title, cut to one line,
  * the whole title on hover; and the run id and SLURM job), and, once the job has
  * ended, "Duplicate", "New from this model snapshot" and Delete on the right.
@@ -67,7 +67,7 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
 
   return (
     <PageHeader
-      top={<SimulationBreadcrumb current={name} />}
+      top={<DraftBreadcrumb current={name} />}
       title={name}
       badge={<JobStatusBadge status={shown} />}
       meta={
@@ -86,7 +86,7 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
         ended ? (
           <div className="flex flex-wrap items-center gap-3 sm:justify-end">
             {offersDuplicate && (
-              <DuplicateSimulationButton
+              <DuplicateDraftButton
                 jobId={job.id}
                 label="Duplicate"
                 variant="outline"

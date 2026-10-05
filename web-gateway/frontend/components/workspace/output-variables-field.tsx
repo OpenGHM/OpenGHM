@@ -191,7 +191,7 @@ export function OutputVariablesSection({
           {selected.length === 0 && (
             <p className="flex items-start gap-2 text-xs text-warning">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              Choose at least one output variable. A simulation with none can&apos;t be submitted.
+              Choose at least one output variable. A snapshot draft with none can&apos;t be submitted.
             </p>
           )}
           {!hasSnapshot && selected.length > 0 && (

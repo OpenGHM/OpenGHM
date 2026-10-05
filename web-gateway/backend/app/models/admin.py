@@ -126,7 +126,7 @@ class SpoolVariantUsage(BaseModel):
 
 
 class SpoolLease(BaseModel):
-    """What one running simulation holds in the cache; never deleted until it
+    """What one active run holds in the cache; never deleted until it
     expires (UTC, same format as `last_used`)."""
 
     sim_id: str
@@ -173,7 +173,7 @@ class SpoolDeletedUnit(BaseModel):
 class SpoolCacheClearResponse(BaseModel):
     """POST /admin/anvil/spool-cache/clear. With `dry_run` nothing was deleted
     and the counts are what would be. `skipped_leased` is the units kept
-    because a running simulation holds them."""
+    because an active run holds them."""
 
     dry_run: bool
     deleted_units: int

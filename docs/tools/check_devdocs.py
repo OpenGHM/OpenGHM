@@ -101,7 +101,7 @@ NOT_A_REPO_PATH = re.compile(
     r"|^[~/]"
     r"|^\^"                # a token that starts with an anchor is a regex
     r"|^toolkits/"
-    r"|^(snapshots|containers|model-inputs|raw-data|wbm-code|wbmAncillaryData|spool|wbm_output"
+    r"|^(snapshots|containers|model-inputs|raw-data|old|wbm-code|wbmAncillaryData|spool|wbm_output"
     r"|data_init|gdal_test_files|WBM_run_state|meta_data|masks|python"
     r"|model|utilities|crops|soil|data|registry|apps|base|overlays|gateway|linux"
     r"|metadata|layout|examples|docs|snapshot-spec|wbm_init|tests|test|node_modules"

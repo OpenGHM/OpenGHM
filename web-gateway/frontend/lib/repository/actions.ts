@@ -144,7 +144,7 @@ export async function fetchModelInputs(
  * status" badge — a snapshot's `uses.modelInput.id` always names one, but
  * only checking membership here tells "present" from "inherited-missing"
  * (the same distinction the draft wizard's summary draws for a
- * simulation's effective model input, by looking it up by id). `page_size: 100` is a one-shot upper bound, not a
+ * snapshot draft's effective model input, by looking it up by id). `page_size: 100` is a one-shot upper bound, not a
  * pagination contract — the catalogue is small; this fetches it whole.
  */
 export async function fetchModelInputIds(): Promise<Set<string>> {

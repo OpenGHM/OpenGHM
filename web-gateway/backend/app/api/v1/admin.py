@@ -180,7 +180,7 @@ async def job_status_breakdown(
     days: int | None = Query(None, ge=1, le=365, description="Omit for all-time"),
 ):
     """Current distribution of job statuses, site-wide. Doesn't change
-    GET /jobs/stats — that endpoint's counts are consumed by the simulation
+    GET /jobs/stats — that endpoint's counts are consumed by the snapshot draft
     list's tabs and the admin cards; this keeps the full per-status grouping
     that endpoint already computes internally and then discards."""
     db = get_db()
@@ -248,7 +248,7 @@ async def clear_spool_cache(
     body: SpoolCacheClearRequest = SpoolCacheClearRequest(),
     user: TokenPayload = Depends(require_permission(Permission.SYSTEM_MANAGE)),
 ):
-    """Delete every unit of the spool cache that no running simulation holds
+    """Delete every unit of the spool cache that no active run holds
     (`openghm spool prune --all`), whatever the quota says. Leased units are
     kept and counted in `skipped_leased`; the cache refills from S3 on the next
     run that needs it. `dry_run` reports what would go and deletes nothing, and

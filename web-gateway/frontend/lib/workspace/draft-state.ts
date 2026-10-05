@@ -22,7 +22,7 @@ import type {
   AboutUpdate,
   Job,
   JobParameters,
-  SimulationUpdateRequest,
+  DraftUpdateRequest,
   SlurmConfig,
   SpatialDomain,
 } from "@/lib/jobs/types";
@@ -87,7 +87,7 @@ export interface ServerRefusals {
 
 interface DraftPatch {
   /** Null when the server already holds everything that may be sent. */
-  patch: SimulationUpdateRequest | null;
+  patch: DraftUpdateRequest | null;
   /** Fields whose local value is not in the patch and not on the server. */
   withheld: DraftField[];
   /** What the server said about a withheld field, for the field to show. */
@@ -243,7 +243,7 @@ export function buildDraftPatch(
   const order = snapshotVariableOrder(ctx);
   const want = canonical(local, order);
   const have = canonical(fromJob(saved), order);
-  const patch: SimulationUpdateRequest = {};
+  const patch: DraftUpdateRequest = {};
   const withheld = new Set<DraftField>();
   const errors: Partial<Record<DraftField, string>> = {};
 
@@ -311,7 +311,7 @@ export function buildDraftPatch(
 // ─── Refusals ────────────────────────────────────────────────────────────────
 
 /** The groups a patch carries. */
-function groupsOf(patch: SimulationUpdateRequest): DraftGroup[] {
+function groupsOf(patch: DraftUpdateRequest): DraftGroup[] {
   const groups: DraftGroup[] = [];
   if ("model_input_id" in patch) groups.push("modelInput");
   if (patch.parameters) groups.push("parameters");
@@ -320,7 +320,7 @@ function groupsOf(patch: SimulationUpdateRequest): DraftGroup[] {
   return groups;
 }
 
-function groupValue(patch: SimulationUpdateRequest, group: DraftGroup): unknown {
+function groupValue(patch: DraftUpdateRequest, group: DraftGroup): unknown {
   switch (group) {
     case "modelInput":
       return patch.model_input_id;
@@ -380,7 +380,7 @@ export function refuseStart(
  */
 export function refuseGroups(
   refusals: ServerRefusals,
-  patch: SimulationUpdateRequest,
+  patch: DraftUpdateRequest,
   failure: { message: string; code?: string; paths?: readonly string[] }
 ): ServerRefusals {
   const sent = groupsOf(patch);

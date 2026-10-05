@@ -75,7 +75,7 @@ describe("stepHref", () => {
 });
 
 describe("parseStep with a fallback", () => {
-  it("opens a new simulation at Run settings when the step is missing or not one of ours", () => {
+  it("opens a new snapshot draft at Run settings when the step is missing or not one of ours", () => {
     for (const raw of [undefined, null, "", "start", "../x", []]) {
       expect(parseStep(raw, "run")).toBe("run");
     }

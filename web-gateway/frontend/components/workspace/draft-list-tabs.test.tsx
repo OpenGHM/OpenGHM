@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { SimulationListTabs } from "@/components/workspace/simulation-list-tabs";
+import { DraftListTabs } from "@/components/workspace/draft-list-tabs";
 import { STATUS_TABS, listHref, tabForStatus } from "@/lib/jobs/filters";
 
 const status = { pending: false };
@@ -17,15 +17,15 @@ afterEach(() => {
 const STATS = { total: 12, running: 3, completed: 4, failed: 1, draft: 2, cancelled: 2 };
 
 function links() {
-  return within(screen.getByRole("navigation", { name: "Filter simulations" })).getAllByRole("link");
+  return within(screen.getByRole("navigation", { name: "Filter snapshot drafts" })).getAllByRole("link");
 }
 
 describe("the list's tab bar", () => {
   it("is one link per bucket, each with its count", () => {
-    render(<SimulationListTabs active={tabForStatus(undefined)} stats={STATS} />);
+    render(<DraftListTabs active={tabForStatus(undefined)} stats={STATS} />);
     expect(links().map((a) => a.textContent)).toEqual([
       "All12",
-      "Draft2",
+      "Editing2",
       "Active3",
       "Completed4",
       "Failed1",
@@ -42,9 +42,9 @@ describe("the list's tab bar", () => {
   });
 
   it("marks the selected tab with aria-current, and only that one", () => {
-    render(<SimulationListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
+    render(<DraftListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
     const current = links().filter((a) => a.getAttribute("aria-current") === "page");
-    expect(current.map((a) => a.textContent)).toEqual(["Draft2"]);
+    expect(current.map((a) => a.textContent)).toEqual(["Editing2"]);
   });
 
   it("reads the status the way the backend does, without regard to case", () => {
@@ -55,20 +55,20 @@ describe("the list's tab bar", () => {
   });
 
   it("selects no tab for a status that matches none", () => {
-    render(<SimulationListTabs active={tabForStatus("nonsense")} stats={STATS} />);
+    render(<DraftListTabs active={tabForStatus("nonsense")} stats={STATS} />);
     expect(links().some((a) => a.hasAttribute("aria-current"))).toBe(false);
   });
 
   it("drops the counts, rather than showing zeros, when they could not be loaded", () => {
-    render(<SimulationListTabs active={STATUS_TABS[0]} stats={null} />);
+    render(<DraftListTabs active={STATUS_TABS[0]} stats={null} />);
     expect(links().map((a) => a.textContent)).toEqual([
-      "All", "Draft", "Active", "Completed", "Failed", "Cancelled",
+      "All", "Editing", "Active", "Completed", "Failed", "Cancelled",
     ]);
   });
 
   it("is the quiet segmented control of the repository's List / Grid switch, with the selected segment on the card colour", () => {
-    render(<SimulationListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
-    const nav = screen.getByRole("navigation", { name: "Filter simulations" });
+    render(<DraftListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
+    const nav = screen.getByRole("navigation", { name: "Filter snapshot drafts" });
     expect(nav.className).toContain("bg-muted");
     expect(nav.className).not.toContain("border");
     const selected = links().find((a) => a.getAttribute("aria-current") === "page")!;
@@ -77,8 +77,8 @@ describe("the list's tab bar", () => {
   });
 
   it("scrolls inside itself on a narrow screen and keeps every target 40 px tall", () => {
-    render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
-    const nav = screen.getByRole("navigation", { name: "Filter simulations" });
+    render(<DraftListTabs active={STATUS_TABS[0]} stats={STATS} />);
+    const nav = screen.getByRole("navigation", { name: "Filter snapshot drafts" });
     expect(nav.className).toContain("overflow-x-auto");
     expect(nav.className).toContain("max-w-full");
     for (const a of links()) expect(a.className).toContain("min-h-10");
@@ -89,13 +89,13 @@ describe("the list's pending feedback", () => {
   const spinners = () => document.querySelectorAll('[data-slot="link-pending"]');
 
   it("shows nothing while no navigation is pending", () => {
-    render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
+    render(<DraftListTabs active={STATUS_TABS[0]} stats={STATS} />);
     expect(spinners()).toHaveLength(0);
   });
 
   it("puts a delayed spinner inside the tab whose navigation is pending", () => {
     status.pending = true;
-    render(<SimulationListTabs active={STATUS_TABS[0]} stats={STATS} />);
+    render(<DraftListTabs active={STATUS_TABS[0]} stats={STATS} />);
     // useLinkStatus is mocked to be pending for every link; each tab can show it.
     expect(spinners()).toHaveLength(STATUS_TABS.length);
     for (const a of links()) {

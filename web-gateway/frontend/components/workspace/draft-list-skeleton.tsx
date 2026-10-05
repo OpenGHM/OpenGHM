@@ -1,14 +1,14 @@
 import { Skeleton } from "@/components/ui/skeleton";
-import { COLUMNS } from "@/components/workspace/simulation-columns";
+import { COLUMNS } from "@/components/workspace/draft-columns";
 
 /**
  * The list while it loads: the toolbar and five rows, in the shape of what
  * replaces them so nothing jumps. Announced once, as busy, not row by row.
  * Invisible for the first 300 ms, so a fast load never shows it.
  */
-export function SimulationListSkeleton() {
+export function DraftListSkeleton() {
   return (
-    <div role="status" aria-busy="true" aria-label="Loading simulations" className="reveal-delayed">
+    <div role="status" aria-busy="true" aria-label="Loading snapshot drafts" className="reveal-delayed">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Skeleton className="h-10.5 w-full rounded-xl sm:w-[31rem]" />
         <Skeleton className="hidden h-10.5 w-72 rounded-xl sm:block" />

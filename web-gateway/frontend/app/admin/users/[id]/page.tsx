@@ -7,7 +7,7 @@ import { AdminPage, EmptyState, InlineError } from "@/components/admin/admin-pag
 import { UserRoleStatusCard } from "@/components/admin/user-role-status-card";
 import { UserSessionsTable } from "@/components/admin/user-sessions-table";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
-import { SimulationCard } from "@/components/jobs/simulation-card";
+import { DraftCard } from "@/components/jobs/draft-card";
 import { fetchUserDetail, fetchUserSessions, fetchAuditLog } from "@/lib/admin/actions";
 import { fetchJobs } from "@/lib/jobs/actions";
 import type { SessionListResponse } from "@/lib/account/types";
@@ -87,10 +87,10 @@ export default async function AdminUserDetailPage({
                 <InlineError title="Couldn't load this user's jobs." />
               ) : recentJobs.length === 0 ? (
                 <EmptyState title="No jobs submitted yet.">
-                  Their simulations will appear here once they start one.
+                  Their snapshot drafts will appear here once they start one.
                 </EmptyState>
               ) : (
-                recentJobs.map((job) => <SimulationCard key={job.id} job={job} />)
+                recentJobs.map((job) => <DraftCard key={job.id} job={job} />)
               )}
             </CardContent>
           </Card>

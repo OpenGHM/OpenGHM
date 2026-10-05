@@ -12,7 +12,7 @@ export function cancelledBy(
   const who = job.cancel_requested_by_email;
   if (!who) return "Cancelled by its owner";
   if (viewerEmail && who.toLowerCase() === viewerEmail.toLowerCase()) {
-    return "You cancelled this simulation";
+    return "You cancelled this run";
   }
   return `Cancelled by ${who}`;
 }

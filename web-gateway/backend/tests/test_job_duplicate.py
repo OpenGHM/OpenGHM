@@ -1,5 +1,5 @@
 """POST /jobs/{id}/duplicate: a new draft that starts from one of the caller's
-own simulations. The copy takes the settings and nothing of the run that was;
+own snapshot drafts. The copy takes the settings and nothing of the run that was;
 the source is untouched; a snapshot that left the repository refuses.
 
 Runs the route and the real auth dependencies against the in-memory Mongo
@@ -191,14 +191,14 @@ def test_a_missing_snapshot_is_a_422_and_nothing_is_inserted_or_audited(client, 
     assert response.status_code == 422
     assert response.json()["detail"] == {
         "code": "snapshot_not_found",
-        "message": "The model snapshot this simulation is based on is no longer in the "
+        "message": "The model snapshot this snapshot draft is based on is no longer in the "
         "repository, so it can't be copied.",
     }
     assert _copies(db) == []
     assert not [e for e in db.audit_events.docs.values() if e["action"] == "simulation_duplicated"]
 
 
-def test_someone_elses_simulation_is_a_404_like_a_missing_one(client, db, source):
+def test_someone_elses_snapshot_draft_is_a_404_like_a_missing_one(client, db, source):
     db.users.docs["other"] = make_user("other", can_run_simulations=True)
     other = token_for("other")
     real = client.post(DUPLICATE, headers=other)

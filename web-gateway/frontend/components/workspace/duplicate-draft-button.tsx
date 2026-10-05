@@ -13,19 +13,19 @@ type CreateError = NonNullable<ReturnType<typeof useCreateDraft>["error"]>;
 function errorMessage(error: CreateError): string {
   if (error.kind === "session-expired") return "Your session has expired.";
   if (error.code === "snapshot_not_found") {
-    return "This simulation's model snapshot is no longer in the repository, so it can't be copied.";
+    return "This snapshot draft's model snapshot is no longer in the repository, so it can't be copied.";
   }
   return error.message;
 }
 
 /**
- * A new draft that copies this simulation's run settings
+ * A new draft that copies this snapshot draft's run settings
  * (`POST /jobs/{id}/duplicate`), opened at the draft wizard's second step.
- * Unlike `DeriveSimulationButton`, which starts over from the snapshot's
- * defaults, nothing the owner chose is lost. The simulation itself is not
+ * Unlike `DeriveDraftButton`, which starts over from the snapshot's
+ * defaults, nothing the owner chose is lost. The snapshot draft itself is not
  * touched.
  *
- * It is the one copy action of the simulation page, in two places so that it is
+ * It is the one copy action of the snapshot draft page, in two places so that it is
  * on the page once: "Try again with these settings" in the status summary of a
  * failed or cancelled job, "Duplicate" in the header of a completed one
  * (`summaryOffersCopy`).
@@ -35,7 +35,7 @@ function errorMessage(error: CreateError): string {
  * toast; a snapshot that has left the repository says so, because that cannot
  * be fixed by trying again.
  */
-export function DuplicateSimulationButton({
+export function DuplicateDraftButton({
   jobId,
   label = "Try again with these settings",
   variant = "default",
@@ -76,7 +76,7 @@ export function DuplicateSimulationButton({
         {label}
       </Button>
       <p id={noteId} className="sr-only">
-        Copies this simulation&apos;s run settings into a new draft.
+        Copies this snapshot draft&apos;s run settings into a new draft.
       </p>
       {error?.kind === "session-expired" && <SessionExpiredBanner className="w-full max-w-md" />}
       {error?.kind === "error" && (

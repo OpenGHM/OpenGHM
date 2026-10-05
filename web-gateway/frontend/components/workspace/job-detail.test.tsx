@@ -4,10 +4,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 vi.mock("@/lib/jobs/actions", () => ({
   pollJobStatus: vi.fn(),
   cancelJob: vi.fn(),
-  deleteSimulation: vi.fn(),
-  deriveSimulation: vi.fn(),
-  duplicateSimulation: vi.fn(),
-  submitSimulation: vi.fn(),
+  deleteDraft: vi.fn(),
+  deriveDraft: vi.fn(),
+  duplicateDraft: vi.fn(),
+  submitDraft: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("next/navigation", () => ({
@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { JobDetail } from "@/components/workspace/job-detail";
-import { fakeLive, fakeLogs, previewSimulation } from "@/lib/workspace/fixtures";
+import { fakeLive, fakeLogs, previewDraftJob } from "@/lib/workspace/fixtures";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -28,7 +28,7 @@ beforeAll(() => {
 afterEach(cleanup);
 
 function renderDetail(key: string) {
-  const job = previewSimulation(key);
+  const job = previewDraftJob(key);
   return render(
     <JobDetail
       job={job}
@@ -46,12 +46,12 @@ function before(a: HTMLElement, b: HTMLElement) {
 }
 
 describe("the detail page", () => {
-  it("titles the page with the simulation's name and puts the breadcrumb in the header", () => {
+  it("titles the page with the snapshot draft's name and puts the breadcrumb in the header", () => {
     renderDetail("completed");
-    const job = previewSimulation("completed");
+    const job = previewDraftJob("completed");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
-    expect(screen.getByRole("link", { name: "My Simulations" }).getAttribute("href")).toBe("/workspace");
-    expect(screen.queryByText("Back to Simulations")).toBeNull();
+    expect(screen.getByRole("link", { name: "My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
+    expect(screen.queryByText("Back to snapshot drafts")).toBeNull();
   });
 
   it("reads status, then logs, then details", () => {
@@ -63,7 +63,7 @@ describe("the detail page", () => {
     expect(before(logs, details)).toBe(true);
     // The old layout's sidebar cards and icon-tile headers are gone.
     expect(screen.queryByText("Job Status")).toBeNull();
-    expect(screen.queryByText("Simulation Parameters")).toBeNull();
+    expect(screen.queryByText("Snapshot draft parameters")).toBeNull();
     expect(screen.queryByText("HPC Configuration")).toBeNull();
   });
 
@@ -71,7 +71,7 @@ describe("the detail page", () => {
     renderDetail("failed:wbm_error");
     expect(screen.getAllByRole("button", { name: "Try again with these settings" })).toHaveLength(1);
     expect(screen.getAllByRole("link", { name: "New from this model snapshot" })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Delete simulation" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete snapshot draft" })).toBeTruthy();
   });
 
   it.each([
@@ -96,6 +96,6 @@ describe("the detail page", () => {
   it("puts Cancel in the summary while it runs, and nothing in the header", () => {
     renderDetail("running");
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Delete simulation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete snapshot draft" })).toBeNull();
   });
 });

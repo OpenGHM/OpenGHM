@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { deleteSimulation } from "@/lib/jobs/actions";
+import { deleteDraft } from "@/lib/jobs/actions";
 import type { FilesState } from "@/lib/jobs/types";
 
 /**
@@ -22,7 +22,7 @@ import type { FilesState } from "@/lib/jobs/types";
  * it: the detail page's button, a list row's button. The dialog says what goes
  * (ADR 0026): a draft is only a record; a finished job also has two
  * directories on Anvil, listed here by path, and deleting it removes them. If
- * anything fails the simulation still exists and the backend says why.
+ * anything fails the snapshot draft still exists and the backend says why.
  *
  * It stays open while the request is in flight. After a delete it goes to the
  * list, unless the caller is already on it and passes `onDeleted`.
@@ -30,7 +30,7 @@ import type { FilesState } from "@/lib/jobs/types";
  * Offer it only for a DRAFT or a job that has ended; the backend refuses an
  * active one (409 `job_active`).
  */
-export function DeleteSimulationDialog({
+export function DeleteDraftDialog({
   open,
   onOpenChange,
   jobId,
@@ -55,12 +55,12 @@ export function DeleteSimulationDialog({
   files: FilesState | null;
   /** Fixture data: there is no real job behind `jobId`. */
   preview?: boolean;
-  /** Called instead of going to `/workspace` once the simulation is gone,
+  /** Called instead of going to `/workspace` once the snapshot draft is gone,
    *  before `onOpenChange(false)`. */
   onDeleted?: () => void;
   /** The session ended; the caller shows the sign-in banner. */
   onSessionExpired?: () => void;
-  /** The delete failed and the simulation still exists; `message` is the
+  /** The delete failed and the snapshot draft still exists; `message` is the
    *  backend's reason, for a caller that shows it beside the control. */
   onError?: (message: string) => void;
   /** Where focus goes when the dialog closes. Radix returns it only to a
@@ -81,34 +81,32 @@ export function DeleteSimulationDialog({
     if (pending) return;
     if (preview) {
       onOpenChange(false);
-      toast.info("Preview data — there is no real simulation to delete.");
+      toast.info("Preview data — there is no real snapshot draft to delete.");
       return;
     }
     setPending(true);
     try {
-      const result = await deleteSimulation(jobId);
+      const result = await deleteDraft(jobId);
       const gone = result.ok || result.reason === "not_found";
       // A caller that tells "deleted" from "closed" hears about the delete first.
       if (gone && onDeleted) onDeleted();
       onOpenChange(false);
       if (gone) {
-        toast.success(
-          result.ok ? (isDraft ? "Draft deleted." : "Simulation deleted.") : "This simulation was already deleted."
-        );
+        toast.success(result.ok ? "Snapshot draft deleted." : "This snapshot draft was already deleted.");
         if (!onDeleted) router.push("/workspace");
       } else if (result.reason === "session_expired") {
         onSessionExpired?.();
-        toast.error("Your session has expired. Sign in to delete this simulation.");
+        toast.error("Your session has expired. Sign in to delete this snapshot draft.");
       } else {
-        // The simulation still exists: say why, and that nothing was lost.
+        // The snapshot draft still exists: say why, and that nothing was lost.
         onError?.(result.message);
         toast.error(result.message);
       }
     } catch (err) {
       const message =
         err instanceof Error
-          ? `Could not confirm the delete: ${err.message}. The simulation may still exist.`
-          : "Could not confirm the delete. The simulation may still exist.";
+          ? `Could not confirm the delete: ${err.message}. The snapshot draft may still exist.`
+          : "Could not confirm the delete. The snapshot draft may still exist.";
       onOpenChange(false);
       onError?.(message);
       toast.error(message);
@@ -128,17 +126,15 @@ export function DeleteSimulationDialog({
     >
       <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {isDraft ? "Delete this draft?" : "Delete this simulation?"}
-          </AlertDialogTitle>
+          <AlertDialogTitle>Delete this snapshot draft?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               {isDraft ? (
-                <p>This draft is removed.</p>
+                <p>This snapshot draft is removed.</p>
               ) : (
                 <>
                   <p>
-                    This removes the simulation and deletes these directories on Anvil:
+                    This removes the snapshot draft and deletes these directories on Anvil:
                   </p>
                   {paths.length > 0 ? (
                     <dl className="space-y-2">
@@ -156,7 +152,7 @@ export function DeleteSimulationDialog({
                     </dl>
                   ) : (
                     <p className="rounded-lg bg-muted p-2.5 text-xs">
-                      No directories on Anvil are recorded for this simulation.
+                      No directories on Anvil are recorded for this snapshot draft.
                     </p>
                   )}
                   <p className="font-medium text-foreground">This can&apos;t be undone.</p>
@@ -187,7 +183,7 @@ export function DeleteSimulationDialog({
             ) : (
               <>
                 <Trash2 aria-hidden="true" />
-                {isDraft ? "Delete draft" : "Delete simulation"}
+                Delete snapshot draft
               </>
             )}
           </AlertDialogAction>

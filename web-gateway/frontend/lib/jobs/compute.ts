@@ -311,11 +311,11 @@ export function submitBlockedReason(
     return "Your account has been deactivated. Contact an administrator.";
   }
   if (!profile.email_verified) {
-    return "Verify your email address to run simulations. Check your inbox for the link.";
+    return "Verify your email address to submit runs. Check your inbox for the link.";
   }
   const exempt = profile.role === "admin" || profile.role === "staff";
   if (!exempt && !(profile.role === "user" && profile.can_run_simulations)) {
-    return "Ask an administrator to allow you to run simulations. You can still prepare and save drafts.";
+    return "Ask an administrator to allow you to submit runs. You can still prepare and save drafts.";
   }
   return null;
 }

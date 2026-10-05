@@ -168,7 +168,7 @@ export function DraftSubmitCard({
         return;
       }
       if (result.reason === "session_expired") setSessionExpired(true);
-      else if (result.reason === "not_found") message = "This simulation no longer exists.";
+      else if (result.reason === "not_found") message = "This snapshot draft no longer exists.";
       else message = describeSubmitFailure(result);
     } catch (err) {
       thrown = true;
@@ -176,8 +176,8 @@ export function DraftSubmitCard({
       // timeout), not an answer from the backend: say what is known.
       message =
         err instanceof Error
-          ? `Could not confirm the submit: ${err.message}. Check My Simulations before trying again.`
-          : "Could not confirm the submit. Check My Simulations before trying again.";
+          ? `Could not confirm the submit: ${err.message}. Check My snapshot drafts before trying again.`
+          : "Could not confirm the submit. Check My snapshot drafts before trying again.";
     }
     setError(message);
     if (thrown && checkSubmitted) {
@@ -329,7 +329,7 @@ export function DraftSubmitCard({
         <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {rerun ? "Run this again on Anvil?" : "Submit this simulation to Anvil?"}
+              {rerun ? "Run this again on Anvil?" : "Submit this snapshot draft to Anvil?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {rerun

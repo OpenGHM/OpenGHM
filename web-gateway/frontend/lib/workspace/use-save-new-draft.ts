@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { deriveSimulation, updateSimulation } from "@/lib/jobs/actions";
+import { deriveDraft, updateDraft } from "@/lib/jobs/actions";
 import type { Job } from "@/lib/jobs/types";
 import type { DraftContext, DraftLocal } from "@/lib/workspace/draft-state";
 import {
@@ -13,12 +13,12 @@ import {
 
 const ACTIONS: SaveNewDraftDeps = {
   // Wrapped so that each call reads the action as it is then.
-  derive: (datasetId) => deriveSimulation(datasetId),
-  update: (jobId, patch) => updateSimulation(jobId, patch),
+  derive: (datasetId) => deriveDraft(datasetId),
+  update: (jobId, patch) => updateDraft(jobId, patch),
 };
 
 /**
- * The screen's side of saving a simulation that is not stored yet
+ * The screen's side of saving a snapshot draft that is not stored yet
  * (`save-new-draft.ts`): one saver for the life of the wizard, so a draft that
  * was created is never created again, whichever button asked.
  *

@@ -5,7 +5,7 @@ import { STATUS_TABS, listHref, type StatusTab } from "@/lib/jobs/filters";
 import type { JobStatsResponse } from "@/lib/jobs/types";
 
 /**
- * The simulation list's filter, drawn like the Data Repository's List / Grid
+ * The snapshot draft list's filter, drawn like the Data Repository's List / Grid
  * switch: one link per status bucket in a quiet segmented control, each with its
  * count. Links rather than tabs because the filter is server-side (`?status=`):
  * a click is a navigation, and `aria-current` marks where you are.
@@ -17,7 +17,7 @@ import type { JobStatsResponse } from "@/lib/jobs/types";
  * null when the counts could not be loaded, and the links then go without them
  * rather than showing zeros.
  */
-export function SimulationListTabs({
+export function DraftListTabs({
   active,
   stats,
 }: {
@@ -26,7 +26,7 @@ export function SimulationListTabs({
   stats: JobStatsResponse | null;
 }) {
   return (
-    <nav aria-label="Filter simulations" className={SEGMENTED_TRACK}>
+    <nav aria-label="Filter snapshot drafts" className={SEGMENTED_TRACK}>
       <ul className="flex gap-0.5">
         {STATUS_TABS.map((tab) => {
           const selected = tab === active;

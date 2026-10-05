@@ -3,12 +3,12 @@
 import { useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DeleteSimulationDialog } from "@/components/workspace/delete-simulation-dialog";
+import { DeleteDraftDialog } from "@/components/workspace/delete-draft-dialog";
 import type { FilesState } from "@/lib/jobs/types";
 
 /**
  * The header's Delete button (a draft, or a job that has ended; the backend
- * refuses an active one). It opens `DeleteSimulationDialog`, which says what
+ * refuses an active one). It opens `DeleteDraftDialog`, which says what
  * goes, and the dialog hands focus back to the button when it closes without
  * a delete.
  */
@@ -39,9 +39,9 @@ export function JobDeleteButton({
   /** The dialog opened or closed. A delete that went through calls `onDeleted`
    *  first, so a caller can tell closing from deleting. */
   onOpenChange?: (open: boolean) => void;
-  /** Called instead of going to `/workspace` once the simulation is gone. */
+  /** Called instead of going to `/workspace` once the snapshot draft is gone. */
   onDeleted?: () => void;
-  /** The delete failed and the simulation still exists. */
+  /** The delete failed and the snapshot draft still exists. */
   onError?: (message: string) => void;
   onSessionExpired?: () => void;
 }) {
@@ -62,10 +62,10 @@ export function JobDeleteButton({
         className="min-h-10 shrink-0 gap-2 border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
       >
         <Trash2 aria-hidden="true" />
-        {isDraft ? "Delete draft" : "Delete simulation"}
+        Delete snapshot draft
       </Button>
 
-      <DeleteSimulationDialog
+      <DeleteDraftDialog
         open={open}
         onOpenChange={(next) => {
           setOpen(next);

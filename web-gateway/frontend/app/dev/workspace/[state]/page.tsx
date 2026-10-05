@@ -5,7 +5,7 @@ import { Footer } from "@/components/landing/footer";
 import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
-import { fakeDataset, fakeLive, fakeLogs, previewSimulation } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeLive, fakeLogs, previewDraftJob } from "@/lib/workspace/fixtures";
 import { recommendedComputeFor } from "@/lib/workspace/draft-wizard";
 import { resolvePreview } from "@/lib/workspace/preview";
 
@@ -35,7 +35,7 @@ export default async function DevWorkspacePreviewPage({
   const me = await fetchMe();
   // "Cancelled by you" needs to know who you are.
   const viewerEmail = preview.key.startsWith("cancel") ? (me?.email ?? null) : null;
-  const job = previewSimulation(preview.key, { overrides: { id: "preview" }, viewerEmail });
+  const job = previewDraftJob(preview.key, { overrides: { id: "preview" }, viewerEmail });
 
   return (
     <div className="flex min-h-screen flex-col">

@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 import { JobDetails } from "@/components/workspace/job-details";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import type { Job, JobLive } from "@/lib/jobs/types";
-import { previewSimulation } from "@/lib/workspace/fixtures";
+import { previewDraftJob } from "@/lib/workspace/fixtures";
 
 afterEach(cleanup);
 
@@ -37,7 +37,7 @@ const VARIABLES = Array.from({ length: 51 }, (_, i) => `var${i + 1}`);
 
 describe("the details", () => {
   it("shows the cores and walltime the draft chose, as they are", () => {
-    const job = previewSimulation("completed", { overrides: { slurm_config: { cores: 26, walltime: "10:00:00" } } });
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 26, walltime: "10:00:00" } } });
     const { container } = details(job, { cores: 16, walltime: "15:00" });
     expect(container.textContent).toContain("Cores26");
     expect(container.textContent).toContain("Walltime10 h");
@@ -45,7 +45,7 @@ describe("the details", () => {
   });
 
   it("shows the snapshot's recommendation as numbers, marked as recommended", () => {
-    const job = previewSimulation("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
     const { container } = details(job, { cores: 16, walltime: "15:00" });
     expect(container.textContent).toContain("Cores16(recommended)");
     // 15 min plus 50%: what the submit asked SLURM for.
@@ -54,14 +54,14 @@ describe("the details", () => {
   });
 
   it("shows a dash, not a guess, when there is nothing to work it out from", () => {
-    const job = previewSimulation("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
     const { container } = details(job, null);
     expect(container.textContent).toContain("Cores—");
     expect(container.textContent).toContain("Walltime—");
   });
 
   it("prefers the limit SLURM enforces while it has the job", () => {
-    const job = previewSimulation("running", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("running", { overrides: { slurm_config: { cores: null, walltime: null } } });
     const live: JobLive = {
       checked_at: "2026-09-30T12:00:00Z",
       queue_reason: null,
@@ -75,8 +75,8 @@ describe("the details", () => {
   });
 
   it("counts the output variables, shows the first few, and expands on request", () => {
-    const job = previewSimulation("completed", {
-      overrides: { parameters: { ...previewSimulation("completed").parameters, variables: VARIABLES } },
+    const job = previewDraftJob("completed", {
+      overrides: { parameters: { ...previewDraftJob("completed").parameters, variables: VARIABLES } },
     });
     details(job, null);
     expect(screen.getByText("51")).toBeTruthy();
@@ -90,7 +90,7 @@ describe("the details", () => {
   });
 
   it("has no toggle when every variable is already shown", () => {
-    details(previewSimulation("completed"), null);
+    details(previewDraftJob("completed"), null);
     expect(screen.queryByRole("button", { name: /Show/ })).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 """DELETE /jobs/{id} (ADR 0026, mission
 2026-09-30-every-job-ends-with-a-verdict): a draft goes at once; a finished
-simulation takes both its directories on Anvil with it, and only those; an
+snapshot draft takes both its directories on Anvil with it, and only those; an
 active one is refused; and whatever goes wrong on Anvil, the document stays.
 
 The route runs against the in-memory Mongo and slurmly's real client over a
@@ -98,7 +98,7 @@ def _refused(client, db):
     [
         "/anvil/scratch/x-openghm/cache",  # a shared cache
         "/anvil/scratch/x-openghm/simulations",  # the whole output base
-        f"{OUTPUT_BASE}/sim-someone-else",  # another simulation's
+        f"{OUTPUT_BASE}/sim-someone-else",  # another run's
         f"{OUTPUT_BASE}/sim-job-1/wbm_output",  # inside this one
         f"{OUTPUT_BASE}/../cache/sim-job-1",
         f"{OUTPUT_BASE}/sim-job-1/",
@@ -107,7 +107,7 @@ def _refused(client, db):
         "sim-job-1",
     ],
 )
-def test_a_work_dir_that_is_not_exactly_this_simulations_is_refused_and_nothing_is_removed(
+def test_a_work_dir_that_is_not_exactly_this_runs_is_refused_and_nothing_is_removed(
     client, db, anvil, work_dir
 ):
     _finished(db, work_dir=work_dir)
@@ -158,7 +158,7 @@ def test_an_active_job_must_be_cancelled_first(client, db, anvil, status):
     assert response.status_code == 409
     assert response.json()["detail"] == {
         "code": "job_active",
-        "message": "Cancel the simulation before deleting it.",
+        "message": "Cancel the run before deleting this snapshot draft.",
     }
     assert "job-1" in db.jobs.docs
     assert anvil.commands == []

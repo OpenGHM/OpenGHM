@@ -11,10 +11,10 @@ export const ROLE_OPTIONS: UserRole[] = ["admin", "staff", "user", "guest"];
 /** What each role can do, as the end of a sentence. Matches the backend's
  *  role permissions (web-gateway/backend/app/core/roles.py). */
 const ROLE_CAN: Record<UserRole, string> = {
-  guest: "A guest can browse the repository but can't create simulations.",
-  user: "A user can create and manage their own simulations, and run them while their run permission is on.",
+  guest: "A guest can browse the repository but can't create snapshot drafts.",
+  user: "A user can create and manage their own snapshot drafts, and run them while their run permission is on.",
   staff:
-    "Staff can do what a user can, and also see everyone's simulations and cancel them, but can't change accounts.",
+    "Staff can do what a user can, and also see everyone's snapshot drafts and cancel them, but can't change accounts.",
   admin: "An admin can do everything staff can, and also change roles and accounts and see system status.",
 };
 
@@ -149,7 +149,7 @@ export function StatusControl({
   );
 }
 
-/** The "Can run simulations" switch. Flipping it does not apply it: it opens a
+/** The "Can submit runs" switch. Flipping it does not apply it: it opens a
  *  dialog that says what the change does, and the switch stays where it was
  *  unless the change is confirmed. What each side says is what the backend
  *  does: the flag is read when a job is submitted, so revoking it stops new
@@ -201,18 +201,18 @@ export function RunPermissionControl({
       <ConfirmActionDialog
         open={open}
         onOpenChange={setOpen}
-        title={grant ? `Let ${user.name} run simulations?` : `Stop ${user.name} from running simulations?`}
+        title={grant ? `Let ${user.name} submit runs?` : `Stop ${user.name} from submitting runs?`}
         description={
           grant
-            ? "They can submit simulations, and each run they submit spends the shared compute allocation. They also need a verified email address."
-            : "They can't submit new simulations, but can still create and edit drafts. Jobs already submitted keep running."
+            ? "They can submit runs, and each one they submit spends the shared compute allocation. They also need a verified email address."
+            : "They can't submit new runs, but can still create and edit snapshot drafts. Runs already submitted keep going."
         }
         confirmLabel={grant ? "Allow running" : "Stop running"}
         pendingLabel={grant ? "Allowing…" : "Stopping…"}
         cancelLabel={grant ? "Don't allow" : "Keep allowed"}
         destructive={!grant}
         successMessage={
-          grant ? `${user.name} can now run simulations.` : `${user.name} can no longer run simulations.`
+          grant ? `${user.name} can now submit runs.` : `${user.name} can no longer submit runs.`
         }
         failureMessage="Couldn't change the run permission. Try again. If it keeps failing, the service may be unavailable."
         onConfirm={async () => {

@@ -18,7 +18,7 @@ function formatDuration(startedAt: string, completedAt: string): string {
   return `${s}s`;
 }
 
-export function SimulationCard({ job }: { job: Job }) {
+export function DraftCard({ job }: { job: Job }) {
   const shown = displayStatus(job);
   const borderColor = HUE[shown].border;
   const displayId = job.sim_id || job.id.slice(0, 12);

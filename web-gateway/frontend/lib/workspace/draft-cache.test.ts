@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fakeSimulation } from "@/lib/workspace/fixtures";
+import { fakeDraft } from "@/lib/workspace/fixtures";
 import {
   clearDraftCache,
   newerJob,
@@ -8,7 +8,7 @@ import {
 } from "@/lib/workspace/draft-cache";
 
 const at = (iso: string | null, id = "job-1") =>
-  fakeSimulation("DRAFT", { id, updated_at: iso, slug: iso });
+  fakeDraft("DRAFT", { id, updated_at: iso, slug: iso });
 
 const OLD = "2026-10-01T10:00:00.000Z";
 const MID = "2026-10-01T10:00:05.000Z";
@@ -30,8 +30,8 @@ describe("writeDraftCache / readDraftCache", () => {
   });
 
   it("replaces a copy with one of the same time, the later write being the later answer", () => {
-    writeDraftCache(fakeSimulation("DRAFT", { id: "job-1", updated_at: MID, slug: "first" }));
-    writeDraftCache(fakeSimulation("DRAFT", { id: "job-1", updated_at: MID, slug: "second" }));
+    writeDraftCache(fakeDraft("DRAFT", { id: "job-1", updated_at: MID, slug: "first" }));
+    writeDraftCache(fakeDraft("DRAFT", { id: "job-1", updated_at: MID, slug: "second" }));
     expect(readDraftCache("job-1")?.slug).toBe("second");
   });
 

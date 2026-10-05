@@ -1,7 +1,7 @@
 """The local dev seed (deploy/local/mongo/init-mongo.js) and ADR 0024.
 
 The "Dev quick login" accounts must be ordinary accounts. Seeded under a
-mock-auth identity's id (MOCK_USER_IDS) they could never submit a simulation,
+mock-auth identity's id (MOCK_USER_IDS) they could never submit a run,
 because the backend refuses those ids whatever the environment, which is what
 keeps the identity a header-less dev request resolves to off the SLURM
 allocation. This guards the two from being coupled again.
@@ -45,7 +45,7 @@ def test_every_seeded_user_is_verified_and_active(field):
         assert re.search(rf"\b{field}:\s*true\b", body), f"{user_id}: {field}"
 
 
-def test_the_seeded_user_may_run_simulations():
+def test_the_seeded_user_may_submit_runs():
     (body,) = [b for b in _seeded_users().values() if re.search(r'role:\s*"user"', b)]
     assert re.search(r"\bcan_run_simulations:\s*true\b", body)
 

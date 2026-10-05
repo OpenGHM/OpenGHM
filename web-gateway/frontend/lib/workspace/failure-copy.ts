@@ -38,7 +38,7 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   run_refused: {
     title: "The run was refused before it started",
-    body: "The toolkit checked the model snapshot and this simulation's settings and refused to start WBM.",
+    body: "The toolkit checked the model snapshot and this snapshot draft's settings and refused to start WBM.",
     nextStep: "new_draft",
     tone: "danger",
   },
@@ -86,13 +86,13 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   cancelled_by_user: {
     title: "Cancelled",
-    body: "This simulation was stopped at its owner's request.",
+    body: "This snapshot draft was stopped at its owner's request.",
     nextStep: "none",
     tone: "neutral",
   },
   cancelled_by_system: {
     title: "Cancelled by Anvil or an administrator",
-    body: "This simulation was stopped by someone other than its owner.",
+    body: "This snapshot draft was stopped by someone other than its owner.",
     nextStep: "resubmit",
     tone: "neutral",
   },
@@ -106,7 +106,7 @@ export const NEXT_STEP_COPY: Record<NextStep, string> = {
   new_draft:
     "Try again from a new draft, change what caused this, and submit it.",
   contact_admin:
-    "Try again from a new draft. If it keeps happening, tell an administrator this simulation's ID.",
+    "Try again from a new draft. If it keeps happening, tell an administrator this snapshot draft's ID.",
   none: "",
 };
 

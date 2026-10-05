@@ -35,7 +35,7 @@ function askable(parameters: JobParameters): boolean {
 /**
  * Asks the backend whether the snapshot's published output answers the draft,
  * for the parameters on screen, saved or not (the endpoint takes parameters, not
- * a job id, so a new simulation asks too).
+ * a job id, so a new snapshot draft asks too).
  *
  * One request per distinct question while `enabled` (the Review step is
  * showing): the answer is kept for as long as the wizard lives, so going back to

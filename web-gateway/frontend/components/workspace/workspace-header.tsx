@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow, PageHeader } from "@/components/workspace/page-header";
 import { WorkspaceSections, type WorkspaceSection } from "./workspace-sections";
 
-/** What each section calls itself; only Simulations has an action, and only Snapshots & Inputs a line of explanation. */
+/** What each section calls itself; only Snapshot drafts has an action, and only Snapshots & Inputs a line of explanation. */
 const COPY: Record<WorkspaceSection, { title: string; subtitle?: string }> = {
-  simulations: { title: "Simulations" },
+  drafts: { title: "Snapshot drafts" },
   data: {
     title: "Snapshots & Inputs",
     subtitle: "What you published. Contents never change; a correction is a new version.",
@@ -25,11 +25,11 @@ export function WorkspaceHeader({ section }: { section: WorkspaceSection }) {
       top={<Eyebrow>Workspace</Eyebrow>}
       title={title}
       aside={
-        section === "simulations" ? (
+        section === "drafts" ? (
           <Button asChild className="min-h-10 w-fit shrink-0 font-semibold">
             <Link href="/workspace/new">
               <Plus aria-hidden="true" />
-              New simulation
+              New snapshot draft
             </Link>
           </Button>
         ) : (

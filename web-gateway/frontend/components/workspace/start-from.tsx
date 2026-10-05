@@ -18,11 +18,11 @@ export interface PickerSeed {
 /**
  * Step 1 of the draft wizard (ADR 0028): choose a model snapshot. A grid of the
  * repository's snapshots under the repository's search and filters
- * (`SnapshotPicker`); choosing one opens Run settings for a new simulation
+ * (`SnapshotPicker`); choosing one opens Run settings for a new snapshot draft
  * (`/workspace/new/<snapshot id>?step=run`). Nothing is created or saved by
- * choosing: the simulation exists only in the browser until "Save as draft" or
- * Submit. There is no other way in: copying a simulation is done from its own
- * page ("Duplicate", or "Try again with these settings"), where the simulation
+ * choosing: the snapshot draft exists only in the browser until "Save as draft" or
+ * Submit. There is no other way in: copying a snapshot draft is done from its own
+ * page ("Duplicate", or "Try again with these settings"), where the snapshot draft
  * is, not from here.
  */
 export function StartFrom({ usedIds, picker }: { usedIds: readonly string[]; picker: PickerSeed }) {
@@ -45,7 +45,7 @@ export function StartFrom({ usedIds, picker }: { usedIds: readonly string[]; pic
       <header className="space-y-1">
         <h2 className="text-xl font-semibold text-foreground">Choose a model snapshot</h2>
         <p className="text-sm text-muted-foreground">
-          Your simulation starts from it. You can change its settings next.
+          Your snapshot draft starts from it. You can change its settings next.
         </p>
       </header>
 
