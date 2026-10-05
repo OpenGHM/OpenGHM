@@ -81,6 +81,12 @@ every published variable, and `monthly/<variable>/` and `yearly/<variable>/`.
 A narrower period or fewer variables is a selection of those files, not a run.
 A deliberate rerun, to check that the snapshot reproduces its own output, stays
 possible as an explicit choice that says it uses allocation.
+Which run produced the published files differs by snapshot: v2's were
+replaced by a run of the published image (job 20909227) and a rerun matched
+them ([snapshot-layout.md](../reference/snapshot-layout.md),
+[metadata-format.md](../reference/metadata-format.md)); Global's and Wyoming's
+come from the lab's own runs and have not been reproduced. The results page
+says which.
 
 ### Continue
 
@@ -94,26 +100,51 @@ snapshot's own end.
 
 Today's path, with the spool of section 4.
 
-## 4. A shared spool
+## 4. A spool belongs to the model input
 
-A spool depends on the inputs and the network, not on the run's period,
-variables or parameters, so runs of the same inputs share one:
+A spool is the model input's datasets warped onto a network grid, and the
+networks are files of the model input too (Global's
+`/wbm/data/network/05min_flwdir.tif` and Wyoming's
+`Wyoming_05min_flwdir.asc` are both in model input `ff0ba2e5`). So a spool is
+decided by the model input, the network the init names, and the warp options
+the init gives each dataset; the snapshot only chooses among them. The run's
+period is not part of it: a day is a file, and runs of different periods add
+files to the same directory.
 
-- **Keyed by what the path does not say.** The cache directory is
-  `<cache>/spool/<key>/`, where the key covers the model input id (immutable,
-  [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), the
-  network file's hash, and the init's input section without its dates, output
-  variables and output paths.
-- **Built ahead, read-only during the run.** A preparation step builds the
-  days the run needs (`build_spool.pl -f N`, which v1 writes for its own run as
-  `build_spool_batch.pl` and v2 starts with `-bldSpool`), holding a lock on
-  `/home` (an `flock` on GPFS scratch is node-local). The run then mounts the
-  spool read-only, so a day the preparation missed fails loudly instead of being
-  written half-way under another run.
-- **Seeded from S3 where that is cheaper.** A snapshot's published spool can
-  fill the cache with `fetch --spool auto` (490 GB for Global).
-- **Disposable.** Scratch purges it after 30 days untouched; a purged day is
-  rebuilt.
+- **Keyed by what WBM's path does not say.** One directory per dataset as one
+  run warps it: `<model input id>/<network>/<variant>/<dataset ID>/`, where the
+  variant is a hash of the dataset's definition and the `-r`, `-p` and `-pp`
+  options. Those are exactly the fields of a line of the `build_spool_batch.pl`
+  WBM writes for every run (`make_build_spool` in `RIMS::WBM`). A run that swaps
+  one dataset shares every other directory.
+- **Three places, cheapest first.** The scratch cache
+  (`<cache>/spools/...`), then S3 (`spools/<model input id>/...`, the same tree), then building
+  it. Downloading is the faster way to fill it: a cold fetch on Anvil moved
+  17.5 GB in 26 s (`ops/docs/reference/anvil-environment.md`, private), so a
+  Global day of spool, about 130 MB, comes down in well under a second against
+  about 13 s to build it.
+- **Built into a temporary directory, then moved in.** A run lists what it
+  needs with `wbm.pl -noRun` (which writes `build_spool_batch.pl`), builds the
+  missing days with `build_spool.pl -f N` into a directory of its own, and
+  renames each finished file into the cache. Two runs that build the same day
+  at once both produce it and one rename wins; neither reads a half-written
+  file, and neither waits on a lock.
+- **Read-only during the run.** Each dataset directory is bound read-only at
+  `/wbm/spool/<network>/<dataset ID>/`; only WBM's own `Cell_Table.dat` is
+  written, in a per-run directory. A day the preparation missed makes WBM fail,
+  instead of being written under another run.
+- **A cache with a cap.** Scratch purges files untouched for 30 days. The
+  binding limit is the file count, not the size: x-openghm has 100 TB and
+  1 million files on scratch, and a 10-year spool is about 24,000 files (Global
+  480 GB, Wyoming 10 GB, as published). So the cache evicts the least recently
+  used dataset directories past a file cap. An evicted day costs a download or
+  a rebuild, nothing else.
+- **What S3 holds.** `spools/<model input id>/` is filled from the spools the published
+  snapshots already carry, copied within S3. A file there never changes once
+  written, since its key fixes its content. Whether a run uploads the days it
+  built waits on who holds the write credentials (open item 10); until then
+  they stay in the scratch cache only. A snapshot's own `spool/` then repeats
+  `spools/<model input id>/` and is retired.
 
 What it saves, measured: about 13 s of a 53 s Global day whose spool is not yet
 built (roughly 12% of a fresh 10-year run, estimated), and 0.6 s of a 1.6 s v2

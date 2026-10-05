@@ -31,8 +31,10 @@ snapshot does not already answer.**
 - A draft that only extends the period past the published end starts from the
   snapshot's end-of-run state and computes the added years.
 - Any other draft computes from an empty state, as today.
-- Runs with the same inputs share a spool cache, keyed by what WBM's spool
-  path does not record, built before the run and mounted read-only during it.
+- A spool belongs to the model input, not to a snapshot: it is kept per
+  model input, network and dataset variant, in a scratch cache and under
+  `spools/<model input id>/` on S3, filled from S3 before it is built, built into a run's own
+  directory and renamed into the cache, and mounted read-only during a run.
 
 ## Alternatives considered
 
@@ -41,8 +43,9 @@ snapshot does not already answer.**
 | Keep rerunning everything | Spends days of allocation to reproduce public files. |
 | Mount the snapshot's `WBM_run_state/` as the run's own | WBM resumes from the end and computes nothing; with a changed draft it resumes from the wrong state. |
 | Reuse the spinup state (`<ID>.spinup.*`) for changed drafts | It is only valid when nothing that shapes the spinup changed, and such a draft is already Published or Continue. |
-| Let WBM share one spool directory as it is | Its path leaves out resampling, patch values and dataset definitions, and its writes are not atomic: a stale or half-written day would be read without a word. |
-| Upload each run's spool | A cache on scratch gets the reuse without the 490 GB uploads, and it does not need open item 2's published reuse envelope. |
+| Keep the spool in each snapshot, as now | Every snapshot of the same model input and network repeats it; the Global and Wyoming snapshots already hold the same 10 GB Wyoming spool twice. |
+| Put the spool inside the model input's tree | A published model input does not change, and a spool gains days whenever a run needs new ones. |
+| Share one spool directory per network, as WBM lays it out | Its path leaves out the warp options and the dataset definition, so a variant would read another's files, and its writes are not atomic, so a half-written day could be read. |
 
 ## Consequences
 
@@ -52,4 +55,9 @@ snapshot does not already answer.**
   reproducible, so the results page says which run produced them.
 - `fetch` has to download `WBM_run_state/` for a Continue run (9 GB for Global),
   and the wizard's latest end becomes the model input's coverage.
-- A spool cache needs a lock on `/home` and a preparation step per run.
+- A run gains a preparation step (`wbm.pl -noRun`, then the missing days).
+- The spool key is the reuse envelope open item 2 asks for. A snapshot's own
+  `spool/` is retired once its days are under `spools/<model input id>/`, and the snapshot
+  layout and spec stop listing it.
+- Uploading the days a run builds waits on open item 10; until then they live
+  only in the scratch cache.

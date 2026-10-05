@@ -11,7 +11,7 @@ repository is made public.
 | # | Item | Blocks | Needs |
 |---|---|---|---|
 | 1 | Default output tier, and the `subset` year boundary | [ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md), spec [snapshot-spec.md](snapshot-spec.md) | a decision |
-| 2 | Whether `spool/` is uploaded to S3 at all — a spool with no recorded reuse envelope is not safe to reuse | [Anvil S3 bucket](s3-layout.md#anvil-s3-bucket), [Upload and lock](s3-layout.md#upload-and-lock) | a decision |
+| 2 | Whether `spool/` is uploaded to S3 at all — a spool with no recorded reuse envelope is not safe to reuse | [Anvil S3 bucket](s3-layout.md#anvil-s3-bucket), [Upload and lock](s3-layout.md#upload-and-lock) | ADR 0029 (proposed) answers it: a spool is keyed by model input, network and dataset variant, under `spools/<model input id>/` |
 | 3 | How upstream WBM/RIMS changes reach us — git, tarball, or otherwise. [Publish a code version](s3-layout.md#publish-a-code-version) only covers where a version lives once we have it | [s3-layout.md](s3-layout.md) | upstream contact |
 | 4 | Object Lock availability: needs bucket versioning and admin enablement | [Upload and lock](s3-layout.md#upload-and-lock) option 1 | RCAC confirmation |
 | 5 | S3 conditional-write (`If-None-Match: *`) support on this endpoint | [Upload and lock](s3-layout.md#upload-and-lock) option 3 | a test against the endpoint |
