@@ -195,7 +195,7 @@ files to the same directory.
 
 **Target:**
 
-- **The snapshots' own `spool/` goes**, now that `spools/` repeats it.
+- **The snapshots' own `spool/` goes**, now that `spools/<model input id>/` repeats it.
 - **A cache with a cap.** Scratch purges files untouched for 30 days, and the
   binding limit is the file count, not the size: x-openghm has 100 TB and
   1 million files on scratch, and a 10-year spool is about 24,000 files
