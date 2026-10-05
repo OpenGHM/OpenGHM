@@ -663,6 +663,7 @@ def _resolve_run(
             # what an init is evaluated under: every read-only bind, and the run's own init
             eval_mounts=[(m.host, m.container) for m in mounts if m.readonly and m.container != SPOOL_CACHE_BIND]
             + [(persim_wbm_init, "/wbm/wbm_init")],
+            prune_high=config.spool_prune_high, prune_low=config.spool_prune_low,
         )
 
     return _Resolved(

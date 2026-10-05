@@ -154,6 +154,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
 | `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh` (default `cache`); writes `simulation.json` |
 | `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
+| `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`) |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
 | `openghm sim logs <id> [-f]` | slurm `.out`/`.err` | print or `--follow` (tail) the SLURM log |
@@ -287,11 +288,35 @@ and `model_input_path`.
   both finish and the cache keeps one copy); `Cell_Table.dat`, the reservoir tifs and
   other network-level files are per run and stay. A run that exits non-zero harvests
   nothing. `simulation.json` records `spool_variant`, `spool_cache` and `spool`
-  (`downloaded`, `linked`, `failed`, `fill_error`, `harvested`, `already_present`,
-  in days) and the `spool_plan` that `sim submit`'s job script reads: it runs
+  (`downloaded`, `linked`, `failed`, `fill_error`, `dangling`, `harvested`,
+  `already_present`, in days; `prune`, below) and the `spool_plan` that `sim submit`'s job script reads: it runs
   `openghm spool prepare <sim dir>` before WBM and `openghm spool harvest <sim dir>`
-  after, on the compute node. The cache is not uploaded anywhere, and nothing evicts
-  from it.
+  after, on the compute node. The cache is not uploaded anywhere.
+
+  **The cache has a cap.** Scratch allows a fixed number of files, so `spool prepare`
+  first runs `openghm spool prune`: it reads the `scratch` row of `myquota` (Files and
+  Limit, `59.6K` or `1.0M` with K, M, G as powers of 1000) and, when files used are at
+  least `spool_prune_high` of the limit (default `0.80`), deletes whole **units** until
+  the projected use is at most `spool_prune_low` (default `0.50`; the two must satisfy
+  `low < high`). Without `myquota`, or with a row it cannot read, nothing is deleted and
+  the run says so; a prune that fails never fails the run, and `simulation.json` records
+  its result as `spool.prune`. A unit is one variant's year (every dataset's `YYYY-…`
+  files, `.dat` and `.hdr`) or its `clim` unit (`0000-…` names and the undated
+  climate-bias and `_MinMax` files). Each variant directory keeps an index of its units,
+  `.units/<YYYY|clim>.json` (`files`, `bytes`, `last_used`, `on_s3`: S3 holds every file
+  of it), which `prepare` and `harvest` maintain so that pruning lists file names but
+  does not `stat` them; a unit with no readable index (a cache from before the index, a
+  year only a failed fill left) is counted when pruning first sees it. A run holds the units it links through a lease,
+  `<spool_cache>/.leases/<sim id>.json`, written by `prepare` before it links and removed
+  by `harvest`; it expires at the run's walltime (`simulation.json`'s, else 97 hours,
+  which covers a run that failed and so never harvested), and an expired lease is ignored
+  and removed. Pruning skips every unit an unexpired lease names, and takes the others
+  oldest last use first (by day; among units last used the same day, one S3 holds before
+  one only this cache holds), re-reading the leases before each deletion. A unit goes
+  index first, then its `.dat` files, then its `.hdr` files. After linking, `prepare`
+  removes a link whose target is gone (counted as `spool.dangling`), so WBM builds that
+  day itself. `spool prune --dry-run` prints the same plan and deletes nothing; `--high`
+  and `--low` override the config for one call.
 - `fresh`: an empty `output_base/<id>/spool`; nothing is shared (to check a cached
   spool against a built one).
 

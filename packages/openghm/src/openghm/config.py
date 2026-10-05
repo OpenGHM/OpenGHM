@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from .errors import OpenghmError
-from .types import RUNTIMES
+from .types import RUNTIMES, SPOOL_PRUNE_HIGH, SPOOL_PRUNE_LOW
 
 if sys.version_info >= (3, 11):  # pragma: no cover - exercised by version
     import tomllib
@@ -56,6 +56,11 @@ class Config:
     #: shared by every run of that variant. Keep it on the filesystem of
     #: ``output_base``: a run's new files are moved into it by hard link.
     spool_cache: str = "~/.openghm/spools"
+    #: The spool cache is pruned (least recently used years first, see
+    #: :func:`openghm.spool.prune`) when the scratch file quota is this fraction used
+    #: or more, down to ``spool_prune_low``.
+    spool_prune_high: float = SPOOL_PRUNE_HIGH
+    spool_prune_low: float = SPOOL_PRUNE_LOW
     #: Image ref for the docker runtime (local builds).
     docker_image: str = "wbm-lite:latest"
 
@@ -138,6 +143,8 @@ def _render_default_toml(c: Config) -> str:
             f'sif_dir       = "{c.sif_dir}"   # cache root for downloaded images',
             f'model_input_dir = "{c.model_input_dir}"   # cache root for downloaded model inputs',
             f'spool_cache  = "{c.spool_cache}"   # cache root for spool files shared by runs (same filesystem as output_base)',
+            f'spool_prune_high = {c.spool_prune_high}   # prune the spool cache at this fraction of the scratch file quota used',
+            f'spool_prune_low  = {c.spool_prune_low}   # ... down to this fraction (must be below spool_prune_high)',
             f'docker_image  = "{c.docker_image}"',
             "",
             "# sim submit / sim run defaults (per-sim work/output root + SLURM):",

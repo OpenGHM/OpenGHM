@@ -57,6 +57,10 @@ SPOOL_CACHE_BIND = "/wbm/spool/.cache"
 #: host side of that bind. The variant is known only once the init is evaluated,
 #: after the argv is built, so ``spool prepare`` points this at it.
 SPOOL_CACHE_LINK = "spool-cache"
+#: The scratch file quota fraction at which the spool cache is pruned, and the fraction
+#: pruning brings it down to (``spool_prune_high`` / ``spool_prune_low`` in the config).
+SPOOL_PRUNE_HIGH = 0.80
+SPOOL_PRUNE_LOW = 0.50
 
 
 @dataclass
@@ -88,6 +92,10 @@ class SpoolPlan:
     s3_base: str
     #: ``(host, container)`` of the read-only binds an init is evaluated under.
     eval_mounts: List[Tuple[str, str]] = field(default_factory=list)
+    #: The config's ``spool_prune_high`` / ``spool_prune_low`` when the plan was built:
+    #: what ``spool prepare`` prunes the cache by on the compute node.
+    prune_high: float = SPOOL_PRUNE_HIGH
+    prune_low: float = SPOOL_PRUNE_LOW
 
     @property
     def init_host(self) -> str:

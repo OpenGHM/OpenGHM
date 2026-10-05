@@ -30,7 +30,7 @@ from ..sim import (
     build_scancel_argv, slurm_log_path, tail_lines,
 )
 from ..spatial import SpatialOptions, build_spatial
-from ..spool import harvest, plan_from_sim_dir, prepare, run_cached, variant
+from ..spool import describe_prune, harvest, plan_from_sim_dir, prepare, prune, run_cached, variant
 from ..temporal import TemporalOptions, build_temporal
 from ..network import NetworkOptions
 from ..types import BuiltCommand
@@ -569,7 +569,7 @@ def _spool_step(step: Callable, sim_dir: str) -> None:
 @spool_group.command("prepare")
 @click.argument("sim_dir", metavar="SIM_DIR")
 def spool_prepare_cmd(sim_dir: str) -> None:
-    """fill the cache from S3 and link it into a simulation's spool (before WBM)
+    """prune the cache if scratch is nearly full, fill it from S3 and link it into a simulation's spool (before WBM)
 
     SIM_DIR is the simulation's work directory (<output_base>/<id>). `sim submit`
     puts this in its job script, so it runs on the compute node.
@@ -582,6 +582,41 @@ def spool_prepare_cmd(sim_dir: str) -> None:
 def spool_harvest_cmd(sim_dir: str) -> None:
     """move the spool files a simulation built into the cache (after WBM exited 0)"""
     _spool_step(harvest, sim_dir)
+
+
+@spool_group.command("prune")
+@click.option("--dry-run", is_flag=True, help="print what would be deleted; delete nothing")
+@click.option("--high", type=float, default=None, metavar="FRACTION",
+              help="prune at this fraction of the scratch file quota used (default: spool_prune_high)")
+@click.option("--low", type=float, default=None, metavar="FRACTION",
+              help="prune down to this fraction (default: spool_prune_low)")
+@click.option("--config", "config_path", default=None, metavar="PATH",
+              help="config file (default: ~/.openghm/config.toml)")
+@click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output")
+def spool_prune_cmd(dry_run: bool, high: Optional[float], low: Optional[float],
+                    config_path: Optional[str], as_json: bool) -> None:
+    """delete the least recently used years of the spool cache when scratch is nearly full
+
+    Reads the scratch file quota from `myquota`. At HIGH of the limit or more it deletes whole
+    units (one variant's year, or its climatology) oldest last use first, until the projected
+    use is at or below LOW, never a unit a running simulation holds. Below HIGH, or without
+    `myquota`, it deletes nothing. `spool prepare` does the same before it fills the cache.
+    """
+    try:
+        cfg = load_config(path=config_path).config
+        result = prune(
+            cfg.resolve_spool_cache(), dry_run=dry_run,
+            high=cfg.spool_prune_high if high is None else high,
+            low=cfg.spool_prune_low if low is None else low,
+        )
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    if as_json:
+        click.echo(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        for line in describe_prune(result):
+            click.echo(line)
 
 
 @cli.command("wizard")

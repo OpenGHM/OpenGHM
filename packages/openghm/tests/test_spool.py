@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -366,7 +367,8 @@ def test_harvest_moves_regular_pairs_of_dataset_directories_only(tmp_path):
     run = _built_spool(plan, v)
     assert spool.harvest(plan) == {"harvested": 5, "already_present": 0}
     cache = Path(v.dir)
-    assert sorted(str(p.relative_to(cache)) for p in cache.rglob("*") if p.is_file()) == sorted(
+    assert sorted(str(p.relative_to(cache)) for p in cache.rglob("*")
+                  if p.is_file() and ".units" not in p.parts) == sorted(
         f"{d}{ext}" for d in ("Precip/2000-01-01.dat", "Precip/2000-01-02.dat", "Temp/2000-01-01.dat",
                               "mod_obs/001.dat", "LAI_MinMax/001.dat") for ext in ("", ".hdr"))
     assert (cache / "Precip/2000-01-01.dat").read_bytes() == b"Precip/2000-01-01.dat"
@@ -446,6 +448,12 @@ def test_two_processes_harvesting_the_same_days_both_finish_and_leave_one_copy(t
 
 
 # ── fill from S3 ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def no_myquota(monkeypatch):
+    """The machine's own ``myquota`` (Anvil has one) is never asked: tests pass a fake."""
+    monkeypatch.setattr(spool, "MYQUOTA", "/nonexistent/myquota")
 
 
 @pytest.fixture
@@ -652,7 +660,9 @@ def test_a_second_run_of_the_same_draft_builds_and_harvests_nothing(tmp_path, bu
     result, sidecar, report, logs = _run(snap, tmp_path, "first", runtime)
     assert result.exit_code == 0
     assert report["built"] == ["2000-01-01", "2000-01-02"] and report["read"] == []
-    assert sidecar["spool"] == {"downloaded": 0, "linked": 0, "failed": 0, "fill_error": None,
+    pruned = sidecar["spool"].pop("prune")                  # no myquota here: nothing to prune
+    assert pruned["deleted"] == [] and "myquota" in pruned["reason"]
+    assert sidecar["spool"] == {"downloaded": 0, "linked": 0, "failed": 0, "fill_error": None, "dangling": 0,
                                 "harvested": 2, "already_present": 0}
     assert sidecar["spool_mode"] == "cache" and sidecar["exit_code"] is None   # the CLI records the exit code
     variant_dir = Path(sidecar["spool_cache"])
@@ -717,6 +727,528 @@ def test_run_cached_needs_a_cache_build(tmp_path, bucket, monkeypatch):
     _c, built = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="s", spool="fresh"), _config(tmp_path))
     with pytest.raises(OpenghmError, match="not built with --spool cache"):
         spool.run_cached(built)
+
+
+# ── the cap: units, leases, prune ─────────────────────────────────────────────
+
+NOW = datetime(2026, 10, 6, 12, 0, 0, tzinfo=timezone.utc)
+
+_MYQUOTA = """\
+Type        Location                  Size      Limit     Use    Files     Limit     Use
+===================================================================================================
+home        x-someone                 1.2GB     25.0GB    5%     8.1K      -         -
+scratch     /anvil/scratch/x-someone  2.1TB     100.0TB   2%     {used}    {limit}   6%
+"""
+
+
+def _quota(used: str, limit: str = "100"):
+    """A ``subprocess.run`` that answers as ``myquota`` would."""
+    def run(argv, **_kw):
+        return subprocess.CompletedProcess(argv, 0, stdout=_MYQUOTA.format(used=used, limit=limit), stderr="")
+    return run
+
+
+def _stamp(days_ago: float = 0, hours: float = 0) -> str:
+    return spool._utc(NOW - timedelta(days=days_ago, hours=hours))
+
+
+def _unit(root: Path, vid: str, unit: str, last_used: str, *, on_s3=False, pairs=5, network=NET) -> Path:
+    """``pairs`` days (``2 * pairs`` files) of ``unit`` in the variant ``vid`` of ``root``, indexed."""
+    vdir = root / MID / network / vid
+    for i in range(1, pairs + 1):
+        name = f"{unit}-01-{i:02d}.dat" if unit != "clim" else f"{i:03d}.dat"
+        _put(vdir, f"{'Precip' if unit != 'clim' else 'mod_obs'}/{name}", b"x" * 10)
+    spool._write_json(str(vdir / ".units" / f"{unit}.json"), {
+        "files": 2 * pairs, "bytes": pairs * (10 + 14),     # a day is 10 bytes and its header 14
+        "last_used": last_used, "on_s3": on_s3})
+    return vdir
+
+
+def _remaining(root: Path) -> set:
+    """``(variant, unit)`` of the units that still have a ``.dat`` under ``root``."""
+    return {(p.parents[1].name, spool.unit_of(p.name)) for p in root.rglob("*.dat")
+            if ".leases" not in p.parts and ".tmp" not in p.parts}
+
+
+def _prune(root: Path, used: str, *, now=NOW, limit="100", **kw):
+    kw.setdefault("high", 0.8)
+    kw.setdefault("low", 0.5)
+    return spool.prune(str(root), run=_quota(used, limit), now=now, **kw)
+
+
+@pytest.mark.parametrize("text, expect", [
+    (_MYQUOTA.format(used="59.6K", limit="1.0M"), (59_600, 1_000_000)),
+    (_MYQUOTA.format(used="812", limit="2K"), (812, 2_000)),
+    (_MYQUOTA.format(used="1.5M", limit="1.2G"), (1_500_000, 1_200_000_000)),
+    # no header line: the last three columns are Files, Limit, Use
+    ("scratch  /anvil/scratch/x  2.1TB  100.0TB  2%  59.6K  1.0M  6%\n", (59_600, 1_000_000)),
+    # the columns are counted from the right: a location with spaces does not shift them
+    ("Type Location Size Limit Use Files Limit Use\nscratch /a b/c 2.1TB 100TB 2% 3K 1M 0%\n", (3_000, 1_000_000)),
+])
+def test_parse_myquota_reads_the_scratch_row(text, expect):
+    assert spool.parse_myquota(text) == expect
+
+
+@pytest.mark.parametrize("text", [
+    "",
+    "Type Location Size Limit Use Files Limit Use\nhome x 1GB 2GB 5% 8.1K - -\n",              # no scratch row
+    "Type Location Size Limit Use Files Limit Use\nscratch x 1GB 2GB 5% many lots 6%\n",     # counts do not read
+    "Type Location Size Limit Use Files Limit Use\nscratch x 1GB 2GB 5% 8.1K 0 6%\n",         # no limit
+    "scratch  x  2.1TB  100.0TB  2%\n",                                                         # too few columns
+])
+def test_parse_myquota_refuses_what_it_cannot_read(text):
+    with pytest.raises(OpenghmError, match="scratch file quota"):
+        spool.parse_myquota(text)
+
+
+def test_read_quota_names_why_there_is_none(monkeypatch):
+    with pytest.raises(OpenghmError, match="not on this machine"):
+        spool.read_quota()                                  # the autouse fixture points at nothing
+    failing = lambda argv, **kw: subprocess.CompletedProcess(argv, 3, stdout="", stderr="no such user")
+    with pytest.raises(OpenghmError, match="exited 3: no such user"):
+        spool.read_quota(run=failing)
+
+
+def test_a_unit_is_a_year_or_the_climatology():
+    assert spool.unit_of("2000-06-15.dat") == "2000" and spool.unit_of("2000-06-00.dat.hdr") == "2000"
+    assert spool.unit_of("0000-06-15.dat") == "clim" and spool.unit_of("0000-06-15.dat.hdr") == "clim"
+    assert spool.unit_of("001.dat") == "clim" and spool.unit_of("365.dat.hdr") == "clim"
+
+
+def test_refresh_index_counts_dat_and_hdr_by_unit_and_sets_on_s3_from_the_listing(tmp_path):
+    vdir = tmp_path / "v"
+    for rel in ("Precip/2000-01-01.dat", "Precip/2000-01-02.dat", "Temp/2001-01-01.dat",
+                "Precip/0000-01-01.dat", "mod_obs/001.dat", "LAI_MinMax/002.dat"):
+        _put(vdir, rel, b"123456")
+    (vdir / "Precip" / "2000-01-03.dat.part").write_bytes(b"not spool data")
+    (vdir / ".units").mkdir(parents=True, exist_ok=True)
+    (vdir / ".units" / "2009-01-01.dat").write_bytes(b"an index directory is never data")
+    listing = {f"{rel}{ext}": 1 for rel in ("Precip/2000-01-01.dat", "Precip/2000-01-02.dat", "mod_obs/001.dat")
+               for ext in ("", ".hdr")}
+    spool.refresh_index(str(vdir), ["2000", "2001", "clim", "1990"], NOW, used=["2000"], listing=listing)
+    got = {u: json.loads((vdir / ".units" / f"{u}.json").read_text()) for u in ("2000", "2001", "clim")}
+    assert got["2000"] == {"files": 4, "bytes": 6 + 10 + 6 + 10, "last_used": _stamp(), "on_s3": True}
+    assert got["2001"]["files"] == 2 and got["2001"]["on_s3"] is False           # the listing lacks it
+    assert got["clim"]["files"] == 6 and got["clim"]["on_s3"] is False           # 0000-, mod_obs and _MinMax
+    assert not (vdir / ".units" / "1990.json").exists()                          # nothing there: no index
+    # not in `used`: last_used stays; `built` files only the run has make on_s3 false
+    spool.refresh_index(str(vdir), ["2000"], NOW + timedelta(days=1), built=True)
+    again = json.loads((vdir / ".units" / "2000.json").read_text())
+    assert again["last_used"] == _stamp() and again["on_s3"] is False
+    spool.refresh_index(str(vdir), ["2000"], NOW + timedelta(days=1))            # no listing: stays as it was
+    assert json.loads((vdir / ".units" / "2000.json").read_text())["on_s3"] is False
+
+
+# prune
+
+
+def test_no_myquota_means_no_pruning(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(100))
+    got = spool.prune(str(tmp_path), high=0.8, low=0.5, now=NOW)
+    assert got["deleted"] == [] and got["used"] is None and "myquota" in got["reason"]
+    assert _remaining(tmp_path) == {("v1", "2000")}
+    unreadable = lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout="scratch ???\n", stderr="")
+    logs = []
+    got = spool.prune(str(tmp_path), high=0.8, low=0.5, run=unreadable, log=logs.append)
+    assert got["deleted"] == [] and "scratch file quota" in got["reason"] and len(logs) == 1
+    assert _remaining(tmp_path) == {("v1", "2000")}
+
+
+def test_below_the_high_threshold_nothing_is_deleted(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(100))
+    got = _prune(tmp_path, "79")                                  # 79%: below 80%
+    assert got["deleted"] == [] and got["after"] == 79 and "below 80%" in got["reason"]
+    assert _remaining(tmp_path) == {("v1", "2000")}
+
+
+def test_at_or_above_high_the_oldest_units_go_first_until_the_projection_is_at_or_below_low(tmp_path):
+    for i, year in enumerate(("2000", "2001", "2002", "2003", "2004")):
+        _unit(tmp_path, "v1", year, _stamp(50 - 10 * i))           # 2000 is the oldest
+    _unit(tmp_path, "v2", "2000", _stamp(60))                     # another variant: older than all of them
+    logs = []
+    got = _prune(tmp_path, "80", log=logs.append)                  # exactly 80%: at the threshold
+    # 10 files a unit; 80 - 50 = 30 to delete: the three oldest units
+    assert [(d["variant_dir"].split(os.sep)[-1], d["unit"]) for d in got["deleted"]] == [
+        ("v2", "2000"), ("v1", "2000"), ("v1", "2001")][:3] and got["deleted_files"] == 30
+    assert got["used"] == 80 and got["after"] == 50 and got["after"] <= 0.5 * 100
+    assert got["deleted_bytes"] == sum(d["bytes"] for d in got["deleted"]) == 3 * 120
+    assert _remaining(tmp_path) == {("v1", "2002"), ("v1", "2003"), ("v1", "2004")}
+    assert not (tmp_path / MID / NET / "v1" / ".units" / "2000.json").exists()
+    assert (tmp_path / MID / NET / "v1" / ".units" / "2002.json").exists()
+    assert any("deleted 3 units, 30 files" in l for l in logs) and any("v2" in l for l in logs)
+
+
+def test_pruning_stops_at_the_target_and_says_when_the_cache_is_not_the_quota(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(5))
+    got = _prune(tmp_path, "95")                  # 45 files over; the cache holds 10
+    assert got["deleted_files"] == 10 and got["after"] == 85 and "not what holds the quota" in got["reason"]
+    assert _remaining(tmp_path) == set()
+    assert _prune(tmp_path, "95")["deleted"] == []            # nothing left to delete
+
+
+def test_among_units_last_used_the_same_day_one_s3_holds_goes_first(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(3), on_s3=False)                        # earlier that day, only here
+    _unit(tmp_path, "v1", "2001", _stamp(3, hours=-8), on_s3=True)               # later that day, on S3
+    _unit(tmp_path, "v1", "2002", _stamp(4), on_s3=False)                        # an earlier day beats on_s3
+    _unit(tmp_path, "v1", "2003", _stamp(2), on_s3=True)
+    got = _prune(tmp_path, "70", high=0.6)                       # 70 - 50 = 20 files: two units
+    assert [d["unit"] for d in got["deleted"]] == ["2002", "2001"]
+    assert _remaining(tmp_path) == {("v1", "2000"), ("v1", "2003")}
+
+
+def _lease(root: Path, sim: str, vdir: Path, units, expires: datetime) -> Path:
+    path = root / ".leases" / f"{sim}.json"
+    spool._write_json(str(path), {"variant_dir": str(vdir), "units": units, "expires": spool._utc(expires)})
+    return path
+
+
+def test_a_unit_an_unexpired_lease_names_is_never_deleted(tmp_path):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(90))
+    _unit(tmp_path, "v1", "2001", _stamp(80))
+    v2 = _unit(tmp_path, "v2", "2000", _stamp(70))
+    lease = _lease(tmp_path, "running", v1, ["2000"], NOW + timedelta(hours=1))
+    got = _prune(tmp_path, "90")                                  # 40 files to delete; the cache holds 30 to give
+    assert [(d["variant_dir"].split(os.sep)[-1], d["unit"]) for d in got["deleted"]] == [("v1", "2001"), ("v2", "2000")]
+    assert _remaining(tmp_path) == {("v1", "2000")} and lease.exists() and got["after"] == 70
+    assert (v1 / "Precip" / "2000-01-01.dat").exists() and not (v2 / "Precip" / "2000-01-01.dat").exists()
+
+
+def test_an_expired_lease_is_removed_and_its_units_are_candidates(tmp_path):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(90))
+    expired = _lease(tmp_path, "gone", v1, ["2000"], NOW - timedelta(seconds=1))
+    live = _lease(tmp_path, "live", v1, ["2000"], NOW + timedelta(hours=2))
+    junk = tmp_path / ".leases" / "notes.txt"
+    junk.write_text("not a lease")
+    # the live lease still protects it, and the expired one is removed on the way
+    got = _prune(tmp_path, "90")
+    assert got["deleted"] == [] and got["expired_leases"] == 1 and got["skipped_leased"] == 0
+    assert not expired.exists() and live.exists() and junk.exists()
+    live.unlink()
+    assert [d["unit"] for d in _prune(tmp_path, "90")["deleted"]] == ["2000"]
+    assert _remaining(tmp_path) == set()
+
+
+def test_leases_are_read_again_before_each_deletion(tmp_path, monkeypatch):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(90))
+    _unit(tmp_path, "v1", "2001", _stamp(80))
+    _unit(tmp_path, "v1", "2002", _stamp(70))
+    real = spool._delete_unit
+
+    def delete(vdir, unit):
+        out = real(vdir, unit)
+        if unit == "2000":                       # a run starts while the first unit goes: it leases the next
+            _lease(tmp_path, "newcomer", v1, ["2001"], NOW + timedelta(hours=1))
+        return out
+
+    monkeypatch.setattr(spool, "_delete_unit", delete)
+    got = _prune(tmp_path, "95")                  # 45 files to delete
+    assert [d["unit"] for d in got["deleted"]] == ["2000", "2002"] and got["skipped_leased"] == 1
+    assert _remaining(tmp_path) == {("v1", "2001")}
+
+
+def test_a_unit_goes_index_first_then_dat_files_then_hdr_files(tmp_path, monkeypatch):
+    vdir = _unit(tmp_path, "v1", "2000", _stamp(9), pairs=3)
+    order = []
+    real = os.unlink
+    monkeypatch.setattr(os, "unlink", lambda p, *a, **k: (order.append(os.path.relpath(p, vdir)), real(p, *a, **k))[1])
+    got = _prune(tmp_path, "90")
+    assert got["deleted_files"] == 6
+    assert order[0] == os.path.join(".units", "2000.json")
+    kinds = [".hdr" if o.endswith(".hdr") else ".dat" for o in order[1:]]
+    assert kinds == [".dat"] * 3 + [".hdr"] * 3
+
+
+def test_a_dry_run_deletes_nothing_and_prints_the_same_plan(tmp_path):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(90))
+    _unit(tmp_path, "v1", "2001", _stamp(80))
+    _unit(tmp_path, "v1", "2002", _stamp(70))
+    expired = _lease(tmp_path, "gone", v1, ["2002"], NOW - timedelta(hours=1))
+    before = sorted(str(p) for p in tmp_path.rglob("*"))
+    logs = []
+    plan = _prune(tmp_path, "95", dry_run=True, log=logs.append)
+    assert sorted(str(p) for p in tmp_path.rglob("*")) == before and expired.exists()
+    assert plan["dry_run"] is True and plan["deleted_files"] == 30 and plan["after"] == 65
+    assert any("would delete 3 units, 30 files" in l for l in logs) and any("would be 65" in l for l in logs)
+    done = _prune(tmp_path, "95")
+    assert [d["unit"] for d in done["deleted"]] == [d["unit"] for d in plan["deleted"]]
+    assert done["deleted_files"] == plan["deleted_files"] and not expired.exists()
+
+
+def test_a_variant_without_an_index_is_counted_when_pruning_first_sees_it(tmp_path):
+    vdir = tmp_path / MID / NET / "legacy"
+    for year in ("2000", "2001"):
+        for d in (1, 2):
+            _put(vdir, f"Precip/{year}-01-{d:02d}.dat", b"y" * 7)
+    old = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc).timestamp()
+    for f in (vdir / "Precip").glob("2000-*"):
+        os.utime(f, (old, old))
+    got = _prune(tmp_path, "90", dry_run=True)
+    assert [d["unit"] for d in got["deleted"]] == ["2000", "2001"] and got["deleted"][0]["last_used"] == "2026-01-02T03:04:05Z"
+    assert got["deleted"][0]["files"] == 4 and got["deleted"][0]["on_s3"] is False
+    assert not (vdir / ".units").exists()                          # a dry run writes nothing
+    _prune(tmp_path, "90")
+    assert not any(vdir.rglob("*.dat"))
+
+
+def test_a_unit_without_an_index_in_an_indexed_variant_is_counted_too(tmp_path):
+    vdir = _unit(tmp_path, "v1", "2000", _stamp(10))
+    for d in (1, 2):
+        _put(vdir, f"Precip/2005-01-{d:02d}.dat")                  # a file the index never heard of
+    (vdir / ".units" / "2000.json").write_text("{not json")        # and an index that cannot be read
+    spool._write_json(str(vdir / ".units" / "2003.json"), {        # and one of a year a purge emptied
+        "files": 40, "bytes": 1, "last_used": _stamp(500), "on_s3": True})
+    got = _prune(tmp_path, "80", dry_run=True)
+    assert sorted(d["unit"] for d in got["deleted"]) == ["2000", "2005"]
+    assert sorted(d["files"] for d in got["deleted"]) == [4, 10]
+    _prune(tmp_path, "80")
+    assert not (vdir / ".units" / "2003.json").exists() and not (vdir / ".units" / "2005.json").exists()
+
+
+def test_dot_directories_of_the_cache_are_never_spool_data(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(10))
+    for hidden in (".tmp/sim1/Precip/2000-01-01.dat", ".leases/x/Precip/2000-01-01.dat"):
+        _put(tmp_path, hidden)
+    got = _prune(tmp_path, "90")
+    assert [d["unit"] for d in got["deleted"]] == ["2000"]
+    assert (tmp_path / ".tmp/sim1/Precip/2000-01-01.dat").exists() and (tmp_path / ".leases/x/Precip/2000-01-01.dat").exists()
+
+
+@pytest.mark.parametrize("high, low", [(0.5, 0.5), (0.5, 0.8), (0.8, -0.1), (1.5, 0.5)])
+def test_low_must_be_below_high(tmp_path, high, low):
+    _unit(tmp_path, "v1", "2000", _stamp(10))
+    with pytest.raises(OpenghmError, match="thresholds"):
+        _prune(tmp_path, "95", high=high, low=low)
+    assert _remaining(tmp_path) == {("v1", "2000")}
+
+
+# leases, links and the run around them
+
+
+def _sidecar(plan: SpoolPlan, **extra) -> Path:
+    path = Path(plan.workdir) / "simulation.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"spool_plan": plan.to_dict(), **extra}))
+    return path
+
+
+def test_walltimes_are_slurms():
+    for text, hours in (("24:00:00", 24), ("1-00:00:00", 24), ("4-00:00:00", 96), ("90", 1.5), ("2-12", 60),
+                        ("1-02:30", 26.5), ("30:00", 0.5)):
+        assert spool._walltime(text) == timedelta(hours=hours), text
+    assert spool._walltime("soon") is None and spool._walltime(None) is None
+
+
+def test_prepare_leases_the_linked_units_until_the_walltime_and_harvest_releases_them(tmp_path, bucket):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    v = _variant(plan)
+    for rel in ("Precip/1999-06-15.dat", "Precip/2000-06-15.dat", "Precip/2010-06-15.dat", "Precip/0000-06-15.dat",
+                "mod_obs/001.dat"):
+        _put(Path(v.dir), rel)
+    _sidecar(plan, walltime="2:00:00")
+    before = datetime.now(timezone.utc)
+    got = spool.prepare(plan, evaluator=_evaluate)
+    lease = tmp_path / "spools" / ".leases" / "sim1.json"
+    rec = json.loads(lease.read_text())
+    assert rec["variant_dir"] == v.dir and rec["units"] == ["1999", "2000", "clim"]       # 2010 is out of the years
+    until = spool._parse_utc(rec["expires"])
+    assert before + timedelta(hours=2) - timedelta(seconds=2) <= until <= datetime.now(timezone.utc) + timedelta(hours=2)
+    # the index: counted, last_used set for the linked units, the one not linked left alone
+    units = tmp_path / "spools" / MID / NET / v.id / ".units"
+    assert sorted(p.name for p in units.iterdir()) == ["1999.json", "2000.json", "clim.json"]
+    assert json.loads((units / "2000.json").read_text())["files"] == 2
+    assert json.loads((units / "clim.json").read_text())["files"] == 4
+    assert got["dangling"] == 0 and got["linked"] == 4
+
+    run = Path(plan.run_spool) / NET / "Precip"
+    (run / "2003-01-01.dat").write_bytes(b"built")
+    (run / "2003-01-01.dat.hdr").write_bytes(b"hdr")
+    spool.harvest(plan)
+    assert not lease.exists()
+    assert json.loads((units / "2003.json").read_text()) == {
+        "files": 2, "bytes": 8, "on_s3": False, "last_used": json.loads((units / "2003.json").read_text())["last_used"]}
+
+
+def test_a_lease_without_a_walltime_runs_97_hours(tmp_path, bucket):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    _put(Path(_variant(plan).dir), "Precip/2000-06-15.dat")
+    spool.prepare(plan, evaluator=_evaluate)                # no simulation.json at all
+    rec = json.loads((tmp_path / "spools" / ".leases" / "sim1.json").read_text())
+    left = spool._parse_utc(rec["expires"]) - datetime.now(timezone.utc)
+    assert timedelta(hours=96, minutes=59) < left <= timedelta(hours=97)
+
+
+def test_prepare_takes_on_s3_from_the_listing_it_reads(tmp_path, bucket):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    v = _variant(plan)
+    for rel in ("Precip/2000-06-15.dat", "Precip/2001-06-15.dat"):
+        _put(Path(v.dir), rel)
+    _publish(bucket, v, "Precip/2000-06-15.dat")              # S3 holds 2000, and a 2002 the cache lacks
+    _publish(bucket, v, "Precip/2002-06-15.dat")
+    spool.prepare(plan, evaluator=_evaluate)
+    units = Path(v.dir) / ".units"
+    got = {p.stem: json.loads(p.read_text()) for p in units.iterdir()}
+    assert got["2000"]["on_s3"] is True and got["2001"]["on_s3"] is False
+    assert got["2002"]["files"] == 2 and got["2002"]["on_s3"] is True      # downloaded by the fill, not linked by name only
+
+
+def test_prepare_removes_a_link_whose_target_is_gone_and_counts_it(tmp_path, bucket, monkeypatch):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    v = _variant(plan)
+    for rel in ("Precip/2000-06-15.dat", "Precip/2000-06-16.dat"):
+        _put(Path(v.dir), rel)
+    _sidecar(plan)
+    real = spool.link
+
+    def link_then_a_prune_strikes(p, variant, chosen=None):
+        n = real(p, variant, chosen)
+        (Path(v.dir) / "Precip" / "2000-06-15.dat").unlink()          # the target is gone: the .hdr stays
+        return n
+
+    monkeypatch.setattr(spool, "link", link_then_a_prune_strikes)
+    logs = []
+    got = spool.prepare(plan, evaluator=_evaluate, log=logs.append)
+    run = Path(plan.run_spool) / NET / "Precip"
+    assert sorted(p.name for p in run.iterdir()) == ["2000-06-16.dat", "2000-06-16.dat.hdr"]   # the pair goes together
+    assert got["linked"] == 2 and got["dangling"] == 1
+    assert json.loads(Path(plan.workdir, "simulation.json").read_text())["spool"]["dangling"] == 1
+    assert any("1 linked days were gone" in l for l in logs)
+
+
+def test_prepare_holds_a_lease_on_the_runs_years_while_it_fills(tmp_path, bucket, monkeypatch):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    _sidecar(plan)
+    real = spool.fill
+    seen = {}
+
+    def fill_and_look(p, variant, listing=None):
+        held, _expired = spool._leases(p.cache_root, datetime.now(timezone.utc))
+        seen["held"] = {u for d, u in held if d == variant.dir}
+        return real(p, variant, listing=listing)
+
+    monkeypatch.setattr(spool, "fill", fill_and_look)
+    spool.prepare(plan, evaluator=_evaluate, log=lambda *_: None)
+    first, last = _variant(plan).years
+    assert spool.CLIM_UNIT in seen["held"]
+    if first is not None and last is not None:
+        assert {str(y) for y in range(first, last + 1)} <= seen["held"]
+
+
+def test_drop_dangling_leaves_working_links_files_and_other_targets_alone(tmp_path):
+    plan = _plan(tmp_path)
+    v = _variant(plan)
+    _put(Path(v.dir), "Precip/2000-06-15.dat")
+    spool.link(plan, v)
+    run = Path(plan.run_spool) / NET / "Precip"
+    (run / "2000-06-16.dat").write_bytes(b"built here")
+    (run / "elsewhere.dat").symlink_to("/somewhere/else.dat")                 # not into the cache: not ours
+    assert spool.drop_dangling(plan, v) == 0
+    assert sorted(p.name for p in run.iterdir()) == ["2000-06-15.dat", "2000-06-15.dat.hdr", "2000-06-16.dat", "elsewhere.dat"]
+    (Path(v.dir) / "Precip" / "2000-06-15.dat.hdr").unlink()
+    assert spool.drop_dangling(plan, v) == 1
+    assert sorted(p.name for p in run.iterdir()) == ["2000-06-16.dat", "elsewhere.dat"]
+
+
+def test_link_ignores_the_index_directory(tmp_path):
+    plan = _plan(tmp_path)
+    v = _variant(plan)
+    _put(Path(v.dir), "Precip/2000-06-15.dat")
+    _put(Path(v.dir), ".units/2000-06-15.dat")
+    assert spool.link(plan, v) == 1
+    assert not (Path(plan.run_spool) / NET / ".units").exists()
+
+
+def test_prepare_prunes_first_by_the_plans_thresholds_and_records_it(tmp_path, bucket, monkeypatch):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    plan.prune_high, plan.prune_low = 0.7, 0.2
+    _sidecar(plan)
+    _unit(tmp_path / "spools", "other", "1990", _stamp(400))
+    monkeypatch.setattr(spool, "MYQUOTA", _fake_myquota_command(tmp_path, "90"))   # 90% of 100 files
+    logs = []
+    got = spool.prepare(plan, evaluator=_evaluate, log=logs.append)
+    pruned = got["prune"]
+    assert (pruned["high"], pruned["low"], pruned["used"], pruned["limit"]) == (0.7, 0.2, 90, 100)
+    assert [d["unit"] for d in pruned["deleted"]] == ["1990"] and pruned["after"] == 80
+    assert not list((tmp_path / "spools" / MID / NET / "other").rglob("*.dat"))
+    assert logs[0].startswith("spool: scratch files 90 of 100")             # before anything else is said
+    assert json.loads(Path(plan.workdir, "simulation.json").read_text())["spool"]["prune"] == pruned
+
+
+def test_a_prune_that_fails_does_not_fail_the_run(tmp_path, bucket, monkeypatch):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    _sidecar(plan)
+    _put(Path(_variant(plan).dir), "Precip/2000-06-15.dat")
+
+    def boom(*_a, **_k):
+        raise RuntimeError("the quota system fell over")
+
+    monkeypatch.setattr(spool, "prune", boom)
+    logs = []
+    got = spool.prepare(plan, evaluator=_evaluate, log=logs.append)
+    assert got["linked"] == 1 and got["prune"] == {"error": "the quota system fell over"}
+    assert any("prune failed: the quota system fell over" in l for l in logs)
+    side = json.loads(Path(plan.workdir, "simulation.json").read_text())
+    assert side["spool"]["prune"] == {"error": "the quota system fell over"} and side["spool"]["linked"] == 1
+
+
+def test_a_plan_whose_thresholds_are_wrong_still_runs(tmp_path, bucket):
+    plan = _plan(tmp_path, s3_base=bucket.url)
+    plan.prune_high, plan.prune_low = 0.3, 0.6
+    _sidecar(plan)
+    got = spool.prepare(plan, evaluator=_evaluate)
+    assert "thresholds" in got["prune"]["error"]
+
+
+def test_the_plan_carries_the_configs_thresholds(tmp_path, bucket, monkeypatch):
+    snap = _runnable(tmp_path, bucket, monkeypatch)
+    cfg = Config(**{**_config(tmp_path).__dict__, "spool_prune_high": 0.9, "spool_prune_low": 0.4})
+    _c, built = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="t"), cfg, runtime="singularity")
+    assert (built.spool.prune_high, built.spool.prune_low) == (0.9, 0.4)
+    old = built.spool.to_dict()
+    del old["prune_high"], old["prune_low"]                        # a plan recorded before the cap
+    assert (SpoolPlan.from_dict(old).prune_high, SpoolPlan.from_dict(old).prune_low) == (0.8, 0.5)
+    assert (Config().spool_prune_high, Config().spool_prune_low) == (0.8, 0.5)
+
+
+def _fake_myquota_command(tmp_path: Path, used: str, limit: str = "100") -> str:
+    script = tmp_path / "bin" / "myquota"
+    script.parent.mkdir(exist_ok=True)
+    script.write_text("#!/bin/sh\ncat <<'EOF'\n" + _MYQUOTA.format(used=used, limit=limit) + "EOF\n")
+    script.chmod(0o755)
+    return str(script)
+
+
+def test_cli_spool_prune_dry_run_and_for_real(tmp_path, monkeypatch):
+    cache = tmp_path / "spools"
+    _unit(cache, "v1", "2000", spool._utc(datetime.now(timezone.utc) - timedelta(days=9)))
+    _unit(cache, "v1", "2001", spool._utc(datetime.now(timezone.utc) - timedelta(days=1)))
+    monkeypatch.setattr(spool, "MYQUOTA", _fake_myquota_command(tmp_path, "85"))
+    cfg = str(_cli_config(tmp_path))
+    runner = CliRunner()
+
+    out = runner.invoke(cli, ["spool", "prune", "--dry-run", "--config", cfg, "--low", "0.75"])
+    assert out.exit_code == 0, out.output
+    assert "would delete 1 units, 10 files" in out.output and "2000" in out.output
+    assert _remaining(cache) == {("v1", "2000"), ("v1", "2001")}
+
+    out = runner.invoke(cli, ["spool", "prune", "--config", cfg, "--json", "--low", "0.75"])
+    got = json.loads(out.output)
+    assert out.exit_code == 0 and got["deleted_files"] == 10 and got["after"] == 75 and got["dry_run"] is False
+    assert [d["unit"] for d in got["deleted"]] == ["2000"] and _remaining(cache) == {("v1", "2001")}
+
+    out = runner.invoke(cli, ["spool", "prune", "--config", cfg, "--high", "0.9"])      # 75% < 90%
+    assert out.exit_code == 0 and "nothing to delete" in out.output
+
+
+def test_cli_spool_prune_refuses_low_at_or_above_high(tmp_path, monkeypatch):
+    monkeypatch.setattr(spool, "MYQUOTA", _fake_myquota_command(tmp_path, "85"))
+    out = CliRunner().invoke(cli, ["spool", "prune", "--config", str(_cli_config(tmp_path)),
+                                   "--high", "0.5", "--low", "0.5"])
+    assert out.exit_code == 2 and "thresholds" in out.output
+
+
+def test_cli_spool_prune_without_myquota_deletes_nothing(tmp_path):
+    out = CliRunner().invoke(cli, ["spool", "prune", "--config", str(_cli_config(tmp_path))])
+    assert out.exit_code == 0 and "no pruning" in out.output and "myquota" in out.output
 
 
 # ── the CLI ───────────────────────────────────────────────────────────────────

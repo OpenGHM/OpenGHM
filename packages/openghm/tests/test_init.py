@@ -58,6 +58,7 @@ def test_non_interactive_writes_config(tmp_path, capsys):
     assert data["output_base"] == "~/.openghm/runs"
     assert data["model_input_dir"] == "~/.openghm/model-inputs"
     assert data["spool_cache"] == "~/.openghm/spools"
+    assert data["spool_prune_high"] == 0.8 and data["spool_prune_low"] == 0.5
     assert "No images were downloaded" in capsys.readouterr().out
 
 
@@ -77,3 +78,5 @@ def test_spool_cache_is_a_cache_root_beside_the_others():
     assert Config().spool_cache == "~/.openghm/spools"
     assert Config().resolve_spool_cache() == os.path.expanduser("~/.openghm/spools")
     assert Config(spool_cache="/scratch/spools").resolve_spool_cache() == "/scratch/spools"
+    assert (Config().spool_prune_high, Config().spool_prune_low) == (0.80, 0.50)
+    assert Config.from_dict({"spool_prune_high": 0.9, "spool_prune_low": 0.6}).spool_prune_low == 0.6
