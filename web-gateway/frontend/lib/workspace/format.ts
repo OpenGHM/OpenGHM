@@ -12,6 +12,20 @@ export function formatBytes(n: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
+/** Bytes in decimal units (1 GB = 10^9 B), the way Anvil's `myquota` reports them. */
+export function formatBytesSI(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n < 1000) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let value = n / 1000;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
 export const RETENTION_DAYS = 30;
 
 /** The day Anvil's purge may take a finished run's files, counting from when

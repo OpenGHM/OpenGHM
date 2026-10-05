@@ -22,7 +22,7 @@ const MODEL_INPUT = "0123456789abcdef0123456789abcdef";
 function status(overrides: Partial<AnvilScratchResponse> = {}): AnvilScratchResponse {
   return {
     checked_at: "2026-10-06T12:00:00Z",
-    quota: { files_used: 400_000, files_limit: 1_000_000, bytes_used: 2 * 1024 ** 3, bytes_limit: 100 * 1024 ** 3 },
+    quota: { files_used: 400_000, files_limit: 1_000_000, bytes_used: 2e9, bytes_limit: 100e9 },
     quota_error: null,
     high: 0.8,
     low: 0.5,
@@ -35,7 +35,7 @@ function status(overrides: Partial<AnvilScratchResponse> = {}): AnvilScratchResp
         dir: "global/era5",
         units: 12,
         files: 4380,
-        bytes: 3 * 1024 ** 3,
+        bytes: 3e9,
         last_used: "2026-10-05T12:00:00Z",
         on_s3_units: 9,
         leased_units: 2,
@@ -47,14 +47,14 @@ function status(overrides: Partial<AnvilScratchResponse> = {}): AnvilScratchResp
         dir: "conus/nldas",
         units: 3,
         files: 1095,
-        bytes: 1024 ** 2,
+        bytes: 1e6,
         last_used: null,
         on_s3_units: 3,
         leased_units: 0,
       },
     ],
     leases: [{ sim_id: "sim-abc", variant_dir: "global/era5", units: ["2020", "2021"], expires: "2026-10-07T00:00:00Z" }],
-    totals: { units: 15, files: 5475, bytes: 4 * 1024 ** 3 },
+    totals: { units: 15, files: 5475, bytes: 4e9 },
     ...overrides,
   };
 }
@@ -63,9 +63,9 @@ const dryRun: SpoolClearResponse = {
   dry_run: true,
   deleted_units: 13,
   deleted_files: 4_745,
-  deleted_bytes: 2 * 1024 ** 3,
+  deleted_bytes: 2e9,
   skipped_leased: 2,
-  deleted: [{ variant_dir: "global/era5", unit: "2019", files: 365, bytes: 1024 }],
+  deleted: [{ variant_dir: "global/era5", unit: "2019", files: 365, bytes: 1000 }],
 };
 
 const refused = (status: number, code: string, message = "") => ({

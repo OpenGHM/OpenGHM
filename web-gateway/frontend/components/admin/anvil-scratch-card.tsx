@@ -17,7 +17,7 @@ import type {
   SpoolVariant,
 } from "@/lib/admin/types";
 import type { ActionFailure } from "@/lib/jobs/types";
-import { formatBytes, formatCount } from "@/lib/workspace/format";
+import { formatBytesSI, formatCount } from "@/lib/workspace/format";
 
 type Load =
   | { kind: "loading" }
@@ -170,7 +170,7 @@ function QuotaSection({ data }: { data: AnvilScratchResponse }) {
         label="Size"
         used={quota.bytes_used}
         limit={quota.bytes_limit}
-        valueText={`${formatBytes(quota.bytes_used)} of ${formatBytes(quota.bytes_limit)}`}
+        valueText={`${formatBytesSI(quota.bytes_used)} of ${formatBytesSI(quota.bytes_limit)}`}
       />
       <p className="text-xs text-muted-foreground">
         The spool cache is pruned automatically at {Math.round(data.high * 100)}% of the file quota, down to{" "}
@@ -190,7 +190,7 @@ function VariantRow({ v }: { v: SpoolVariant }) {
       <TableCell>{v.variant}</TableCell>
       <TableCell className="text-right tabular-nums">{formatCount(v.units)}</TableCell>
       <TableCell className="text-right tabular-nums">{formatCount(v.files)}</TableCell>
-      <TableCell className="text-right tabular-nums">{formatBytes(v.bytes)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatBytesSI(v.bytes)}</TableCell>
       <TableCell className="text-muted-foreground">
         {v.last_used ? <TimeStamp value={v.last_used} format="relative" /> : "—"}
       </TableCell>
@@ -216,7 +216,7 @@ function CacheSection({ data }: { data: AnvilScratchResponse }) {
       <div className="grid grid-cols-3 gap-3">
         {[
           ["Files", formatCount(data.totals.files)],
-          ["Size", formatBytes(data.totals.bytes)],
+          ["Size", formatBytesSI(data.totals.bytes)],
           ["Units", formatCount(data.totals.units)],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg bg-muted px-3 py-2">
@@ -406,7 +406,7 @@ export function AnvilScratchCard() {
         {lastClear && (
           <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">
             Cleared {plural(lastClear.deleted_units, "year", "years")} ({plural(lastClear.deleted_files, "file", "files")},{" "}
-            {formatBytes(lastClear.deleted_bytes)}).
+            {formatBytesSI(lastClear.deleted_bytes)}).
             {lastClear.skipped_leased > 0 &&
               ` ${plural(lastClear.skipped_leased, "year", "years")} in use by running jobs were kept.`}
           </p>
@@ -451,7 +451,7 @@ export function AnvilScratchCard() {
           title="Clear the spool cache?"
           description={
             `This deletes ${plural(preview.deleted_units, "year", "years")} of cached data ` +
-            `(${plural(preview.deleted_files, "file", "files")}, ${formatBytes(preview.deleted_bytes)}) from the spool cache on Anvil scratch. ` +
+            `(${plural(preview.deleted_files, "file", "files")}, ${formatBytesSI(preview.deleted_bytes)}) from the spool cache on Anvil scratch. ` +
             (preview.skipped_leased > 0
               ? `${plural(preview.skipped_leased, "year", "years")} in use by running jobs ${preview.skipped_leased === 1 ? "is" : "are"} kept. `
               : "No year is in use by a running job. ") +
