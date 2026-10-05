@@ -203,7 +203,7 @@ and what a gateway job passes):
   binding limit is the file count, not the size: x-openghm has 100 TB and
   1 million files on scratch, and a 10-year spool is about 24,000 files
   (Global 480 GB, Wyoming 10 GB, as published). Evicting past a file cap is
-  not built.
+  not built (open item 24).
 
 What it changes and saves, measured:
 
