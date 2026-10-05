@@ -88,10 +88,39 @@ does not say which yet.
 ### Continue
 
 The run starts on the day after the published end, from the published
-end-of-run state through `State_ID`, and writes only the added years. The
-result is shown as the published years plus the added ones. The latest end
-allowed is the earliest end among the model input's datasets, not the
+end-of-run state, and writes only the added years. The result is shown as the
+published years plus the added ones.
+
+**No published snapshot can be continued today** (open item 23). The latest
+end is the last year for which every dataset the init reads has its files, and
+the published model inputs carry only the years their snapshots ran for some
+datasets, whatever their definitions declare: model input `ff0ba2e5` (Global,
+Wyoming) has glacier files for 1980 and 2000 to 2009 while its definition says
+1980 to 2012, and a Wyoming run for 2010 stopped at
+`glacier_RDI40_6min_2010_m.nc` (job 21087911); model input `52585562` (the v2
+tutorial) has precipitation and temperature for 2000 and 2001 only. So the end
+is read from the files, not from the definitions, and today it is each
 snapshot's own end.
+
+What is known about resuming, measured on Wyoming on 2026-10-05:
+
+- WBM resumes from a copied state: with the published end-of-spinup state
+  named as `State_ID`, it logged "Previous run state files are read! Resume
+  date is 2000-01-01." and ran no spinup (job 21086458). With the published
+  end-of-run state as the run's own (no `State_ID`) and a `Run_Start` the day
+  after the published end, it resumed on that day (job 21087911, until the
+  missing glacier file).
+- Resumed from the published end-of-spinup state, 2000 matched the published
+  2000 within floating-point noise: over the year runoff differed by at most
+  3.7e-4 mm/day and soil moisture by at most 0.0025 mm, on the days sampled at
+  most 152 of 67,480 cells differed, and soil moisture was identical by 31
+  December. Fractions of tracked components differed by up to 1 in a few
+  cells, where the totals they divide are near zero.
+- A self-check that ran a one-month spinup fresh and then resumed the same
+  months from its own saved state (job 21089081) differed more, from the first
+  day: runoff by up to 0.4 mm/day in 1,000 to 1,500 cells on the days sampled.
+  Why is not known; that
+  spinup overlapped the run's own months, which no published run does.
 
 ### Compute
 
