@@ -37,7 +37,7 @@ export const STATUS_TABS: StatusTab[] = [
     count: "running",
     empty: {
       title: "Nothing running",
-      hint: "Submitted snapshot drafts wait and run here. Submit one, or start a new snapshot draft.",
+      hint: "Submitted snapshot drafts wait and run here. Submit one, or start a new snapshot.",
     },
   },
   {

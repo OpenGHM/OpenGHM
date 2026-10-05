@@ -29,7 +29,7 @@ export function WorkspaceHeader({ section }: { section: WorkspaceSection }) {
           <Button asChild className="min-h-10 w-fit shrink-0 font-semibold">
             <Link href="/workspace/new">
               <Plus aria-hidden="true" />
-              New snapshot draft
+              New snapshot
             </Link>
           </Button>
         ) : (

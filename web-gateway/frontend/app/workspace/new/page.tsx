@@ -49,8 +49,8 @@ export default async function NewDraftPage({
       <Header />
       <main className={WORKSPACE_MAIN}>
         <PageHeader
-          top={<DraftBreadcrumb current="New snapshot draft" />}
-          title="New snapshot draft"
+          top={<DraftBreadcrumb current="New snapshot" />}
+          title="New snapshot"
           meta={<p className="mt-2.5 text-sm text-muted-foreground">Start from a published model snapshot</p>}
         >
           <StartProgress />

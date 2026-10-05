@@ -377,7 +377,7 @@ function WizardBody({
 
   const recommended = recommendedComputeFor(ctx.dataset);
   const source = draftSource({ dataset_id: datasetId, dataset_title: initialJob.dataset_title });
-  const name = isNew ? local.name.trim() || "New snapshot draft" : liveName(local.name, initialJob);
+  const name = isNew ? local.name.trim() || "New snapshot" : liveName(local.name, initialJob);
   const index = DRAFT_STEPS.indexOf(step);
 
   // ── Saving, and leaving ───────────────────────────────────────────────────

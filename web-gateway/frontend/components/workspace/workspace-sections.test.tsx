@@ -57,7 +57,7 @@ describe("the Workspace header", () => {
     render(<WorkspaceHeader section="drafts" />);
     expect(screen.getByText("Workspace")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Snapshot drafts" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New snapshot draft" }).getAttribute("href")).toBe("/workspace/new");
+    expect(screen.getByRole("link", { name: "New snapshot" }).getAttribute("href")).toBe("/workspace/new");
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshot drafts");
   });
 
@@ -65,7 +65,7 @@ describe("the Workspace header", () => {
     render(<WorkspaceHeader section="data" />);
     expect(screen.getByRole("heading", { level: 1, name: "Snapshots & Inputs" })).toBeTruthy();
     expect(screen.getByText(/What you published/)).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "New snapshot draft" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "New snapshot" })).toBeNull();
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshots & Inputs");
   });
 

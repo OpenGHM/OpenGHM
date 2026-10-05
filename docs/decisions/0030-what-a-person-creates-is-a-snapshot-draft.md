@@ -25,6 +25,9 @@ nothing else.**
 - **Snapshot draft** is the whole lifecycle in user-facing copy and in docs:
   *edited*, *submitted*, *run*, and in time *published as a snapshot*. After
   the first mention, "draft" alone is fine where it is unambiguous.
+- **The action that starts one is "New snapshot".** A person sets out to
+  make a snapshot; that it is a draft until published is what the list and
+  its status say, so the button does not repeat it.
 - **Status `DRAFT` is shown as "Editing".** The word "draft" now names the
   thing at every status, so it cannot also name one status.
 - **A submitted draft's execution is its run** (Queued, Running, Completed,
@@ -41,7 +44,7 @@ nothing else.**
 ## Consequences
 
 - The UI says snapshot draft everywhere a person used to read simulation
-  (My snapshot drafts, New snapshot draft, Delete snapshot draft, Can submit
+  (My snapshot drafts, New snapshot, Delete snapshot draft, Can submit
   runs), and the frontend files and symbols that meant the workspace thing
   are renamed `draft-*`. `job-*` components keep their names, as they mirror
   the backend's job.

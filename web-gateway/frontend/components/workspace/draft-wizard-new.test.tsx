@@ -152,10 +152,10 @@ function click(el: Element): boolean {
 }
 
 describe("a new snapshot draft: what the page says", () => {
-  it("opens on Run settings, titled New snapshot draft, badged Not saved, with no id anywhere", () => {
+  it("opens on Run settings, titled New snapshot, badged Not saved, with no id anywhere", () => {
     wizard();
     expect(heading()).toBe("Run settings");
-    expect(h1()).toBe("New snapshot draft");
+    expect(h1()).toBe("New snapshot");
     expect(screen.getByText("Not saved")).toBeTruthy();
     expect(screen.queryByText("Draft")).toBeNull();
     expect(screen.getByText("Not saved yet")).toBeTruthy();
@@ -167,13 +167,13 @@ describe("a new snapshot draft: what the page says", () => {
     expect(screen.getByRole("link", { name: "Cancel" }).getAttribute("href")).toBe("/workspace");
   });
 
-  it("follows the name as it is typed, and goes back to New snapshot draft when it is cleared", () => {
+  it("follows the name as it is typed, and goes back to New snapshot when it is cleared", () => {
     wizard();
     type("  Colorado basin ");
     expect(h1()).toBe("Colorado basin");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" }).textContent).toContain("Colorado basin");
     type("   ");
-    expect(h1()).toBe("New snapshot draft");
+    expect(h1()).toBe("New snapshot");
   });
 
   it("focuses the empty Name on open", () => {

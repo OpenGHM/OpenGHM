@@ -129,7 +129,7 @@ async function DraftList({
             <Button asChild size="sm" className="min-h-10 sm:min-h-8">
               <Link href="/workspace/new">
                 <Plus className="mr-1.5 size-4" />
-                New snapshot draft
+                New snapshot
               </Link>
             </Button>
             {statusFilter && (

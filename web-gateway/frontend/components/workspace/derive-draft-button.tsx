@@ -8,13 +8,13 @@ export const CARD_BUTTON =
   "h-auto min-h-10 gap-2 whitespace-normal border-primary px-6 text-left text-base font-semibold text-primary hover:bg-primary/5";
 
 /**
- * "New snapshot draft from this snapshot" (T9). Opens the new snapshot draft wizard on
+ * "New snapshot from this model snapshot" (T9). Opens the new snapshot draft wizard on
  * Run settings, starting from the snapshot. Nothing is created here: the
  * snapshot draft is stored when the person saves it (ADR 0028).
  */
 export function DeriveDraftButton({
   datasetId,
-  label = "New snapshot draft from this model snapshot",
+  label = "New snapshot from this model snapshot",
   fullWidth = false,
 }: {
   datasetId: string;
