@@ -8,12 +8,13 @@ The GPFS project space (`ops/docs/reference/anvil-environment.md`, private) is s
 where compute jobs read from. Anvil S3 is the published, immutable
 destination — everything in this document pins against it.
 
-One bucket, `openghm`, eight prefixes (`wbm-code/` is designed but holds nothing yet):
+One bucket, `openghm`, nine prefixes (`wbm-code/` is designed but holds nothing yet):
 
 ```
 openghm/
   snapshots/<id>/…                   # full snapshot tree (snapshot-layout), immutable once published
   model-inputs/<id>/…                # axis 3; internal layout is dataset-specific
+  spools/<model input id>/<network>/<variant>/…   # WBM spool days, shared by runs (ADR 0029)
   wbm-code/<name>/<version>/…        # model/ + utilities/
   containers/<image>/<version>/…     # plain-S3 SIF mirror
   registry/…                         # zot's own blob store, content-addressed, opaque
@@ -26,12 +27,32 @@ openghm/
 |---|---|---|---|---|
 | `snapshots/` | minted id | **open** — any user | none | [Upload and lock](#upload-and-lock) |
 | `model-inputs/` | minted id | **open** — any user | none | [Publish a model input](#publish-a-model-input) |
+| `spools/<model input id>/` | model input id, network basename, variant | curated | none — a key's content is fixed by its variant | `ops/anvil/publish_spools.sh` (private), from the published snapshots' `spool/` |
 | `wbm-code/` | name + version | curated | none | [Publish a code version](#publish-a-code-version) |
 | `containers/` | name + version | curated | `containers/manifest.json` only | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
 | `registry/` | content address | curated | zot's own bookkeeping | zot |
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
 | `old/` | the path the object had before it moved | none — a holding area | nothing is added; objects are only moved in | by hand, when a curated prefix drops something worth keeping |
 | `schema-docs/` | not versioned — single artifact, no version axis | curated | every file — redeployed on each change, not versioned as an artifact ([ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)) | **built** by `just schema-docs-gen` (`schema-docs/generated/`, committed) then **published** by a manual `s3cmd put`, same as `schemas/` before automation — no dedicated publish walkthrough exists yet |
+
+**`spools/<model input id>/` holds the three published snapshots' spools** (2026-10-05, job
+21093012): their dataset directories, not the network-level files
+(`Cell_Table.dat`, the reservoir tifs, `glAreaFrac`), each copied
+server-side under the variant `openghm spool variant` gives the snapshot at
+its defaults, every key public-read, and each listing compared key, size and
+ETag against its source:
+
+| Source snapshot | Key prefix | Objects | Size |
+|---|---|---|---|
+| v2 tutorial `fc66a2cd…` | `spools/52585562…/hyd_5m_CONUS_mississippi_patched/6f68149a0de1f431/` | 3,654 | 1.9 GB |
+| Wyoming `245430de…` | `spools/ff0ba2e5…/Wyoming_05min_flwdir/01c56eb25d76aa37/` | 24,368 | 10.1 GB |
+| Global `4604e608…` | `spools/ff0ba2e5…/05min_flwdir/47401856003325c3/` | 24,368 | 479.8 GB |
+
+Before the copy, what the toolkit builds for each variant was compared byte
+for byte with the published files it overlaps (job 21090183: v2 3,654,
+Wyoming 11,228, Global 940 files, all identical). Inside a variant the tree is
+WBM's own spool layout, `<dataset ID>[_<patch>]/<date>.dat` with its
+`.dat.hdr`. Nothing uploads to `spools/<model input id>/` from a run yet (open item 10).
 
 **`containers/` and `registry/` hold real content as of `2026-09-25-zot-deploy`
 (private):** three images (`wbm-v1-lite`, `wbm-v2-lite`, `wbm-tools-lite`,

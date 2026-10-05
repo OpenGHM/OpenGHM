@@ -185,11 +185,17 @@ files to the same directory.
   to build it. A run never uploads: who would hold the write credentials is
   open item 10.
 
+- **What S3 holds.** `spools/<model input id>/` holds the three published
+  snapshots' spools under their variants, copied within S3 after a byte-for-byte
+  check against what each variant builds ([s3-layout.md](../reference/s3-layout.md)).
+  A Wyoming run from an empty scratch cache downloaded the 6,236 days its
+  years needed (6.5 GB) and built none (job 21093028). The cache takes whole
+  years from S3, the spinup's first to the year after the run's last, so a
+  two-month run fetches two years.
+
 **Target:**
 
-- **What S3 holds.** `spools/<model input id>/` is filled from the spools the
-  published snapshots carry, copied within S3 under their variants; each
-  snapshot's own `spool/` then goes.
+- **The snapshots' own `spool/` goes**, now that `spools/` repeats it.
 - **A cache with a cap.** Scratch purges files untouched for 30 days, and the
   binding limit is the file count, not the size: x-openghm has 100 TB and
   1 million files on scratch, and a 10-year spool is about 24,000 files
