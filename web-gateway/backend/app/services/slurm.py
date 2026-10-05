@@ -274,7 +274,9 @@ async def submit_job(job: JobDB, snapshot: dict, body: str) -> SubmittedJob:
 # ---------------------------------------------------------------------------
 
 
-async def run_remote(command: str, *, operation: str, retry_safe: bool = False):
+async def run_remote(
+    command: str, *, operation: str, retry_safe: bool = False, timeout: float | None = None
+):
     """Run one shell command on Anvil and return slurmly's `CommandResult`
     (`exit_status`, `stdout`, `stderr`); a transport failure raises.
 
@@ -284,9 +286,13 @@ async def run_remote(command: str, *, operation: str, retry_safe: bool = False):
     (rule 2): the one place to change when the pin moves. `retry_safe` is for
     a command that does the same thing run twice — a read, a `rm -rf`, an
     `scancel` — because slurmly re-sends those after a dropped connection.
+    `timeout` (seconds) is for a command that may run long; without one the
+    transport's own default applies.
     """
     client = await get_slurm_client()
-    return await client._run(command, operation=operation, check=False, retry_safe=retry_safe)
+    return await client._run(
+        command, operation=operation, check=False, retry_safe=retry_safe, timeout=timeout
+    )
 
 
 async def read_outcome(remote_job_dir: str) -> dict | None:

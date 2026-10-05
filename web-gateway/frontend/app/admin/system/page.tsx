@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AdminPage, InlineError } from "@/components/admin/admin-page";
+import { AnvilScratchCard } from "@/components/admin/anvil-scratch-card";
 import { SectionHeader } from "@/components/admin/section-header";
 import { fetchSystemInfo } from "@/lib/admin/actions";
 import type { DependencyStatus } from "@/lib/admin/types";
@@ -32,15 +33,16 @@ export default async function AdminSystemPage() {
   if (!info) {
     return (
       <AdminPage>
-        <SectionHeader title="System" description="How the gateway is running. Read-only." />
+        <SectionHeader title="System" description="How the gateway is running, and what the spool cache holds on Anvil scratch." />
         <InlineError title="Couldn't load the system information." />
+        <AnvilScratchCard />
       </AdminPage>
     );
   }
 
   return (
     <AdminPage>
-      <SectionHeader title="System" description="How the gateway is running. Read-only." />
+      <SectionHeader title="System" description="How the gateway is running, and what the spool cache holds on Anvil scratch." />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
@@ -94,6 +96,8 @@ export default async function AdminSystemPage() {
           ))}
         </CardContent>
       </Card>
+
+      <AnvilScratchCard />
 
       <Card>
         <CardHeader>

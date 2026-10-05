@@ -643,12 +643,13 @@ assume. None of them is here:
 
 `web-gateway/backend/app/core/audit.py` appends to `audit_events`; admins and
 staff read it at `GET /admin/audit-log`. Every event carries a category,
-because the two streams
+because the streams
 have nothing in common: `auth` is low-volume and security-relevant (sign-in
 success and failure, registration, password reset, role and status changes, SSO
 account creation and linking), `job` is operational (a draft created as
 `simulation_derived` or `simulation_duplicated`, submission, cancellation, SLURM
-transitions, deletion).
+transitions, deletion), `system` is an admin changing shared infrastructure
+(`spool_cache_cleared`, with the counts; a dry run writes nothing).
 
 Job-status events are written **only at genuine transitions**. The sweep runs
 on every background tick and every status-page load, so the audit call lives
@@ -657,3 +658,20 @@ that finds nothing changed never reaches it. That placement is the only thing
 keeping the log from filling with polling noise — preserve it if that code is
 ever restructured. A delete writes `job_deleted` with the paths it removed. Editing a draft
 writes nothing.
+
+**Anvil's scratch, from the admin page.** Two admin-only routes
+(`web-gateway/backend/app/api/v1/admin.py`, `web-gateway/backend/app/services/anvil_scratch.py`)
+run one toolkit command on Anvil through `slurm.run_remote`, the same
+`<ANVIL_OPENGHM_HOME>/bin/openghm … --config <ANVIL_OPENGHM_HOME>/gateway.toml`
+a job uses, and return its JSON; the gateway keeps no copy of the cache's layout
+(rule 4). `GET /api/v1/admin/anvil/scratch` (`system:view`) runs `spool status
+--json`: the scratch quota in files and bytes, the cache per variant, the
+unexpired leases, and `checked_at`. `POST /api/v1/admin/anvil/spool-cache/clear`
+(`system:manage`, body `{"dry_run": false}`) runs `spool prune --all --json`,
+which deletes every unit no running simulation holds, and writes a
+`spool_cache_cleared` audit event unless it was a dry run. Both are asked of
+Anvil on every call and send `retry_safe`: a status read and a second delete
+are harmless. Errors are `{"code", "message"}`: 503 `anvil_not_configured`
+(no toolkit home or no SSH credentials), 503 `anvil_unreachable`, and 502
+`spool_status_failed` / `spool_clear_failed` (the toolkit exited non-zero, with
+its stderr tail, or printed something that is not its JSON).

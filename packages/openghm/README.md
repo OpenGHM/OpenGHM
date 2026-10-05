@@ -154,7 +154,8 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
 | `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh` (default `cache`); writes `simulation.json` |
 | `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
-| `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`) |
+| `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`); `--all` deletes every unit no running simulation holds, whatever the quota says |
+| `openghm spool status [--json]` | `myquota` | print the scratch quota (files and bytes) and what the spool cache holds per variant, with the unexpired leases; deletes nothing |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
 | `openghm sim logs <id> [-f]` | slurm `.out`/`.err` | print or `--follow` (tail) the SLURM log |
@@ -316,7 +317,16 @@ and `model_input_path`.
   index first, then its `.dat` files, then its `.hdr` files. After linking, `prepare`
   removes a link whose target is gone (counted as `spool.dangling`), so WBM builds that
   day itself. `spool prune --dry-run` prints the same plan and deletes nothing; `--high`
-  and `--low` override the config for one call.
+  and `--low` override the config for one call. `spool prune --all` ignores the quota and
+  the thresholds and deletes every unit no unexpired lease holds (even without
+  `myquota`; its `--json` is the same result plus `"all": true`, and `skipped_leased`
+  then counts every leased unit). `spool status [--json]` deletes nothing: it prints
+  `quota` (`files_used`, `files_limit`, `bytes_used`, `bytes_limit`, from the Files
+  and Size columns of the `scratch` row, sizes in decimal units; `null` with
+  `quota_error` where `myquota` is missing or unreadable), `high`, `low`, `cache_root`,
+  one entry per variant (`units`, `files`, `bytes`, `last_used`, `on_s3_units`,
+  `leased_units`, newest last use first), the unexpired `leases` and `totals`, reading
+  the unit indexes as pruning does.
 - `fresh`: an empty `output_base/<id>/spool`; nothing is shared (to check a cached
   spool against a built one).
 

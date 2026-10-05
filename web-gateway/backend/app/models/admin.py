@@ -6,7 +6,7 @@ these aren't shaped like either domain's resources.
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 DependencyStatus = Literal["ok", "degraded", "unconfigured", "error"]
 
@@ -93,3 +93,91 @@ class StatusBreakdownResponse(BaseModel):
     items: list[StatusCount]
     total: int
     since: datetime | None = None
+
+
+class ScratchQuota(BaseModel):
+    """The `scratch` row of Anvil's `myquota`: files and bytes (decimal units)."""
+
+    files_used: int
+    files_limit: int
+    bytes_used: int
+    bytes_limit: int
+
+
+class SpoolVariantUsage(BaseModel):
+    """One variant directory of the spool cache,
+    `<cache root>/<model input id>/<network>/<variant>`. A unit is one year of
+    it (or its climatology); `last_used` is the newest of its units' last use
+    (UTC, `YYYY-MM-DDTHH:MM:SSZ`)."""
+
+    # `model_input_id` is the toolkit's field name; pydantic reserves `model_`.
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_input_id: str
+    network: str
+    variant: str
+    dir: str
+    units: int
+    files: int
+    bytes: int
+    last_used: str | None = None
+    on_s3_units: int
+    leased_units: int
+
+
+class SpoolLease(BaseModel):
+    """What one running simulation holds in the cache; never deleted until it
+    expires (UTC, same format as `last_used`)."""
+
+    sim_id: str
+    variant_dir: str
+    units: list[str]
+    expires: str
+
+
+class SpoolTotals(BaseModel):
+    units: int
+    files: int
+    bytes: int
+
+
+class ScratchStatusResponse(BaseModel):
+    """GET /admin/anvil/scratch: Anvil's scratch quota and the spool cache, as
+    `openghm spool status --json` reports them. `quota` is null, with
+    `quota_error` saying why, when `myquota` could not be read. `high` and
+    `low` are the toolkit's automatic-prune thresholds (fractions of the file
+    quota); `variants` are newest last use first and `leases` unexpired only."""
+
+    quota: ScratchQuota | None = None
+    quota_error: str | None = None
+    high: float
+    low: float
+    cache_root: str
+    variants: list[SpoolVariantUsage]
+    leases: list[SpoolLease]
+    totals: SpoolTotals
+    checked_at: datetime
+
+
+class SpoolCacheClearRequest(BaseModel):
+    dry_run: bool = False
+
+
+class SpoolDeletedUnit(BaseModel):
+    variant_dir: str
+    unit: str
+    files: int
+    bytes: int
+
+
+class SpoolCacheClearResponse(BaseModel):
+    """POST /admin/anvil/spool-cache/clear. With `dry_run` nothing was deleted
+    and the counts are what would be. `skipped_leased` is the units kept
+    because a running simulation holds them."""
+
+    dry_run: bool
+    deleted_units: int
+    deleted_files: int
+    deleted_bytes: int
+    skipped_leased: int
+    deleted: list[SpoolDeletedUnit]

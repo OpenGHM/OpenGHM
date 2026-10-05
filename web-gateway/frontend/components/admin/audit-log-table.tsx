@@ -28,6 +28,7 @@ const CATEGORY_TABS: { label: string; value: AuditCategory | undefined }[] = [
   { label: "All", value: undefined },
   { label: "Auth", value: "auth" },
   { label: "Jobs", value: "job" },
+  { label: "System", value: "system" },
 ];
 
 function CategoryTabs({

@@ -45,6 +45,7 @@ class Permission(StrEnum):
     REPO_MANAGE = "repository:manage"  # reserved — no endpoint yet
     # system
     SYSTEM_VIEW = "system:view"  # read-only infra/health/config surface
+    SYSTEM_MANAGE = "system:manage"  # changes shared system state (clearing the Anvil spool cache)
 
 
 _GUEST: frozenset[Permission] = frozenset({Permission.REPO_VIEW})
@@ -68,6 +69,7 @@ _ADMIN: frozenset[Permission] = _STAFF | {
     Permission.USER_MANAGE,
     Permission.REPO_MANAGE,
     Permission.SYSTEM_VIEW,
+    Permission.SYSTEM_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {

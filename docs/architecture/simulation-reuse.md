@@ -213,7 +213,11 @@ and what a gateway job passes):
   bytes, last use and whether S3 holds it. Without `myquota`, nothing is
   deleted. `openghm spool prune --dry-run` shows what would go; on Anvil it
   read 59,700 of 1,000,000 files (6.0%) on 2026-10-06. Scratch's own 30-day
-  purge still applies on top.
+  purge still applies on top. `openghm spool status --json` reports the quota
+  (files and bytes) and the cache per variant, and `spool prune --all` deletes
+  every unit no lease holds; the admin page reads and clears the cache through
+  them (`GET /api/v1/admin/anvil/scratch`, `POST /api/v1/admin/anvil/spool-cache/clear`,
+  admin only, [gateway.md §7](gateway.md#7-audit-log)).
 
 What it changes and saves, measured:
 

@@ -221,6 +221,14 @@ def _check_abs_path(kind: str, value: str) -> str:
     return value.rstrip("/") or "/"
 
 
+def toolkit_paths(openghm_home: str) -> tuple[str, str]:
+    """`(bin/openghm, gateway.toml)` of a toolkit install: the executable a job
+    runs and the config it passes with `--config`. Raises `SubmitInputError`
+    when `openghm_home` is not an absolute path. Unquoted: the caller quotes."""
+    home = _check_abs_path("ANVIL_OPENGHM_HOME", openghm_home)
+    return home + "/bin/openghm", home + "/gateway.toml"
+
+
 def toolkit_commit(openghm_home: str) -> str:
     """The commit a toolkit install is pinned to: the install directory's
     name (`<...>/apps/openghm/<commit>`, ADR 0025)."""
@@ -312,6 +320,7 @@ def render_job_body(
     snapshot_id = _check_id("snapshot id", snapshot_id)
     sim_id = _check_id("simulation id", sim_id)
     home = _check_abs_path("ANVIL_OPENGHM_HOME", openghm_home)
+    openghm, config = toolkit_paths(home)
     commit = toolkit_commit(home)
     cache = _check_abs_path("ANVIL_CACHE_DIR", cache_dir)
     lock = _check_abs_path("ANVIL_FETCH_LOCK", fetch_lock)
@@ -339,8 +348,8 @@ def render_job_body(
     return "\n".join(
         [
             "set -euo pipefail",
-            f"OPENGHM={shlex.quote(home + '/bin/openghm')}",
-            f"CONFIG={shlex.quote(home + '/gateway.toml')}",
+            f"OPENGHM={shlex.quote(openghm)}",
+            f"CONFIG={shlex.quote(config)}",
             f"CACHE={shlex.quote(cache)}",
             f"PY={shlex.quote(home + '/venv/bin/python')}",
             f"export OG_SNAPSHOT_ID={snapshot_id} OG_SIM_ID={sim_id} OG_COMMIT={commit}",

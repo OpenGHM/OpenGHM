@@ -130,6 +130,9 @@ MYQUOTA_TIMEOUT = 60
 #: A count as ``myquota`` prints it: ``812``, ``59.6K``, ``1.0M``.
 _QUOTA_COUNT = re.compile(r"^(\d+(?:\.\d+)?)([KMG]?)$", re.IGNORECASE)
 _QUOTA_FACTOR = {"": 1, "K": 10**3, "M": 10**6, "G": 10**9}
+#: A size as ``myquota`` prints it: ``812B``, ``91.9GB``, ``100.0TB`` (decimal: KB = 1e3 ... PB = 1e15).
+_QUOTA_SIZE = re.compile(r"^(\d+(?:\.\d+)?)([KMGTP]?)B?$", re.IGNORECASE)
+_SIZE_FACTOR = {"": 1, "K": 10**3, "M": 10**6, "G": 10**9, "T": 10**12, "P": 10**15}
 
 #: Reads the init the way ``read_init`` does (``WBM.pm``: strip ``\r``, ``=> ,``, ``eval``)
 #: and prints it as canonical JSON, every scalar a string. A string naming an existing
@@ -658,22 +661,31 @@ def write_lease(plan: SpoolPlan, v: Variant, units: Iterable[str], now: datetime
     })
 
 
-def _leases(cache_root: str, now: datetime) -> Tuple[Set[Tuple[str, str]], List[str]]:
-    """``({(variant dir, unit)}, [expired lease files])``: what unexpired leases hold, and the
-    leases that have run out. A file that is not a lease is left alone and holds nothing."""
-    held: Set[Tuple[str, str]] = set()
-    expired: List[str] = []
+def _lease_records(cache_root: str) -> List[Tuple[str, str, dict, datetime]]:
+    """``[(lease file, sim id, record, expiry)]`` of the readable leases under ``cache_root``, by
+    name. A file that is not a lease is left out."""
+    out: List[Tuple[str, str, dict, datetime]] = []
     directory = os.path.join(cache_root, LEASES_DIR)
     try:
         names = sorted(os.listdir(directory))
     except FileNotFoundError:
-        return held, expired
+        return out
     for name in names:
         path = os.path.join(directory, name)
         rec = _read_json(path) if name.endswith(".json") else None
         until = _parse_utc(rec.get("expires")) if rec else None
         if until is None or not isinstance(rec.get("variant_dir"), str) or not isinstance(rec.get("units"), list):
             continue
+        out.append((path, name[:-len(".json")], rec, until))
+    return out
+
+
+def _leases(cache_root: str, now: datetime) -> Tuple[Set[Tuple[str, str]], List[str]]:
+    """``({(variant dir, unit)}, [expired lease files])``: what unexpired leases hold, and the
+    leases that have run out. A file that is not a lease is left alone and holds nothing."""
+    held: Set[Tuple[str, str]] = set()
+    expired: List[str] = []
+    for path, _sim, rec, until in _lease_records(cache_root):
         if until <= now:
             expired.append(path)
         else:
@@ -691,14 +703,8 @@ def release_lease(plan: SpoolPlan) -> None:
 # the cap
 
 
-def parse_myquota(text: str) -> Tuple[int, int]:
-    """``(files used, file limit)`` of the ``scratch`` row of ``myquota``'s output.
-
-    The columns are found from the header line (``… Files Limit Use``) counting from the right,
-    so a location or size that holds spaces does not shift them; without a header the row's last
-    three columns are taken to be those. A count is ``812``, ``59.6K``, ``1.0M`` (K, M, G are
-    powers of 1000). Raises :class:`OpenghmError` where there is no such row or it does not read.
-    """
+def _scratch_row(text: str) -> Optional[Tuple[List[str], Optional[List[str]]]]:
+    """``(columns of the scratch row, columns of the header line before it or None)``."""
     header: Optional[List[str]] = None
     for line in text.splitlines():
         cols = line.split()
@@ -707,19 +713,42 @@ def parse_myquota(text: str) -> Tuple[int, int]:
         if cols[0].lower() == "type" and "Files" in cols:
             header = cols
         elif cols[0] == "scratch":
-            if header is not None:
-                files = header.index("Files") - len(header)
-                limit = next((i - len(header) for i, c in enumerate(header)
-                              if c == "Limit" and i - len(header) > files), None)
-            else:
-                files, limit = -3, -2
-            try:
-                used, cap = (_quota_count(cols[i]) for i in (files, limit))
-            except (IndexError, TypeError, ValueError):
-                break
-            if cap > 0:
-                return used, cap
-            break
+            return cols, header
+    return None
+
+
+def _quota_columns(header: Optional[List[str]]) -> Dict[str, Optional[int]]:
+    """The scratch row's ``Size``, size ``Limit``, ``Files`` and file ``Limit`` columns as indexes
+    from the right (``None`` where the header has no ``Size``). Without a header the row's last
+    columns are taken to be ``Size Limit Use Files Limit Use``."""
+    if header is None:
+        return {"size": -6, "size_limit": -5, "files": -3, "files_limit": -2}
+    n = len(header)
+    files = header.index("Files") - n
+    size = header.index("Size") - n if "Size" in header else None
+    after = lambda i: next((j - n for j, c in enumerate(header) if c == "Limit" and j - n > i), None)
+    return {"size": size, "size_limit": None if size is None else after(size),
+            "files": files, "files_limit": after(files)}
+
+
+def parse_myquota(text: str) -> Tuple[int, int]:
+    """``(files used, file limit)`` of the ``scratch`` row of ``myquota``'s output.
+
+    The columns are found from the header line (``… Files Limit Use``) counting from the right,
+    so a location or size that holds spaces does not shift them; without a header the row's last
+    three columns are taken to be those. A count is ``812``, ``59.6K``, ``1.0M`` (K, M, G are
+    powers of 1000). Raises :class:`OpenghmError` where there is no such row or it does not read.
+    """
+    row = _scratch_row(text)
+    if row is not None:
+        cols, header = row
+        at = _quota_columns(header)
+        try:
+            used, cap = (_quota_count(cols[at[k]]) for k in ("files", "files_limit"))
+        except (IndexError, TypeError, ValueError):
+            used = cap = 0
+        if cap > 0:
+            return used, cap
     raise OpenghmError("cannot read the scratch file quota from myquota's output")
 
 
@@ -730,9 +759,33 @@ def _quota_count(text: str) -> int:
     return round(float(m.group(1)) * _QUOTA_FACTOR[m.group(2).upper()])
 
 
-def read_quota(*, run=subprocess.run) -> Tuple[int, int]:
-    """``(files used, file limit)`` of the scratch quota, from ``myquota`` (``run`` is
-    ``subprocess.run``; tests pass a fake). Raises :class:`OpenghmError` without one."""
+def _quota_bytes(text: str) -> int:
+    """A size as ``myquota`` prints it (``91.9GB``, ``100.0TB``, ``0B``) in bytes: decimal units,
+    B, KB, MB, GB, TB, PB."""
+    m = _QUOTA_SIZE.match(text)
+    if m is None:
+        raise ValueError(text)
+    return round(float(m.group(1)) * _SIZE_FACTOR[m.group(2).upper()])
+
+
+def parse_scratch_quota(text: str) -> Dict[str, int]:
+    """``{files_used, files_limit, bytes_used, bytes_limit}`` of the ``scratch`` row of
+    ``myquota``'s output: the files as :func:`parse_myquota` reads them, the bytes from the row's
+    ``Size`` and ``Limit`` columns. Raises :class:`OpenghmError` where either does not read."""
+    files_used, files_limit = parse_myquota(text)
+    cols, header = _scratch_row(text)         # parse_myquota found it
+    at = _quota_columns(header)
+    try:
+        bytes_used, bytes_limit = (_quota_bytes(cols[at[k]]) for k in ("size", "size_limit"))
+    except (IndexError, TypeError, ValueError):
+        bytes_limit = 0
+    if bytes_limit <= 0:
+        raise OpenghmError("cannot read the scratch size quota from myquota's output")
+    return {"files_used": files_used, "files_limit": files_limit,
+            "bytes_used": bytes_used, "bytes_limit": bytes_limit}
+
+
+def _myquota(run) -> str:
     try:
         proc = run([MYQUOTA], capture_output=True, text=True, timeout=MYQUOTA_TIMEOUT)
     except FileNotFoundError:
@@ -741,7 +794,19 @@ def read_quota(*, run=subprocess.run) -> Tuple[int, int]:
         raise OpenghmError(f"{MYQUOTA} failed: {e}")
     if proc.returncode:
         raise OpenghmError(f"{MYQUOTA} exited {proc.returncode}: {(proc.stderr or '').strip()[-200:]}")
-    return parse_myquota(proc.stdout or "")
+    return proc.stdout or ""
+
+
+def read_quota(*, run=subprocess.run) -> Tuple[int, int]:
+    """``(files used, file limit)`` of the scratch quota, from ``myquota`` (``run`` is
+    ``subprocess.run``; tests pass a fake). Raises :class:`OpenghmError` without one."""
+    return parse_myquota(_myquota(run))
+
+
+def read_scratch_quota(*, run=subprocess.run) -> Dict[str, int]:
+    """``{files_used, files_limit, bytes_used, bytes_limit}`` of the scratch quota, from
+    ``myquota`` (see :func:`parse_scratch_quota`). Raises :class:`OpenghmError` without one."""
+    return parse_scratch_quota(_myquota(run))
 
 
 @dataclass
@@ -832,6 +897,7 @@ def _delete_unit(vdir: str, unit: str) -> Tuple[int, int]:
 def prune(
     cache_root: str, *, high: float, low: float, dry_run: bool = False,
     log: Optional[Callable[[str], None]] = None, run=subprocess.run, now: Optional[datetime] = None,
+    everything: bool = False,
 ) -> Dict[str, object]:
     """Keep the scratch file quota under ``high`` by deleting the least recently used units of the
     spool cache under ``cache_root``, down to ``low``.
@@ -847,9 +913,15 @@ def prune(
     unit, files, bytes, last_used, on_s3}], "deleted_files", "deleted_bytes", "skipped_leased",
     "expired_leases"}``: ``reason`` says why nothing was done (``None`` where something was) and
     ``after`` is the file count it leaves (projected, with ``dry_run``).
+
+    With ``everything`` the thresholds and the target are ignored: every unit no unexpired lease
+    holds is deleted, in the same order and with the same re-reading of the leases. The quota is
+    still read, for the report, but a cache with no readable ``myquota`` is cleared all the same
+    (``used``, ``limit`` and ``after`` are ``None`` then). ``skipped_leased`` counts every unit a
+    lease holds, and the result has ``"all": true``.
     """
     say = log or (lambda _m: None)
-    if not 0 <= low < high <= 1:
+    if not everything and not 0 <= low < high <= 1:
         raise OpenghmError(f"the spool prune thresholds must satisfy 0 <= low < high <= 1 (got low {low}, high {high})")
     now = now or datetime.now(timezone.utc)
     result: Dict[str, object] = {
@@ -857,16 +929,22 @@ def prune(
         "reason": None, "deleted": [], "deleted_files": 0, "deleted_bytes": 0,
         "skipped_leased": 0, "expired_leases": 0,
     }
+    used = limit = None
     try:
         used, limit = read_quota(run=run)
     except OpenghmError as e:
-        result["reason"] = f"no pruning: {e}"
-        return _said(result, say)
+        if not everything:
+            result["reason"] = f"no pruning: {e}"
+            return _said(result, say)
     result.update(used=used, limit=limit, after=used)
-    if used < high * limit:
+    if everything:
+        result["all"] = True
+        target = None
+    elif used < high * limit:
         result["reason"] = f"below {high:.0%} of the quota: nothing to delete"
         return _said(result, say)
-    target = used - low * limit
+    else:
+        target = used - low * limit
     held, expired = _leases(cache_root, now)
     result["expired_leases"] = len(expired)
     if not dry_run:
@@ -875,12 +953,14 @@ def prune(
                 os.unlink(path)
             except FileNotFoundError:
                 pass
-    units = sorted((u for u in _candidates(cache_root, write=not dry_run)
-                    if (os.path.realpath(u.variant_dir), u.unit) not in held), key=lambda u: u.order)
+    candidates = _candidates(cache_root, write=not dry_run)
+    units = sorted((u for u in candidates if (os.path.realpath(u.variant_dir), u.unit) not in held),
+                   key=lambda u: u.order)
     deleted: List[dict] = []
-    files = nbytes = skipped = 0
+    files = nbytes = 0
+    skipped = len(candidates) - len(units) if everything else 0
     for u in units:
-        if files >= target:
+        if target is not None and files >= target:
             break
         if (os.path.realpath(u.variant_dir), u.unit) in _leases(cache_root, now)[0]:
             skipped += 1
@@ -892,9 +972,12 @@ def prune(
         files += n
         nbytes += b
         deleted.append({**u.to_dict(), "files": n, "bytes": b})
-    result.update(deleted=deleted, deleted_files=files, deleted_bytes=nbytes, after=used - files,
-                  skipped_leased=skipped)
-    if files < target:
+    result.update(deleted=deleted, deleted_files=files, deleted_bytes=nbytes,
+                  after=None if used is None else used - files, skipped_leased=skipped)
+    if everything:
+        if not deleted:
+            result["reason"] = "no unit to delete: the cache is empty or every unit is leased"
+    elif files < target:
         result["reason"] = "no more units to delete: the cache is not what holds the quota"
     return _said(result, say)
 
@@ -908,6 +991,8 @@ def _said(result: Dict[str, object], say: Callable[[str], None]) -> Dict[str, ob
 def describe_prune(result: Dict[str, object]) -> List[str]:
     """``prune``'s result as the lines ``spool prune`` and ``spool prepare`` print."""
     verb = "would delete" if result["dry_run"] else "deleted"
+    if result.get("all"):
+        return _describe_prune_all(result, verb)
     if result["used"] is None:
         return [f"spool: {result['reason']}"]
     head = f"spool: scratch files {result['used']:,} of {result['limit']:,} ({result['used'] / result['limit']:.1%})"
@@ -920,6 +1005,103 @@ def describe_prune(result: Dict[str, object]) -> List[str]:
     lines.append(f"spool: scratch files {'would be' if result['dry_run'] else 'now'} {result['after']:,} "
                  f"({result['after'] / result['limit']:.1%}), target {result['low']:.0%}"
                  + (f"; {result['reason']}" if result["reason"] else ""))
+    return lines
+
+
+def _describe_prune_all(result: Dict[str, object], verb: str) -> List[str]:
+    what = "all units no running simulation holds"
+    head = f"spool: {what}"
+    if result["used"] is not None:
+        head = (f"spool: scratch files {result['used']:,} of {result['limit']:,} "
+                f"({result['used'] / result['limit']:.1%}), {what}")
+    leased = f"; {result['skipped_leased']} held by leases, kept" if result["skipped_leased"] else ""
+    if not result["deleted"]:
+        return [f"{head}: {result['reason']}{leased}"]
+    lines = [f"{head}: {verb} {len(result['deleted'])} units, {result['deleted_files']:,} files, "
+             f"{result['deleted_bytes'] / 1e9:.1f} GB{leased}"]
+    lines += [f"spool:   {d['variant_dir']} {d['unit']}: {d['files']:,} files, {d['bytes'] / 1e9:.2f} GB, "
+              f"last used {d['last_used']}, {'on S3' if d['on_s3'] else 'only here'}" for d in result["deleted"]]
+    if result["after"] is not None:
+        lines.append(f"spool: scratch files {'would be' if result['dry_run'] else 'now'} {result['after']:,} "
+                     f"({result['after'] / result['limit']:.1%})")
+    return lines
+
+
+# ── status ────────────────────────────────────────────────────────────────────
+
+
+def status(
+    cache_root: str, *, high: float, low: float, run=subprocess.run, now: Optional[datetime] = None,
+) -> Dict[str, object]:
+    """What the scratch quota and the spool cache under ``cache_root`` hold now; deletes and
+    writes nothing.
+
+    Units are read as :func:`prune` reads them (:func:`_variant_units` without writing: the
+    indexes, and file names and one ``stat`` per file for a unit with none). Returns
+    ``{"quota": {files_used, files_limit, bytes_used, bytes_limit} | None, "quota_error", "high",
+    "low", "cache_root", "variants": [{model_input_id, network, variant, dir, units, files, bytes,
+    last_used, on_s3_units, leased_units}], "leases": [{sim_id, variant_dir, units, expires}],
+    "totals": {units, files, bytes}}``: ``variants`` (those with a unit) newest ``last_used``
+    first, ``leases`` the unexpired ones, by sim id.
+    """
+    now = now or datetime.now(timezone.utc)
+    quota: Optional[Dict[str, int]] = None
+    quota_error: Optional[str] = None
+    try:
+        quota = read_scratch_quota(run=run)
+    except OpenghmError as e:
+        quota_error = str(e)
+    held, _expired = _leases(cache_root, now)
+    variants: List[dict] = []
+    for mi in _subdirs(cache_root):
+        for net in _subdirs(mi.path):
+            for var in _subdirs(net.path):
+                units = _variant_units(var.path, write=False)
+                if not units:
+                    continue
+                real = os.path.realpath(var.path)
+                variants.append({
+                    "model_input_id": mi.name, "network": net.name, "variant": var.name, "dir": var.path,
+                    "units": len(units), "files": sum(u.files for u in units), "bytes": sum(u.bytes for u in units),
+                    "last_used": max(u.last_used for u in units),
+                    "on_s3_units": sum(u.on_s3 for u in units),
+                    "leased_units": sum((real, u.unit) in held for u in units),
+                })
+    variants.sort(key=lambda v: v["last_used"], reverse=True)
+    leases = [{"sim_id": sim, "variant_dir": rec["variant_dir"], "units": [str(u) for u in rec["units"]],
+               "expires": str(rec["expires"])}
+              for _path, sim, rec, until in _lease_records(cache_root) if until > now]
+    return {
+        "quota": quota, "quota_error": quota_error, "high": high, "low": low, "cache_root": cache_root,
+        "variants": variants, "leases": leases,
+        "totals": {"units": sum(v["units"] for v in variants), "files": sum(v["files"] for v in variants),
+                   "bytes": sum(v["bytes"] for v in variants)},
+    }
+
+
+def describe_status(result: Dict[str, object]) -> List[str]:
+    """``status``'s result as the lines ``spool status`` prints."""
+    q, t = result["quota"], result["totals"]
+    lines = []
+    if q:
+        lines.append(f"scratch  files {q['files_used']:,} of {q['files_limit']:,} ({q['files_used'] / q['files_limit']:.1%}); "
+                     f"size {q['bytes_used'] / 1e9:,.1f} GB of {q['bytes_limit'] / 1e9:,.0f} GB "
+                     f"({q['bytes_used'] / q['bytes_limit']:.1%})")
+    else:
+        lines.append(f"scratch  no quota: {result['quota_error']}")
+    lines.append(f"cache    {result['cache_root']}: {t['units']:,} units, {t['files']:,} files, {t['bytes'] / 1e9:,.2f} GB; "
+                 f"pruned at {result['high']:.0%} of the file quota, down to {result['low']:.0%}")
+    if result["variants"]:
+        rows = [("MODEL INPUT", "NETWORK", "VARIANT", "UNITS", "FILES", "GB", "LAST USED", "ON S3", "LEASED")]
+        rows += [(v["model_input_id"], v["network"], v["variant"], str(v["units"]), f"{v['files']:,}",
+                  f"{v['bytes'] / 1e9:,.2f}", v["last_used"] or "-", str(v["on_s3_units"]), str(v["leased_units"]))
+                 for v in result["variants"]]
+        widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+        right = {3, 4, 5, 7, 8}
+        lines += ["  ".join(c.rjust(w) if i in right else c.ljust(w) for i, (c, w) in enumerate(zip(r, widths))).rstrip()
+                  for r in rows]
+    for lease in result["leases"]:
+        lines.append(f"lease    {lease['sim_id']}: {len(lease['units'])} units of {lease['variant_dir']}, until {lease['expires']}")
     return lines
 
 

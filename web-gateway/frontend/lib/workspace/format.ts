@@ -23,3 +23,10 @@ export function purgeAround(completedAt: string | null): string | null {
   if (Number.isNaN(ms)) return null;
   return new Date(ms + RETENTION_DAYS * 86_400_000).toISOString();
 }
+
+/** A whole number with thousands separators: `1234567` -> `1,234,567`. Fixed
+ *  to en-US so the server and the browser print the same. */
+export function formatCount(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-US");
+}

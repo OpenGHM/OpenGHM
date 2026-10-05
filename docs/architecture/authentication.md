@@ -26,7 +26,7 @@ permissions are their own enum in `web-gateway/backend/app/core/roles.py`:
 guest  repository:view
 user   + job:submit, job:view:own, job:cancel:own
 staff  + job:view:any, job:cancel:any, user:view:any
-admin  + user:manage, repository:manage, system:view
+admin  + user:manage, repository:manage, system:view, system:manage
 ```
 
 `ROLE_PERMISSIONS` is the whole policy, in one file, as frozensets. "Who can

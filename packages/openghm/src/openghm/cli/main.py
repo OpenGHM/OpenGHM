@@ -30,7 +30,9 @@ from ..sim import (
     build_scancel_argv, slurm_log_path, tail_lines,
 )
 from ..spatial import SpatialOptions, build_spatial
-from ..spool import describe_prune, harvest, plan_from_sim_dir, prepare, prune, run_cached, variant
+from ..spool import (
+    describe_prune, describe_status, harvest, plan_from_sim_dir, prepare, prune, run_cached, status, variant,
+)
 from ..temporal import TemporalOptions, build_temporal
 from ..network import NetworkOptions
 from ..types import BuiltCommand
@@ -590,10 +592,12 @@ def spool_harvest_cmd(sim_dir: str) -> None:
               help="prune at this fraction of the scratch file quota used (default: spool_prune_high)")
 @click.option("--low", type=float, default=None, metavar="FRACTION",
               help="prune down to this fraction (default: spool_prune_low)")
+@click.option("--all", "everything", is_flag=True,
+              help="delete every unit no running simulation holds, whatever the quota says")
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="config file (default: ~/.openghm/config.toml)")
 @click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output")
-def spool_prune_cmd(dry_run: bool, high: Optional[float], low: Optional[float],
+def spool_prune_cmd(dry_run: bool, high: Optional[float], low: Optional[float], everything: bool,
                     config_path: Optional[str], as_json: bool) -> None:
     """delete the least recently used years of the spool cache when scratch is nearly full
 
@@ -601,13 +605,15 @@ def spool_prune_cmd(dry_run: bool, high: Optional[float], low: Optional[float],
     units (one variant's year, or its climatology) oldest last use first, until the projected
     use is at or below LOW, never a unit a running simulation holds. Below HIGH, or without
     `myquota`, it deletes nothing. `spool prepare` does the same before it fills the cache.
+    With --all it deletes every unit no running simulation holds (a lease), whatever the quota
+    says and even without `myquota`; HIGH and LOW are not used.
     """
     try:
         cfg = load_config(path=config_path).config
         result = prune(
             cfg.resolve_spool_cache(), dry_run=dry_run,
             high=cfg.spool_prune_high if high is None else high,
-            low=cfg.spool_prune_low if low is None else low,
+            low=cfg.spool_prune_low if low is None else low, everything=everything,
         )
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
@@ -616,6 +622,30 @@ def spool_prune_cmd(dry_run: bool, high: Optional[float], low: Optional[float],
         click.echo(json.dumps(result, indent=2, sort_keys=True))
     else:
         for line in describe_prune(result):
+            click.echo(line)
+
+
+@spool_group.command("status")
+@click.option("--config", "config_path", default=None, metavar="PATH",
+              help="config file (default: ~/.openghm/config.toml)")
+@click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output")
+def spool_status_cmd(config_path: Optional[str], as_json: bool) -> None:
+    """print the scratch quota and what the spool cache holds; deletes nothing
+
+    Reads the scratch row of `myquota` (without it, `quota` is null and `quota_error` says why),
+    the index of every variant's units and the unexpired leases. With --json: quota, high, low,
+    cache_root, variants (newest last use first), leases and totals.
+    """
+    try:
+        cfg = load_config(path=config_path).config
+        result = status(cfg.resolve_spool_cache(), high=cfg.spool_prune_high, low=cfg.spool_prune_low)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    if as_json:
+        click.echo(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        for line in describe_status(result):
             click.echo(line)
 
 

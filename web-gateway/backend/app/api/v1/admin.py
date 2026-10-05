@@ -12,11 +12,14 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.core.audit import AuditCategory
+from app.core.audit import AuditCategory, log_event
 from app.core.authz import require_permission
 from app.core.database import get_db
 from app.core.roles import Permission
 from app.models.admin import (
+    ScratchStatusResponse,
+    SpoolCacheClearRequest,
+    SpoolCacheClearResponse,
     StatusBreakdownResponse,
     StatusCount,
     SystemInfoResponse,
@@ -24,6 +27,7 @@ from app.models.admin import (
     TimeSeriesResponse,
 )
 from app.models.user import AuditLogEntry, AuditLogListResponse, TokenPayload
+from app.services import anvil_scratch
 from app.services.system_info import get_system_info
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -210,7 +214,61 @@ async def system_info(
     _user: TokenPayload = Depends(require_permission(Permission.SYSTEM_VIEW)),
 ):
     """Admin-only (not staff — see Permission.SYSTEM_VIEW). Read-only: no
-    config editing, no cache flush, no job re-queue. GET /health stays the
+    config editing, no cache flush (that is POST /admin/anvil/spool-cache/clear,
+    which needs SYSTEM_MANAGE), no job re-queue. GET /health stays the
     unauthenticated k8s-probe endpoint; this is deliberately a separate,
     gated surface with more detail than a probe should ever expose."""
     return await get_system_info(request.app.state.started_at)
+
+
+def _anvil_error(exc: anvil_scratch.AnvilScratchError) -> HTTPException:
+    """`detail` is `{"code", "message"}`, the shape jobs.py and app.core.authz
+    refuse with."""
+    return HTTPException(
+        status_code=exc.http_status, detail={"code": exc.code, "message": exc.message}
+    )
+
+
+@router.get("/anvil/scratch", response_model=ScratchStatusResponse)
+async def get_anvil_scratch(
+    _user: TokenPayload = Depends(require_permission(Permission.SYSTEM_VIEW)),
+):
+    """Anvil's scratch quota (files and bytes) and what the spool cache holds,
+    asked of the toolkit (`openghm spool status`) on Anvil at each call: not
+    cached, nothing is deleted. 503 `anvil_not_configured` / `anvil_unreachable`,
+    502 `spool_status_failed` (the toolkit failed or answered something else)."""
+    try:
+        return await anvil_scratch.scratch_status()
+    except anvil_scratch.AnvilScratchError as exc:
+        raise _anvil_error(exc)
+
+
+@router.post("/anvil/spool-cache/clear", response_model=SpoolCacheClearResponse)
+async def clear_spool_cache(
+    body: SpoolCacheClearRequest = SpoolCacheClearRequest(),
+    user: TokenPayload = Depends(require_permission(Permission.SYSTEM_MANAGE)),
+):
+    """Delete every unit of the spool cache that no running simulation holds
+    (`openghm spool prune --all`), whatever the quota says. Leased units are
+    kept and counted in `skipped_leased`; the cache refills from S3 on the next
+    run that needs it. `dry_run` reports what would go and deletes nothing, and
+    writes no audit event. Same errors as GET /admin/anvil/scratch, with 502
+    `spool_clear_failed`."""
+    try:
+        result = await anvil_scratch.clear_spool_cache(dry_run=body.dry_run)
+    except anvil_scratch.AnvilScratchError as exc:
+        raise _anvil_error(exc)
+    if not body.dry_run:
+        await log_event(
+            "spool_cache_cleared",
+            actor_id=user.sub,
+            actor_email=user.email,
+            detail={
+                "deleted_units": result.deleted_units,
+                "deleted_files": result.deleted_files,
+                "deleted_bytes": result.deleted_bytes,
+                "skipped_leased": result.skipped_leased,
+            },
+            category=AuditCategory.SYSTEM,
+        )
+    return result

@@ -1,8 +1,9 @@
 "use server";
 
 import { getApiClient } from "@/lib/api-client";
+import { describeFailure } from "@/lib/action-failure";
 import type { UserRole } from "@/lib/auth.types";
-import type { JobStatsResponse } from "@/lib/jobs/types";
+import type { ActionResult, JobStatsResponse } from "@/lib/jobs/types";
 import type { SessionListResponse } from "@/lib/account/types";
 import type {
   AuditCategory,
@@ -13,6 +14,8 @@ import type {
   TimeSeriesResponse,
   StatusBreakdownResponse,
   SystemInfoResponse,
+  AnvilScratchResponse,
+  SpoolClearResponse,
 } from "@/lib/admin/types";
 
 /**
@@ -155,5 +158,41 @@ export async function fetchSystemInfo(): Promise<SystemInfoResponse | null> {
     return res.data;
   } catch {
     return null;
+  }
+}
+
+/** Both Anvil calls open an SSH session and walk the spool cache, which the
+ *  10 s default does not allow for. */
+const ANVIL_TIMEOUT_MS = 60_000;
+
+/**
+ * Scratch quota and the spool cache, read live from Anvil. A failure comes back
+ * as data: 503 `anvil_not_configured` / `anvil_unreachable`, 502
+ * `spool_status_failed` (`code`, `message`), 403 for a non-admin (`status`).
+ */
+export async function fetchAnvilScratch(): Promise<ActionResult<AnvilScratchResponse>> {
+  try {
+    const client = await getApiClient({ timeoutMs: ANVIL_TIMEOUT_MS });
+    const res = await client.get<AnvilScratchResponse>("/api/v1/admin/anvil/scratch");
+    return { ok: true, data: res.data };
+  } catch (error: unknown) {
+    return describeFailure(error, []);
+  }
+}
+
+/**
+ * Clears the spool cache on Anvil, except the years a running job holds. With
+ * `dryRun` it only reports what it would delete. Failures as for
+ * `fetchAnvilScratch`, plus 502 `spool_clear_failed`.
+ */
+export async function clearSpoolCache(dryRun: boolean): Promise<ActionResult<SpoolClearResponse>> {
+  try {
+    const client = await getApiClient({ timeoutMs: ANVIL_TIMEOUT_MS });
+    const res = await client.post<SpoolClearResponse>("/api/v1/admin/anvil/spool-cache/clear", {
+      dry_run: dryRun,
+    });
+    return { ok: true, data: res.data };
+  } catch (error: unknown) {
+    return describeFailure(error, []);
   }
 }

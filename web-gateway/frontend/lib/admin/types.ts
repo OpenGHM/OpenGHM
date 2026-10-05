@@ -22,7 +22,7 @@ export interface UserListResponse {
 }
 
 /** Mirrors web-gateway/backend/app/core/audit.py:AuditCategory. */
-export type AuditCategory = "auth" | "job";
+export type AuditCategory = "auth" | "job" | "system";
 
 export interface AuditLogEntry {
   id: string;
@@ -113,4 +113,58 @@ export interface SystemInfoResponse {
   dependencies: DependencyHealth[];
   features: FeatureStatus[];
   settings: RuntimeSettingsSummary;
+}
+
+/** GET /api/v1/admin/anvil/scratch. `quota` is null when Anvil's quota report
+ *  could not be read; `quota_error` then says why. */
+export interface AnvilScratchQuota {
+  files_used: number;
+  files_limit: number;
+  bytes_used: number;
+  bytes_limit: number;
+}
+
+export interface SpoolVariant {
+  model_input_id: string;
+  network: string;
+  variant: string;
+  dir: string;
+  units: number;
+  files: number;
+  bytes: number;
+  last_used: string | null;
+  on_s3_units: number;
+  leased_units: number;
+}
+
+export interface SpoolLease {
+  sim_id: string;
+  variant_dir: string;
+  units: string[];
+  expires: string;
+}
+
+export interface AnvilScratchResponse {
+  checked_at: string;
+  quota: AnvilScratchQuota | null;
+  quota_error: string | null;
+  /** Fraction of the file quota at which the cache is pruned (0.8). */
+  high: number;
+  /** Fraction of the file quota it is pruned down to (0.5). */
+  low: number;
+  cache_root: string;
+  variants: SpoolVariant[];
+  leases: SpoolLease[];
+  totals: { units: number; files: number; bytes: number };
+}
+
+/** POST /api/v1/admin/anvil/spool-cache/clear. With `dry_run` it reports what
+ *  a clear would delete and deletes nothing. */
+export interface SpoolClearResponse {
+  dry_run: boolean;
+  deleted_units: number;
+  deleted_files: number;
+  deleted_bytes: number;
+  skipped_leased: number;
+  deleted: { variant_dir: string; unit: string; files: number; bytes: number }[];
 }

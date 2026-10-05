@@ -1251,6 +1251,188 @@ def test_cli_spool_prune_without_myquota_deletes_nothing(tmp_path):
     assert out.exit_code == 0 and "no pruning" in out.output and "myquota" in out.output
 
 
+# ── spool status, prune --all, the quota's bytes ──────────────────────────────
+
+
+@pytest.mark.parametrize("text, expect", [
+    ("0B", 0), ("812B", 812), ("1KB", 1_000), ("1.5MB", 1_500_000), ("91.9GB", 91_900_000_000),
+    ("2.1TB", 2_100_000_000_000), ("100.0TB", 100 * 10**12), ("1PB", 10**15), ("5", 5), ("2.5gb", 2_500_000_000),
+])
+def test_quota_sizes_are_decimal(text, expect):
+    assert spool._quota_bytes(text) == expect
+
+
+@pytest.mark.parametrize("text", ["", "-", "GB", "1.5XB", "1 GB", "much"])
+def test_quota_sizes_refuse_what_is_not_one(text):
+    with pytest.raises(ValueError):
+        spool._quota_bytes(text)
+
+
+@pytest.mark.parametrize("text, expect", [
+    (_MYQUOTA.format(used="59.6K", limit="1.0M"),
+     {"files_used": 59_600, "files_limit": 1_000_000, "bytes_used": 2_100_000_000_000, "bytes_limit": 100 * 10**12}),
+    # no header line: Size Limit Use Files Limit Use from the right
+    ("scratch  /anvil/scratch/x  91.9GB  100.0TB  0%  59.6K  1.0M  6%\n",
+     {"files_used": 59_600, "files_limit": 1_000_000, "bytes_used": 91_900_000_000, "bytes_limit": 100 * 10**12}),
+    # a location with spaces does not shift the columns counted from the right
+    ("Type Location Size Limit Use Files Limit Use\nscratch /a b/c 512MB 1TB 0% 3K 1M 0%\n",
+     {"files_used": 3_000, "files_limit": 1_000_000, "bytes_used": 512_000_000, "bytes_limit": 10**12}),
+])
+def test_parse_scratch_quota_reads_files_and_bytes(text, expect):
+    assert spool.parse_scratch_quota(text) == expect
+
+
+def test_parse_scratch_quota_refuses_what_it_cannot_read():
+    with pytest.raises(OpenghmError, match="scratch file quota"):
+        spool.parse_scratch_quota("")
+    with pytest.raises(OpenghmError, match="scratch size quota"):
+        spool.parse_scratch_quota("Type Location Size Limit Use Files Limit Use\nscratch x 1GB - 5% 8.1K 1M 6%\n")
+    with pytest.raises(OpenghmError, match="scratch size quota"):
+        spool.parse_scratch_quota("Type Location Files Limit Use\nscratch x 8.1K 1M 6%\n")     # no Size column
+    with pytest.raises(OpenghmError, match="not on this machine"):
+        spool.read_scratch_quota()
+
+
+def _status(root: Path, *, used="60", limit="100", now=NOW):
+    return spool.status(str(root), high=0.8, low=0.5, run=_quota(used, limit), now=now)
+
+
+def test_status_counts_variants_units_leases_and_totals(tmp_path):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(9), on_s3=True)
+    _unit(tmp_path, "v1", "2001", _stamp(3))
+    v2 = _unit(tmp_path, "v2", "clim", _stamp(1), pairs=2)
+    # a unit with no index: counted from its files, last used its newest file's mtime, not on S3
+    for i in (1, 2, 3):
+        _put(tmp_path / MID / NET / "v1", f"Precip/2002-01-{i:02d}.dat", b"x" * 10)
+    mtime = NOW.timestamp() - 5 * 86400
+    for f in (tmp_path / MID / NET / "v1" / "Precip").glob("2002-*"):
+        os.utime(f, (mtime, mtime))
+    (tmp_path / MID / NET / "empty").mkdir()                      # a variant directory with no unit
+    _lease(tmp_path, "run1", v1, ["2000", "2001"], NOW + timedelta(hours=3))
+    _lease(tmp_path, "run2", v2, ["clim"], NOW + timedelta(days=1))
+    _lease(tmp_path, "old", v1, ["2002"], NOW - timedelta(seconds=1))
+    (tmp_path / ".leases" / "notes.txt").write_text("not a lease")
+
+    got = _status(tmp_path)
+    assert got["quota"] == {"files_used": 60, "files_limit": 100, "bytes_used": 2_100_000_000_000,
+                            "bytes_limit": 100 * 10**12}
+    assert got["quota_error"] is None and (got["high"], got["low"]) == (0.8, 0.5)
+    assert got["cache_root"] == str(tmp_path)
+    assert [(v["variant"], v["model_input_id"], v["network"], v["dir"]) for v in got["variants"]] == [
+        ("v2", MID, NET, str(v2)), ("v1", MID, NET, str(v1))]                  # newest last use first
+    v2s, v1s = got["variants"]
+    assert v2s == {"model_input_id": MID, "network": NET, "variant": "v2", "dir": str(v2), "units": 1,
+                   "files": 4, "bytes": 2 * 24, "last_used": _stamp(1), "on_s3_units": 0, "leased_units": 1}
+    assert v1s["units"] == 3 and v1s["files"] == 10 + 10 + 6 and v1s["bytes"] == 5 * 24 * 2 + 3 * (10 + 14)
+    assert v1s["last_used"] == _stamp(3) and v1s["on_s3_units"] == 1 and v1s["leased_units"] == 2
+    # the expired lease and the stray file are not leases
+    assert got["leases"] == [
+        {"sim_id": "run1", "variant_dir": str(v1), "units": ["2000", "2001"], "expires": spool._utc(NOW + timedelta(hours=3))},
+        {"sim_id": "run2", "variant_dir": str(v2), "units": ["clim"], "expires": spool._utc(NOW + timedelta(days=1))}]
+    assert got["totals"] == {"units": 4, "files": 4 + 26, "bytes": 2 * 24 + v1s["bytes"]}
+    assert (tmp_path / ".leases" / "old.json").exists()                      # nothing is deleted or written
+    assert not (tmp_path / MID / NET / "v1" / ".units" / "2002.json").exists()
+    assert json.loads(json.dumps(got)) == got
+
+
+def test_status_of_an_empty_or_absent_cache_root(tmp_path):
+    for root in (tmp_path, tmp_path / "absent"):
+        got = _status(root)
+        assert got["variants"] == [] and got["leases"] == [] and got["totals"] == {"units": 0, "files": 0, "bytes": 0}
+        assert got["quota"]["files_used"] == 60
+
+
+def test_status_without_myquota_has_a_null_quota_and_says_why(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(1))
+    got = spool.status(str(tmp_path), high=0.8, low=0.5, now=NOW)         # the autouse fixture: no myquota
+    assert got["quota"] is None and "myquota" in got["quota_error"] and got["totals"]["units"] == 1
+
+
+def test_cli_spool_status_json_and_table(tmp_path, monkeypatch):
+    cache = tmp_path / "spools"
+    _unit(cache, "v1", "2000", spool._utc(datetime.now(timezone.utc) - timedelta(days=2)), on_s3=True)
+    monkeypatch.setattr(spool, "MYQUOTA", _fake_myquota_command(tmp_path, "85"))
+    cfg = str(_cli_config(tmp_path))
+    out = CliRunner().invoke(cli, ["spool", "status", "--config", cfg, "--json"])
+    assert out.exit_code == 0, out.output
+    got = json.loads(out.output)
+    assert set(got) == {"quota", "quota_error", "high", "low", "cache_root", "variants", "leases", "totals"}
+    assert got["quota"]["files_used"] == 85 and got["cache_root"] == str(cache)
+    assert (got["high"], got["low"]) == (0.8, 0.5) and got["variants"][0]["on_s3_units"] == 1
+    out = CliRunner().invoke(cli, ["spool", "status", "--config", cfg])
+    assert out.exit_code == 0 and "85 of 100" in out.output and "v1" in out.output and "MODEL INPUT" in out.output
+    assert _remaining(cache) == {("v1", "2000")}
+
+
+def test_cli_spool_status_without_myquota(tmp_path):
+    cfg = str(_cli_config(tmp_path))
+    got = json.loads(CliRunner().invoke(cli, ["spool", "status", "--config", cfg, "--json"]).output)
+    assert got["quota"] is None and got["variants"] == []
+    out = CliRunner().invoke(cli, ["spool", "status", "--config", cfg])
+    assert out.exit_code == 0 and "no quota" in out.output
+
+
+def test_prune_all_deletes_every_unleased_unit_whatever_the_quota(tmp_path):
+    v1 = _unit(tmp_path, "v1", "2000", _stamp(90))
+    _unit(tmp_path, "v1", "2001", _stamp(80))
+    _unit(tmp_path, "v2", "clim", _stamp(70))
+    _unit(tmp_path, "v2", "2005", _stamp(60), on_s3=True)
+    _lease(tmp_path, "running", v1, ["2000"], NOW + timedelta(hours=1))
+    got = _prune(tmp_path, "10", everything=True)                        # 10% used: a plain prune does nothing
+    assert got["all"] is True and got["dry_run"] is False and got["reason"] is None
+    assert [(d["variant_dir"].split(os.sep)[-1], d["unit"]) for d in got["deleted"]] == [
+        ("v1", "2001"), ("v2", "clim"), ("v2", "2005")]                    # the order prune uses
+    assert got["deleted_files"] == 30 and got["deleted_bytes"] == 3 * 5 * 24
+    assert got["skipped_leased"] == 1 and got["used"] == 10 and got["after"] == -20
+    assert _remaining(tmp_path) == {("v1", "2000")} and (v1 / "Precip" / "2000-01-01.dat").exists()
+    assert _prune(tmp_path, "10")["deleted"] == [] and "all" not in _prune(tmp_path, "10")
+
+
+def test_prune_all_dry_run_deletes_and_writes_nothing(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(90))
+    _unit(tmp_path, "v1", "2001", _stamp(80))
+    expired = _lease(tmp_path, "gone", tmp_path / MID / NET / "v1", ["2000"], NOW - timedelta(hours=1))
+    got = _prune(tmp_path, "10", everything=True, dry_run=True)
+    assert got["dry_run"] is True and got["deleted_files"] == 20 and len(got["deleted"]) == 2
+    assert _remaining(tmp_path) == {("v1", "2000"), ("v1", "2001")} and expired.exists()
+    assert (tmp_path / MID / NET / "v1" / ".units" / "2000.json").exists()
+
+
+def test_prune_all_without_myquota_or_with_unusable_thresholds_still_clears(tmp_path):
+    _unit(tmp_path, "v1", "2000", _stamp(90))
+    got = spool.prune(str(tmp_path), high=0.5, low=0.5, everything=True, now=NOW)       # no myquota, low == high
+    assert got["used"] is None and got["after"] is None and got["deleted_files"] == 10
+    assert _remaining(tmp_path) == set()
+    again = spool.prune(str(tmp_path), high=0.5, low=0.5, everything=True, now=NOW)
+    assert again["deleted"] == [] and "empty" in again["reason"]
+    with pytest.raises(OpenghmError, match="thresholds"):
+        spool.prune(str(tmp_path), high=0.5, low=0.5, now=NOW)                          # without all it is refused
+
+
+def test_cli_spool_prune_all(tmp_path, monkeypatch):
+    cache = tmp_path / "spools"
+    v1 = _unit(cache, "v1", "2000", spool._utc(datetime.now(timezone.utc) - timedelta(days=9)))
+    _unit(cache, "v1", "2001", spool._utc(datetime.now(timezone.utc) - timedelta(days=1)))
+    _unit(cache, "v1", "2002", spool._utc(datetime.now(timezone.utc) - timedelta(days=2)))
+    _lease(cache, "running", v1, ["2002"], datetime.now(timezone.utc) + timedelta(hours=1))
+    monkeypatch.setattr(spool, "MYQUOTA", _fake_myquota_command(tmp_path, "5"))          # 5%: far below high
+    cfg = str(_cli_config(tmp_path))
+    runner = CliRunner()
+
+    out = runner.invoke(cli, ["spool", "prune", "--all", "--dry-run", "--config", cfg])
+    assert out.exit_code == 0, out.output
+    assert "would delete 2 units, 20 files" in out.output and "held by leases" in out.output
+    assert _remaining(cache) == {("v1", "2000"), ("v1", "2001"), ("v1", "2002")}
+
+    out = runner.invoke(cli, ["spool", "prune", "--all", "--json", "--config", cfg])
+    got = json.loads(out.output)
+    assert out.exit_code == 0 and got["all"] is True and got["deleted_files"] == 20 and got["skipped_leased"] == 1
+    assert sorted(d["unit"] for d in got["deleted"]) == ["2000", "2001"] and _remaining(cache) == {("v1", "2002")}
+
+    out = runner.invoke(cli, ["spool", "prune", "--config", cfg, "--json"])                 # without --all: below high
+    assert json.loads(out.output)["deleted"] == [] and "all" not in json.loads(out.output)
+
+
 # ── the CLI ───────────────────────────────────────────────────────────────────
 
 
