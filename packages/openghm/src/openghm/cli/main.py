@@ -104,11 +104,10 @@ def output_options(f):
                      default=None, help="container runtime"),
         click.option("--sif", default=None, metavar="PATH",
                      help="WBM SIF path override (default: the image the snapshot pins, from sif_dir)"),
-        click.option("--spool", type=click.Choice(["cache", "fresh", "snapshot"]), default="cache",
+        click.option("--spool", type=click.Choice(["cache", "fresh"]), default="cache",
                      show_default=True,
                      help="cache: a per-simulation spool linked to the shared spool cache and "
-                          "harvested into it; fresh: an empty per-simulation spool, nothing shared; "
-                          "snapshot: use <snapshot>/spool in place (created if absent)"),
+                          "harvested into it; fresh: an empty per-simulation spool, nothing shared"),
         click.option("--dry-run", "dry_run", is_flag=True,
                      help="print the generated init/sbatch script without submitting"),
         click.option("-v", "--verbose", is_flag=True,
@@ -655,8 +654,6 @@ snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
 @snapshot_group.command("fetch")
 @click.argument("snapshot_id", metavar="<id>")
 @click.option("--dest", default=None, metavar="DIR", help="where to put the tree (default: ./<id>)")
-@click.option("--spool", type=click.Choice(["auto", "skip"]), default="auto", show_default=True,
-              help="auto: download spool/ if the snapshot has one; skip: never")
 @click.option("--no-image", "no_image", is_flag=True,
               help="do not download the container image the snapshot pins")
 @click.option("--no-model-input", "no_model_input", is_flag=True,
@@ -665,15 +662,15 @@ snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
               help="parallel downloads")
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="config file (default: ~/.openghm/config.toml)")
-def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_image: bool,
+def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], no_image: bool,
                        no_model_input: bool, jobs: int, config_path: Optional[str]) -> None:
     """download snapshots/<id>/ from the public bucket, ready for `sim`
 
     Everything except wbm_output/ (output is carried, not consumed),
-    WBM_run_state/ and data/, data_init/ (the input is the model input);
-    spool/ only if the snapshot has one and --spool is auto. Each file is
-    checked against SHA256SUMS (spool files by size and MD5) and gets its mode
-    from the object's metadata. The model input it links
+    WBM_run_state/, data/ and data_init/ (the input is the model input), and
+    spool/ (a spool belongs to the model input; runs share it through the spool
+    cache). Each file is checked against SHA256SUMS and gets its mode from the
+    object's metadata. The model input it links
     (uses.modelInput.id) goes into model_input_dir, and the pinned container
     image into sif_dir, each checked like the snapshot. Re-running resumes:
     files already valid are skipped, so a model input shared by several
@@ -692,7 +689,7 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
     try:
         cfg = load_config(path=config_path).config
         result = fetch_snapshot(
-            FetchOptions(snapshot_id=snapshot_id, dest=dest, spool=spool, image=not no_image,
+            FetchOptions(snapshot_id=snapshot_id, dest=dest, image=not no_image,
                          model_input=not no_model_input, jobs=jobs),
             cfg, console=err if tty else None,
             on_progress=progress if tty else None,  # no counter in a log file
@@ -703,10 +700,6 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], spool: str, no_ima
     if tty:
         click.echo("", err=True)
     click.echo(f"snapshot: {result.dest}")
-    if result.spool == "fetched":
-        click.echo(f"spool: {result.spool_files} files")
-    else:
-        click.echo(f"spool: {'not fetched (--spool skip)' if result.spool == 'skipped' else 'none in this snapshot'}")
     if result.model_input_path:
         click.echo(f"model input: {result.model_input_path}")
     if result.image_path:

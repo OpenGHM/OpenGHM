@@ -23,10 +23,7 @@ openghm_jobrun_params.md``):
   bound read-only at ``/wbm/spool/.cache``, which the files the cache holds are
   symlinked to; WBM builds the rest, and a run that exits 0 hands what it built to
   the cache (see :mod:`openghm.spool`). ``--spool fresh`` gives the run an empty
-  ``<output_base>/<sim_id>/spool`` and shares nothing. ``--spool snapshot`` binds
-  the snapshot's own ``spool/``, read-write and created if absent, so a fetched
-  spool is used in place and a missing one is there afterwards; two simulations
-  sharing one snapshot's spool at the same time is unsafe.
+  ``<output_base>/<sim_id>/spool`` and shares nothing.
 
 The model image is the one the snapshot pins (``uses.container``), looked up in
 the ``sif_dir`` cache; ``--sif`` overrides it. The model input is the one it links
@@ -68,8 +65,8 @@ _SIM_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _JOBID_RE = re.compile(r"Submitted batch job (\d+)")
 SIDECAR_NAME = "simulation.json"
 #: ``--spool`` choices: a per-simulation spool fed by (and feeding) the shared cache,
-#: an empty per-simulation one, or the snapshot's own ``spool/``.
-SPOOL_MODES = ("cache", "fresh", "snapshot")
+#: or an empty per-simulation one.
+SPOOL_MODES = ("cache", "fresh")
 
 
 @dataclass
@@ -87,8 +84,7 @@ class SubmitOptions:
     partition: Optional[str] = None
     output_base: Optional[str] = None
     #: ``cache`` → a per-simulation spool linked to the shared cache and harvested
-    #: into it; ``fresh`` → an empty per-simulation spool; ``snapshot`` →
-    #: ``<snapshot>/spool`` (created if absent).
+    #: into it; ``fresh`` → an empty per-simulation spool.
     spool: str = "cache"
     #: The init file in the snapshot's ``wbm_init/`` to run (default: the metadata's).
     init: Optional[str] = None
@@ -179,20 +175,6 @@ def _pinned_image(config, meta: dict, snap: str, *, check: bool) -> str:
             "or pass --sif PATH"
         )
     return path
-
-
-def _snapshot_spool(snap: str) -> str:
-    """``<snapshot>/spool``, checked to be writable (or creatable) before a run uses it."""
-    spool = os.path.join(snap, "spool")
-    if os.path.lexists(spool) and not os.path.isdir(spool):
-        raise OpenghmError(f"{spool} exists and is not a directory (use --spool fresh)")
-    target = spool if os.path.isdir(spool) else snap
-    if not os.access(target, os.W_OK | os.X_OK):
-        raise OpenghmError(
-            f"{target} is not writable, and --spool snapshot writes the spool there; "
-            "use --spool fresh to give this run its own spool"
-        )
-    return spool
 
 
 def _model_input(config, meta: dict, snap: str, *, check: bool) -> Tuple[str, str]:
@@ -638,7 +620,7 @@ def _resolve_run(
     # per-sim host paths
     workdir = posixpath.join(output_base, sim_id)
     persim_wbm_init = posixpath.join(workdir, "wbm_init")
-    spool_dir = _snapshot_spool(snap) if opts.spool == "snapshot" else posixpath.join(workdir, "spool")
+    spool_dir = posixpath.join(workdir, "spool")
     cached = opts.spool == "cache"
     output_dir = posixpath.join(workdir, "wbm_output")
     run_state_dir = posixpath.join(workdir, "WBM_run_state")

@@ -123,8 +123,9 @@ run binds that input's root at `/wbm/data` and its `data_init/` at `/wbm/data_in
 `spool/` is in neither list either: a spool belongs to the model input, not the
 snapshot, and runs share it through a cache
 ([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)).
-The three published snapshots still carry a `spool/` until it is copied under
-`spools/<model input id>/`; a folder the layout does not name is not an error.
+The three published snapshots' own `spool/` was deleted on 2026-10-06, after its
+days were copied under `spools/<model input id>/`; a folder the layout does not
+name is not an error, and `openghm snapshot fetch` never downloads a `spool/`.
 
 `SHA256SUMS` is optional, and stays optional: it is an integrity check a
 consumer may run, not part of a snapshot's identity

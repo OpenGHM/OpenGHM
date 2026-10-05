@@ -35,12 +35,11 @@ snapshot is published. The tree above leaves out two optional directories:
 `WBM_run_state/`, which all three published snapshots have, and `meta_data/`,
 which only the two v1.0.0 staging copies have and none of the published ones
 does. That is what optional means here: the tree is the full shape, not the
-guaranteed one. All three published snapshots still have a `spool/` from
-before the spool left the snapshot; it goes once its days are under
-`spools/<model input id>/` (mission `2026-10-05-runs-share-a-spool`, private).
-v2.0.0's `spool/`, `WBM_run_state/` and `wbm_output/` come from job 20909227
-(2026-09-25), which ran its own `wbm_test.init` through the published
-`wbm-v2-lite` 2.0.0.
+guaranteed one. The three published snapshots' own `spool/` was deleted on 2026-10-06,
+after its days were copied under `spools/<model input id>/` (mission
+`2026-10-05-runs-share-a-spool`, private). v2.0.0's `WBM_run_state/` and
+`wbm_output/` come from job 20909227 (2026-09-25), which ran its own
+`wbm_test.init` through the published `wbm-v2-lite` 2.0.0.
 
 `schemas/snapshot-spec/layout/<version>.json` ([metadata-format.md](metadata-format.md)) is the machine-readable
 form of this tree, and the one that decides required from optional.
@@ -62,13 +61,12 @@ are about it.
 ## Generate `SHA256SUMS`
 
 `SHA256SUMS` covers the snapshot's **inputs** — everything except
-`wbm_output/` (a result) and a leftover `spool/` (a cache). A model input uses the same recipe with
+`wbm_output/` (a result). A model input uses the same recipe with
 no exclusions ([s3-layout.md](s3-layout.md)).
 
 ```bash
 cd <snapshot>
 find . -type f \
-  -not -path './spool/*' \
   -not -path './wbm_output/*' \
   -not -name 'SHA256SUMS' \
   -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
@@ -83,8 +81,8 @@ bytes arrive intact", and a consumer runs it or does not
 it is carried in `metadata.json`.
 
 `openghm snapshot fetch <id>` is one such consumer: it checks every file it
-downloads against `SHA256SUMS` (a spool file, which has no line, by size and
-MD5), and does not download `wbm_output/` or `WBM_run_state/`. It then does the
+downloads against `SHA256SUMS` and does not download `wbm_output/`, `WBM_run_state/` or a `spool/` an old
+tree may still list. It then does the
 same for the linked model input, into its own cache, which has its own `SHA256SUMS`
 ([packages/openghm/README.md](../../packages/openghm/README.md#fetching-a-snapshot-openghm-snapshot-fetch)).
 

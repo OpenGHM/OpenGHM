@@ -21,7 +21,7 @@ and `sim status` reads live `sacct` records. The test suite covers the
 processing-tool goldens, the dry-run contract, `sim` build/run + management, image
 assets, `snapshot fetch` and `model-input fetch` (against a local HTTP fixture), `init`, the library API
 and the wizard. On Anvil, a published snapshot fetched with `snapshot fetch` and run with
-`sim submit`, with and without `--spool`, reproduced its published output bit-for-bit. **Full library/API reference:**
+`sim submit`, with and without a prebuilt spool, reproduced its published output bit-for-bit. **Full library/API reference:**
 [`docs/library.md`](docs/library.md).
 
 ## Install
@@ -147,12 +147,12 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm temporal` | `temporal_aggregation.pl` | `--mt` required |
 | `openghm init` | — | one-time setup: download image(s), configure runtime/SLURM |
 | `openghm sif list` / `pull <image[:version]>` | — | list published images / download one into `sif_dir` |
-| `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/`, the model input it links and the image it pins, verified; `--dest`, `--spool auto\|skip`, `--no-model-input`, `--no-image`, `--jobs` |
+| `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/`, the model input it links and the image it pins, verified; `--dest`, `--no-model-input`, `--no-image`, `--jobs` |
 | `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec |
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
-| `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh\|snapshot` (default `cache`); writes `simulation.json` |
+| `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh` (default `cache`); writes `simulation.json` |
 | `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
@@ -200,7 +200,6 @@ openghm temporal --mt /work/test.MT.csv --no-datacube-check \
 
 ```sh
 openghm snapshot fetch <id>                    # -> ./<id>, plus the model input in model_input_dir and the pinned image in sif_dir
-openghm snapshot fetch <id> --spool skip       # without the (large) spool cache
 openghm snapshot fetch <id> --dest /scratch/me/snap --jobs 16 --no-image --no-model-input
 ```
 
@@ -208,14 +207,15 @@ Reads `snapshots/<id>/` from the public bucket with anonymous HTTPS (no
 credentials). It downloads everything **except** `wbm_output/` (a snapshot carries
 its output, it does not consume it; ADR 0009 — the fetched tree gets an empty
 `wbm_output/`, which the layout requires), `WBM_run_state/` (a new run
-starts its own), and `data/` and `data_init/` (a snapshot holds no input data; it
-links a model input, ADR 0015). `spool/` is downloaded with `--spool auto` (the
-default) when the snapshot has one, and never with `--spool skip`.
+starts its own), `data/` and `data_init/` (a snapshot holds no input data; it
+links a model input, ADR 0015), and `spool/` (a spool belongs to the model input
+and runs share it through the spool cache, see [Simulations](#simulations-openghm-sim);
+an old tree whose listing still has a `spool/` is fetched without it).
 
-- Every file with a `SHA256SUMS` line is checked against it. A spool file has no
-  line, so it is checked by size and, when its ETag is a plain MD5 (not
-  multipart), by MD5. A file in the bucket with no line and outside `spool/`, or a
-  line with no object, is a failure.
+- Every file with a `SHA256SUMS` line is checked against it. `SHA256SUMS` itself
+  has no line, so it is checked by size and, when its ETag is a plain MD5 (not
+  multipart), by MD5. A file in the bucket with no line, or a line with no object,
+  is a failure.
 - Modes come from each object's `x-amz-meta-s3cmd-attrs` header (ADR 0022); an
   object without one is a failure rather than a guessed mode (setuid/setgid/sticky
   bits are never applied).
@@ -294,10 +294,6 @@ and `model_input_path`.
   from it.
 - `fresh`: an empty `output_base/<id>/spool`; nothing is shared (to check a cached
   spool against a built one).
-- `snapshot`: binds `<snapshot>/spool` read-write as `/wbm/spool` and creates it if
-  absent, so a fetched spool is used in place (never copied). It needs the snapshot
-  folder to be writable, otherwise the command fails and suggests `--spool fresh`.
-  **Two simulations must not share one snapshot's spool at the same time.**
 
 `simulation.json` records `spool_mode` and `spool_dir`.
 

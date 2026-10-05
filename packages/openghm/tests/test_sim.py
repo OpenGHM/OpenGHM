@@ -101,7 +101,7 @@ def _gen(built, endswith):
 def test_submit_split_mounts_and_sif(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
 
     assert _ctx.image == str(tmp_path / "sif" / "wbm-v2-lite" / "2.0.0" / "wbm-v2-lite-2.0.0.sif")
     # reads come from the model input cache and the snapshot, bound read-only
@@ -116,8 +116,8 @@ def test_submit_split_mounts_and_sif(tmp_path):
         m = _find(built, cpath)
         assert m.readonly is False
         assert m.host.startswith(str(tmp_path / "out" / "sim1"))
-    # the spool is the snapshot's own, in place, writable
-    assert _find(built, "/wbm/spool").host == str(snap / "spool")
+    # the spool is the run's own (fresh), writable
+    assert _find(built, "/wbm/spool").host == str(tmp_path / "out" / "sim1" / "spool")
     assert _find(built, "/wbm/spool").readonly is False
     # per-sim wbm_init overrides the snapshot's
     assert _find(built, "/wbm/wbm_init").host == str(tmp_path / "out" / "sim1" / "wbm_init")
@@ -129,9 +129,9 @@ def test_submit_split_mounts_and_sif(tmp_path):
 def test_submit_staging_lists(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
     base = str(tmp_path / "out" / "sim1")
-    assert set(built.staged_dirs) == {str(snap / "spool"), f"{base}/wbm_output", f"{base}/WBM_run_state"}
+    assert set(built.staged_dirs) == {f"{base}/spool", f"{base}/wbm_output", f"{base}/WBM_run_state"}
     assert len(built.staged_copies) == 1
     assert built.staged_copies[0].src == str(snap / "wbm_init")
     assert built.staged_copies[0].dst == f"{base}/wbm_init"
@@ -425,12 +425,11 @@ def test_cwd_default(tmp_path, monkeypatch):
     assert _find(built, "/wbm/data").host == str(tmp_path / "model-inputs" / ("2" * 64))
 
 
-# ── --spool cache | fresh | snapshot ─────────────────────────────────────────
+# ── --spool cache | fresh ─────────────────────────────────────────
 
 
 def test_spool_cache_is_the_default_and_binds_the_variant_read_only(tmp_path):
     snap = _make_snapshot(tmp_path)
-    (snap / "spool").mkdir()
     cfg = _config(tmp_path)
     _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), cfg)
     base = str(tmp_path / "out" / "sim1")
@@ -442,7 +441,7 @@ def test_spool_cache_is_the_default_and_binds_the_variant_read_only(tmp_path):
     # nested binds are applied in order, and the mount point exists on the host
     order = [m.container for m in built.mounts]
     assert order.index("/wbm/spool/.cache") > order.index("/wbm/spool")
-    assert f"{base}/spool/.cache" in built.staged_dirs and str(snap / "spool") not in built.staged_dirs
+    assert f"{base}/spool/.cache" in built.staged_dirs
     sidecar = json.loads(_gen(built, "simulation.json").content)
     assert sidecar["spool_mode"] == "cache" and sidecar["spool_dir"] == f"{base}/spool"
     plan = built.spool
@@ -477,29 +476,14 @@ def test_spool_cache_submit_fills_and_harvests_on_the_compute_node(tmp_path):
     assert not (tmp_path / "out" / "sim1" / "spool").exists()
 
 
-@pytest.mark.parametrize("mode", ["fresh", "snapshot"])
-def test_other_spool_modes_have_no_cache_step(tmp_path, mode):
+def test_fresh_spool_mode_has_no_cache_step(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool=mode), _config(tmp_path))
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
     assert built.spool is None
     assert "openghm.cli.main" not in _gen(built, ".sbatch").content
     assert not any(m.container == "/wbm/spool/.cache" for m in built.mounts)
     assert "spool_plan" not in json.loads(_gen(built, "simulation.json").content)
-
-
-def test_spool_snapshot_uses_existing_spool_in_place(tmp_path):
-    snap = _make_snapshot(tmp_path)
-    (snap / "spool").mkdir()
-    (snap / "spool" / "cache.bin").write_bytes(b"x")
-    _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
-    stage_files(built)
-    assert _find(built, "/wbm/spool").host == str(snap / "spool")
-    assert (snap / "spool" / "cache.bin").read_bytes() == b"x"   # untouched, not copied
-    assert not (tmp_path / "out" / "sim1" / "spool").exists()
-    sidecar = json.loads(_gen(built, "simulation.json").content)
-    assert sidecar["spool_mode"] == "snapshot" and sidecar["spool_dir"] == str(snap / "spool")
 
 
 def test_spool_fresh_is_per_simulation(tmp_path):
@@ -527,21 +511,11 @@ def test_spool_fresh_works_on_a_read_only_snapshot(tmp_path):
         snap.chmod(0o755)
 
 
-@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores permissions")
-@pytest.mark.parametrize("existing_spool", [False, True])
-def test_spool_snapshot_not_writable_suggests_fresh(tmp_path, existing_spool):
+def test_spool_snapshot_mode_is_gone(tmp_path):
     snap = _make_snapshot(tmp_path)
-    target = snap
-    if existing_spool:
-        target = snap / "spool"
-        target.mkdir()
-    target.chmod(0o555)
-    try:
-        with pytest.raises(OpenghmError, match="--spool fresh"):
-            build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"),
-                         _config(tmp_path))
-    finally:
-        target.chmod(0o755)
+    with pytest.raises(OpenghmError, match="--spool must be one of cache, fresh"):
+        build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"),
+                     _config(tmp_path))
 
 
 def test_spool_bad_mode(tmp_path):
@@ -559,13 +533,13 @@ def test_stage_files_creates_dirs_copies_and_init(tmp_path):
     # a sibling file in wbm_init must survive the per-sim copy
     (snap / "wbm_init" / "shared.pm").write_text("1;\n", encoding="utf-8")
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="snapshot"), _config(tmp_path))
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
 
     stage_files(built)
     base = tmp_path / "out" / "sim1"
     for d in ("wbm_output", "WBM_run_state"):
         assert (base / d).is_dir()
-    assert (snap / "spool").is_dir() and not (base / "spool").exists()   # created in the snapshot
+    assert (base / "spool").is_dir() and not (snap / "spool").exists()   # the run's own
     assert (base / "wbm_init" / "shared.pm").is_file()          # copied
     init = (base / "wbm_init" / "wbm_test.init").read_text()
     assert "Output_dir => '/wbm/wbm_output/sim1'" in init       # generated wins over copy

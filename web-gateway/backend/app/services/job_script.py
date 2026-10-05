@@ -300,9 +300,9 @@ def render_job_body(
     snapshots can link the same model input. `fetch_lock` must be on a
     filesystem where flock works across nodes: on Anvil that is /home (NFS),
     not /anvil (GPFS), where two jobs on different nodes held it at once.
-    `--spool skip` because a snapshot's own spool is not used: the run shares
-    one through the toolkit's spool cache (`--spool cache`), which links the
-    days the cache holds and harvests the days the run built after it exits 0.
+    The run shares a spool through the toolkit's spool cache (`--spool cache`),
+    which links the days the cache holds and harvests the days the run built
+    after it exits 0; the fetch brings no spool.
 
     `work_dir` is where `sim run` writes (`<output_base>/<sim_id>`, ADR 0023):
     the body reads WBM's log and lists the output there to write
@@ -357,7 +357,7 @@ def render_job_body(
             f'echo "openghm $("$OPENGHM" --version) commit {commit}"',
             'mkdir -p "$CACHE/snapshots"',
             f'step fetch flock {shlex.quote(lock)} "$OPENGHM" snapshot fetch --config "$CONFIG" '
-            f'{snapshot_id} --dest "$CACHE/snapshots/{snapshot_id}" --spool skip',
+            f'{snapshot_id} --dest "$CACHE/snapshots/{snapshot_id}"',
             " ".join(run),
             "OG_PHASE=check",
         ]

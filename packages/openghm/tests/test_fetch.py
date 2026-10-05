@@ -135,7 +135,7 @@ class Bucket:
         self.put_mi("SHA256SUMS", sums.encode())
         return self
 
-    def publish(self, *, spool=True, image_body=b"pretend sif"):
+    def publish(self, *, image_body=b"pretend sif"):
         """Fill the bucket with a snapshot the way ``snapshot-layout.md`` lays it out."""
         hashed = {
             "model/wbm.pl": (b"#!/usr/bin/perl\nprint 1;\n", _MODE_EXE),
@@ -164,9 +164,9 @@ class Bucket:
         self.put("SHA256SUMS", sums.encode())
         # output is carried but has no SHA256SUMS line and is never fetched
         self.put("wbm_output/run/out.nc", b"output")
-        if spool:
-            self.put("spool/plain.bin", b"spool bytes")                       # plain-MD5 ETag
-            self.put("spool/big/multi.bin", b"multipart", etag="d41d8cd98f00b204e9800998ecf8427e-3")
+        # an old tree still lists its own spool/, unhashed; it is never fetched
+        self.put("spool/plain.bin", b"spool bytes")
+        self.put("spool/big/multi.bin", b"multipart", etag="d41d8cd98f00b204e9800998ecf8427e-3")
         self.objects[IMAGE_KEY] = _Obj(image_body)
         return self
 
@@ -197,26 +197,23 @@ def _image_path(tmp_path) -> Path:
 # ── what is fetched ───────────────────────────────────────────────────────────
 
 
-def test_fetch_auto_downloads_tree_spool_and_image(bucket, tmp_path):
+def test_fetch_downloads_tree_and_image(bucket, tmp_path):
     result = _run(bucket, tmp_path)
     snap = tmp_path / "snap"
     assert result.ok, result.failed
-    # 6 of the 7 hashed files (WBM_run_state is not fetched) + SHA256SUMS + 2 spool + image
-    assert (result.downloaded, result.skipped) == (5 + 2 + 2 + 1, 0)
+    # 6 of the 7 hashed files (WBM_run_state is not fetched) + SHA256SUMS + image
+    assert (result.downloaded, result.skipped) == (5 + 2 + 1, 0)
     assert bucket.lists > 1                       # the listing was paginated
     assert (snap / "model" / "wbm.pl").read_bytes().startswith(b"#!/usr/bin/perl")
     assert (snap / "gdal_test_files" / "a.nc").read_bytes() == b"a" * 100
     assert not (snap / "WBM_run_state").exists()
     # wbm_output/ is there, as the layout requires, but its contents are not
     assert (snap / "wbm_output").is_dir() and not any((snap / "wbm_output").iterdir())
-    assert (snap / "spool" / "plain.bin").read_bytes() == b"spool bytes"
-    assert (snap / "spool" / "big" / "multi.bin").exists()
     assert (snap / "metadata.json").exists() and (snap / "SHA256SUMS").exists()
     assert not list(snap.rglob("*.part"))
-    assert (result.spool, result.spool_files) == ("fetched", 2)
     assert result.image_path == str(_image_path(tmp_path))
     assert _image_path(tmp_path).read_bytes() == b"pretend sif"
-    assert fetch.summary_line(result).startswith("downloaded 10, skipped 0, failed 0")
+    assert fetch.summary_line(result).startswith("downloaded 8, skipped 0, failed 0")
 
 
 def test_the_fetched_tree_has_the_wbm_output_the_layout_requires(bucket, tmp_path):
@@ -236,31 +233,14 @@ def test_modes_come_from_the_object_metadata(bucket, tmp_path):
     assert (snap / "model" / "lib" / "RIMS.pm").stat().st_mode & 0o777 == 0o644
 
 
-def test_spool_skip_leaves_it_out(bucket, tmp_path):
-    result = _run(bucket, tmp_path, spool="skip")
-    assert result.ok and result.spool == "skipped"
+def test_a_spool_in_the_listing_is_not_downloaded(bucket, tmp_path):
+    # an old snapshot tree still lists spool/...; a spool belongs to the model input
+    assert PREFIX + "spool/plain.bin" in bucket.objects and PREFIX + "spool/big/multi.bin" in bucket.objects
+    result = _run(bucket, tmp_path)
+    assert result.ok, result.failed
     assert not (tmp_path / "snap" / "spool").exists()
     assert not any("spool/" in k for k in bucket.gets)
-
-
-def test_spool_auto_when_the_snapshot_has_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(fetch, "_BACKOFF", 0.0)
-    b = Bucket().publish(spool=False)
-    try:
-        result = _run(b, tmp_path)
-    finally:
-        b.close()
-    assert result.ok and result.spool == "absent"
-    assert not (tmp_path / "snap" / "spool").exists()
-
-
-def test_spool_is_checked_by_md5_when_the_etag_is_one(bucket, tmp_path):
-    bucket.objects[PREFIX + "spool/plain.bin"].body = b"spool BYTES"   # same size, wrong MD5
-    result = _run(bucket, tmp_path)
-    assert [p for p, _ in result.failed] == ["spool/plain.bin"]
-    assert "md5" in result.failed[0][1]
-    assert not (tmp_path / "snap" / "spool" / "plain.bin").exists()
-    assert (tmp_path / "snap" / "spool" / "big" / "multi.bin").exists()   # multipart: size only
+    assert not hasattr(result, "spool")
 
 
 def test_data_and_data_init_are_not_fetched_even_if_published(bucket, tmp_path):
@@ -314,7 +294,7 @@ def test_sums_line_without_an_object_fails(bucket, tmp_path):
     assert "not in the bucket" in result.failed[0][1]
 
 
-def test_unhashed_object_outside_spool_fails(bucket, tmp_path):
+def test_unhashed_object_fails(bucket, tmp_path):
     bucket.put("gdal_test_files/extra.nc", b"stray")
     result = _run(bucket, tmp_path)
     assert [p for p, _ in result.failed] == ["gdal_test_files/extra.nc"]
@@ -346,21 +326,21 @@ def test_a_second_run_downloads_nothing(bucket, tmp_path):
     second = _run(bucket, tmp_path)
     assert second.ok and second.downloaded == 0 and second.skipped == first.downloaded
     assert bucket.gets == []
-    assert fetch.summary_line(second).startswith("downloaded 0, skipped 10, failed 0")
+    assert fetch.summary_line(second).startswith("downloaded 0, skipped 8, failed 0")
 
 
 def test_resume_refetches_only_what_is_not_valid(bucket, tmp_path):
     _run(bucket, tmp_path)
     snap = tmp_path / "snap"
     (snap / "gdal_test_files" / "a.nc").write_bytes(b"z" * 100)     # right size, wrong hash
-    (snap / "spool" / "plain.bin").write_bytes(b"short")         # wrong size
+    (snap / "utilities" / "tool").write_bytes(b"short")          # wrong size
     (snap / "model" / "lib" / "RIMS.pm").unlink()                # missing
     (snap / "model" / "wbm.pl.part").write_bytes(b"half")        # a killed run's leftover
     bucket.gets.clear()
     result = _run(bucket, tmp_path)
     assert result.ok and result.downloaded == 3
     assert sorted(bucket.gets) == sorted(PREFIX + r for r in
-                                         ("gdal_test_files/a.nc", "spool/plain.bin", "model/lib/RIMS.pm"))
+                                         ("gdal_test_files/a.nc", "utilities/tool", "model/lib/RIMS.pm"))
     assert (snap / "gdal_test_files" / "a.nc").read_bytes() == b"a" * 100
 
 
@@ -402,8 +382,8 @@ def test_snapshot_fetch_also_fetches_the_linked_model_input(bucket, tmp_path):
     result = _run(bucket, tmp_path, model_input=True)
     mi = _mi_dir(tmp_path)
     assert result.ok, result.failed
-    # 10 for the snapshot + its image, and the model input's 4 files + SHA256SUMS
-    assert (result.downloaded, result.skipped) == (10 + 5, 0)
+    # 8 for the snapshot + its image, and the model input's 4 files + SHA256SUMS
+    assert (result.downloaded, result.skipped) == (8 + 5, 0)
     assert result.model_input_path == str(mi)
     assert (mi / "climate" / "t2m" / "2000-01-01.nc").read_bytes() == b"n" * 50
     assert (mi / "data_init" / "climate" / "t2m.init").exists()
@@ -426,7 +406,7 @@ def test_a_shared_model_input_downloads_once(bucket, tmp_path):
     other = _run(bucket, tmp_path, model_input=True, dest=str(tmp_path / "snap2"))
     assert other.ok
     assert not any(k.startswith(MI_PREFIX) for k in bucket.gets)
-    # the second snapshot's tree and spool download; the input (5 files) and the image are skipped
+    # the second snapshot's tree downloads; the input (5 files) and the image are skipped
     assert other.skipped == 5 + 1 and other.downloaded == first.downloaded - 5 - 1
 
 
@@ -526,7 +506,7 @@ def test_model_input_fetch_reports_a_bad_file(bucket, tmp_path):
 def test_cli_fetch_help():
     out = CliRunner().invoke(cli, ["snapshot", "fetch", "--help"])
     assert out.exit_code == 0
-    for flag in ("--dest", "--spool", "--no-image", "--no-model-input", "--jobs"):
+    for flag in ("--dest", "--no-image", "--no-model-input", "--jobs"):
         assert flag in out.output
 
 
@@ -541,8 +521,8 @@ def _invoke(bucket, tmp_path, monkeypatch, *args):
 def test_cli_fetch_reports_and_exits_0(bucket, tmp_path, monkeypatch):
     out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2", "--no-model-input")
     assert out.exit_code == 0, out.output
-    assert "downloaded 10, skipped 0, failed 0" in out.output
-    assert "spool: 2 files" in out.output and str(_image_path(tmp_path)) in out.output
+    assert "downloaded 8, skipped 0, failed 0" in out.output
+    assert "spool" not in out.output and str(_image_path(tmp_path)) in out.output
     assert "model input:" not in out.output and not (tmp_path / "mi").exists()
 
 
@@ -551,8 +531,8 @@ def test_cli_fetch_prints_no_progress_counter_when_stderr_is_not_a_tty(bucket, t
     # of noise, and the summary line already reports the result.
     out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
     assert out.exit_code == 0, out.output
-    assert " files" not in out.output.replace("spool: 2 files", "")
-    assert "downloaded 15, skipped 0, failed 0" in out.output
+    assert " files" not in out.output
+    assert "downloaded 13, skipped 0, failed 0" in out.output
     out = CliRunner().invoke(
         cli, ["model-input", "fetch", MI_ID, "--config", str(tmp_path / "config.toml"),
               "--dest", str(tmp_path / "there")])
@@ -566,13 +546,13 @@ def test_cli_fetch_keeps_the_progress_counter_on_a_tty(bucket, tmp_path, monkeyp
     monkeypatch.setattr(click.testing._NamedTextIOWrapper, "isatty", lambda self: True)
     out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2", "--no-model-input")
     assert out.exit_code == 0, out.output
-    assert "7/7 files" in out.output
+    assert "5/5 files" in out.output
 
 
 def test_cli_fetch_includes_the_model_input_by_default(bucket, tmp_path, monkeypatch):
     out = _invoke(bucket, tmp_path, monkeypatch, "--jobs", "2")
     assert out.exit_code == 0, out.output
-    assert "downloaded 15, skipped 0, failed 0" in out.output
+    assert "downloaded 13, skipped 0, failed 0" in out.output
     assert f"model input: {_mi_dir(tmp_path)}" in out.output
     assert (_mi_dir(tmp_path) / "data_init" / "climate" / "t2m.init").exists()
     assert not (tmp_path / "snap" / "data").exists()
@@ -605,6 +585,6 @@ def test_cli_model_input_fetch_errors(bucket, tmp_path, monkeypatch):
 
 def test_cli_fetch_exits_1_and_lists_failures(bucket, tmp_path, monkeypatch):
     bucket.objects[PREFIX + "gdal_test_files/a.nc"].body = b"b" * 100
-    out = _invoke(bucket, tmp_path, monkeypatch, "--spool", "skip", "--no-image")
+    out = _invoke(bucket, tmp_path, monkeypatch, "--no-image")
     assert out.exit_code == 1
     assert "failed 1" in out.output and "gdal_test_files/a.nc" in out.output

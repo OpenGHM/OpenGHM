@@ -101,7 +101,7 @@ trap 'OG_SIGNAL=INT; exit 130' INT
 trap 'OG_SIGNAL=HUP; exit 129' HUP
 echo "openghm $("$OPENGHM" --version) commit abc1234"
 mkdir -p "$CACHE/snapshots"
-step fetch flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}" --spool skip
+step fetch flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}"
 step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool cache
 OG_PHASE=check"""
 

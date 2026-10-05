@@ -16,12 +16,12 @@ finish (section 1). The reasoning is
 ## 1. Where it stands
 
 A gateway job runs `openghm snapshot fetch` and then `openghm sim run
---spool fresh` ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
-`fetch` leaves out the snapshot's `wbm_output/` and `WBM_run_state/`
+--spool cache` ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
+`fetch` leaves out the snapshot's `wbm_output/`, `WBM_run_state/` and `spool/`
 (`packages/openghm/src/openghm/fetch.py`, `EXCLUDED_DIRS`), and `sim run` gives
-every run an empty `WBM_run_state/` and, with `--spool fresh`, an empty spool.
-So WBM computes every day of the spinup and the run, and warps every input it
-reads.
+every run an empty `WBM_run_state/`. So WBM computes every day of the spinup
+and the run; it warps only the inputs the shared spool cache does not already
+hold (§4).
 
 What a draft can change today is narrow. The wizard bounds the run period to
 the snapshot's `simulation.temporalCoverage`, the output variables are chosen
@@ -151,8 +151,8 @@ diagram in [artifact-versioning.md](artifact-versioning.md) §1). The run's
 period is not part of it: a day is a file, and runs of different periods add
 files to the same directory.
 
-**Built in the toolkit** (`openghm sim --spool cache`, the default since
-`24b261f`; the gateway's job still passes `--spool fresh`):
+**Built** (`openghm sim --spool cache`, the toolkit's default since `24b261f`,
+and what a gateway job passes):
 
 - **One directory per variant.** `<spool cache>/<model input id>/<network>/<variant>/`,
   laid out inside as WBM lays out its own spool. The variant hashes the image
@@ -192,10 +192,13 @@ files to the same directory.
   years needed (6.5 GB) and built none (job 21093028). The cache takes whole
   years from S3, the spinup's first to the year after the run's last, so a
   two-month run fetches two years.
+- **The snapshots' own `spool/` is gone.** Deleted from S3 on 2026-10-06, after
+  `spools/<model input id>/` repeated it. The toolkit has no `--spool snapshot`
+  mode and `snapshot fetch` has no `--spool` option; it never downloads a
+  `spool/`, so an old tree that lists one still fetches.
 
 **Target:**
 
-- **The snapshots' own `spool/` goes**, now that `spools/<model input id>/` repeats it.
 - **A cache with a cap.** Scratch purges files untouched for 30 days, and the
   binding limit is the file count, not the size: x-openghm has 100 TB and
   1 million files on scratch, and a 10-year spool is about 24,000 files

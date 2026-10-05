@@ -11,9 +11,10 @@ What a snapshot fetch downloads:
 - everything under ``snapshots/<id>/`` **except** ``wbm_output/`` (a snapshot
   carries output it does not consume, ADR 0009; the fetched tree gets an empty
   one, which the layout requires), ``WBM_run_state/`` (a new run starts its
-  own), and ``data/`` and ``data_init/`` (the input lives in the model input, ADR
-  0015, even where a published tree still carries a copy);
-- ``spool/`` only with ``spool="auto"`` and only if the snapshot has one;
+  own), ``data/`` and ``data_init/`` (the input lives in the model input, ADR
+  0015, even where a published tree still carries a copy), and ``spool/`` (a spool
+  belongs to the model input and runs share it through the spool cache; an old
+  tree that still lists one is fetched without it);
 - the model input the document links (``uses.modelInput.id``), into the
   ``model_input_dir`` cache, unless ``model_input=False``;
 - the container image the document pins (``uses.container.https``), into the
@@ -24,7 +25,7 @@ A model input fetch downloads all of ``model-inputs/<id>/``, checked the same wa
 How each file is checked:
 
 - a file with a ``SHA256SUMS`` line: its sha256;
-- a file without a line (spool files, by design, and ``SHA256SUMS`` itself): its
+- ``SHA256SUMS`` itself, which has no line: its
   MD5 against the ETag when the ETag is a plain MD5 (no ``-``, i.e. not
   multipart);
 - every file: its size against the listing.
@@ -61,9 +62,7 @@ from .errors import OpenghmError
 S3_BASE = "https://s3.anvil.rcac.purdue.edu/openghm"
 
 #: Top-level directories of a snapshot that are never fetched.
-EXCLUDED_DIRS = ("wbm_output", "WBM_run_state", "data", "data_init")
-SPOOL_DIR = "spool"
-SPOOL_MODES = ("auto", "skip")
+EXCLUDED_DIRS = ("wbm_output", "WBM_run_state", "data", "data_init", "spool")
 
 METADATA_NAME = "metadata.json"
 SUMS_NAME = "SHA256SUMS"
@@ -89,8 +88,6 @@ class FetchOptions:
     snapshot_id: str
     #: Where the tree goes. Defaults to ``./<snapshot_id>``.
     dest: Optional[str] = None
-    #: ``auto`` → fetch ``spool/`` if the snapshot has one; ``skip`` → never.
-    spool: str = "auto"
     #: Fetch the pinned container image too.
     image: bool = True
     #: Fetch the linked model input too, into ``config.model_input_path(id)``.
@@ -130,9 +127,6 @@ class FetchResult:
     bytes_downloaded: int = 0
     #: ``(path, reason)`` for everything that did not end up valid at its path.
     failed: List[Tuple[str, str]] = field(default_factory=list)
-    #: ``fetched`` / ``absent`` (the snapshot has none) / ``skipped`` (``--spool skip``).
-    spool: str = "skipped"
-    spool_files: int = 0
     #: Absolute path of the pinned image, when it was requested and is valid.
     image_path: Optional[str] = None
     #: Absolute path of the linked model input, when it was requested and is valid.
@@ -211,17 +205,15 @@ def parse_sums(text: str) -> Dict[str, str]:
     return sums
 
 
-def select(rel: str, spool: Optional[str], excluded: Tuple[str, ...] = EXCLUDED_DIRS) -> Optional[str]:
+def select(rel: str, excluded: Tuple[str, ...] = EXCLUDED_DIRS) -> Optional[str]:
     """Whether a tree-relative path is fetched: ``None`` if so, else why not.
 
-    ``spool`` is ``"auto"`` / ``"skip"`` for a snapshot, ``None`` for a tree
-    with no spool (a model input), where ``spool/`` is an ordinary directory.
+    ``excluded`` is :data:`EXCLUDED_DIRS` for a snapshot and ``()`` for a model
+    input, where every top-level directory (``spool/`` included) is fetched.
     """
     top = rel.split("/", 1)[0]
     if top in excluded:
         return f"{top}/ is not fetched"
-    if spool is not None and top == SPOOL_DIR and spool != "auto":
-        return "spool/ skipped"
     return None
 
 
@@ -338,7 +330,6 @@ def _fetch_tree(
     *,
     kind: str,
     excluded: Tuple[str, ...],
-    spool: Optional[str],
     jobs: int,
     on_progress: Optional[Callable[[int, int], None]],
 ) -> dict:
@@ -368,10 +359,6 @@ def _fetch_tree(
         if name not in on_offer:
             raise OpenghmError(f"{prefix}{name} is not in the bucket; this is not a {kind}")
 
-    if spool is not None:
-        spool_present = any(r.split("/", 1)[0] == SPOOL_DIR for r in on_offer)
-        result.spool = ("skipped" if spool == "skip" else "fetched" if spool_present else "absent")
-
     # SHA256SUMS first, then metadata.json (which it may list): everything else
     # is checked against them.
     def head(name: str, sha256: Optional[str]) -> None:
@@ -394,18 +381,16 @@ def _fetch_tree(
     # What to fetch, and what the document and the bucket disagree about.
     items: List[_Item] = []
     for rel, sha256 in sums.items():
-        if select(rel, spool, excluded) is None and rel not in on_offer:
+        if select(rel, excluded) is None and rel not in on_offer:
             result.failed.append((rel, f"listed in {SUMS_NAME} but not in the bucket"))
     for rel, (size, etag) in sorted(on_offer.items()):
-        if rel in (METADATA_NAME, SUMS_NAME) or select(rel, spool, excluded) is not None:
+        if rel in (METADATA_NAME, SUMS_NAME) or select(rel, excluded) is not None:
             continue
         sha256 = sums.get(rel)
-        if sha256 is None and not (spool is not None and rel.split("/", 1)[0] == SPOOL_DIR):
+        if sha256 is None:
             result.failed.append((rel, f"in the bucket but has no {SUMS_NAME} line"))
             continue
         items.append(_Item(rel, size, etag, sha256))
-    if spool is not None:
-        result.spool_files = sum(1 for i in items if i.rel.split("/", 1)[0] == SPOOL_DIR)
 
     done = 0
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
@@ -439,15 +424,13 @@ def fetch_snapshot(
     """
     if not _ID_RE.match(opts.snapshot_id):
         raise OpenghmError(f"not a snapshot id: {opts.snapshot_id!r}")
-    if opts.spool not in SPOOL_MODES:
-        raise OpenghmError(f"--spool must be one of {', '.join(SPOOL_MODES)} (got {opts.spool!r})")
     base = (opts.base_url or S3_BASE).rstrip("/")
     prefix = f"snapshots/{opts.snapshot_id}/"
     dest = os.path.abspath(opts.dest or opts.snapshot_id)
     result = FetchResult(dest=dest)
 
     meta = _fetch_tree(base, prefix, dest, result, kind="snapshot", excluded=EXCLUDED_DIRS,
-                       spool=opts.spool, jobs=opts.jobs, on_progress=on_progress)
+                       jobs=opts.jobs, on_progress=on_progress)
     uses = meta.get("uses") or {}
     image_spec = assets.spec_from_container(uses.get("container") or {}) if opts.image else None
     model_input_id = _model_input_id(meta) if opts.model_input else None
@@ -483,7 +466,7 @@ def fetch_model_input(
     prefix = f"model-inputs/{opts.model_input_id}/"
     dest = os.path.abspath(opts.dest or config.model_input_path(opts.model_input_id))
     result = FetchResult(dest=dest)
-    _fetch_tree(base, prefix, dest, result, kind="model input", excluded=(), spool=None,
+    _fetch_tree(base, prefix, dest, result, kind="model input", excluded=(),
                 jobs=opts.jobs, on_progress=on_progress)
     if not result.failed:
         result.model_input_path = dest
@@ -516,7 +499,7 @@ def _fetch_linked_model_input(
     sub = FetchResult(dest=config.model_input_path(model_input_id))
     try:
         _fetch_tree(base, f"model-inputs/{model_input_id}/", sub.dest, sub, kind="model input",
-                    excluded=(), spool=None, jobs=jobs, on_progress=on_progress)
+                    excluded=(), jobs=jobs, on_progress=on_progress)
     except OpenghmError as e:
         result.failed.append((f"model input {model_input_id}", str(e)))
         return
