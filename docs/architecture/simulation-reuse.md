@@ -8,7 +8,7 @@ warped inputs.
 WBM from an empty run state into an empty spool, start to finish (section 1).
 Where a piece already exists, the text says so. The reasoning is
 [ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)
-(proposed); the gateway as it runs is [gateway.md](gateway.md).
+(accepted 2026-10-05); the gateway as it runs is [gateway.md](gateway.md).
 
 ---
 

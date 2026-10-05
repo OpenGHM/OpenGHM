@@ -126,7 +126,7 @@ and 0012 were folded into 0010.
 | [0026](decisions/0026-how-a-job-verdict-is-reached.md) | How a job's verdict is reached, and how long its files live | accepted |
 | [0027](decisions/0027-live-updates-are-polled.md) | A job's live state is polled and shared, and its logs are read by byte offset | accepted |
 | [0028](decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md) | A new simulation is stored when the user saves it, and a stored draft saves its own edits | accepted |
-| [0029](decisions/0029-a-run-computes-only-what-is-not-published.md) | A run computes only what is not already published | proposed |
+| [0029](decisions/0029-a-run-computes-only-what-is-not-published.md) | A run computes only what is not already published | accepted |
 
 ## Missions
 

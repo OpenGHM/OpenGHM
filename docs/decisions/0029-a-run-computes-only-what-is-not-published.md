@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | proposed |
+| **Status** | accepted |
 | **Date** | 2026-10-05 |
 | **Affects** | [`../architecture/simulation-reuse.md`](../architecture/simulation-reuse.md), [`../architecture/gateway.md`](../architecture/gateway.md), [ADR 0009](0009-output-is-carried-not-reproducible.md), [ADR 0025](0025-a-gateway-job-runs-the-pinned-toolkit.md) |
 
