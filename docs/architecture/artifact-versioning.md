@@ -32,11 +32,20 @@ mounted read-only, so everything the run produces lands in per-simulation
 scratch.*
 
 The snapshot folder holds the model code, run configuration, the identity
-manifest, and `metadata.json` — plus two things that are deliberately *not* part
-of its identity: a regenerable `spool/` cache, and the `wbm_output/` it produced
-([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)). Those two
-are about 95 % of a published snapshot's bytes, which is why what to ship is a
-real decision rather than a detail.
+manifest, and `metadata.json` — plus the `wbm_output/` it produced, which is
+deliberately *not* part of its identity
+([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)) and is most
+of a published snapshot's bytes, which is why what to ship is a real decision
+rather than a detail.
+
+The spool is not in the folder either. It is the model input's datasets warped
+onto a network grid, so it belongs to the model input, not the snapshot: it is
+kept once per model input, network and variant, under `spools/<model input id>/`
+on S3 and in a scratch cache that runs share. A run links the days the cache
+holds, read-only, builds the rest in its own scratch, and hands them to the
+cache after it exits 0
+([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md),
+[simulation-reuse.md](simulation-reuse.md) §4).
 
 Input data is **not** in the folder. It is a separately published artifact that
 `metadata.json` links by id, and the run binds it from a shared cache

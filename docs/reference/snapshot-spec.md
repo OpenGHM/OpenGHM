@@ -112,7 +112,7 @@ The real file:
     "metadata.json", "model/", "utilities/", "wbm_init/",
     "gdal_test_files/", "wbm_output/"
   ],
-  "optional": ["SHA256SUMS", "spool/", "meta_data/", "WBM_run_state/"]
+  "optional": ["SHA256SUMS", "meta_data/", "WBM_run_state/"]
 }
 ```
 
@@ -120,6 +120,11 @@ The real file:
 links a separately published model input by `uses.modelInput.id`
 ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), and the
 run binds that input's root at `/wbm/data` and its `data_init/` at `/wbm/data_init`.
+`spool/` is in neither list either: a spool belongs to the model input, not the
+snapshot, and runs share it through a cache
+([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)).
+The three published snapshots still carry a `spool/` until it is copied under
+`spools/<model input id>/`; a folder the layout does not name is not an error.
 
 `SHA256SUMS` is optional, and stays optional: it is an integrity check a
 consumer may run, not part of a snapshot's identity

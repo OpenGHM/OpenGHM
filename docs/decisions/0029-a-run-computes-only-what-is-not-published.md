@@ -32,9 +32,10 @@ snapshot does not already answer.**
   snapshot's end-of-run state and computes the added years.
 - Any other draft computes from an empty state, as today.
 - A spool belongs to the model input, not to a snapshot: it is kept per
-  model input, network and dataset variant, in a scratch cache and under
-  `spools/<model input id>/` on S3, filled from S3 before it is built, built into a run's own
-  directory and renamed into the cache, and mounted read-only during a run.
+  model input, network and variant (the run's settings without its dates and
+  names), in a scratch cache and under `spools/<model input id>/` on S3,
+  filled from S3 before it is built, built into a run's own directory and
+  moved into the cache after the run, and read-only to a run that reads it.
 
 ## Alternatives considered
 

@@ -11,18 +11,20 @@ The on-disk shape of a snapshot, and how its identity is computed.
 ├── model/  utilities/               # WBM code, hashed (ADR 0008)
 ├── wbm_init/                        # run configuration
 ├── gdal_test_files/                 # GDAL fixtures the model probes at startup
-├── wbm_output/<runId>/              # published results (ADR 0009)
-└── spool/                           # cache — NOT in SHA256SUMS
-    └── spool-manifest.json
+└── wbm_output/<runId>/              # published results (ADR 0009)
 ```
 
-A snapshot holds no input data: no `data/`, no `data_init/`. It links one published
+A snapshot holds no input data and no spool: no `data/`, no `data_init/`, no
+`spool/`. It links one published
 model input by `uses.modelInput.id`
 ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), which
 `openghm snapshot fetch` puts in a shared cache and `sim` binds at `/wbm/data`
 and `/wbm/data_init`. The three published snapshots hold neither directory; the
 project-space staging copies on Anvil keep theirs, because their test scripts
-read them.
+read them. A spool, the model input's datasets warped onto a network grid, is
+kept per model input, network and variant in a cache that runs share, not in
+the snapshot ([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md),
+[packages/openghm/README.md](../../packages/openghm/README.md)).
 
 **The three snapshots published at `snapshots/<id>/` each have a
 `SHA256SUMS`** (mission `2026-09-23-publish-the-staged-snapshots`, private),
@@ -33,8 +35,10 @@ snapshot is published. The tree above leaves out two optional directories:
 `WBM_run_state/`, which all three published snapshots have, and `meta_data/`,
 which only the two v1.0.0 staging copies have and none of the published ones
 does. That is what optional means here: the tree is the full shape, not the
-guaranteed one. All three published snapshots also have `spool/`. v2.0.0's
-`spool/`, `WBM_run_state/` and `wbm_output/` come from job 20909227
+guaranteed one. All three published snapshots still have a `spool/` from
+before the spool left the snapshot; it goes once its days are under
+`spools/<model input id>/` (mission `2026-10-05-runs-share-a-spool`, private).
+v2.0.0's `spool/`, `WBM_run_state/` and `wbm_output/` come from job 20909227
 (2026-09-25), which ran its own `wbm_test.init` through the published
 `wbm-v2-lite` 2.0.0.
 
@@ -47,18 +51,18 @@ bundled its input (`toolkits/docs/wbm_s3_direct_journey.md`):
 | Component | Global size | Share |
 |---|---|---|
 | `data/` — input store, now the model input's | **49 GB** | 5 % |
-| `spool/` — regenerable cache | **490 GB** | 49 % |
+| `spool/` — regenerable cache, now kept per model input | **490 GB** | 49 % |
 | `wbm_output/` — published results | **≈470 GB** | 47 % |
 | **whole snapshot, then** | **1,009 GB** | |
 
-`spool/` and `wbm_output/` are what a snapshot's bytes are. Tiering decisions
-([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)) are about those
-two directories.
+With the input and the spool out, `wbm_output/` is what a snapshot's bytes are,
+and tiering decisions ([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md))
+are about it.
 
 ## Generate `SHA256SUMS`
 
-`SHA256SUMS` covers the snapshot's **inputs** — everything except `spool/`
-(a cache) and `wbm_output/` (a result). A model input uses the same recipe with
+`SHA256SUMS` covers the snapshot's **inputs** — everything except
+`wbm_output/` (a result) and a leftover `spool/` (a cache). A model input uses the same recipe with
 no exclusions ([s3-layout.md](s3-layout.md)).
 
 ```bash

@@ -7,7 +7,7 @@ Terms this project uses without re-explaining them.
 | **snapshot** | one folder that reproduces one WBM simulation — code, run configuration, a link to the inputs, and the output it produced |
 | **model input** | the data a simulation mounts, published on its own outside any snapshot and linked by id (axis 3). Called `raw_data` until [ADR 0015](decisions/0015-model-input-is-a-published-artifact.md) |
 | **minted id** | an artifact's identifier — 256 random bits assigned once at publish, unique but not derived from the bytes ([ADR 0014](decisions/0014-identity-is-a-minted-id.md)) |
-| **spool** | WBM's cache of input data resampled onto the model grid — large, regenerable, excluded from snapshot identity |
+| **spool** | WBM's cache of input data resampled onto the model grid — large, regenerable; kept per model input, network and variant, shared by runs, not part of a snapshot |
 | **Apptainer** | the container runtime on Anvil (formerly Singularity; `singularity` is a symlink to it) |
 | **SIF** | Singularity Image Format — one file that is the whole container |
 | **squashfs** | the compressed read-only filesystem inside a SIF; it embeds timestamps, which is why a rebuild is not bit-identical |

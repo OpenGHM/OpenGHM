@@ -251,11 +251,6 @@
         <div class="spacer"></div>
 
         <div class="t-row excl">
-          <code>├── spool/</code>
-          <span class="note">derived cache — excluded from identity</span>
-        </div>
-
-        <div class="t-row excl">
           <code>└── wbm_output/</code>
           <span class="note">published results — excluded from identity</span>
         </div>
@@ -284,12 +279,16 @@
   <title id="dgm-title">Snapshot assembly and run graph</title>
   <desc id="dgm-desc">
     A spec repository sits at the top. Below it a read-only snapshot folder holds metadata.json
-    above three sibling boxes: the published wbm_output, the bundled code and configuration, and a dashed
-    spool cache. metadata.json makes two dashed pin edges — one up to the spec repository, one
-    right to a group of external stores holding the image registry and the model input store.
-    The bundled content flows down into a WBM run on a solid edge; the spool is bound into the
-    run in place, read-write, on a dashed conditional edge; the external stores feed the run from the right. The run writes down
-    into a writable per-simulation scratch directory containing wbm_output and WBM_run_state. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
+    above two sibling boxes: the published wbm_output and the bundled code and configuration.
+    metadata.json makes two dashed pin edges — one up to the spec repository, one right to a
+    group of external stores holding the image registry and the model input store. Beside the
+    snapshot, outside it, a shared spool cache: S3 spools/ keyed by model input id, filling a
+    scratch cache keyed by network and variant. The bundled content flows down into a WBM run on
+    a solid edge; the external stores feed the run from the right; the spool cache links its days
+    into the run read-only, and a run that exits 0 hands the days it built back to the cache.
+    Input data is not bundled: it is a published model input the run pulls by id. The run writes
+    down into a writable per-simulation scratch directory containing wbm_output, WBM_run_state
+    and its own spool. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
   </desc>
 
   <!-- SVG <style> is not scoped, so every class is g- prefixed: this markup is
@@ -318,41 +317,51 @@
   </defs>
 
   <!-- ── spec repository ─────────────────────────────────────────────────── -->
-  <rect x="390" y="14" width="210" height="60" rx="4" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="495" y="40" text-anchor="middle" font-size="15">Spec repository</text>
-  <text class="g-m g-acc"      x="495" y="61" text-anchor="middle" font-size="11.5">snapshot-spec &#183; semver</text>
+  <rect x="300" y="14" width="210" height="60" rx="4" fill="none" stroke="#10695C" stroke-width="1.5"/>
+  <text class="g-b g-bd g-acc" x="405" y="40" text-anchor="middle" font-size="15">Spec repository</text>
+  <text class="g-m g-acc"      x="405" y="61" text-anchor="middle" font-size="11.5">snapshot-spec &#183; semver</text>
 
   <!-- ── snapshot boundary (read-only) ───────────────────────────────────── -->
-  <rect x="215" y="120" width="560" height="268" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <rect x="215" y="120" width="381" height="268" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
   <text class="g-m g-fnt g-cap" x="223" y="110" font-size="12">SNAPSHOT &#8212; READ-ONLY</text>
 
-  <rect x="370" y="140" width="250" height="54" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
-  <text class="g-m g-ink g-bd" x="495" y="166" text-anchor="middle" font-size="14.5">metadata.json</text>
-  <text class="g-b g-mut"      x="495" y="184" text-anchor="middle" font-size="11.5">identity + pins</text>
+  <rect x="280" y="140" width="250" height="54" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
+  <text class="g-m g-ink g-bd" x="405" y="166" text-anchor="middle" font-size="14.5">metadata.json</text>
+  <text class="g-b g-mut"      x="405" y="184" text-anchor="middle" font-size="11.5">identity + pins</text>
 
   <!-- s1 · reference output -->
   <rect x="233" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-m g-ink g-bd" x="316" y="246" text-anchor="middle" font-size="12.5">wbm_output/</text>
   <text class="g-b g-ink"      x="316" y="266" text-anchor="middle" font-size="11.5">published results</text>
   <text class="g-b g-mut"      x="316" y="286" text-anchor="middle" font-size="11">&#8776;470 GB &#183; Global</text>
-  <text class="g-b g-mut"      x="316" y="312" text-anchor="middle" font-size="11">excluded from identity</text>
+  <text class="g-b g-mut"      x="316" y="312" text-anchor="middle" font-size="11">excluded from SHA256SUMS</text>
   <text class="g-b g-mut"      x="316" y="330" text-anchor="middle" font-size="11">never mounted</text>
 
   <!-- s2 · bundled input content -->
   <rect x="412" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
-  <text class="g-b g-ink g-bd" x="495" y="246" text-anchor="middle" font-size="13">bundled content</text>
-  <text class="g-m g-ink"      x="495" y="266" text-anchor="middle" font-size="11.5">model/  utilities/</text>
-  <text class="g-m g-ink"      x="495" y="284" text-anchor="middle" font-size="11.5">wbm_init/  gdal_test_files/</text>
-  <text class="g-b g-mut"      x="495" y="310" text-anchor="middle" font-size="11">495 MB &#183; Global</text>
-  <text class="g-b g-mut"      x="495" y="328" text-anchor="middle" font-size="11">defines identity</text>
+  <text class="g-b g-ink g-bd" x="495" y="244" text-anchor="middle" font-size="13">bundled content</text>
+  <text class="g-m g-ink"      x="495" y="264" text-anchor="middle" font-size="11.5">model/  utilities/</text>
+  <text class="g-m g-ink"      x="495" y="282" text-anchor="middle" font-size="11.5">wbm_init/</text>
+  <text class="g-m g-ink"      x="495" y="300" text-anchor="middle" font-size="11.5">gdal_test_files/</text>
+  <text class="g-b g-mut"      x="495" y="324" text-anchor="middle" font-size="11">495 MB &#183; Global</text>
+  <text class="g-b g-mut"      x="495" y="342" text-anchor="middle" font-size="11">covered by SHA256SUMS</text>
 
-  <!-- s3 · spool cache -->
-  <rect x="591" y="222" width="166" height="132" rx="4" fill="none" stroke="#8A9997" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text class="g-m g-fnt g-bd" x="674" y="246" text-anchor="middle" font-size="12.5">spool/</text>
-  <text class="g-b g-fnt"      x="674" y="266" text-anchor="middle" font-size="11.5">warped-grid cache</text>
-  <text class="g-b g-fnt"      x="674" y="286" text-anchor="middle" font-size="11">490 GB &#183; Global</text>
-  <text class="g-b g-fnt"      x="674" y="312" text-anchor="middle" font-size="11">excluded from identity</text>
-  <text class="g-b g-fnt"      x="674" y="330" text-anchor="middle" font-size="11">regenerable</text>
+  <!-- ── spool cache (outside the snapshot, shared by runs) ──────────────── -->
+  <rect x="612" y="200" width="178" height="188" rx="4" fill="none" stroke="#5C6B69" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <text class="g-m g-mut g-cap" x="620" y="192" font-size="11.5">SPOOL &#8212; SHARED</text>
+
+  <rect x="624" y="212" width="154" height="66" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.4"/>
+  <text class="g-m g-ink g-bd" x="701" y="234" text-anchor="middle" font-size="12.5">spools/</text>
+  <text class="g-b g-mut"      x="701" y="252" text-anchor="middle" font-size="11">Anvil S3 &#183; public</text>
+  <text class="g-m g-mut"      x="701" y="268" text-anchor="middle" font-size="10">&lt;model input id&gt;/&#8230;</text>
+
+  <rect x="624" y="304" width="154" height="72" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.4"/>
+  <text class="g-m g-ink g-bd" x="701" y="326" text-anchor="middle" font-size="12">scratch cache</text>
+  <text class="g-m g-mut"      x="701" y="344" text-anchor="middle" font-size="10">&lt;network&gt;/&lt;variant&gt;/</text>
+  <text class="g-b g-mut"      x="701" y="362" text-anchor="middle" font-size="11">regenerable</text>
+
+  <line x1="701" y1="278" x2="701" y2="300" stroke="#5C6B69" stroke-width="1.6" marker-end="url(#g-af)"/>
+  <text class="g-m g-mut" x="710" y="294" font-size="11">fills</text>
 
   <!-- ── WBM run ─────────────────────────────────────────────────────────── -->
   <rect x="380" y="468" width="320" height="86" rx="4" fill="none" stroke="#131C1B" stroke-width="2.2"/>
@@ -383,21 +392,21 @@
   <text class="g-m g-ink g-bd" x="495" y="698" text-anchor="middle" font-size="12">WBM_run_state/</text>
   <text class="g-b g-mut"      x="495" y="718" text-anchor="middle" font-size="11">resume state</text>
 
-  <rect x="591" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <rect x="591" y="674" width="166" height="62" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
   <text class="g-m g-ink g-bd" x="674" y="698" text-anchor="middle" font-size="12">spool/</text>
-  <text class="g-b g-mut"      x="674" y="718" text-anchor="middle" font-size="11">only with --spool fresh</text>
+  <text class="g-b g-mut"      x="674" y="718" text-anchor="middle" font-size="11">links + days it built</text>
 
   <text class="g-b g-mut" x="233" y="758" font-size="11.5">+ per-sim wbm_init/ copy &#183; simulation.json provenance &#183; slurm logs</text>
   <text class="g-b g-mut" x="233" y="774" font-size="11.5">Nothing here is ever written back into the snapshot.</text>
 
   <!-- ── pin edges (dashed accent — no bytes move) ───────────────────────── -->
   <g fill="none" stroke="#10695C" stroke-width="1.5" stroke-dasharray="7 5">
-    <line x1="495" y1="140" x2="495" y2="80" marker-end="url(#g-aa)"/>
-    <polyline points="620,167 872,167 872,424" marker-end="url(#g-aa)"/>
+    <line x1="405" y1="140" x2="405" y2="80" marker-end="url(#g-aa)"/>
+    <polyline points="530,167 980,167 980,424" marker-end="url(#g-aa)"/>
   </g>
-  <text class="g-m g-acc" x="507" y="112" font-size="12.5">conforms to</text>
-  <text class="g-m g-acc" x="882" y="296" font-size="12.5">pinned by</text>
-  <text class="g-m g-acc" x="882" y="312" font-size="12.5">digest / version</text>
+  <text class="g-m g-acc" x="417" y="112" font-size="12.5">conforms to</text>
+  <text class="g-m g-acc" x="970" y="296" text-anchor="end" font-size="12.5">pinned by</text>
+  <text class="g-m g-acc" x="970" y="312" text-anchor="end" font-size="12.5">digest / id</text>
 
   <!-- ── external stores -> run ──────────────────────────────────────────── -->
   <line x1="798" y1="518" x2="704" y2="518" stroke="#10695C" stroke-width="1.8" marker-end="url(#g-aa)"/>
@@ -409,10 +418,13 @@
   <text class="g-m g-ink" x="505" y="400" font-size="12.5">mounted</text>
   <text class="g-m g-ink" x="505" y="416" font-size="12.5">read-only</text>
 
-  <!-- ── spool -> run (conditional: bound read-write in place, if present) ── -->
-  <line x1="674" y1="354" x2="674" y2="464" stroke="#8A9997" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#g-af)"/>
-  <text class="g-m g-fnt" x="686" y="400" font-size="12.5">bound in place</text>
-  <text class="g-m g-fnt" x="686" y="416" font-size="12.5">read-write</text>
+  <!-- ── spool cache <-> run: linked read-only in, harvested back after exit 0 ── -->
+  <line x1="655" y1="388" x2="655" y2="464" stroke="#5C6B69" stroke-width="2" marker-end="url(#g-af)"/>
+  <text class="g-m g-mut" x="647" y="440" text-anchor="end" font-size="11.5">linked</text>
+  <text class="g-m g-mut" x="647" y="455" text-anchor="end" font-size="11.5">read-only</text>
+  <line x1="690" y1="468" x2="690" y2="392" stroke="#5C6B69" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#g-af)"/>
+  <text class="g-m g-mut" x="698" y="420" font-size="11.5">new days,</text>
+  <text class="g-m g-mut" x="698" y="435" font-size="11.5">after exit 0</text>
 
   <!-- ── run -> scratch (lands in the gap between children: it writes all) ─ -->
   <line x1="584" y1="554" x2="584" y2="646" stroke="#131C1B" stroke-width="2.6" marker-end="url(#g-ai)"/>
@@ -424,21 +436,21 @@
         <span><span class="swatch"></span> bundled or written — real bytes move</span>
         <span><span class="swatch acc"></span> pulled from outside at run time</span>
         <span><span class="swatch dash acc"></span> pin declared in metadata.json — no bytes move</span>
-        <span><span class="swatch dash"></span> conditional — only if the reuse envelope matches</span>
+        <span><span class="swatch dash"></span> only after a run that exits 0</span>
       </div>
       <figcaption>
-        A published snapshot holds no input data: the model input it links is a separate
-        artifact (49&nbsp;GB for Global). What the snapshot itself holds is 490&nbsp;GB of
-        <code>spool/</code> and roughly 470&nbsp;GB of results. Those two large directories are
-        the ones that need their own rules.
+        A published snapshot holds neither input data nor a spool. The model input it links is a
+        separate artifact (49&nbsp;GB for Global), and the spool &mdash; the model input's datasets
+        warped onto a network grid, 490&nbsp;GB for a 10-year Global run &mdash; belongs to the model
+        input, not the snapshot: it is kept once per model input, network and variant, under
+        <code>spools/&lt;model input id&gt;/</code> on S3 and in a scratch cache that runs share. What
+        the snapshot itself holds is roughly 470&nbsp;GB of results.
         <code>wbm_output/</code> appears on both sides for different reasons: inside the snapshot
         it is the <strong>record of what was published</strong>, carried as-is with no identifier
         of its own and never mounted; in scratch it is what this run produced. Nothing connects
-        them automatically. <code>spool/</code> is the exception to read-only: <code>openghm sim</code> binds the
-        snapshot folder's own <code>spool/</code> read-write (<code>--spool snapshot</code>, the
-        default), so a fetched spool is reused in place and a missing one is built there;
-        <code>--spool fresh</code> gives the run an empty one in scratch instead. Nothing checks yet
-        that a spool matches the run reusing it (open item 2).
+        them automatically. The run's own <code>spool/</code> links the days the cache holds,
+        read-only, and WBM builds the rest there; after a run that exits 0 those new days move
+        into the cache, never overwriting a file already in it.
       </figcaption>
     </figure>
   </section>
@@ -663,9 +675,10 @@
           </tr>
           <tr>
             <td>spool cache</td>
-            <td class="opt">optional</td>
-            <td>Regenerable, and derived from the environment as well as the data. Keeping it out
-                of the identity means dropping it does not change what the snapshot is.</td>
+            <td class="out">outside</td>
+            <td>Regenerable, and decided by the model input, the network and the run's settings, not
+                by the snapshot. Kept once per variant and shared by every run and snapshot that
+                needs it.</td>
           </tr>
         </tbody>
       </table>

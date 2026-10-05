@@ -10,7 +10,6 @@
   ],
   "optional": [
     "SHA256SUMS",
-    "spool/",
     "meta_data/",
     "WBM_run_state/"
   ]
