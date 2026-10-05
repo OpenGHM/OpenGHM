@@ -7,7 +7,7 @@ const { patch, post, getApiClient } = vi.hoisted(() => {
 });
 vi.mock("@/lib/api-client", () => ({ getApiClient }));
 
-import { duplicateSimulation, updateSimulation } from "./actions";
+import { duplicateSimulation, publishedAnswer, submitSimulation, updateSimulation } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
@@ -134,5 +134,82 @@ describe("duplicateSimulation", () => {
     await expect(duplicateSimulation("j")).resolves.toEqual({ ok: false, reason: "not_found" });
     post.mockRejectedValueOnce(refused(401));
     await expect(duplicateSimulation("j")).resolves.toEqual({ ok: false, reason: "session_expired" });
+  });
+});
+
+describe("submitSimulation", () => {
+  it("sends no body for an ordinary submit", async () => {
+    post.mockResolvedValue({ data: { id: "job/1" } });
+    await expect(submitSimulation("job/1")).resolves.toEqual({ ok: true, data: { id: "job/1" } });
+    expect(post).toHaveBeenCalledWith("/api/v1/jobs/job%2F1/submit");
+  });
+
+  it("sends no body for rerun: false either", async () => {
+    post.mockResolvedValue({ data: {} });
+    await submitSimulation("j", { rerun: false });
+    expect(post).toHaveBeenCalledWith("/api/v1/jobs/j/submit");
+  });
+
+  it("sends { rerun: true } when asked for a rerun", async () => {
+    post.mockResolvedValue({ data: {} });
+    await submitSimulation("j", { rerun: true });
+    expect(post).toHaveBeenCalledWith("/api/v1/jobs/j/submit", { rerun: true });
+  });
+
+  it("answers the refusal of a published draft with its code", async () => {
+    post.mockRejectedValue(
+      refused(409, { code: "answered_by_published", message: "The published results answer this draft." })
+    );
+    await expect(submitSimulation("j")).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 409,
+      code: "answered_by_published",
+    });
+  });
+});
+
+describe("publishedAnswer", () => {
+  const parameters = {
+    temporal_range_start: "2000-01-01",
+    temporal_range_end: "2001-12-31",
+    spatial_domain: null,
+    variables: ["discharge"],
+    custom_params: null,
+  };
+
+  it("POSTs the parameters and the model input to the snapshot's published-answer route", async () => {
+    const answer = { answered: true, reasons: [], period: null, run_id: "r", files: [] };
+    post.mockResolvedValue({ data: answer });
+    await expect(publishedAnswer("snap/1", parameters, "mi-1")).resolves.toEqual({ ok: true, data: answer });
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/repository/datasets/snap%2F1/published-answer",
+      { parameters, model_input_id: "mi-1" }
+    );
+  });
+
+  it("sends a null model input as null", async () => {
+    post.mockResolvedValue({ data: {} });
+    await publishedAnswer("s", parameters, null);
+    expect(post.mock.calls[0][1]).toEqual({ parameters, model_input_id: null });
+  });
+
+  it("answers a closed listing with its code and status", async () => {
+    post.mockRejectedValue(
+      refused(502, { code: "published_listing_unavailable", message: "The published files could not be listed." })
+    );
+    await expect(publishedAnswer("s", parameters, null)).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 502,
+      code: "published_listing_unavailable",
+    });
+  });
+
+  it("answers an unknown snapshot as not found and an ended session as such", async () => {
+    post.mockRejectedValueOnce(refused(404, "Dataset not found"));
+    await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "not_found" });
+    post.mockRejectedValueOnce(refused(401));
+    await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "session_expired" });
   });
 });

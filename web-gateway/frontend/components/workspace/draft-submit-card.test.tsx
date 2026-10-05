@@ -479,3 +479,61 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
   });
 });
+
+describe("DraftSubmitCard: a rerun of published results", () => {
+  const runAnyway = () => screen.getByRole("button", { name: "Run anyway" }) as HTMLButtonElement;
+
+  it("offers a secondary Run anyway, not Submit to Anvil, and no Submit section heading", () => {
+    card({ rerun: true });
+    expect(screen.queryByRole("button", { name: "Submit to Anvil" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Submit" })).toBeNull();
+    expect(runAnyway().getAttribute("data-variant")).toBe("outline");
+    expect(screen.getByText(/uses compute time/)).toBeTruthy();
+  });
+
+  it("saves first, then confirms with copy that says it reruns a published result and uses allocation", async () => {
+    card({ rerun: true });
+    fireEvent.click(runAnyway());
+    await screen.findByRole("alertdialog");
+    expect(calls).toEqual(["flush"]);
+    expect(within(dialog()).getByRole("heading", { name: "Run this again on Anvil?" })).toBeTruthy();
+    const text = dialog().textContent ?? "";
+    expect(text).toContain("already published");
+    expect(text).toContain("reproduces");
+    expect(text).toContain("uses compute time");
+    // What the server holds after the flush, as in a submit.
+    expect(text).toContain("Saved snapshot title");
+  });
+
+  it("calls submit on confirm, and the wizard's submit is the one that asks for the rerun", async () => {
+    card({ rerun: true });
+    fireEvent.click(runAnyway());
+    await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Run anyway" }));
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith(SUBMITTED));
+    expect(submit).toHaveBeenCalledWith("job-1");
+    expect(calls).toEqual(["flush", "suspend", "submitting:true", "submit"]);
+  });
+
+  it("Cancel submits nothing", async () => {
+    card({ rerun: true });
+    fireEvent.click(runAnyway());
+    await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("is off, with the reason listed, while something stands in the way", () => {
+    card({ rerun: true, problems: [{ step: "run", field: "variables", message: "Pick a variable." }] });
+    expect(runAnyway().disabled).toBe(true);
+    expect(screen.getByText(/Pick a variable/)).toBeTruthy();
+  });
+
+  it("keeps the ordinary card's words when it is not a rerun", async () => {
+    card();
+    await openDialog();
+    expect(within(dialog()).getByRole("heading", { name: "Submit this simulation to Anvil?" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Run anyway" })).toBeNull();
+  });
+});

@@ -100,6 +100,41 @@ export interface JobParameters {
   custom_params: Record<string, string> | null;
 }
 
+// ─── The published answer to a draft ─────────────────────────────────────────
+
+/** Which folder of the published run a file is in. */
+export type PublishedFileGroup = "daily" | "monthly" | "yearly";
+
+/** One published output file that answers a draft. `variable` is null for a
+ *  daily file, which holds every published variable. `url` is public. */
+export interface PublishedFile {
+  group: PublishedFileGroup;
+  variable: string | null;
+  year: number;
+  key: string;
+  url: string;
+  /** Bytes. */
+  size: number;
+}
+
+/** Why a draft is not answered by its snapshot: a stable `code` and a plain
+ *  `message`. */
+export interface PublishedAnswerReason {
+  code: string;
+  message: string;
+}
+
+/** `POST /repository/datasets/{id}/published-answer`: whether the snapshot's
+ *  own published output answers a draft, and the files that do. `reasons` is
+ *  empty when `answered`, and `files` is empty when not. */
+export interface PublishedAnswer {
+  answered: boolean;
+  reasons: PublishedAnswerReason[];
+  period: { start: string; end: string } | null;
+  run_id: string | null;
+  files: PublishedFile[];
+}
+
 /** What a draft asks SLURM for. Both null means the snapshot's own
  *  `simulation.recommendedCompute`. The account and partition are the
  *  gateway's, not the user's (app/models/job.py). */

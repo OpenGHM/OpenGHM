@@ -24,6 +24,11 @@ vi.mock("@/lib/jobs/actions", () => ({
   deleteSimulation,
   duplicateSimulation: vi.fn(),
 }));
+// These tests are about saving and submitting: no published results are looked
+// up (draft-wizard-published.test.tsx covers the lookup).
+vi.mock("@/lib/workspace/use-published-answer", () => ({
+  usePublishedAnswer: () => ({ state: { status: "none" }, refresh: () => {} }),
+}));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
 }));

@@ -25,6 +25,8 @@ export function describeSubmitFailure(
       // The backend's sentence says how long the reference run took, what one
       // job may use, and what to change.
       return failure.message;
+    case "answered_by_published":
+      return "The model snapshot already publishes these results, so nothing was run. Use Run anyway if you want to run it again.";
     case "not_a_draft":
       return "This simulation was already submitted or was changed in the meantime. Reload the page to see where it stands.";
     default:

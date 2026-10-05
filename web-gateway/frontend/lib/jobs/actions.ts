@@ -7,9 +7,11 @@ import type {
   Job,
   JobListResponse,
   JobLogChunk,
+  JobParameters,
   JobStatsResponse,
   JobStatusResponse,
   LogStream,
+  PublishedAnswer,
   SimulationDeriveRequest,
   SimulationUpdateRequest,
 } from "@/lib/jobs/types";
@@ -17,6 +19,9 @@ import type {
 type ApiClient = Awaited<ReturnType<typeof getApiClient>>;
 
 const SUBMIT_TIMEOUT_MS = 60_000;
+/** The first answer for a snapshot lists its published files in the public
+ *  bucket, which the 10 s default may not allow for. */
+const PUBLISHED_ANSWER_TIMEOUT_MS = 20_000;
 
 function describeFailure(error: unknown, notFoundStatuses: number[]): ActionFailure {
   const response = (
@@ -110,20 +115,55 @@ async function run<T>(
  * this succeeds; if Anvil does not take it the draft stays a draft and the
  * failure comes back as `{ reason: "error", code, message }`.
  *
+ * A draft the snapshot's published output already answers is refused with
+ * `code: "answered_by_published"` (409) unless `opts.rerun` is true: the person
+ * asked, on purpose, to compute it again. The body is sent only for a rerun.
+ *
  * Its own 60 s timeout: the backend opens an SSH session to Anvil and uploads
  * the script before it answers, which the 10 s default does not allow for.
  */
-export async function submitSimulation(jobId: string): Promise<ActionResult<Job>> {
+export async function submitSimulation(
+  jobId: string,
+  opts?: { rerun?: boolean }
+): Promise<ActionResult<Job>> {
   // 403 here means "not permitted to run" (ADR 0024), not "not found".
   return run(
     async (client) => {
-      const res = await client.post<Job>(
-        `/api/v1/jobs/${encodeURIComponent(jobId)}/submit`
-      );
+      const url = `/api/v1/jobs/${encodeURIComponent(jobId)}/submit`;
+      const res = opts?.rerun
+        ? await client.post<Job>(url, { rerun: true })
+        : await client.post<Job>(url);
       return res.data;
     },
     [404],
     SUBMIT_TIMEOUT_MS
+  );
+}
+
+/**
+ * Whether the snapshot's published output already answers a draft with these
+ * parameters, and the public files that do. It takes the parameters rather than
+ * a job id so that a new simulation, which is not stored yet, can ask too.
+ * Any signed-in user may ask (the files are public). Failures: `not_found` is
+ * an unknown snapshot; a 502 `published_listing_unavailable` comes back as
+ * `{ reason: "error", code, status }`, and callers treat every failure as "could
+ * not be checked", never as a reason to stop a submit.
+ */
+export async function publishedAnswer(
+  datasetId: string,
+  parameters: JobParameters,
+  modelInputId: string | null
+): Promise<ActionResult<PublishedAnswer>> {
+  return run(
+    async (client) => {
+      const res = await client.post<PublishedAnswer>(
+        `/api/v1/repository/datasets/${encodeURIComponent(datasetId)}/published-answer`,
+        { parameters, model_input_id: modelInputId }
+      );
+      return res.data;
+    },
+    [404],
+    PUBLISHED_ANSWER_TIMEOUT_MS
   );
 }
 

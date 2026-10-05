@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
+import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
 import { fakeDataset, fakeSimulation } from "@/lib/workspace/fixtures";
 
@@ -238,5 +239,80 @@ describe("DraftReviewStep: the rest", () => {
     const off = (el: Element) => el.matches(":disabled");
     expect(off(screen.getByRole("button", { name: "Edit name" }))).toBe(true);
     expect(off(screen.getByRole("button", { name: "Edit run period" }))).toBe(true);
+  });
+});
+
+describe("DraftReviewStep: published results", () => {
+  const answered: PublishedAnswerState = {
+    status: "answered",
+    answer: {
+      answered: true,
+      reasons: [],
+      period: { start: "2001-01-01", end: "2001-12-31" },
+      run_id: "WBM_test",
+      files: [
+        {
+          group: "daily",
+          variable: null,
+          year: 2001,
+          key: "k",
+          url: "https://s3.example.org/openghm/k.nc",
+          size: 3_145_728,
+        },
+      ],
+    },
+  };
+
+  it("shows only the submit area when nothing is known or nothing answers", () => {
+    review({ publishedAnswer: { status: "none" } });
+    expect(screen.getByTestId("submit-area")).toBeTruthy();
+    expect(screen.queryByText("Results already published")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows a skeleton, and no submit area, while the results are being looked up", () => {
+    review({ publishedAnswer: { status: "loading" } });
+    expect(screen.queryByTestId("submit-area")).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status.getAttribute("aria-busy")).toBe("true");
+    expect(status.textContent).toContain("Checking whether this is already published");
+    expect(screen.queryByText("Results already published")).toBeNull();
+  });
+
+  it("replaces the submit card with the results card, and puts the submit area under it", () => {
+    review({ publishedAnswer: answered });
+    const heading = screen.getByRole("heading", { name: "Results already published" });
+    const area = screen.getByTestId("submit-area");
+    // Below the card, outside the review panel.
+    expect(heading.compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(area.closest(".divide-y")).toBeNull();
+    expect(screen.getByRole("link", { name: "Download daily 2001" }).getAttribute("href")).toBe(
+      "https://s3.example.org/openghm/k.nc"
+    );
+    expect(screen.getByText("3.0 MB")).toBeTruthy();
+    // The summary is still there.
+    expect(within(row("Run period")).getByText("2001-03-01 → 2001-06-30")).toBeTruthy();
+  });
+
+  it("says the years come from the published run when the draft starts later than it", () => {
+    // LOCAL starts 2001-03-01; the published run starts 2001-01-01.
+    review({ publishedAnswer: answered });
+    expect(screen.getByText(/whose spinup began earlier/)).toBeTruthy();
+  });
+
+  it("leaves that out when the draft starts where the published run does", () => {
+    review({
+      publishedAnswer: answered,
+      local: { ...LOCAL, parameters: { ...LOCAL.parameters, temporal_range_start: "2001-01-01" } },
+    });
+    expect(screen.queryByText(/whose spinup began earlier/)).toBeNull();
+  });
+
+  it("offers the submit area as usual, with a small note, when the check failed", () => {
+    review({ publishedAnswer: { status: "error" } });
+    expect(screen.getByTestId("submit-area")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("couldn't check whether this is already published");
+    expect(screen.getByRole("status").textContent).toContain("You can still submit it");
+    expect(screen.queryByText("Results already published")).toBeNull();
   });
 });

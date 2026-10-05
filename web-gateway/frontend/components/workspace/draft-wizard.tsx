@@ -51,6 +51,7 @@ import { useLeaveGuard, type LeaveTarget } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
 import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
+import { usePublishedAnswer } from "@/lib/workspace/use-published-answer";
 import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
 
 /** Which draft the wizard edits: one that is stored (`/workspace/<id>`, saved as
@@ -72,6 +73,12 @@ const OPEN_FALLBACK_MS = 2_500;
 /** The checks after that one, and the gap between them. */
 const OPEN_RETRIES = 3;
 const OPEN_RETRY_MS = 2_000;
+
+/** A submit the backend refused because the snapshot already publishes the
+ *  result. */
+function isAnsweredRefusal(failure: ActionFailure): boolean {
+  return failure.reason === "error" && failure.code === "answered_by_published";
+}
 
 /** What the header calls a draft: the list's `displayName` rule applied to the
  *  name being typed (then the slug, the run id, `Untitled (<id8>)`), so a draft
@@ -278,6 +285,15 @@ function WizardBody({
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [defaultStep, ownPath]);
+
+  // The snapshot's published results for what is on screen, asked once the
+  // Review step shows (saved or not: the question is the parameters).
+  const { state: publishedState, refresh: refreshAnswer } = usePublishedAnswer({
+    datasetId,
+    parameters: local.parameters,
+    modelInputId: local.modelInputId,
+    enabled: step === "review",
+  });
 
   // The field an Edit link or a "fix <field>" link asked to focus, until the
   // effect below has done it. `focusTick` makes a second request for the same
@@ -487,12 +503,23 @@ function WizardBody({
     }
     return { ok: true, job: result.job, withheld: result.notSaved };
   };
-  const newSubmit = async (): Promise<ActionResult<Job>> => {
+  const newSubmit = async (opts?: { rerun?: boolean }): Promise<ActionResult<Job>> => {
     submitFailure.current = null;
     const id = newDraft.created()?.id;
     if (!id) return { ok: false, reason: "error", message: "The draft was not created." };
-    const result = await submitSimulation(id);
-    if (!result.ok) submitFailure.current = result;
+    const result = opts ? await submitSimulation(id, opts) : await submitSimulation(id);
+    if (!result.ok) {
+      submitFailure.current = result;
+      if (isAnsweredRefusal(result)) refreshAnswer();
+    }
+    return result;
+  };
+  // A stored draft's submit. Refused as answered means the Review step did not
+  // know (the check was out of date or had failed): ask again, and the answer
+  // card replaces the submit card.
+  const storedSubmit = async (id: string, opts?: { rerun?: boolean }): Promise<ActionResult<Job>> => {
+    const result = opts ? await submitSimulation(id, opts) : await submitSimulation(id);
+    if (!result.ok && isAnsweredRefusal(result)) refreshAnswer();
     return result;
   };
   // The draft exists, so a failed submit goes on to it: it shows the reason the
@@ -561,6 +588,47 @@ function WizardBody({
   };
 
   const state = saver.state;
+
+  /** The submit card, or, for results that are already published, the same
+   *  card as a rerun: the same save, confirm and submit, asking the backend to
+   *  run it anyway. */
+  const submitCard = (rerun: boolean) =>
+    isNew ? (
+      // Nothing is stored yet: Submit creates the draft first, once.
+      <DraftSubmitCard
+        jobId=""
+        problems={problems}
+        onFix={goTo}
+        lastSubmitError={null}
+        recommended={recommended}
+        flush={newFlush}
+        suspend={noop}
+        submit={() => newSubmit(rerun ? { rerun: true } : undefined)}
+        onSubmitted={onSubmitted}
+        onSubmitFailed={onNewSubmitFailed}
+        onSubmittingChange={setSubmitting}
+        checkSubmitted={() => checkSubmitted(newDraft.created()?.id ?? "")}
+        openJobHref={pageStuck}
+        rerun={rerun}
+      />
+    ) : (
+      <DraftSubmitCard
+        jobId={jobId}
+        problems={problems}
+        onFix={goTo}
+        lastSubmitError={lastSubmitError}
+        recommended={recommended}
+        flush={flush}
+        suspend={suspend}
+        submit={(id) => storedSubmit(id, rerun ? { rerun: true } : undefined)}
+        onSubmitted={onSubmitted}
+        onSubmitFailed={onSubmitFailed}
+        onSubmittingChange={setSubmitting}
+        checkSubmitted={checkSubmitted}
+        openJobHref={pageStuck}
+        rerun={rerun}
+      />
+    );
 
   return (
     <main className={WORKSPACE_MAIN}>
@@ -731,42 +799,8 @@ function WizardBody({
                 recommended={recommended}
                 onEditStep={goTo}
                 disabled={submitting}
-                submitArea={
-                  isNew ? (
-                    // Nothing is stored yet: Submit creates the draft first, once.
-                    <DraftSubmitCard
-                      jobId=""
-                      problems={problems}
-                      onFix={goTo}
-                      lastSubmitError={null}
-                      recommended={recommended}
-                      flush={newFlush}
-                      suspend={noop}
-                      submit={newSubmit}
-                      onSubmitted={onSubmitted}
-                      onSubmitFailed={onNewSubmitFailed}
-                      onSubmittingChange={setSubmitting}
-                      checkSubmitted={() => checkSubmitted(newDraft.created()?.id ?? "")}
-                      openJobHref={pageStuck}
-                    />
-                  ) : (
-                    <DraftSubmitCard
-                      jobId={jobId}
-                      problems={problems}
-                      onFix={goTo}
-                      lastSubmitError={lastSubmitError}
-                      recommended={recommended}
-                      flush={flush}
-                      suspend={suspend}
-                      submit={submitSimulation}
-                      onSubmitted={onSubmitted}
-                      onSubmitFailed={onSubmitFailed}
-                      onSubmittingChange={setSubmitting}
-                      checkSubmitted={checkSubmitted}
-                      openJobHref={pageStuck}
-                    />
-                  )
-                }
+                publishedAnswer={publishedState}
+                submitArea={submitCard(publishedState.status === "answered")}
               />
             )}
           </>

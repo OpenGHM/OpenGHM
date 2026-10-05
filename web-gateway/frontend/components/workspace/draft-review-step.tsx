@@ -2,12 +2,14 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
+import { PublishedAnswerCard } from "@/components/workspace/published-answer-card";
 import {
   automaticWalltimeLabel,
   describeCoresBelowRecommendedShort,
@@ -15,6 +17,7 @@ import {
   effectiveCompute,
   type Recommended,
 } from "@/lib/jobs/compute";
+import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import type { DraftContext, DraftField, DraftLocal } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 
@@ -99,6 +102,22 @@ function VariablesValue({ names }: { names: readonly string[] }) {
   );
 }
 
+/** While the published results are being looked up: the shape of the card that
+ *  will replace it, in the place of the submit area. Submitting waits for it, so
+ *  a draft that is answered is never offered for submission first. */
+function AnswerSkeleton() {
+  return (
+    <DraftSection title="Published results">
+      <div role="status" aria-busy="true" className="space-y-3">
+        <span className="sr-only">Checking whether this is already published…</span>
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    </DraftSection>
+  );
+}
+
 /**
  * Step 3, "Review & submit": one list that says what will run, each line with
  * a way back to the step that edits it, and, last, the submit area
@@ -111,6 +130,13 @@ function VariablesValue({ names }: { names: readonly string[] }) {
  * list give it). "Based on" has no Edit (a draft's starting point cannot
  * change), only its repository link. `onEditStep` receives the field too so the
  * wizard can focus it.
+ *
+ * `publishedAnswer` is what the wizard learned about the snapshot's published
+ * results for this draft (`usePublishedAnswer`). Answered: the panel ends with
+ * the summary, the published results card follows it, and `submitArea` (then the
+ * secondary "Run anyway") goes under the card. Loading: a skeleton in place of
+ * the submit area. Otherwise `submitArea` ends the panel as ever, with a note
+ * above it when the check itself failed.
  */
 export function DraftReviewStep({
   datasetId,
@@ -120,6 +146,7 @@ export function DraftReviewStep({
   recommended,
   onEditStep,
   submitArea,
+  publishedAnswer = { status: "none" },
   disabled = false,
 }: {
   datasetId: string;
@@ -129,6 +156,7 @@ export function DraftReviewStep({
   recommended: Recommended | null;
   onEditStep: (step: DraftStep, field?: DraftField) => void;
   submitArea: ReactNode;
+  publishedAnswer?: PublishedAnswerState;
   /** Everything off, while a submit is under way. */
   disabled?: boolean;
 }) {
@@ -146,7 +174,9 @@ export function DraftReviewStep({
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
       <DraftStepHeading step="review">
-        Check what will run, then submit it to Anvil.
+        {publishedAnswer.status === "answered"
+          ? "Check what you asked for, then download the published results."
+          : "Check what will run, then submit it to Anvil."}
       </DraftStepHeading>
 
       <DraftPanel>
@@ -239,8 +269,28 @@ export function DraftReviewStep({
           </dl>
         </DraftSection>
 
-        {submitArea}
+        {publishedAnswer.status === "loading" && <AnswerSkeleton />}
+        {publishedAnswer.status === "error" && (
+          <p
+            role="status"
+            className="flex items-start gap-2 px-5 py-3 text-xs text-muted-foreground sm:px-7"
+          >
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            We couldn&apos;t check whether this is already published. You can still submit it.
+          </p>
+        )}
+        {publishedAnswer.status !== "loading" && publishedAnswer.status !== "answered" && submitArea}
       </DraftPanel>
+
+      {publishedAnswer.status === "answered" && (
+        <>
+          <PublishedAnswerCard
+            answer={publishedAnswer.answer}
+            draftStart={parameters.temporal_range_start}
+          />
+          {submitArea}
+        </>
+      )}
     </fieldset>
   );
 }

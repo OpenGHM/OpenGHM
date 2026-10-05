@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, RotateCw, Send } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +54,12 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
  * - `onSubmittingChange(true)` is called at Confirm, not while saving, so the
  *   wizard may switch its inputs off without stopping the save.
  *
+ * - `rerun` is the card for a draft the snapshot's published results already
+ *   answer (the Review step shows those above it): the same save-confirm-submit
+ *   path, but quiet, a secondary "Run anyway", and a confirmation that says it
+ *   repeats a published result and uses allocation. The wizard passes a `submit`
+ *   that asks the backend for a rerun.
+ *
  * Everything with an effect is a prop, so this component calls no server action
  * and no router.
  */
@@ -71,6 +77,7 @@ export function DraftSubmitCard({
   onSubmittingChange,
   checkSubmitted,
   openJobHref = null,
+  rerun = false,
 }: {
   jobId: string;
   problems: readonly SubmitProblem[];
@@ -90,6 +97,8 @@ export function DraftSubmitCard({
   checkSubmitted?: (jobId: string) => Promise<Job | null>;
   /** Set by the wizard once a submit went through but its page did not change. */
   openJobHref?: string | null;
+  /** A rerun of results that are already published (see above). */
+  rerun?: boolean;
 }) {
   const noteId = useId();
   const [stage, setStage] = useState<Stage>("idle");
@@ -198,8 +207,8 @@ export function DraftSubmitCard({
 
   const done = stage === "done";
 
-  return (
-    <DraftSection title="Submit">
+  const body = (
+    <>
       {blocked && !done && (
         <div id={noteId} className="space-y-2">
           <p className="text-sm text-foreground">
@@ -271,19 +280,31 @@ export function DraftSubmitCard({
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <p className="text-xs text-muted-foreground">
-            Submitting saves your changes first, then runs it on Anvil and uses compute time.
+            {rerun
+              ? "To check that the published results reproduce, run it again on Anvil. This saves your changes first and uses compute time."
+              : "Submitting saves your changes first, then runs it on Anvil and uses compute time."}
           </p>
           <Button
             type="button"
+            variant={rerun ? "outline" : "default"}
             disabled={blocked || stage !== "idle"}
             aria-describedby={blocked ? noteId : undefined}
             onClick={() => void start()}
-            className="min-h-10 w-full shrink-0 px-6 font-semibold sm:w-auto"
+            className={
+              rerun
+                ? "min-h-10 w-full shrink-0 px-6 sm:w-auto"
+                : "min-h-10 w-full shrink-0 px-6 font-semibold sm:w-auto"
+            }
           >
             {stage === "flushing" ? (
               <>
                 <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
                 Saving…
+              </>
+            ) : rerun ? (
+              <>
+                <RotateCw aria-hidden="true" />
+                Run anyway
               </>
             ) : (
               <>
@@ -307,9 +328,13 @@ export function DraftSubmitCard({
             inside the dialog so Cancel and Submit stay reachable. */}
         <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>Submit this simulation to Anvil?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {rerun ? "Run this again on Anvil?" : "Submit this simulation to Anvil?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This starts the run and spends compute time. Check the summary first.
+              {rerun
+                ? "This result is already published. Running it again checks that it reproduces, and uses compute time on your allocation. Check the summary first."
+                : "This starts the run and spends compute time. Check the summary first."}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -347,6 +372,8 @@ export function DraftSubmitCard({
                   <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
                   Submitting…
                 </>
+              ) : rerun ? (
+                "Run anyway"
               ) : (
                 "Submit to Anvil"
               )}
@@ -354,6 +381,10 @@ export function DraftSubmitCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DraftSection>
+    </>
   );
+
+  // A rerun sits below the published results, outside the review panel: no
+  // "Submit" section of its own.
+  return rerun ? <div className="space-y-4">{body}</div> : <DraftSection title="Submit">{body}</DraftSection>;
 }
