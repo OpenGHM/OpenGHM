@@ -72,7 +72,7 @@ describe("the header", () => {
   it("has no actions while the job is active: Cancel is in the status summary", () => {
     for (const key of ["pending", "submitted", "running", "completing", "cancelling"]) {
       renderHeader(key);
-      expect(button("Cancel")).toBeNull();
+      expect(button("Cancel simulation")).toBeNull();
       expect(button("Duplicate")).toBeNull();
       expect(startLink("New from this model snapshot")).toBeNull();
       expect(button("Delete snapshot draft")).toBeNull();
@@ -88,7 +88,7 @@ describe("the header", () => {
       expect(button("Delete snapshot draft")).not.toBeNull();
       expect(screen.queryByRole("menu")).toBeNull();
       expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
-      expect(button("Cancel")).toBeNull();
+      expect(button("Cancel simulation")).toBeNull();
     }
   );
 

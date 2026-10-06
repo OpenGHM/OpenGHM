@@ -46,6 +46,7 @@ describe("describePollError", () => {
     expect(describePollError({ thrown: true })).toBe("Couldn't reach the gateway");
     expect(describePollError({ status: 500 })).toBe("Couldn't check the job's status");
     expect(describePollError({})).toBe("Couldn't check the job's status");
+    expect(describePollError({ code: "backend_unreachable" })).toBe("Couldn't reach the gateway");
   });
 });
 

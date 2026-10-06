@@ -25,7 +25,7 @@ from app.models.job import JobDB
 from app.services import job_script, slurm
 
 from conftest import REMOTE_BASE
-from route_helpers import make_job, make_user, token_for
+from route_helpers import NOW, make_job, make_user, token_for
 
 # conftest fakes these for the route tests; the leftovers tests below want the
 # real ones, and this module is imported before any fixture runs.
@@ -100,9 +100,12 @@ def test_a_submit_is_accepted_and_the_job_records_everything(client, db, draft, 
     assert stored["remote_script_path"].endswith("/run.sh")
 
     # What slurmly was handed: the rendered body, for this snapshot and sim id.
-    ((job, _, script),) = sent
+    ((job, snapshot, script),) = sent
     assert isinstance(job, JobDB) and job.sim_id == body["sim_id"]
-    assert f'--id {body["sim_id"]} --spool cache' in script  # defaults: no overrides
+    # Defaults: no overrides, and the walltime asked of SLURM (the snapshot's
+    # 15:00 with headroom) given to the toolkit for its spool lease.
+    assert f'--id {body["sim_id"]} --walltime 22:30 --spool cache' in script
+    assert slurm.build_job_spec(job, snapshot, "x").time_limit == "22:30"
     assert f'OG_WORK_DIR={body["work_dir"]}' in script
     assert "snapshot fetch" in script and " ds-1 " in script
 
@@ -293,7 +296,8 @@ def test_a_recommendation_over_the_limit_is_refused_before_anvil_is_called(
     assert detail["recommended_seconds"] == 111 * 3600 + 30 * 60
     assert detail["limit_seconds"] == 96 * 3600
     stored = db.jobs.docs["job-1"]
-    assert stored["status"] == "DRAFT" and "last_submit_error" not in stored
+    assert stored["status"] == "DRAFT"
+    assert stored["last_submit_error"]["code"] == "walltime_over_limit"
     assert sent == []  # no SSH, no SLURM
 
 
@@ -745,3 +749,212 @@ def test_spec_without_any_compute_is_refused(v2_spec_inputs):
     del snapshot["simulation"]["recommendedCompute"]
     with pytest.raises(job_script.SubmitInputError):
         slurm.build_job_spec(job, snapshot, "echo body")
+
+
+# ---- mission 2026-10-06: a submit that is interrupted or unexpected -----------
+
+
+def test_an_unexpected_exception_after_sbatch_cancels_the_attempt_by_name(db, draft, monkeypatch):
+    """The generic branch used to return the draft and drop the name: sbatch may
+    have run, and nothing would ever scancel it."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    _fail_with(monkeypatch, ZeroDivisionError("bug while reading sbatch's answer"))
+    app = FastAPI()
+    app.include_router(jobs_router.router, prefix="/api/v1")
+    response = TestClient(app, raise_server_exceptions=False).post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "internal_error"
+    ((call, sim_id),) = db.cleanup_calls
+    assert call == "scancel_by_name" and sim_id.startswith("sim-")
+    _assert_back_to_draft(db, "internal_error")
+    assert "cancelled" in db.jobs.docs["job-1"]["last_submit_error"]["message"]
+    assert not db.jobs.docs["job-1"].get("orphan_sim_ids")
+
+
+def test_if_that_scancel_cannot_run_the_unexpected_failure_keeps_the_name(db, draft, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    _fail_with(monkeypatch, ZeroDivisionError("bug"))
+
+    async def scancel_by_name(sim_id):
+        raise SSHTransportError("down")
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    app = FastAPI()
+    app.include_router(jobs_router.router, prefix="/api/v1")
+    assert TestClient(app, raise_server_exceptions=False).post(SUBMIT, headers=HEADERS).status_code == 500
+    assert len(db.jobs.docs["job-1"]["orphan_sim_ids"]) == 1
+    _assert_back_to_draft(db, "internal_error")
+
+
+def test_a_failed_write_of_the_slurm_id_cancels_the_job_and_gives_the_draft_back(
+    db, draft, monkeypatch
+):
+    """sbatch answered, the gateway could not record the id: the job exists and
+    nothing would track it."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    real = db.jobs.update_one
+
+    async def update_one(query, update):
+        if "slurm_job_id" in update.get("$set", {}):
+            raise RuntimeError("mongo went away")
+        return await real(query, update)
+
+    monkeypatch.setattr(db.jobs, "update_one", update_one)
+    app = FastAPI()
+    app.include_router(jobs_router.router, prefix="/api/v1")
+    response = TestClient(app, raise_server_exceptions=False).post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 500
+    ((call, sim_id),) = db.cleanup_calls
+    assert call == "scancel_by_name"
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT" and "sim_id" not in stored
+    assert stored["last_submit_error"]["code"] == "submit_interrupted"
+    assert not stored.get("orphan_sim_ids")
+
+
+def test_a_cancel_that_won_the_job_while_the_answer_was_lost_still_records_the_name(
+    client, db, draft, monkeypatch
+):
+    """`_return_to_draft` filtered on SUBMITTED, so an orphan from a submit the
+    user cancelled in flight was dropped with the filter."""
+
+    async def submit_job(job, snapshot, body):
+        db.jobs.docs["job-1"].update(status="CANCELLED", cancel_requested_by=OWNER)
+        raise SSHTransportError("connection reset")
+
+    async def scancel_by_name(sim_id):
+        return False
+
+    monkeypatch.setattr(slurm, "submit_job", submit_job)
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 503
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "CANCELLED"  # the cancel stands
+    assert stored["orphan_sim_ids"] == [stored["sim_id"]]
+
+
+# ---- a sbatch refusal message is a sentence, then another ----------------------
+
+
+def test_an_unrecognised_refusal_gets_its_full_stop_before_your_draft_is_unchanged(
+    client, db, draft, monkeypatch
+):
+    _fail_with(
+        monkeypatch,
+        SbatchError(
+            command="sbatch run.sh",
+            exit_status=1,
+            stderr="sbatch: error: Batch job submission failed: Requested node configuration is not available combination specified",
+        ),
+    )
+    message = client.post(SUBMIT, headers=HEADERS).json()["detail"]["message"]
+    assert message.endswith("combination specified. Your draft is unchanged.")
+    assert "specified Your" not in message
+
+
+# ---- last_submit_error is never the reason of an earlier try --------------------
+
+STALE = {"code": "anvil_unreachable", "message": "Anvil could not be reached.", "at": NOW}
+
+
+def _stale(db):
+    db.jobs.docs["job-1"]["last_submit_error"] = dict(STALE)
+
+
+def _assert_error_is(db, code: str, status: str = "DRAFT"):
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == status
+    assert stored["last_submit_error"]["code"] == code, stored["last_submit_error"]
+    assert stored["last_submit_error"]["message"] != STALE["message"]
+
+
+def test_a_refusal_before_anvil_replaces_the_stale_reason_walltime(client, db, draft):
+    _stale(db)
+    _recommend(db, "111:30:00")
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 422
+    _assert_error_is(db, "walltime_over_limit")
+    got = client.get("/api/v1/jobs/job-1", headers=HEADERS).json()
+    assert got["last_submit_error"]["code"] == "walltime_over_limit"
+
+
+def test_unsupported_fields_replaces_the_stale_reason(client, db, draft):
+    _stale(db)
+    db.jobs.docs["job-1"]["model_input_id"] = "other-input"
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 422
+    _assert_error_is(db, "unsupported_fields")
+
+
+def test_answered_by_published_replaces_the_stale_reason(client, db, draft, monkeypatch):
+    from app.services import published_answer
+
+    class Answered:
+        answered = True
+
+    async def answer(*args, **kwargs):
+        return Answered()
+
+    monkeypatch.setattr(published_answer, "answer", answer)
+    _stale(db)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 409
+    _assert_error_is(db, "answered_by_published")
+
+
+@pytest.mark.parametrize("check", ["_refuse_unaligned_start", "_refuse_dates_outside_aggregation"])
+def test_the_run_date_refusals_replace_the_stale_reason(client, db, draft, monkeypatch, check):
+    async def refuse(*args, **kwargs):
+        raise jobs_router._error(422, "run_start_not_aligned" if "start" in check else "run_dates_outside_aggregation", "No.")
+
+    monkeypatch.setattr(jobs_router, check, refuse)
+    _stale(db)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 422
+    _assert_error_is(db, "run_start_not_aligned" if "start" in check else "run_dates_outside_aggregation")
+
+
+def test_an_unconfigured_gateway_replaces_the_stale_reason(client, db, draft, monkeypatch):
+    monkeypatch.setattr(settings, "ANVIL_OPENGHM_HOME", "")
+    _stale(db)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 503
+    _assert_error_is(db, "anvil_not_configured")
+
+
+def test_a_refusal_of_the_account_replaces_the_stale_reason(client, db, draft):
+    db.users.docs[OWNER] = make_user(OWNER, can_run_simulations=False)
+    _stale(db)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 403
+    _assert_error_is(db, "not_permitted_to_run")
+
+
+def test_the_active_job_limit_replaces_the_stale_reason(client, db, draft):
+    for n in (2, 3):
+        db.jobs.docs[f"busy-{n}"] = make_job(f"busy-{n}", OWNER, "RUNNING")
+    _stale(db)
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 429
+    _assert_error_is(db, "active_job_limit")
+
+
+def test_someone_elses_refused_submit_writes_nothing_to_the_draft(client, db, draft):
+    db.users.docs["other"] = make_user("other", can_run_simulations=False)
+    _stale(db)
+    assert client.post(SUBMIT, headers=token_for("other")).status_code in (403, 404)
+    assert db.jobs.docs["job-1"]["last_submit_error"] == STALE
+
+
+def test_a_submit_that_is_not_a_draft_does_not_touch_the_reason(client, db):
+    db.jobs.docs["job-1"] = make_job("job-1", OWNER, "RUNNING")
+    db.jobs.docs["job-1"]["last_submit_error"] = dict(STALE)
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 409
+    assert db.jobs.docs["job-1"]["last_submit_error"] == STALE
+
+
+def test_a_refusal_after_anvil_replaces_it_too(client, db, draft, monkeypatch):
+    _stale(db)
+    _fail_with(monkeypatch, SbatchError(command="sbatch run.sh", exit_status=1, stderr="Invalid account"))
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 502
+    _assert_error_is(db, "sbatch_rejected")

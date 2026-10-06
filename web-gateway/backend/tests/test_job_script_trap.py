@@ -52,8 +52,9 @@ if [ "$1 $2" = "sim run" ]; then
   case "${STUB_LOG:-ok}" in
     ok) printf 'Start\nTime used for the job - 12s\nAll Done!\n' > "$log" ;;
     nodone) printf 'Start\nrunning\n' > "$log" ;;
-    warp) printf 'Start\nFailed to warp runoff: out of memory\n' > "$log" ;;
-    warp_done) printf 'Failed to warp runoff\nAll Done!\n' > "$log" ;;
+    # WBM prints "Failed to warp" to its stderr (WBM.pm), not to its log.
+    warp) printf 'Start\n' > "$log"; printf '\nFailed to warp /m/precip.nc\n\tErrors = out of memory\n' >&2 ;;
+    warp_done) printf 'All Done!\n' > "$log"; printf '\nFailed to warp /m/precip.nc\n' >&2 ;;
     nothing) printf 'Start\nNothing to do\n' > "$log" ;;
     hostile) printf 'say "hi" \\ \xff\xfe {"a": 1}\nAll Done!\n' > "$log" ;;
     none) ;;
@@ -231,20 +232,45 @@ def test_exit_0_without_all_done_is_a_failed_check(job):
     assert r["wbm"]["all_done"] is False and r["wbm"]["markers"] == []
 
 
-@pytest.mark.parametrize(
-    "mode, markers, all_done",
-    [
-        ("warp", ["Failed to warp"], False),
-        ("warp_done", ["Failed to warp"], True),  # a marker alone is enough
-        ("nothing", ["Nothing to do"], False),
-    ],
-)
-def test_exit_0_with_a_failure_marker_is_a_failed_check(job, mode, markers, all_done):
-    done = job.run(STUB_LOG=mode)
+def test_exit_0_with_a_failure_marker_in_the_log_is_a_failed_check(job):
+    done = job.run(STUB_LOG="nothing")
     assert done.returncode == 3
     r = job.record
     assert r["ok"] is False
-    assert r["wbm"]["markers"] == markers and r["wbm"]["all_done"] is all_done
+    assert r["wbm"]["markers"] == ["Nothing to do"] and r["wbm"]["all_done"] is False
+
+
+def test_the_markers_are_the_ones_the_verdict_looks_for():
+    from app.services.job_script import OUTCOME_PY, WBM_MARKERS
+
+    assert 'MARKERS = ("Failed to warp", "Nothing to do")' in OUTCOME_PY
+    assert WBM_MARKERS == ("Failed to warp", "Nothing to do")
+
+
+@pytest.mark.parametrize("mode, all_done", [("warp", False), ("warp_done", True)])
+def test_failed_to_warp_is_on_stderr_where_the_record_does_not_look(job, mode, all_done):
+    """WBM prints it to stderr and exits 0. The script only reads WBM's log, so
+    its record has no marker (and, with "All Done!" in the log, says ok and exits
+    0): the gateway's verdict is what finds the line, in the stderr tail."""
+    from app.services.job_verdict import classify
+
+    done = job.run(STUB_LOG=mode)
+    assert "Failed to warp" in done.stderr
+    r = job.record
+    assert r["wbm"]["markers"] == [] and r["wbm"]["all_done"] is all_done
+    assert r["ok"] is all_done and done.returncode == (0 if all_done else 3)
+
+    verdict = classify(
+        slurm_state="COMPLETED" if all_done else "FAILED",
+        cancel_requested=False,
+        outcome=r,
+        stderr_tail=done.stderr,
+        missing=False,
+    )
+    assert verdict.status == "FAILED"
+    assert verdict.failure.cause == "wbm_silent_failure"
+    assert "Failed to warp" in verdict.failure.message
+    assert "Failed to warp /m/precip.nc" in verdict.failure.excerpt
 
 
 def test_exit_0_with_no_nc_files_is_a_failed_check(job):

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.sbatch_refusal import explain
+from app.services.sbatch_refusal import explain, sentence
 
 # What a user was shown on 2026-10-02 for a 167:15:00 request.
 REAL = (
@@ -51,13 +51,30 @@ def test_the_reason_may_be_in_text_that_is_not_shown():
 
 def test_a_code_inside_a_longer_word_is_not_a_reason():
     text = "sbatch: error: MyQOSMaxWallDurationPerJobLimitX"
-    assert explain(text) == f"SLURM refused the job: {text}"
+    assert explain(text) == f"SLURM refused the job: {text}."
 
 
-def test_an_unknown_refusal_stays_as_it_was():
+def test_an_unknown_refusal_is_shown_as_slurm_wrote_it_and_ends_in_a_full_stop():
     text = "sbatch: error: Batch job submission failed: Invalid account"
-    assert explain(text) == f"SLURM refused the job: {text}"
-    assert explain("x" * 900) == "SLURM refused the job: " + "x" * 500
+    assert explain(text) == f"SLURM refused the job: {text}."
+    assert explain(text + ".") == f"SLURM refused the job: {text}."
+    # cut at 500 characters, and the cut is marked
+    assert explain("x" * 900) == "SLURM refused the job: " + "x" * 499 + "…"
+
+
+def test_every_message_ends_in_a_full_stop_so_another_sentence_can_follow():
+    for text in (
+        "sbatch: error: Batch job submission failed: Requested node configuration is not available",
+        "sbatch: error: Invalid account",
+        "sbatch: error: Batch job submission failed: Job violates policy QOSMaxWallDurationPerJobLimit",
+        "x" * 900,
+        "",
+    ):
+        assert explain(text).endswith((".", "…")), text
+    assert explain("") == "SLURM refused the job."
+    assert sentence("no stop") == "no stop."
+    assert sentence("stop.") == "stop."
+    assert sentence("really?") == "really?"
 
 
 def test_only_the_first_lines_are_quoted_and_paths_are_left_out():

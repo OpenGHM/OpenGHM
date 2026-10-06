@@ -774,3 +774,331 @@ def test_a_job_that_changed_status_meanwhile_is_not_written(db, anvil, settled_f
     monkeypatch.setattr(anvil.client, "get_jobs", get_jobs_then_change)
     backfill()
     assert db.jobs.docs["job-1"].get("slurm_end") is None
+
+
+# ---- mission 2026-10-06: a submit the gateway lost track of --------------------
+
+
+def reconcile():
+    asyncio.run(slurm.reconcile_interrupted_submits())
+
+
+def stuck(db, job_id="job-1", age=timedelta(minutes=10), **extra):
+    """A claimed job with no SLURM id, last written `age` ago."""
+    doc = make_sent_job(job_id, "owner", "SUBMITTED", slurm_job_id=None, **extra)
+    doc["updated_at"] = (now() - age).replace(microsecond=0)  # as BSON keeps it
+    db.jobs.docs[job_id] = doc
+    return doc
+
+
+def test_a_claim_with_no_slurm_id_for_minutes_is_cancelled_by_name_and_given_back(db):
+    stuck(db)
+    reconcile()
+    assert db.cleanup_calls == [
+        ("scancel_by_name", "sim-job-1"),
+        ("remove_failed_submit_dirs", "sim-job-1"),
+    ]
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT"
+    assert not {"sim_id", "toolkit", "work_dir"} & set(stored)
+    assert stored["slurm_job_name"] == ""
+    assert stored["last_submit_error"]["code"] == "submit_interrupted"
+    assert "interrupted" in stored["last_submit_error"]["message"]
+    assert "cancelled" in stored["last_submit_error"]["message"]
+    assert not stored.get("orphan_sim_ids")
+    (event,) = [e for e in db.audit_events.docs.values() if e["action"] == "job_submit_interrupted"]
+    assert event["target_id"] == "job-1" and event["detail"] == {
+        "sim_id": "sim-job-1", "cancelled": True, "user_id": "owner",
+    }
+
+
+def test_a_claim_still_inside_the_grace_period_is_left_alone(db):
+    stuck(db, age=timedelta(seconds=settings.JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS - 60))
+    reconcile()
+    assert db.cleanup_calls == []
+    assert db.jobs.docs["job-1"]["status"] == "SUBMITTED"
+
+
+def test_the_grace_period_outlasts_the_submits_own_timeouts():
+    # sbatch is one of a few SSH commands of at most 30 s each (slurmly's
+    # command_timeout_seconds, after a 10 s connect): minutes of room, not seconds.
+    assert settings.JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS >= 180
+
+
+def test_a_job_with_a_slurm_id_a_draft_and_a_finished_job_are_not_reconciled(db):
+    db.jobs.docs["a"] = make_sent_job("a", "owner", "SUBMITTED")  # has an id
+    db.jobs.docs["b"] = make_job("b", "owner", "DRAFT")
+    db.jobs.docs["c"] = make_sent_job("c", "owner", "FAILED", slurm_job_id=None)
+    for doc in db.jobs.docs.values():
+        doc["updated_at"] = (now() - timedelta(hours=1)).replace(microsecond=0)
+    before = {k: dict(v) for k, v in db.jobs.docs.items()}
+    reconcile()
+    assert db.jobs.docs == before and db.cleanup_calls == []
+
+
+@pytest.mark.parametrize("how", ["fails", "raises"])
+def test_if_scancel_cannot_run_the_name_goes_to_the_orphans_the_sweep_retries(db, monkeypatch, how):
+    stuck(db)
+
+    async def scancel_by_name(sim_id):
+        if how == "raises":
+            raise SSHTransportError("down")
+        return False
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    reconcile()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT"
+    assert stored["last_submit_error"]["code"] == "submit_interrupted"
+    assert stored["orphan_sim_ids"] == ["sim-job-1"]
+    assert db.cleanup_calls == []  # no directory removed after a scancel that did not run
+
+
+def test_the_orphan_is_then_cancelled_by_the_orphan_pass(db, anvil, monkeypatch):
+    stuck(db)
+
+    async def down(sim_id):
+        return False
+
+    monkeypatch.setattr(slurm, "scancel_by_name", down)
+    reconcile()
+    monkeypatch.setattr(slurm, "scancel_by_name", REAL_SCANCEL_BY_NAME)
+    asyncio.run(slurm.clear_orphans())
+    assert anvil.commands == ["scancel --name=sim-job-1 --user=x-openghm"]
+    assert db.jobs.docs["job-1"]["orphan_sim_ids"] == []
+
+
+def test_a_submit_that_recorded_its_id_during_the_sweep_is_not_given_back(db, monkeypatch):
+    """The scancel took a while and a slow submit wrote its id meanwhile: the
+    conditional write misses, the job is not turned into a DRAFT under it, and
+    the name stays for a scancel of what may be running."""
+    stuck(db)
+
+    async def scancel_while_the_submit_records(sim_id):
+        db.jobs.docs["job-1"].update(slurm_job_id="999", updated_at=now())
+        return True
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_while_the_submit_records)
+    reconcile()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "SUBMITTED" and stored["slurm_job_id"] == "999"
+    assert "last_submit_error" not in stored
+    assert not [e for e in db.audit_events.docs.values() if e["action"] == "job_submit_interrupted"]
+
+
+# ---- SLURM's NO_VAL is not a time ------------------------------------------------
+
+NO_VAL_ISO = "2106-02-07T06:28:14Z"  # what slurmly makes of 4294967294
+
+
+@pytest.mark.parametrize(
+    "value",
+    [NO_VAL_ISO, "2106-02-07T06:28:14", 4294967294, 4294967295, 0, "1970-01-01T00:00:00Z",
+     datetime(2106, 2, 7, 6, 28, 14, tzinfo=timezone.utc), datetime(2106, 2, 7, 6, 28, 14),
+     "2100-01-01T00:00:00Z", "Unknown", "", None, "garbage", True],
+)
+def test_a_time_slurm_does_not_have_is_none(value):
+    assert slurm._as_utc(value) is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["2026-09-30T14:00:00Z", "2026-09-30T14:00:00", datetime(2026, 9, 30, 14), 1790000000],
+)
+def test_a_real_time_still_parses(value):
+    assert slurm._as_utc(value).year == 2026
+
+
+def test_slurmly_turns_no_val_into_2106(db):
+    """The input of the bug: the parser keeps the sentinel as a date."""
+    from slurmly.slurm.parser import _epoch_to_iso
+
+    assert _epoch_to_iso(4294967294) == NO_VAL_ISO
+
+
+def test_a_job_cancelled_while_queued_stores_no_start_time(db, anvil, job):
+    """Seen live: sacct reported NO_VAL for the start of a job cancelled before it
+    ran, and the page showed "Waited 695470 h"."""
+    job["cancel_requested_at"] = now()
+    anvil.found["12345"] = info("CANCELLED by 8013088", "cancelled", start_time=NO_VAL_ISO,
+                                end_time="2026-09-30T14:05:00Z", exit_code="0:0")
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "CANCELLED"
+    assert "slurm_start" not in stored
+    assert stored["started_at"] is None
+    assert stored["slurm_end"].isoformat().startswith("2026-09-30T14:05:00")
+    assert stored["completed_at"] == stored["slurm_end"]
+
+
+def test_an_end_time_of_no_val_falls_back_to_when_the_sweep_saw_it(db, anvil, job):
+    anvil.found["12345"] = info("CANCELLED", "cancelled", start_time=NO_VAL_ISO, end_time=NO_VAL_ISO)
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert "slurm_end" not in stored
+    assert stored["completed_at"].year == now().year
+
+
+def test_a_running_job_with_no_val_start_is_given_the_time_it_was_seen(db, anvil, job):
+    anvil.found["12345"] = info("RUNNING", "running", start_time=NO_VAL_ISO)
+    sweep()
+    assert db.jobs.docs["job-1"]["slurm_start"].year == now().year
+
+
+def test_the_backfill_does_not_store_no_val_either(db, anvil, settled_from_squeue):
+    anvil.found["12345"] = info("COMPLETED", "succeeded", start_time=NO_VAL_ISO)
+    backfill()
+    stored = db.jobs.docs["job-1"]
+    assert stored["slurm_end"] is not None and stored.get("slurm_start") is None
+
+
+def test_a_job_stored_with_the_2106_start_reads_without_it(client, db):
+    """The dev job that already carries it: shown with no start, not 695470 h."""
+    from route_helpers import make_user, token_for
+
+    no_val = datetime(2106, 2, 7, 6, 28, 14, tzinfo=timezone.utc)
+    db.users.docs["owner"] = make_user("owner", can_run_simulations=True)
+    db.jobs.docs["job-1"] = make_sent_job(
+        "job-1", "owner", "CANCELLED", slurm_start=no_val, started_at=no_val,
+        slurm_end=datetime(2026, 9, 30, 14, 5, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 9, 30, 14, 5, tzinfo=timezone.utc),
+    )
+    headers = token_for("owner")
+    for path in ("", "/status"):
+        body = client.get(f"/api/v1/jobs/job-1{path}", headers=headers).json()
+        assert body["started_at"] is None and body["slurm_start"] is None
+        assert body["slurm_end"].startswith("2026-09-30T14:05")
+        assert body["completed_at"].startswith("2026-09-30T14:05")
+    listed = client.get("/api/v1/jobs", headers=headers).json()["items"][0]
+    assert listed["started_at"] is None and listed["slurm_start"] is None
+
+
+# ---- the verdict reads what the job left, whatever it is ------------------------
+
+
+def test_stderr_is_read_through_the_base64_reader_and_decoded_leniently(db, anvil, job):
+    """slurmly's tail decodes strictly: one byte that is not UTF-8 failed its
+    command (exit -1) and the excerpt came back empty."""
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    anvil.files[STDERR] = b"slurmstepd: error: DUE TO TIME LIMIT\nlatin-1 \xe9 and \xff\xfe bytes\nlast line\n"
+    sweep()
+    excerpt = db.jobs.docs["job-1"]["failure"]["excerpt"]
+    assert excerpt.splitlines()[0] == "slurmstepd: error: DUE TO TIME LIMIT"
+    assert "latin-1 � and �� bytes" in excerpt
+    assert excerpt.splitlines()[-1] == "last line"
+    commands = [c for c in anvil.commands if "base64" in c]
+    assert len(commands) == 1 and "stderr.log" in commands[0]
+    assert not any("tail -n" in c for c in anvil.commands)  # slurmly's strict tail is not used
+
+
+def test_only_the_end_of_a_long_stderr_is_read(db, anvil, job):
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    anvil.files[STDERR] = "".join(f"line {i}\n" for i in range(20000))
+    sweep()
+    excerpt = db.jobs.docs["job-1"]["failure"]["excerpt"]
+    assert excerpt.splitlines()[-1] == "line 19999" and len(excerpt.splitlines()) == 60
+
+
+def test_a_job_with_no_stderr_file_has_no_excerpt_and_still_gets_its_verdict(db, anvil, job):
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "FAILED" and stored["failure"]["excerpt"] is None
+
+
+def test_failed_to_warp_on_stderr_fails_a_job_whose_log_and_exit_are_clean(db, anvil, job):
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    anvil.files[OUTCOME] = json.dumps(SUCCESS_OUTCOME)
+    anvil.files[STDERR] = "\nFailed to warp /m/precip_2001.nc\n\tFork code = 9\n"
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "FAILED"
+    assert stored["failure"]["cause"] == "wbm_silent_failure"
+    assert "Failed to warp" in stored["failure"]["message"]
+    assert "precip_2001.nc" in stored["failure"]["excerpt"]
+
+
+@pytest.mark.parametrize(
+    "record",
+    [{"steps": []}, {"steps": {"fetch": [], "run": []}}, {"wbm": [1]}, {"output": "x"},
+     {"schema": 1, "steps": {"fetch": {"exit_code": "0"}, "run": {"exit_code": "0"}}}],
+)
+def test_a_record_of_the_wrong_shape_ends_the_job_instead_of_being_retried_forever(db, anvil, job, record):
+    """classify used to raise AttributeError on `steps` being a list, which the
+    sweep caught per job and tried again every tick."""
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    anvil.files[OUTCOME] = json.dumps(record)
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "FAILED"
+    assert stored["failure"]["cause"] == "outcome_missing"
+    assert stored["outcome"] == record
+    # and what it stores does not break the pages that read it
+    from app.api.v1.jobs import _doc_to_response, _status_response
+
+    _doc_to_response(stored)
+    _status_response(stored)
+
+
+def test_a_malformed_stored_record_does_not_break_the_log_path(db, anvil, job):
+    job.update(status="FAILED", outcome={"wbm": ["not", "an", "object"]})
+    anvil.results.append((lambda c: "wbm_init" in c, (3, "", "")))
+    assert asyncio.run(slurm.log_path(job, "wbm")) is None
+
+
+# ---- messages that need the job's own facts -------------------------------------
+
+
+def snapshot_recommending(db, walltime):
+    db.datasets.docs["ds-1"] = {
+        "_id": "ds-1",
+        "document": {"simulation": {"recommendedCompute": {"cores": 16, "walltime": walltime}}},
+    }
+
+
+def test_a_timeout_at_the_96_hour_maximum_says_to_shorten_the_period(db, anvil, job):
+    job["slurm_config"] = {"cores": 8, "walltime": "96:00:00"}
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert "already the 96 h maximum" in message and "longer walltime" not in message
+
+
+def test_a_timeout_of_a_shorter_walltime_offers_a_longer_one(db, anvil, job):
+    job["slurm_config"] = {"cores": 8, "walltime": "06:00:00"}
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert "longer walltime (up to 96 h)" in message and "maximum" not in message
+
+
+def test_the_walltime_of_a_draft_with_none_of_its_own_is_the_snapshots_with_headroom(db, anvil, job):
+    """80 h recommended: with headroom it is 120 h, which the submit capped at 96 h."""
+    snapshot_recommending(db, "80:00:00")
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    assert "already the 96 h maximum" in db.jobs.docs["job-1"]["failure"]["message"]
+
+
+def test_a_timeout_whose_snapshot_is_gone_still_gets_a_verdict(db, anvil, job):
+    del db.datasets.docs["ds-1"]
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    assert db.jobs.docs["job-1"]["failure"]["cause"] == "timeout"
+
+
+def test_a_timeout_during_the_fetch_is_worded_for_the_fetch(db, anvil, job):
+    rec = failing(phase="fetch", signal="TERM", steps={"fetch": {"exit_code": None}}, staged=False)
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    anvil.files[OUTCOME] = json.dumps(rec)
+    sweep()
+    stored = db.jobs.docs["job-1"]
+    assert stored["failure"]["phase"] == "fetch"
+    assert "fetching the snapshot" in stored["failure"]["message"]
+
+
+def test_a_job_slurm_marks_failed_with_exit_137_and_no_record_is_probably_out_of_memory(db, anvil, job):
+    anvil.found["12345"] = info("FAILED", "failed", exit_code="137:0")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert "ran out of memory" in message and "more cores" in message

@@ -29,7 +29,9 @@ describe("describeQueueReason", () => {
     expect(describeQueueReason(reason)).toBe(words);
   });
 
-  it("quotes a reason it does not know", () => {
-    expect(describeQueueReason("SomethingNew")).toBe("Waiting (SLURM reason: SomethingNew).");
+  it("does not quote a reason it does not know: the raw reason is shown beside the sentence", () => {
+    const words = describeQueueReason("SomethingNew");
+    expect(words).toBe("Waiting for SLURM to start it.");
+    expect(words).not.toContain("SomethingNew");
   });
 });

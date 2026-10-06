@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # gives up on it (ADR 0026, rule 4). One lookup that finds nothing proves
     # nothing: slurmly answers "absent" when both commands fail, too.
     JOB_LOST_AFTER_SECONDS: int = 600
+    # A submit claims the draft (SUBMITTED) and then awaits sbatch in the request:
+    # a few SSH commands of at most 30 s each. A job still SUBMITTED with no SLURM
+    # id this long after its last write is a submit that lost its process or its
+    # database write, and the sweep gives the draft back (`slurm.
+    # reconcile_interrupted_submits`). Keep it well above the longest submit.
+    JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS: int = 300
     # A job whose verdict came from a squeue row has no end time (squeue's row
     # has none). The sweep asks sacct for it, once a job has been over for
     # JOB_END_BACKFILL_RETRY_SECONDS (so it is out of squeue) and then again

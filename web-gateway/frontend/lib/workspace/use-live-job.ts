@@ -45,6 +45,10 @@ export interface UseLiveJobResult {
   /** The backend answered 401: polling has stopped. Show SessionExpiredBanner.
    *  Cleared if a manual `refresh()` succeeds. */
   sessionExpired: boolean;
+  /** The backend answered 404: this snapshot draft no longer exists (deleted
+   *  from another tab, or never the viewer's). Polling has stopped for good;
+   *  the page shows a notice, with no Cancel and no Refresh. */
+  gone: boolean;
   /** Ask now, without waiting for the timer. */
   refresh: () => void;
   /** Take a status response that came from somewhere else (the cancel route
@@ -56,7 +60,7 @@ export interface UseLiveJobResult {
  * Follows a job (ADR 0027): asks for its status every 5 s while it is queued,
  * running or cancelling, and not at all while the tab is hidden. After a failed
  * poll it backs off (5, 10, 20, 40, then 60 s) and resets on the next good
- * answer. A 401 or a 404 stops it, as does a terminal status. Every change of
+ * answer. A 401 or a 404 stops it (a 404 sets `gone`), as does a terminal status. Every change of
  * status asks Next for the page again, because the verdict cards beside the
  * panel are chosen on the server from the status it rendered with.
  *
@@ -75,6 +79,7 @@ export function useLiveJob(
   const [view, setView] = useState<StatusView>(() => toView(initialStatus, initialData));
   const [polling, setPolling] = useState(!disabled && !isTerminalStatus(initialStatus));
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [gone, setGone] = useState(false);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
   const [failure, setFailure] = useState<{ message: string; retryAt: number } | null>(null);
   // The clock for the retry countdown; only ticks while a failure is showing.
@@ -172,14 +177,17 @@ export function useLiveJob(
       setFailure(null);
       setPolling(false);
     } else if (result.reason === "not_found") {
-      // Deleted, or never ours: nothing left to watch.
+      // Deleted, or never ours: nothing left to watch, and nothing the page
+      // may still offer (Cancel, Refresh): it says so instead.
       stoppedRef.current = true;
+      clearTimer();
+      setGone(true);
       setFailure(null);
       setPolling(false);
     } else {
-      fail(describePollError({ status: result.status }));
+      fail(describePollError({ status: result.status, code: result.code }));
     }
-  }, [jobId, disabled, commit, fail]);
+  }, [jobId, disabled, commit, fail, clearTimer]);
 
   useEffect(() => {
     pollRef.current = poll;
@@ -219,10 +227,10 @@ export function useLiveJob(
   }, [retryAt]);
 
   const refresh = useCallback(() => {
-    if (disabled) return;
+    if (disabled || gone) return;
     clearTimer();
     void pollRef.current();
-  }, [disabled, clearTimer]);
+  }, [disabled, gone, clearTimer]);
 
   const apply = useCallback(
     (data: JobStatusResponse) => {
@@ -248,6 +256,7 @@ export function useLiveJob(
     lastError: failure?.message ?? null,
     retryInSeconds: failure ? Math.max(0, Math.ceil((failure.retryAt - now) / 1000)) : null,
     sessionExpired,
+    gone,
     refresh,
     apply,
   };

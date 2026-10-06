@@ -170,7 +170,13 @@ export function DraftSubmitCard({
       }
       if (result.reason === "session_expired") setSessionExpired(true);
       else if (result.reason === "not_found") message = "This snapshot draft no longer exists.";
-      else message = describeSubmitFailure(result);
+      else {
+        message = describeSubmitFailure(result);
+        // No answer within the timeout: the backend may have gone on and
+        // submitted. Look, as for a thrown error (`describeFailure` folds a
+        // timeout into data, so it is not thrown).
+        thrown = result.code === "backend_timeout";
+      }
     } catch (err) {
       thrown = true;
       // A thrown error is the request itself failing (for example the 60 s

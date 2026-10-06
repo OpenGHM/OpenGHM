@@ -32,7 +32,7 @@ export async function fetchCatalogue(
   filters: CatalogueFilterState,
   pageSize: number = CATALOGUE_PAGE_SIZE
 ): Promise<CatalogueResponse> {
-  const client = await getApiClient();
+  const client = await getApiClient({ allowAnonymous: true });
 
   const params: Record<string, string | number | string[]> = {
     sort: filters.sortBy,
@@ -64,7 +64,7 @@ export async function fetchCatalogue(
  * it is, for the page to turn into a sign-in redirect.
  */
 export async function fetchMine(): Promise<MineResponse> {
-  const client = await getApiClient();
+  const client = await getApiClient({ allowAnonymous: true });
   const response = await client.get<MineResponse>("/api/v1/repository/mine");
   return response.data;
 }
@@ -89,7 +89,7 @@ export async function fetchSnapshots(
  */
 export async function fetchDatasetById(id: string): Promise<Dataset | null> {
   try {
-    const client = await getApiClient();
+    const client = await getApiClient({ allowAnonymous: true });
     const response = await client.get<Dataset>(
       `/api/v1/repository/datasets/${encodeURIComponent(id)}`
     );
@@ -119,7 +119,7 @@ export async function fetchModelInputs(
   filters: ModelInputFilterState,
   pageSize: number = 5
 ): Promise<ModelInputListResponse> {
-  const client = await getApiClient();
+  const client = await getApiClient({ allowAnonymous: true });
 
   const params: Record<string, string | number> = {
     sort: filters.sortBy,
@@ -163,7 +163,7 @@ export async function fetchModelInputById(
   id: string
 ): Promise<ModelInput | null> {
   try {
-    const client = await getApiClient();
+    const client = await getApiClient({ allowAnonymous: true });
     const response = await client.get<ModelInput>(
       `/api/v1/repository/model-inputs/${encodeURIComponent(id)}`
     );
@@ -184,7 +184,7 @@ export async function fetchModelInputById(
  */
 export async function fetchDatasetLinks(id: string): Promise<SnapshotLinks | null> {
   try {
-    const client = await getApiClient();
+    const client = await getApiClient({ allowAnonymous: true });
     const response = await client.get<SnapshotLinks>(
       `/api/v1/repository/datasets/${encodeURIComponent(id)}/links`
     );
@@ -204,7 +204,7 @@ export async function fetchDatasetLinks(id: string): Promise<SnapshotLinks | nul
  */
 export async function fetchModelInputLinks(id: string): Promise<ModelInputLinks | null> {
   try {
-    const client = await getApiClient();
+    const client = await getApiClient({ allowAnonymous: true });
     const response = await client.get<ModelInputLinks>(
       `/api/v1/repository/model-inputs/${encodeURIComponent(id)}/links`
     );

@@ -342,3 +342,41 @@ def test_each_unsupported_field_is_named(v2):
         "parameters.custom_params"
     ]
     assert job_script.unsupported_fields(_params(v2, custom_params={}), None, v2) == []
+
+
+# ---- the walltime the toolkit's spool lease lasts for ------------------------
+
+
+@pytest.mark.parametrize("walltime", ["22:30", "96:00:00", "4-00:00:00", "1:05:09"])
+def test_the_walltime_asked_of_slurm_is_passed_to_sim_run(walltime):
+    run_line = _body(walltime=walltime).splitlines()[-2]
+    assert run_line == (
+        f'step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" '
+        f"--id {SIM_ID} --walltime {walltime} --spool cache"
+    )
+
+
+def test_the_walltime_comes_after_the_overrides_and_before_the_spool():
+    run_line = _body(run_start="2000-06-01", output_vars="runoff", walltime="22:30").splitlines()[-2]
+    assert run_line.endswith("--run-start 2000-06-01 --output-vars runoff --walltime 22:30 --spool cache")
+
+
+def test_without_a_walltime_no_flag_is_passed():
+    assert "--walltime" not in _body()
+
+
+@pytest.mark.parametrize("walltime", ["22:30; rm -rf ~", "$(reboot)", "", "0", "0:00:00", "soon", "1 2"])
+def test_a_walltime_that_is_not_a_slurm_time_is_refused(walltime):
+    with pytest.raises(SubmitInputError):
+        _body(walltime=walltime)
+
+
+def test_the_flag_carries_the_value_the_submit_gives_sbatch(v2):
+    """One resolution feeds both (`slurm.resolve_compute`): the draft's own
+    walltime as written, else the snapshot's with headroom."""
+    from app.services import slurm
+
+    _, from_snapshot = slurm.resolve_compute(SlurmConfig(), v2)
+    _, own = slurm.resolve_compute(SlurmConfig(walltime="02:00:00"), v2)
+    assert f"--walltime {from_snapshot} " in _body(walltime=from_snapshot)
+    assert own == "02:00:00" and f"--walltime {own} " in _body(walltime=own)

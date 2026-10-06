@@ -94,6 +94,16 @@ describe("DuplicateDraftButton", () => {
     expect(toastError).toHaveBeenCalledWith("Boom");
   });
 
+  it("shows the unreachable-backend sentence under the button and as a toast, never nothing", async () => {
+    const message = "The gateway's server could not be reached. Nothing was changed; try again in a minute.";
+    duplicate.mockResolvedValue({ ok: false, reason: "error", message, code: "backend_unreachable" } as ActionResult<Job>);
+    render(<DuplicateDraftButton jobId="job-1" />);
+    await act(async () => fireEvent.click(button()));
+    expect(screen.getByRole("alert").textContent).toBe(message);
+    expect(toastError).toHaveBeenCalledWith(message);
+    expect(button().disabled).toBe(false);
+  });
+
   it("shows the sign-in banner when the session has expired", async () => {
     duplicate.mockResolvedValue({ ok: false, reason: "session_expired" } as ActionResult<Job>);
     render(<DuplicateDraftButton jobId="job-1" />);

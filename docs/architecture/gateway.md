@@ -425,21 +425,25 @@ for the public commit it was built from:
    `flock` on the GPFS scratch filesystem only locks within one node. The
    fetch verifies the tree, the linked model input and the pinned image, and
    downloads what is missing.
-2. `openghm sim run` on that tree, with `--id <sim_id>` and `--spool cache`:
-   the run links the days the shared spool cache holds and hands it the days
-   it built after exiting 0 ([simulation-reuse.md](simulation-reuse.md) §4).
-   `--run-start`, `--run-end` and `--output-vars` are passed only when the
-   draft differs from the snapshot's own values.
+2. `openghm sim run` on that tree, with `--id <sim_id>`, `--walltime <the
+   `--time` the job asks SLURM for>` and `--spool cache`: the run links the days
+   the shared spool cache holds and hands it the days it built after exiting 0
+   ([simulation-reuse.md](simulation-reuse.md) §4), and its lease on them lasts
+   as long as the job can. `--run-start`, `--run-end` and `--output-vars` are
+   passed only when the draft differs from the snapshot's own values.
 
 Each step runs through a `step` wrapper that records its exit code, and an
 `EXIT` trap (with `TERM`, `INT` and `HUP` trapped too) writes `outcome.json`
 into slurmly's job directory with the toolkit venv's Python
 ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)). The record
 holds the phase reached, each step's exit code, whether the simulation was staged,
-the WBM markers (`All Done!`, `Failed to warp`, `Nothing to do`) and log tail,
-and the output manifest. The script exits non-zero when those facts are not a
-success, so SLURM's state agrees. The body's schema is the docstring of
-`job_script.py`.
+the WBM markers its log holds (`All Done!`, `Failed to warp`, `Nothing to do`) and
+log tail, and the output manifest. The script exits non-zero when those facts
+are not a success, so SLURM's state agrees. The body's schema is the docstring
+of `job_script.py`. WBM prints `Failed to warp` to its **stderr**, not to its
+log, and exits 0, so the record cannot hold it: `classify` also looks for the
+markers (`WBM_MARKERS`) in the stderr tail, and a run that did this ends
+`wbm_silent_failure` although SLURM said `COMPLETED`.
 
 SLURM is asked for `--cpus-per-task` and `--time`:
 - cores come from the draft's `slurm_config`, or else the snapshot's
@@ -447,7 +451,8 @@ SLURM is asked for `--cpus-per-task` and `--time`:
 - walltime comes from the draft's `slurm_config` (a PATCH holds it to at most
   96:00:00, `MAX_WALLTIME_SECONDS`), or else the snapshot's recommended
   walltime × 1.5, **never more than 96:00:00** (`with_headroom`; SLURM rounds a
-  value with seconds up to the minute);
+  value with seconds up to the minute). `slurm.resolve_compute` resolves it
+  once, and the same string is `sbatch --time` and `sim run --walltime`;
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
@@ -505,7 +510,10 @@ submitting.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name
-  stays in the draft's `orphan_sim_ids` and the sweep retries it.
+  stays in the draft's `orphan_sim_ids` and the sweep retries it. An
+  unexpected exception (500 `internal_error`) is treated the same way, as is a
+  failed write of the SLURM id after sbatch answered (500, `submit_interrupted`
+  on the draft): the job is scancelled by name, or the name kept.
 - An sbatch that says no: 502 `sbatch_rejected`. slurmly's leftover job
   directory, found by the attempt's `sim_id` in its `metadata.json`, is removed.
   The message names the cause in plain English when SLURM's reason code is one
@@ -515,9 +523,30 @@ submitting.
   Any other refusal is shown as SLURM wrote it. The code stays
   `sbatch_rejected` either way.
 
-After a refusal the draft goes **back to DRAFT**, with `last_submit_error`.
+After a refusal the draft goes **back to DRAFT**, with `last_submit_error`
+`{code, message, at}`. Every refusal of a submit replaces it, the ones before
+the claim included (`answered_by_published`, `unsupported_fields`,
+`walltime_over_limit`, the run-date refusals, `anvil_not_configured`, an
+account that may not run, the active-job limit), so a reopened draft never shows
+the reason of an earlier try; the claim itself clears it. A refusal's message always
+ends in a full stop (`sbatch_refusal.sentence`), so "Your draft is unchanged."
+follows cleanly.
 The DRAFT→SUBMITTED claim is one conditional update, so a double click or a
-concurrent PATCH cannot submit twice. Who may submit at all is
+concurrent PATCH cannot submit twice.
+
+**A submit the gateway loses track of.** The claim sets SUBMITTED and a `sim_id`;
+the SLURM id is written only after sbatch answers. If the process dies in
+between, the job would stay SUBMITTED with no `slurm_job_id`, which the status
+sweep cannot look up, while a job may be queued on Anvil. So each tick also
+looks for jobs SUBMITTED with no SLURM id not written for
+`JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS` (300, more than a submit's few SSH commands
+take): `scancel --name=<sim_id>`, slurmly's leftover directory removed, and the
+draft returned with `last_submit_error` `submit_interrupted`. If the scancel
+cannot run, the name goes to `orphan_sim_ids` and the orphan pass retries it. A
+**cancel** of such a job is CANCELLED at once and keeps its `sim_id` in
+`orphan_sim_ids` for the same pass, and **deleting** a job that still carries
+orphans scancels each by name first and answers 409 `orphan_cancel_failed`, with
+nothing deleted, when one cannot be. Who may submit at all is
 [ADR 0024](../decisions/0024-who-may-run-a-simulation.md).
 
 Status is pulled, never pushed
@@ -528,7 +557,8 @@ every `JOB_BACKGROUND_SYNC_INTERVAL` (60) when none is: one batched
 `get_jobs` for every non-terminal job, then the end-time backfill (below),
 then the orphan `scancel` retries, then the daily purge check. A lookup that
 fails skips the tick, and a job it did not report is only counted absent after a
-`sacct` of the gateway's own shows it gone (`confirm_absent`). The status route settles one job the same way (`update_job_status()`).
+`sacct` of the gateway's own shows it gone (`confirm_absent`). The status route settles one job the same way (`update_job_status()`). Between the end-time backfill and the orphan retries the tick gives back
+interrupted submits (below).
 
 **Watching a job.** `web-gateway/backend/app/services/job_live.py` shares SLURM's answers
 in process for `JOB_LIVE_TTL_SECONDS` (5): the sweep and every viewer's
@@ -562,6 +592,16 @@ A job that ran before the toolkit went quiet shows its module notices and
 counter lines as they were written. The three streams are polled one after another,
 never at once.
 
+A poll that fails does not end the page quietly. A 401 stops it and shows the
+sign-in banner (`proxy.ts` lets every server action through, even with no
+session at all, so the backend's 401 reaches the page as data); a 404 stops it
+and shows a notice that the snapshot draft no longer exists, with a link to
+"My snapshot drafts" and no Cancel or Refresh; anything else backs off (5, 10,
+20, 40, then 60 s) under "Retry now". Every server action turns a failure into a
+sentence: the backend's own `message` for a `{code, message}` or plain-string
+`detail`, and fixed ones for a backend that cannot be reached, a timeout and a
+5xx with no message (`web-gateway/frontend/lib/action-failure.ts`).
+
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
 snapshot draft's own name with its status, the title of the snapshot it is based on
@@ -590,7 +630,34 @@ names one cause: SLURM's `CANCELLED` first, then SLURM's kills (`TIMEOUT`,
 `OUT_OF_MEMORY`, the node-failure family), then the record. The job stores
 `status`, `failure {cause, phase, message, excerpt}`, the record, the raw
 `slurm_state` and `slurm_exit_code`, and SLURM's own `slurm_start` and
-`slurm_end`. A job absent from every lookup for `JOB_LOST_AFTER_SECONDS`
+`slurm_end`. A time SLURM does not have, NO_VAL (4294967294, which slurmly turns
+into 2106-02-07T06:28:14Z: a job cancelled while queued never started), epoch 0
+and anything after the year 2100 are no time: nothing is stored, and a job
+that already holds one reads as having none. The cancel the verdict names
+(`cancelled_by_user`: the gateway recorded a request) is read from the job
+again just before it is written, not from the copy the tick began with. `classify`
+is total: a record that is JSON but not the record the script writes (`steps`
+a list, an exit code that is a string) is `outcome_missing`, so the sweep
+settles the job instead of retrying it every tick. The excerpt reads the end of
+the job's stderr through the same base64 reader as the logs route (the last
+64 KiB, undecodable bytes shown as U+FFFD): slurmly's own tail decodes strictly,
+and one byte that is not UTF-8 emptied it.
+
+The message names the lever the owner has. `out_of_memory`, and a run killed with
+exit code 137 or 247 (SLURM's `137:0`, `247:0` or signal 9 when it left no record),
+say memory comes with cores (about 1.9 GB each on `shared`): more cores or a
+shorter run period. `timeout` says it by phase (while fetching, or before WBM
+finished) and, when the walltime the job asked for was already 96 h, to shorten
+the run period instead of a longer walltime. A fetch step that exits 64 to 78
+(sysexits, what `flock` answers with for a lock directory or a toolkit that is
+not there) is the gateway's Anvil setup, not the snapshot: the message says to
+tell an administrator. A `sim run` that stopped before staging with no
+`openghm:` line gets a neutral message, not "check the snapshot's settings". A
+`wbm_error`'s reason is the last paragraph of stderr with the toolkit's own
+`spool:` lines and warnings left out, cut from its start so its end shows. The
+stored cancel messages name nobody ("cancelled from OpenGHM"): who asked is
+`cancel_requested_by_email`, which the page words from the viewer's side. A
+job absent from every lookup for `JOB_LOST_AFTER_SECONDS`
 (600), each time confirmed by that `sacct`, is judged from its record, or is
 `lost`. Every status write is
 conditional on the status it read.
@@ -608,13 +675,17 @@ a sacct row counts; it sets `slurm_end`, and `slurm_start` and
 
 **Cancel** records `cancel_requested_at` and runs `scancel`; the status stays
 until SLURM reports `CANCELLED`, and the UI shows *Cancelling*. A job with no
-SLURM id yet is cancelled at once.
+SLURM id yet is cancelled at once, and its `sim_id` is kept in `orphan_sim_ids`
+because a job may exist. A job that is not queued or running answers 409
+`not_cancellable` with `{code, message, current}`.
 
 **Files.** A job owns two directories on scratch: slurmly's job directory and
 `work_dir`. The shared caches are never removed by a job. `DELETE` removes
 both directories, the work directory only if it is exactly
 `ANVIL_OUTPUT_BASE/<sim_id>` and not a symlink, and then the document; if a
-removal fails the document stays. The gateway deletes nothing on its own:
+removal fails the document stays. The delete of the document is conditional on
+the status that was read: when it removes nothing (a submit claimed the draft
+meanwhile) the answer is 409 `job_changed`, with no `job_deleted` event. The gateway deletes nothing on its own:
 Anvil purges scratch files untouched for 30 days, and a daily check sets
 `files: purged` on a job whose work directory is gone.
 

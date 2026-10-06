@@ -81,6 +81,33 @@ describe("the cancel dialog", () => {
     expect(props.onCancelled).not.toHaveBeenCalled();
   });
 
+  it("shows the backend's sentence for a not_cancellable 409, and the unreachable-backend one, whatever the code", async () => {
+    cancelJob.mockResolvedValueOnce({
+      ok: false,
+      reason: "error",
+      message: "This simulation has already ended.",
+      status: 409,
+      code: "not_cancellable",
+    });
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel simulation" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("This simulation has already ended."));
+    expect(props.onConflict).toHaveBeenCalled();
+
+    cancelJob.mockResolvedValueOnce({
+      ok: false,
+      reason: "error",
+      message: "The gateway's server could not be reached. Nothing was changed; try again in a minute.",
+      code: "backend_unreachable",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel simulation" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenLastCalledWith(
+        "The gateway's server could not be reached. Nothing was changed; try again in a minute."
+      )
+    );
+  });
+
   it("reports an expired session to the caller", async () => {
     cancelJob.mockResolvedValue({ ok: false, reason: "session_expired" });
     const props = setup();

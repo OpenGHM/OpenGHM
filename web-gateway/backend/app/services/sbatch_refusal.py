@@ -70,14 +70,23 @@ def _quote(detail: str) -> str:
     return text if text.endswith((".", "…")) else text + "."
 
 
+def sentence(text: str) -> str:
+    """`text` as a sentence that can be followed by another: a full stop is
+    added unless it ends in one (or in `!`, `?`, `…`)."""
+    text = text.rstrip()
+    return text if text.endswith((".", "!", "?", "…")) else text + "."
+
+
 def explain(detail: str, also: str = "") -> str:
-    """The message for a refused submit, without the closing "Your draft is
-    unchanged.". `detail` is what SLURM said (stderr, else stdout); `also` is
-    more text to look for a reason code in, not to show. A reason in the table
-    is explained, with SLURM's own words after it; anything else is SLURM's
-    text as it is."""
+    """The message for a refused submit, ending in a full stop, without the
+    closing "Your draft is unchanged.". `detail` is what SLURM said (stderr,
+    else stdout); `also` is more text to look for a reason code in, not to
+    show. A reason in the table is explained, with SLURM's own words after it;
+    anything else is SLURM's text as it is."""
     searched = f"{detail}\n{also}"
     for pattern, explanation in _PATTERNS:
         if pattern.search(searched):
             return f"{explanation} SLURM said: {_quote(detail)}" if detail.strip() else explanation
-    return f"SLURM refused the job: {detail.strip()[:_UNKNOWN_CHARS]}"
+    shown = detail.strip()
+    shown = shown[: _UNKNOWN_CHARS - 1].rstrip() + "…" if len(shown) > _UNKNOWN_CHARS else shown
+    return sentence(f"SLURM refused the job: {shown}" if shown else "SLURM refused the job")

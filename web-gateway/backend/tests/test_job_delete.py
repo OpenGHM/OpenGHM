@@ -12,6 +12,9 @@ from __future__ import annotations
 import pytest
 from slurmly.exceptions import SSHTransportError
 
+from app.api.v1 import jobs as jobs_router
+from app.services import slurm
+
 from conftest import REMOTE_BASE
 from route_helpers import OUTPUT_BASE, make_job, make_sent_job, make_user, token_for
 
@@ -213,3 +216,98 @@ def test_someone_elses_job_is_a_404_and_nothing_is_removed(client, db, anvil):
     db.users.docs["other"] = make_user("other", can_run_simulations=True)
     assert client.delete(DELETE, headers=token_for("other")).status_code == 404
     assert anvil.commands == [] and "job-1" in db.jobs.docs
+
+
+# ---- mission 2026-10-06: orphans, and a delete that deleted nothing ----------
+
+
+def _draft_with_orphans(db, *names):
+    db.jobs.docs["job-1"] = make_job("job-1", OWNER, "DRAFT")
+    db.jobs.docs["job-1"]["orphan_sim_ids"] = list(names)
+
+
+def test_deleting_a_draft_scancels_its_orphans_by_name_first(client, db):
+    _draft_with_orphans(db, "sim-20260930-aaaaaa", "sim-20260930-bbbbbb")
+    assert client.delete(DELETE, headers=HEADERS).status_code == 204
+    assert db.cleanup_calls == [
+        ("scancel_by_name", "sim-20260930-aaaaaa"),
+        ("scancel_by_name", "sim-20260930-bbbbbb"),
+    ]
+    assert "job-1" not in db.jobs.docs
+
+
+def test_a_draft_whose_orphan_cannot_be_cancelled_is_not_deleted(client, db, monkeypatch):
+    """The document is the only place the name is kept: deleting it would leave
+    a job on Anvil that nothing will ever cancel."""
+    _draft_with_orphans(db, "sim-20260930-aaaaaa", "sim-20260930-bbbbbb")
+
+    async def scancel_by_name(sim_id):
+        return sim_id != "sim-20260930-bbbbbb"
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    response = client.delete(DELETE, headers=HEADERS)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "orphan_cancel_failed"
+    assert "nothing was deleted" in response.json()["detail"]["message"]
+    # The one that worked is not asked again; the one that did not is kept.
+    assert db.jobs.docs["job-1"]["orphan_sim_ids"] == ["sim-20260930-bbbbbb"]
+    assert "job_deleted" not in [e["action"] for e in db.audit_events.docs.values()]
+
+
+def test_a_scancel_that_raises_refuses_the_delete_too(client, db, monkeypatch):
+    _draft_with_orphans(db, "sim-20260930-aaaaaa")
+
+    async def scancel_by_name(sim_id):
+        raise SSHTransportError("down")
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.delete(DELETE, headers=HEADERS).status_code == 409
+    assert db.jobs.docs["job-1"]["orphan_sim_ids"] == ["sim-20260930-aaaaaa"]
+
+
+def test_a_retry_once_anvil_answers_deletes(client, db, monkeypatch):
+    _draft_with_orphans(db, "sim-20260930-aaaaaa")
+    answers = iter([False, True])
+
+    async def scancel_by_name(sim_id):
+        return next(answers)
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.delete(DELETE, headers=HEADERS).status_code == 409
+    assert client.delete(DELETE, headers=HEADERS).status_code == 204
+
+
+def test_a_finished_job_with_an_orphan_cancels_it_before_its_files_are_removed(client, db, anvil):
+    _finished(db, "CANCELLED", orphan_sim_ids=["sim-20260930-aaaaaa"])
+    assert client.delete(DELETE, headers=HEADERS).status_code == 204
+    assert db.cleanup_calls == [("scancel_by_name", "sim-20260930-aaaaaa")]
+    assert anvil.commands == [RM_WORK, RM_DIR]
+
+
+def test_a_finished_job_whose_orphan_cannot_be_cancelled_keeps_its_files_too(client, db, anvil, monkeypatch):
+    _finished(db, "CANCELLED", orphan_sim_ids=["sim-20260930-aaaaaa"])
+
+    async def scancel_by_name(sim_id):
+        return False
+
+    monkeypatch.setattr(slurm, "scancel_by_name", scancel_by_name)
+    assert client.delete(DELETE, headers=HEADERS).status_code == 409
+    assert anvil.commands == []
+    assert "job-1" in db.jobs.docs
+
+
+def test_a_draft_claimed_by_a_submit_meanwhile_is_not_deleted_and_not_audited(client, db, monkeypatch):
+    """The delete read a DRAFT; a submit claimed it before the conditional
+    delete: nothing was deleted, so 204 and a `job_deleted` event would lie."""
+    stale = make_job("job-1", OWNER, "DRAFT")
+    db.jobs.docs["job-1"] = make_sent_job("job-1", OWNER, "SUBMITTED")
+
+    async def read_before_the_claim(job_id, user, escalated):
+        return stale
+
+    monkeypatch.setattr(jobs_router, "_get_job_for", read_before_the_claim)
+    response = client.delete(DELETE, headers=HEADERS)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "job_changed"
+    assert "job-1" in db.jobs.docs
+    assert "job_deleted" not in [e["action"] for e in db.audit_events.docs.values()]

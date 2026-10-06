@@ -35,6 +35,16 @@ function setup(over: Partial<React.ComponentProps<typeof DeleteDraftDialog>> = {
 }
 
 describe("the delete dialog", () => {
+  it("shows the unreachable-backend sentence, and tells the caller the snapshot draft still exists", async () => {
+    const message = "The gateway's server could not be reached. Nothing was changed; try again in a minute.";
+    deleteDraft.mockResolvedValue({ ok: false, reason: "error", message, code: "backend_unreachable" });
+    const props = setup();
+    fireEvent.click(screen.getByRole("button", { name: "Delete snapshot draft" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    expect(props.onError).toHaveBeenCalledWith(message);
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("lists the directories that go for a finished job", () => {
     setup({ files: "purged" });
     expect(screen.getByText("Delete this snapshot draft?")).toBeTruthy();

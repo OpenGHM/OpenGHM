@@ -42,14 +42,17 @@ A step that was not reached is absent from `steps`; one the script was
 interrupted in has `"exit_code": null`. `staged` is whether `simulation.json`
 has an `exit_code` (the toolkit writes it only once the container ran), which
 tells `sim run` refusing before staging from WBM failing after it. `markers`
-are the failure lines WBM exits 0 after (`Failed to warp`, `Nothing to do`);
-`all_done` is its success line. `output.files` is capped at 5000 and its paths
+are the failure lines WBM exits 0 after (`WBM_MARKERS`) that the log holds;
+`Failed to warp` is printed to WBM's stderr, which this record does not read,
+so `classify` looks for the markers in the stderr tail too. `all_done` is its
+success line. `output.files` is capped at 5000 and its paths
 are relative to the work directory, under `wbm_output/<sim_id>/` only. `ok` is
 the script's own judgement and only sets its exit code, so SLURM agrees.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import posixpath
 import re
@@ -79,17 +82,23 @@ _COMMIT_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 _VARIABLE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+#: The lines WBM prints and exits 0 after. `Failed to warp` goes to its stderr
+#: (`WBM.pm`, the gdalwarp failure), `Nothing to do` to its log: so the script
+#: scans the log for them and `job_verdict.classify` scans stderr too. The one
+#: list, for both.
+WBM_MARKERS = ("Failed to warp", "Nothing to do")
+
 #: The program the EXIT trap feeds to the toolkit venv's Python, as a quoted
 #: heredoc. That Python is 3.9 on Anvil, so: stdlib only, no `X | Y`
 #: annotations. Its inputs are environment variables the body exports
 #: (`OG_*`), never text interpolated into it. Exits 0 for a record that says `ok`, 10 for one that
 #: does not, and anything else (a traceback) when the record was not written.
-OUTCOME_PY = r'''import json, os, re, socket, sys, tempfile
+_OUTCOME_PY = r'''import json, os, re, socket, sys, tempfile
 from collections import deque
 from datetime import datetime, timezone
 
 E = os.environ
-MARKERS = ("Failed to warp", "Nothing to do")
+MARKERS = @MARKERS@
 MAX_FILES = 5000
 
 
@@ -201,6 +210,9 @@ os.replace(tmp, os.path.join(dest, "outcome.json"))
 print("outcome: " + ("ok" if ok else "fail"))
 sys.exit(0 if ok else 10)
 '''
+OUTCOME_PY = _OUTCOME_PY.replace(
+    "@MARKERS@", "(" + ", ".join(json.dumps(m) for m in WBM_MARKERS) + ")"
+)
 
 
 def is_valid_id(value: object) -> bool:
@@ -298,10 +310,17 @@ def render_job_body(
     run_start: str | None = None,
     run_end: str | None = None,
     output_vars: str | None = None,
+    walltime: str | None = None,
 ) -> str:
     """The job's bash body. `run_start`, `run_end` and `output_vars` are passed
     to `sim run` only when given — the caller gives one only when the draft
     differs from the snapshot's own value (see `run_overrides`).
+
+    `walltime` is the value the job asks SLURM for (`--time`, as
+    `slurm.resolve_compute` resolves it, in SLURM's own syntax): the toolkit's
+    spool lease lasts as long as the job does (`sim run --walltime`). The
+    caller always gives it; without one the toolkit falls back to its own
+    default lease.
 
     The fetch takes one lock for every snapshot, not one each: a fetch also
     writes the model-input and image caches, which snapshots share, and two
@@ -343,6 +362,8 @@ def render_job_body(
         run.append(f"--run-end {shlex.quote(_check_date('run end', run_end))}")
     if output_vars is not None:
         run.append(f"--output-vars {shlex.quote(_check_output_vars(output_vars))}")
+    if walltime is not None:
+        run.append(f"--walltime {shlex.quote(_check_walltime(walltime))}")
     run.append("--spool cache")
 
     return "\n".join(
@@ -381,6 +402,16 @@ def _check_date(kind: str, value: str) -> str:
     except ValueError:
         raise SubmitInputError(f"The {kind} {value!r} is not a real date.")
     return value
+
+
+def _check_walltime(value: str) -> str:
+    """A walltime in SLURM's syntax, as it is: the toolkit parses the same
+    formats (`parse_slurm_time` is the gateway's reading of them)."""
+    if not isinstance(value, str) or not _SLURM_TIME_RE.match(value.strip()):
+        raise SubmitInputError(f"The walltime {value!r} is not a SLURM time.")
+    if parse_slurm_time(value) <= 0:
+        raise SubmitInputError("The walltime must be more than zero.")
+    return value.strip()
 
 
 def _check_output_vars(value: str) -> str:

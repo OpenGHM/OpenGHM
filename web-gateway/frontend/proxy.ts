@@ -18,14 +18,14 @@ export default auth((req) => {
   const signedOut = !req.auth || Boolean(req.auth.error);
 
   // A server action (polling, cancel, save) from a page that is already open
-  // must reach its action when the session has expired: the action answers 401
-  // as data and the page shows SessionExpiredBanner. Redirecting it here would
-  // hand the client an HTML sign-in page it cannot parse. The backend still
+  // always reaches its action, whether the session expired (`req.auth.error`)
+  // or is gone altogether (signed out in another tab): the action answers 401
+  // as data and the page shows SessionExpiredBanner. Redirecting it would hand
+  // the client an HTML sign-in page it cannot parse. The backend still
   // authorises every call, and the next page navigation redirects as usual.
-  const isServerActionFromExpiredSession =
-    req.headers.has("next-action") && Boolean(req.auth?.error);
+  const isServerAction = req.headers.has("next-action");
 
-  if (isProtected && signedOut && !isServerActionFromExpiredSession) {
+  if (isProtected && signedOut && !isServerAction) {
     // Keep the query string: /workspace?status=FAILED returns there.
     const target = pathname + req.nextUrl.search;
     return NextResponse.redirect(new URL(signInPath(target), req.nextUrl.origin));

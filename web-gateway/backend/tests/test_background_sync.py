@@ -90,7 +90,33 @@ def test_a_tick_runs_every_step_even_when_one_fails(monkeypatch):
 
     monkeypatch.setattr(slurm, "sync_active_jobs", step("jobs", fail=True))
     monkeypatch.setattr(slurm, "backfill_slurm_end", step("end times"))
+    monkeypatch.setattr(slurm, "reconcile_interrupted_submits", step("interrupted submits"))
     monkeypatch.setattr(slurm, "clear_orphans", step("orphans"))
     monkeypatch.setattr(slurm, "detect_purged_files", step("purged"))
     asyncio.run(background_sync._sync_once())
-    assert ran == ["jobs", "end times", "orphans", "purged"]
+    # The reconcile comes before the orphans, so a name it keeps is retried
+    # on the same tick's next pass rather than a minute later.
+    assert ran == ["jobs", "end times", "interrupted submits", "orphans", "purged"]
+
+
+def test_a_failing_reconcile_does_not_stop_the_orphan_pass(monkeypatch):
+    from app.services import slurm
+
+    ran: list[str] = []
+
+    async def reconcile():
+        raise RuntimeError("anvil down")
+
+    async def orphans():
+        ran.append("orphans")
+
+    async def nothing():
+        return None
+
+    monkeypatch.setattr(slurm, "sync_active_jobs", nothing)
+    monkeypatch.setattr(slurm, "backfill_slurm_end", nothing)
+    monkeypatch.setattr(slurm, "reconcile_interrupted_submits", reconcile)
+    monkeypatch.setattr(slurm, "clear_orphans", orphans)
+    monkeypatch.setattr(slurm, "detect_purged_files", nothing)
+    asyncio.run(background_sync._sync_once())
+    assert ran == ["orphans"]

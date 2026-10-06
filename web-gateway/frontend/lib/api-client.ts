@@ -7,17 +7,37 @@ const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8100";
  * Creates an Axios instance pre-configured to call FastAPI.
  * Must only be called from Server Components, Server Actions, or Route Handlers.
  * The browser never calls FastAPI directly (except the register endpoint).
- * `timeoutMs` raises the 10 s default for the one call that legitimately takes
- * longer (submitting a job opens an SSH session to Anvil).
+ * `timeoutMs` raises the 10 s default for the calls that legitimately take
+ * longer (submitting, cancelling or deleting a job opens an SSH session to Anvil).
+ *
+ * With no usable session (signed out, or a token that could not be refreshed)
+ * it throws a 401-shaped error instead of building a client: a call with no
+ * credentials must never reach the backend, where in development an
+ * unauthenticated request is the mock user (ALLOW_MOCK_AUTH) and in production
+ * a 401 at best. `describeFailure` and `isUnauthorizedError` read the error as
+ * the 401 it stands for, so a server action answers `session_expired` and a
+ * page redirects to sign in. Only a caller of an endpoint that is open to
+ * anonymous visitors (the Data Repository's reads) passes `allowAnonymous`.
  */
-export async function getApiClient(options: { timeoutMs?: number } = {}) {
-  const { headers } = await getBackendAuth();
+export async function getApiClient(
+  options: { timeoutMs?: number; allowAnonymous?: boolean } = {}
+) {
+  const { headers, authenticated } = await getBackendAuth();
+  if (!authenticated && !options.allowAnonymous) throw notSignedInError();
 
   return axios.create({
     baseURL: BACKEND_URL,
     headers: { "Content-Type": "application/json", ...headers },
     timeout: options.timeoutMs ?? 10_000,
     paramsSerializer: { indexes: null },
+  });
+}
+
+/** What `getApiClient` throws without a session: shaped like the axios error of
+ *  a 401, so every existing reader of a 401 treats it as one. */
+function notSignedInError() {
+  return Object.assign(new Error("Not signed in."), {
+    response: { status: 401, data: { detail: "Not signed in." } },
   });
 }
 

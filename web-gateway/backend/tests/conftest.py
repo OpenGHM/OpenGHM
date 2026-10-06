@@ -9,6 +9,8 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import base64
+import re
 import shlex
 from dataclasses import dataclass, field
 
@@ -179,6 +181,8 @@ class Anvil:
                 return result
         if command.startswith("sacct "):  # a working sacct that knows no such job
             return (0, '{"jobs": [], "errors": []}', "")
+        if command.startswith("f=") and "base64" in command:
+            return self._read_log(command)
         words = shlex.split(command) if command.startswith(("[ -f", "test -f")) else []
         if words[:2] in (["[", "-f"], ["test", "-f"]):
             path = words[2]
@@ -190,6 +194,24 @@ class Anvil:
                 text = "\n".join(lines) + "\n"
             return (0, text, "")
         return (0, "", "")
+
+
+    def _read_log(self, command: str):
+        """`slurm.build_log_read_command`, as the shell would answer it for a
+        file in `files` (text or bytes): the size, where the read started, and
+        the bytes base64-encoded, from the end when it reads the tail."""
+        path = shlex.split(command)[0][len("f="):].rstrip(";")
+        if path not in self.files:
+            return (3, "", "")
+        data = self.files[path]
+        data = data.encode() if isinstance(data, str) else data
+        size = len(data)
+        tail = re.search(r"start=\$\(\(size-(\d+)\)\)", command)
+        fixed = re.search(r"start=(\d+);", command)
+        start = max(size - int(tail.group(1)), 0) if tail else int(fixed.group(1))
+        limit = int(re.search(r"head -c (\d+)", command).group(1))
+        chunk = data[start:start + limit]
+        return (0, f"{size}\n{start}\n{base64.b64encode(chunk).decode()}\n", "")
 
 
 @pytest.fixture

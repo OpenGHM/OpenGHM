@@ -26,8 +26,12 @@ export function visibilityAction(visible: boolean, stopped: boolean): "pause" | 
 
 /** The words for a poll that did not get an answer. `status` is the HTTP
  *  status the backend answered with; absent when the call itself failed. */
-export function describePollError(failure: { thrown: true } | { status?: number }): string {
+export function describePollError(
+  failure: { thrown: true } | { status?: number; code?: string }
+): string {
   if ("thrown" in failure) return "Couldn't reach the gateway";
+  // The action ran but its server could not reach the backend.
+  if (failure.code === "backend_unreachable") return "Couldn't reach the gateway";
   const status = failure.status;
   if (status === 502 || status === 503 || status === 504) return "Couldn't reach Anvil";
   return "Couldn't check the job's status";

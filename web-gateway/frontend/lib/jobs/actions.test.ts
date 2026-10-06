@@ -1,17 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { patch, post, getApiClient } = vi.hoisted(() => {
+const { patch, post, get, del, getApiClient } = vi.hoisted(() => {
   const patch = vi.fn();
   const post = vi.fn();
-  return { patch, post, getApiClient: vi.fn(async () => ({ patch, post })) };
+  const get = vi.fn();
+  const del = vi.fn();
+  return { patch, post, get, del, getApiClient: vi.fn<(options?: unknown) => Promise<unknown>>(async () => ({ patch, post, get, delete: del })) };
 });
 vi.mock("@/lib/api-client", () => ({ getApiClient }));
 
-import { duplicateDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
+import { AxiosError } from "axios";
+import {
+  BACKEND_TIMEOUT_MESSAGE,
+  BACKEND_UNREACHABLE_MESSAGE,
+  SERVER_ERROR_MESSAGE,
+} from "@/lib/action-failure";
+import { cancelJob, deleteDraft, duplicateDraft, pollJobStatus, publishedAnswer, submitDraft, updateDraft } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
   post.mockReset();
+  get.mockReset();
+  del.mockReset();
+  getApiClient.mockClear();
 });
 
 /** What axios throws for a response that is not a 2xx. */
@@ -101,11 +112,139 @@ describe("a failed PATCH, read by describeFailure", () => {
     await expect(updateDraft("j", {})).resolves.toMatchObject({ status: 409, code: "not_a_draft" });
   });
 
-  it("answers a failure with no response as the error's message, without a status", async () => {
-    patch.mockRejectedValue(new Error("timeout of 10000ms exceeded"));
+  it("answers a failure with no response and no axios in it as the error's own message, without a status", async () => {
+    patch.mockRejectedValue(new Error("something odd"));
     const result = await updateDraft("j", {});
-    expect(result).toMatchObject({ ok: false, reason: "error", message: "timeout of 10000ms exceeded" });
+    expect(result).toMatchObject({ ok: false, reason: "error", message: "something odd" });
     expect(result).toHaveProperty("status", undefined);
+  });
+});
+
+describe("a call that gets no answer, read by describeFailure", () => {
+  // Node 26 with axios 1.13.6: a refused connection is an AxiosError whose message is "".
+  const refusedConnection = () => new AxiosError("", "ECONNREFUSED");
+
+  it("says the gateway's server could not be reached when the connection is refused (empty message)", async () => {
+    post.mockRejectedValue(refusedConnection());
+    const result = await submitDraft("j");
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "error",
+      code: "backend_unreachable",
+      message: BACKEND_UNREACHABLE_MESSAGE,
+    });
+    expect(result).toHaveProperty("status", undefined);
+    expect(BACKEND_UNREACHABLE_MESSAGE).toMatch(/Nothing was changed/);
+  });
+
+  it("treats an empty message as missing even from a plain Error", async () => {
+    post.mockRejectedValue(new Error(""));
+    await expect(duplicateDraft("j")).resolves.toMatchObject({ code: "backend_unreachable", message: BACKEND_UNREACHABLE_MESSAGE });
+  });
+
+  it("never answers with an empty message, whichever action it was", async () => {
+    post.mockRejectedValue(refusedConnection());
+    del.mockRejectedValue(refusedConnection());
+    patch.mockRejectedValue(refusedConnection());
+    const results = await Promise.all([submitDraft("j"), cancelJob("j"), deleteDraft("j"), duplicateDraft("j"), updateDraft("j", {})]);
+    for (const result of results) {
+      expect(result).toMatchObject({ ok: false, reason: "error", code: "backend_unreachable" });
+      expect((result as { message: string }).message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("words a timeout as no answer yet, which may still have gone through", async () => {
+    post.mockRejectedValue(new AxiosError("timeout of 60000ms exceeded", "ECONNABORTED"));
+    const result = await submitDraft("j");
+    expect(result).toMatchObject({ ok: false, reason: "error", code: "backend_timeout", message: BACKEND_TIMEOUT_MESSAGE });
+    expect(BACKEND_TIMEOUT_MESSAGE).toMatch(/may still have gone through/);
+    expect(BACKEND_TIMEOUT_MESSAGE).toMatch(/Reload the page/);
+  });
+
+  it("recognises a timeout by its message when it carries no code", async () => {
+    patch.mockRejectedValue(new Error("timeout of 10000ms exceeded"));
+    await expect(updateDraft("j", {})).resolves.toMatchObject({ code: "backend_timeout", message: BACKEND_TIMEOUT_MESSAGE });
+  });
+});
+
+describe("a 5xx, read by describeFailure", () => {
+  const axios500 = (status: number, detail?: unknown) =>
+    Object.assign(new AxiosError(`Request failed with status code ${status}`), { response: { status, data: { detail } } });
+
+  it.each([500, 502, 503, 504])("is a fixed sentence for a %i with no message of its own, never axios's words", async (status) => {
+    del.mockRejectedValue(axios500(status));
+    const result = await deleteDraft("j");
+    expect(result).toMatchObject({ ok: false, reason: "error", status, code: "server_error", message: SERVER_ERROR_MESSAGE });
+    expect((result as { message: string }).message).not.toMatch(/status code/);
+  });
+
+  it("is a fixed sentence for a 5xx whose detail is an empty string, or an HTML error page", async () => {
+    del.mockRejectedValueOnce(axios500(500, ""));
+    await expect(deleteDraft("j")).resolves.toMatchObject({ message: SERVER_ERROR_MESSAGE });
+    del.mockRejectedValueOnce(Object.assign(new AxiosError("Request failed with status code 502"), { response: { status: 502, data: "<html>Bad gateway</html>" } }));
+    await expect(deleteDraft("j")).resolves.toMatchObject({ message: SERVER_ERROR_MESSAGE });
+  });
+
+  it("keeps the backend's own sentence for a 5xx that has one", async () => {
+    del.mockRejectedValue(axios500(502, { code: "cleanup_failed", message: "Anvil could not remove the directories." }));
+    await expect(deleteDraft("j")).resolves.toMatchObject({
+      status: 502,
+      code: "cleanup_failed",
+      message: "Anvil could not remove the directories.",
+    });
+  });
+});
+
+describe("cancelJob and deleteDraft", () => {
+  it("wait longer than the 10 s default: they open an SSH session to Anvil", async () => {
+    post.mockResolvedValue({ data: {} });
+    del.mockResolvedValue({});
+    await cancelJob("j");
+    await deleteDraft("j");
+    const timeouts = getApiClient.mock.calls.map((call) => (call[0] as { timeoutMs?: number } | undefined)?.timeoutMs);
+    expect(timeouts).toHaveLength(2);
+    for (const timeoutMs of timeouts) expect(timeoutMs).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("show the backend's message for any { code, message } detail, whatever the code", async () => {
+    post.mockRejectedValue(refused(409, { code: "not_cancellable", message: "This simulation has already ended." }));
+    await expect(cancelJob("j")).resolves.toMatchObject({
+      status: 409,
+      code: "not_cancellable",
+      message: "This simulation has already ended.",
+    });
+    del.mockRejectedValue(refused(409, { code: "orphans_unresolved", message: "A job from an interrupted submit may still run." }));
+    await expect(deleteDraft("j")).resolves.toMatchObject({ status: 409, code: "orphans_unresolved", message: "A job from an interrupted submit may still run." });
+  });
+
+  it("show a plain-string detail as the message too", async () => {
+    post.mockRejectedValue(refused(409, "Job cannot be cancelled in status COMPLETED"));
+    await expect(cancelJob("j")).resolves.toMatchObject({ status: 409, message: "Job cannot be cancelled in status COMPLETED" });
+  });
+
+  it("answer session_expired without calling the backend when there is no session (getApiClient refuses)", async () => {
+    getApiClient.mockRejectedValue(Object.assign(new Error("Not signed in."), { response: { status: 401, data: {} } }));
+    const expired = { ok: false, reason: "session_expired" };
+    await expect(pollJobStatus("j")).resolves.toEqual(expired);
+    await expect(cancelJob("j")).resolves.toEqual(expired);
+    await expect(deleteDraft("j")).resolves.toEqual(expired);
+    await expect(submitDraft("j")).resolves.toEqual(expired);
+    for (const method of [get, post, patch, del]) expect(method).not.toHaveBeenCalled();
+    getApiClient.mockImplementation(async () => ({ patch, post, get, delete: del }));
+  });
+
+  it("answer 401 (no token at all) as an ended session, for every action", async () => {
+    post.mockRejectedValue(refused(401, "Not authenticated"));
+    del.mockRejectedValue(refused(401, "Not authenticated"));
+    get.mockRejectedValue(refused(401, "Not authenticated"));
+    patch.mockRejectedValue(refused(401, "Not authenticated"));
+    const expired = { ok: false, reason: "session_expired" };
+    await expect(cancelJob("j")).resolves.toEqual(expired);
+    await expect(deleteDraft("j")).resolves.toEqual(expired);
+    await expect(pollJobStatus("j")).resolves.toEqual(expired);
+    await expect(submitDraft("j")).resolves.toEqual(expired);
+    await expect(duplicateDraft("j")).resolves.toEqual(expired);
+    await expect(updateDraft("j", {})).resolves.toEqual(expired);
   });
 });
 

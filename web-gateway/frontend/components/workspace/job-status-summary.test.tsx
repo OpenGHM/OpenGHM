@@ -21,7 +21,8 @@ import { JobStatusSummary } from "@/components/workspace/job-status-summary";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { previewDraftJob } from "@/lib/workspace/fixtures";
 import { FAILED_CAUSES, PREVIEW_GROUPS } from "@/lib/workspace/preview";
-import { FAILURE_COPY } from "@/lib/workspace/failure-copy";
+import { FAILURE_COPY, UNKNOWN_FAILURE_COPY } from "@/lib/workspace/failure-copy";
+import { pollJobStatus } from "@/lib/jobs/actions";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -124,7 +125,7 @@ describe("a queued job", () => {
     expect(screen.getByRole("heading", { name: "In the queue" })).toBeTruthy();
     expect(screen.getByText(/Waiting for higher-priority jobs to start first\./)).toBeTruthy();
     expect(screen.getByText("SLURM: Priority")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel simulation" })).toBeTruthy();
   });
 
   it("shows an estimate only when SLURM gave one, labelled as SLURM's", () => {
@@ -133,6 +134,13 @@ describe("a queued job", () => {
     cleanup();
     render(summary(live("PENDING"), { live: { ...QUEUED, estimated_start: "2026-09-30T13:00:00Z" } }));
     expect(screen.getByText(/SLURM's estimate/)).toBeTruthy();
+  });
+
+  it("shows a queue reason it has no wording for once, not twice", () => {
+    const { container } = render(summary(live("PENDING"), { live: { ...QUEUED, queue_reason: "SomethingNew" } }));
+    expect(container.textContent).toContain("Waiting for SLURM to start it.");
+    expect(container.textContent?.match(/SomethingNew/g)).toHaveLength(1);
+    expect(screen.getByText("SLURM: SomethingNew")).toBeTruthy();
   });
 
   it("waits gracefully before SLURM has answered", () => {
@@ -150,7 +158,7 @@ describe("a queued job", () => {
 
   it("opens the Cancel dialog, and puts focus back on the button when it is dismissed", async () => {
     render(summary(live("PENDING"), { live: QUEUED }));
-    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const cancel = screen.getByRole("button", { name: "Cancel simulation" });
     fireEvent.click(cancel);
     expect(await screen.findByText("Cancel this simulation?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
@@ -177,7 +185,7 @@ describe("a running job", () => {
     expect(bars[1].getAttribute("aria-valuenow")).toBe("18");
     // Elapsed against walltime is labelled as such, with no percentage of its own.
     expect(container.textContent).not.toContain("18 %");
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel simulation" })).toBeTruthy();
   });
 
   it("turns the walltime bar amber at 80 % and red at 95 %", () => {
@@ -221,13 +229,13 @@ describe("a running job", () => {
   it("shows Cancelling and no Cancel button once a cancel is waiting on SLURM", () => {
     render(summary(live("RUNNING", { cancel_requested_at: "2026-09-30T12:04:00Z" }), { live: runLive() }));
     expect(screen.getByRole("heading", { name: "Cancelling" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
   });
 
   it("has no Cancel button while COMPLETING", () => {
     render(summary(live("COMPLETING"), { live: runLive() }));
     expect(screen.getByRole("heading", { name: "Completing" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
   });
 });
 
@@ -260,7 +268,7 @@ describe("a completed job", () => {
     expect(text).not.toMatch(/publish|illustrative|not wired/i);
     expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Show file list/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
   });
 
   it("shows only the purge notice when the files are gone", () => {
@@ -306,6 +314,19 @@ describe("a failed job", () => {
     expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
     expect(screen.getByText(/longer walltime/)).toBeTruthy();
     expect(screen.queryByText("Start a new draft")).toBeNull();
+  });
+
+  it("shows a generic title and the backend's message for a cause it has no wording for, instead of crashing", () => {
+    const job = previewDraftJob("failed:wbm_error");
+    const odd = { ...job, failure: { ...job.failure!, cause: "brand_new_cause" as never, message: "Something new went wrong." } };
+    const html = renderToString(summary(odd));
+    expect(html).toContain(escape(UNKNOWN_FAILURE_COPY.title));
+    expect(html).toContain("Something new went wrong.");
+    // The failure card is built too: the copy action is offered.
+    expect(html).toContain("Try again with these settings");
+    cleanup();
+    render(summary({ ...odd, failure: { ...odd.failure!, message: "" } }));
+    expect(screen.getByText(UNKNOWN_FAILURE_COPY.body)).toBeTruthy();
   });
 
   it("offers nothing to retry after a cause that has no next step", () => {
@@ -372,5 +393,26 @@ describe("every preview", () => {
     const job = previewDraftJob(key);
     expect(job.status).toBe(all.find((o) => o.key === key)!.status);
     expect(() => renderToString(summary(job))).not.toThrow();
+  });
+});
+
+
+describe("a snapshot draft that was deleted while its page was open", () => {
+  it("says it no longer exists, links to My snapshot drafts, and offers neither Cancel nor Refresh", async () => {
+    vi.mocked(pollJobStatus).mockResolvedValue({ ok: false, reason: "not_found" });
+    const job = live("RUNNING");
+    render(
+      <LiveJobProvider jobId={job.id} initialStatus="RUNNING" initialData={{ started_at: job.started_at }}>
+        <JobStatusSummary job={job} viewerEmail={null} />
+      </LiveJobProvider>
+    );
+    // Before the answer: the controls are there.
+    expect(screen.getByRole("button", { name: "Cancel simulation" })).toBeTruthy();
+
+    expect(await screen.findByText("This snapshot draft no longer exists.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
+    expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Refresh|Retry now/ })).toBeNull();
+    expect(screen.queryByText(/Checking with SLURM|Checked with SLURM/)).toBeNull();
   });
 });

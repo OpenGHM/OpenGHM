@@ -3,7 +3,9 @@ import type { FailureCause, JobFailure } from "@/lib/jobs/types";
 import {
   FAILURE_COPY,
   NEXT_STEP_COPY,
+  UNKNOWN_FAILURE_COPY,
   UNRECORDED_FAILURE_COPY,
+  failureCopyFor,
   offersNewDraft,
   summaryOffersCopy,
 } from "@/lib/workspace/failure-copy";
@@ -60,6 +62,19 @@ describe("FAILURE_COPY", () => {
     expect(NEXT_STEP_COPY.resubmit_longer_walltime).toMatch(/longer walltime/);
   });
 
+  it("words a timeout as a longer walltime or a shorter run period", () => {
+    expect(FAILURE_COPY.timeout.body).toMatch(/shorter run period/);
+    expect(NEXT_STEP_COPY.resubmit_longer_walltime).toMatch(/shorter run period/);
+  });
+
+  it("does not suggest a smaller spatial domain for running out of memory: more cores or a shorter run period", () => {
+    const { body } = FAILURE_COPY.out_of_memory;
+    expect(body).not.toMatch(/spatial domain|smaller/i);
+    expect(body).toMatch(/more cores/);
+    expect(body).toMatch(/1\.9 GB/);
+    expect(body).toMatch(/shorter run period/);
+  });
+
   it("offers a new draft for every step except none", () => {
     expect(offersNewDraft("none")).toBe(false);
     expect(offersNewDraft("resubmit")).toBe(true);
@@ -76,5 +91,25 @@ describe("FAILURE_COPY", () => {
     expect(summaryOffersCopy("FAILED", failure("cancelled_by_user"))).toBe(false);
     expect(summaryOffersCopy("COMPLETED", null)).toBe(false);
     expect(summaryOffersCopy("RUNNING", null)).toBe(false);
+  });
+});
+
+describe("failureCopyFor", () => {
+  const failure = (cause: string) => ({ cause: cause as FailureCause, phase: null, message: "m", excerpt: null });
+
+  it("is the cause's copy for a known cause, and the unrecorded copy without a verdict", () => {
+    expect(failureCopyFor(failure("timeout"))).toBe(FAILURE_COPY.timeout);
+    expect(failureCopyFor(null)).toBe(UNRECORDED_FAILURE_COPY);
+  });
+
+  it("is a generic copy, not undefined, for a cause the frontend does not know", () => {
+    expect(failureCopyFor(failure("brand_new_cause"))).toBe(UNKNOWN_FAILURE_COPY);
+    // Inherited object keys are not causes either.
+    expect(failureCopyFor(failure("constructor"))).toBe(UNKNOWN_FAILURE_COPY);
+    expect(UNKNOWN_FAILURE_COPY.title.length).toBeGreaterThan(0);
+  });
+
+  it("lets the summary offer the copy action for an unknown cause", () => {
+    expect(summaryOffersCopy("FAILED", failure("brand_new_cause"))).toBe(true);
   });
 });

@@ -31,8 +31,10 @@ export function describeSubmitFailure(
       return "This snapshot draft was already submitted or was changed in the meantime. Reload the page to see where it stands.";
     default:
       // anvil_unreachable, sbatch_rejected, anvil_not_configured,
-      // email_not_verified, account_inactive, invalid_parameters, ...
-      return failure.message;
+      // email_not_verified, account_inactive, invalid_parameters, the
+      // unreachable-backend and 5xx sentences of `describeFailure`, ...:
+      // whatever the code, the backend's own sentence.
+      return failure.message || "The submit did not go through. Your draft is unchanged.";
   }
 }
 

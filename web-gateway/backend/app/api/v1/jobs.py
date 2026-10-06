@@ -1,6 +1,7 @@
 """Jobs API — drafts, submit, list, status, cancel, logs."""
 
 import asyncio
+import contextlib
 import copy
 import logging
 import math
@@ -22,7 +23,13 @@ from slurmly.exceptions import (
 )
 
 from app.core.audit import AuditCategory, log_event
-from app.core.authz import can, require_active_user, require_permission, require_submitter
+from app.core.authz import (
+    CurrentUser,
+    can,
+    require_active_user,
+    require_permission,
+    require_submitter,
+)
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.roles import Permission
@@ -45,6 +52,7 @@ from app.models.job import (
     SimulationUpdateRequest,
     SlurmConfig,
     SubmitRequest,
+    real_time,
     verdict_fields,
 )
 from app.models.user import TokenPayload
@@ -155,8 +163,8 @@ def _doc_to_response(
         slurm_config=doc["slurm_config"],
         created_at=doc["created_at"],
         submitted_at=doc.get("submitted_at"),
-        started_at=doc.get("started_at"),
-        completed_at=doc.get("completed_at"),
+        started_at=real_time(doc.get("started_at")),
+        completed_at=real_time(doc.get("completed_at")),
         updated_at=doc.get("updated_at"),
         output_s3_key=doc.get("output_s3_key"),
         toolkit=doc.get("toolkit"),
@@ -176,8 +184,8 @@ def _status_response(doc: dict, live: dict | None = None) -> JobStatusResponse:
         status=doc["status"],
         slurm_job_id=doc.get("slurm_job_id"),
         submitted_at=doc.get("submitted_at"),
-        started_at=doc.get("started_at"),
-        completed_at=doc.get("completed_at"),
+        started_at=real_time(doc.get("started_at")),
+        completed_at=real_time(doc.get("completed_at")),
         status_reason=doc.get("status_reason"),
         work_dir=doc.get("work_dir"),
         live=live,
@@ -669,6 +677,10 @@ _ANVIL_NOT_CONFIGURED = (
     "This gateway is not set up to run simulations on Anvil yet. "
     "Ask an administrator. Your draft is unchanged."
 )
+_SUBMIT_UNEXPECTED = (
+    "The submit failed unexpectedly, so anything it started on Anvil was cancelled. "
+    "Your draft is unchanged. Try again, and if it keeps failing, tell an administrator."
+)
 _ANVIL_UNREACHABLE = (
     "Anvil could not be reached, so nothing was submitted. "
     "Your draft is unchanged. Try again in a few minutes."
@@ -680,7 +692,53 @@ def _sbatch_refusal_message(exc: Exception) -> str:
     if isinstance(exc, SbatchError):
         detail = (exc.stderr or exc.stdout or "").strip()
         also = f"{exc.stderr}\n{exc.stdout}"
-    return f"{sbatch_refusal.explain(detail or str(exc), also)} Your draft is unchanged."
+    return f"{sbatch_refusal.sentence(sbatch_refusal.explain(detail or str(exc), also))} Your draft is unchanged."
+
+
+async def _record_refusal(job_id: str, user_id: str, exc: HTTPException) -> None:
+    """Keep a submit's refusal as the draft's `last_submit_error`, replacing
+    whatever an earlier try left there: the person who reopens the draft is told
+    why the last submit did not go, never why an older one did not. A refusal
+    that is not a `{code, message}` (a bare 404) says nothing to keep. Never
+    raises: a failed write must not change the answer to the submit."""
+    detail = exc.detail
+    if not isinstance(detail, dict) or "code" not in detail or "message" not in detail:
+        return
+    try:
+        await get_db().jobs.update_one(
+            {"_id": job_id, "user_id": user_id, "status": "DRAFT"},
+            {
+                "$set": {
+                    "last_submit_error": {
+                        "code": detail["code"],
+                        "message": detail["message"],
+                        "at": datetime.now(timezone.utc),
+                    }
+                }
+            },
+        )
+    except Exception as err:
+        logger.warning("Could not record the refusal of the submit of %s: %s", job_id, err)
+
+
+@contextlib.asynccontextmanager
+async def _refusals_kept(job_id: str, user_id: str):
+    """Whatever refuses inside is also written to the draft (`_record_refusal`)."""
+    try:
+        yield
+    except HTTPException as exc:
+        await _record_refusal(job_id, user_id, exc)
+        raise
+
+
+async def _submitter(job_id: str, user: CurrentUser) -> TokenPayload:
+    """`require_submitter`, which also keeps its refusal (an account not
+    allowed to run, the active-job limit) on the draft the submit was for."""
+    try:
+        return await require_submitter(user)
+    except HTTPException as exc:
+        await _record_refusal(job_id, user.sub, exc)
+        raise
 
 
 @router.post(
@@ -691,7 +749,7 @@ def _sbatch_refusal_message(exc: Exception) -> str:
 async def submit_simulation(
     job_id: str,
     body: SubmitRequest | None = None,
-    user: TokenPayload = Depends(require_submitter),
+    user: TokenPayload = Depends(_submitter),
 ):
     db = get_db()
     # Owner only, like edit and delete: no "any" permission submits someone
@@ -704,102 +762,108 @@ async def submit_simulation(
             f"Only a snapshot draft that is still being edited can be submitted; this one is {doc['status']}.",
         )
 
-    envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
-    if envelope is None:
-        raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "snapshot_not_found",
-            "The snapshot this snapshot draft is based on is no longer in the repository.",
-        )
-    snapshot = envelope["document"]
-    job = JobDB(**doc)
-    rerun = body is not None and body.rerun
-
-    # A draft the snapshot's published output already answers is not queued
-    # (ADR 0029) unless the person asks for a rerun. Before the Anvil check, so
-    # it answers the same with or without Anvil. A bucket that cannot be listed
-    # blocks nothing, like the run-date checks below: the answer is unknown, and
-    # an unchecked submit is a rerun the person can still make on purpose.
-    if not rerun:
-        try:
-            answered = await published_answer.answer(
-                job.dataset_id, snapshot, job.parameters, job.model_input_id
-            )
-        except (published_answer.InvalidPeriod, published_answer.ListingUnavailable):
-            answered = None  # the checks below say what is wrong with the dates
-        if answered is not None and answered.answered:
+    # Every refusal below is kept on the draft as `last_submit_error`, so a
+    # reopened draft never shows the reason of an earlier try.
+    async with _refusals_kept(job_id, user.sub):
+        envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+        if envelope is None:
             raise _error(
-                status.HTTP_409_CONFLICT,
-                "answered_by_published",
-                "This snapshot's published results already answer this snapshot draft, "
-                "so nothing was queued. Open the published files, or ask for a "
-                "rerun to check that the snapshot reproduces itself (it uses "
-                "allocation).",
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "snapshot_not_found",
+                "The snapshot this snapshot draft is based on is no longer in the repository.",
+            )
+        snapshot = envelope["document"]
+        job = JobDB(**doc)
+        rerun = body is not None and body.rerun
+
+        # A draft the snapshot's published output already answers is not queued
+        # (ADR 0029) unless the person asks for a rerun. Before the Anvil check, so
+        # it answers the same with or without Anvil. A bucket that cannot be listed
+        # blocks nothing, like the run-date checks below: the answer is unknown, and
+        # an unchecked submit is a rerun the person can still make on purpose.
+        if not rerun:
+            try:
+                answered = await published_answer.answer(
+                    job.dataset_id, snapshot, job.parameters, job.model_input_id
+                )
+            except (published_answer.InvalidPeriod, published_answer.ListingUnavailable):
+                answered = None  # the checks below say what is wrong with the dates
+            if answered is not None and answered.answered:
+                raise _error(
+                    status.HTTP_409_CONFLICT,
+                    "answered_by_published",
+                    "This snapshot's published results already answer this snapshot draft, "
+                    "so nothing was queued. Open the published files, or ask for a "
+                    "rerun to check that the snapshot reproduces itself (it uses "
+                    "allocation).",
+                )
+
+        if not slurm.toolkit_configured():
+            raise _error(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "anvil_not_configured",
+                _ANVIL_NOT_CONFIGURED,
             )
 
-    if not slurm.toolkit_configured():
-        raise _error(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "anvil_not_configured",
-            _ANVIL_NOT_CONFIGURED,
+        fields = job_script.unsupported_fields(job.parameters, job.model_input_id, snapshot)
+        if fields:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "unsupported_fields",
+                "These settings cannot run yet, because the toolkit has no option for "
+                f"them: {', '.join(fields)}. Reset them to the snapshot's own values "
+                "and submit again.",
+                fields=fields,
+            )
+
+        over = job_script.walltime_over_limit(job.slurm_config, snapshot)
+        if over is not None:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "walltime_over_limit",
+                "This model snapshot's reference simulation took about "
+                f"{job_script.describe_hours(over)}, and one job may use at most "
+                f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, or set a "
+                "walltime yourself (a simulation that needs longer may be stopped when time "
+                "runs out).",
+                recommended_seconds=over,
+                limit_seconds=MAX_WALLTIME_SECONDS,
+            )
+
+        await _refuse_unaligned_start(
+            job.dataset_id, snapshot, job.parameters.temporal_range_start
+        )
+        await _refuse_dates_outside_aggregation(
+            job.dataset_id,
+            snapshot,
+            job.parameters.temporal_range_start,
+            job.parameters.temporal_range_end,
         )
 
-    fields = job_script.unsupported_fields(job.parameters, job.model_input_id, snapshot)
-    if fields:
-        raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "unsupported_fields",
-            "These settings cannot run yet, because the toolkit has no option for "
-            f"them: {', '.join(fields)}. Reset them to the snapshot's own values "
-            "and submit again.",
-            fields=fields,
-        )
-
-    over = job_script.walltime_over_limit(job.slurm_config, snapshot)
-    if over is not None:
-        raise _error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "walltime_over_limit",
-            "This model snapshot's reference simulation took about "
-            f"{job_script.describe_hours(over)}, and one job may use at most "
-            f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, or set a "
-            "walltime yourself (a simulation that needs longer may be stopped when time "
-            "runs out).",
-            recommended_seconds=over,
-            limit_seconds=MAX_WALLTIME_SECONDS,
-        )
-
-    await _refuse_unaligned_start(
-        job.dataset_id, snapshot, job.parameters.temporal_range_start
-    )
-    await _refuse_dates_outside_aggregation(
-        job.dataset_id,
-        snapshot,
-        job.parameters.temporal_range_start,
-        job.parameters.temporal_range_end,
-    )
-
-    now = datetime.now(timezone.utc)
-    sim_id = _generate_sim_id(now)
-    home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
-    work_dir = posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
-    try:
-        overrides = job_script.run_overrides(job.parameters, snapshot)
-        body = job_script.render_job_body(
-            snapshot_id=job.dataset_id,
-            sim_id=sim_id,
-            openghm_home=home,
-            cache_dir=settings.ANVIL_CACHE_DIR,
-            fetch_lock=settings.ANVIL_FETCH_LOCK,
-            work_dir=work_dir,
-            run_start=overrides.run_start,
-            run_end=overrides.run_end,
-            output_vars=overrides.output_vars,
-        )
-        toolkit = {"home": home, "commit": job_script.toolkit_commit(home)}
-        slurm.resolve_compute(job.slurm_config, snapshot)
-    except job_script.SubmitInputError as exc:
-        raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_parameters", str(exc))
+        now = datetime.now(timezone.utc)
+        sim_id = _generate_sim_id(now)
+        home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
+        work_dir = posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
+        try:
+            overrides = job_script.run_overrides(job.parameters, snapshot)
+            # What sbatch is asked for (`--time`), told to the toolkit too so the
+            # spool lease lasts as long as the job can.
+            _, walltime = slurm.resolve_compute(job.slurm_config, snapshot)
+            body = job_script.render_job_body(
+                snapshot_id=job.dataset_id,
+                sim_id=sim_id,
+                openghm_home=home,
+                cache_dir=settings.ANVIL_CACHE_DIR,
+                fetch_lock=settings.ANVIL_FETCH_LOCK,
+                work_dir=work_dir,
+                run_start=overrides.run_start,
+                run_end=overrides.run_end,
+                output_vars=overrides.output_vars,
+                walltime=walltime,
+            )
+            toolkit = {"home": home, "commit": job_script.toolkit_commit(home)}
+        except job_script.SubmitInputError as exc:
+            raise _error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_parameters", str(exc))
 
     # The claim. `updated_at` is part of the filter so that a PATCH landing
     # between the read above and here is not submitted half-rendered.
@@ -862,8 +926,16 @@ async def submit_simulation(
             )
             maybe_sent = True
         else:
-            await _return_to_draft(job_id, "internal_error", "The submit failed unexpectedly.")
-            raise
+            # Anything else may have been raised after sbatch ran (parsing its
+            # answer, building the record), so a job may exist: it is treated
+            # like a lost answer, scancelled by name or kept for the sweep.
+            logger.exception("Job %s submit failed unexpectedly", job_id)
+            http_status, code, message = (
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "internal_error",
+                _SUBMIT_UNEXPECTED,
+            )
+            maybe_sent = True
         logger.error("Job %s submit failed (%s): %s", job_id, code, exc)
         # The user is told nothing was submitted, so a job that was must go.
         # If scancel cannot run either, the sim_id stays on the draft and the
@@ -873,22 +945,31 @@ async def submit_simulation(
         raise _error(http_status, code, message)
 
     done = datetime.now(timezone.utc)
-    recorded = await db.jobs.update_one(
-        {"_id": job_id, "status": "SUBMITTED"},
-        {
-            "$set": {
-                "slurm_job_id": submitted.slurm_job_id,
-                "internal_job_id": submitted.internal_job_id,
-                "remote_job_dir": submitted.remote_job_dir,
-                "remote_script_path": submitted.remote_script_path,
-                "stdout_path": submitted.stdout_path,
-                "stderr_path": submitted.stderr_path,
-                "slurmly_submitted_at": submitted.submitted_at,
-                "submitted_at": done,
-                "updated_at": done,
-            }
-        },
-    )
+    try:
+        recorded = await db.jobs.update_one(
+            {"_id": job_id, "status": "SUBMITTED"},
+            {
+                "$set": {
+                    "slurm_job_id": submitted.slurm_job_id,
+                    "internal_job_id": submitted.internal_job_id,
+                    "remote_job_dir": submitted.remote_job_dir,
+                    "remote_script_path": submitted.remote_script_path,
+                    "stdout_path": submitted.stdout_path,
+                    "stderr_path": submitted.stderr_path,
+                    "slurmly_submitted_at": submitted.submitted_at,
+                    "submitted_at": done,
+                    "updated_at": done,
+                }
+            },
+        )
+    except Exception:
+        # SLURM has the job and the gateway could not write its id. Nothing
+        # tracks it, so it is cancelled now and the draft handed back; if the
+        # database is down, the sweep does the same once it is up again
+        # (`slurm.reconcile_interrupted_submits`).
+        logger.exception("Job %s: sbatch took %s but its id was not recorded", job_id, submitted.slurm_job_id)
+        await _abandon_submit(job_id, sim_id)
+        raise
     if recorded.matched_count == 0:
         # Cancelled in the moments between the claim and SLURM's answer: the
         # job exists on Anvil but the user already said no to it.
@@ -948,23 +1029,20 @@ async def _scancel_attempt(sim_id: str) -> bool:
 async def _return_to_draft(
     job_id: str, code: str, message: str, *, orphan_sim_id: str | None = None
 ) -> None:
-    """Undo the claim of a submit that never reached SLURM: back to DRAFT, the
-    submit-time fields removed (a draft carries no `sim_id`, see
-    `_new_draft_document`), and the reason kept for the UI. `orphan_sim_id` is
-    a `sim_id` whose job may exist after all, kept for the sweep to cancel."""
-    now = datetime.now(timezone.utc)
-    update: dict = {
-        "$set": {
-            "status": "DRAFT",
-            "slurm_job_name": "",
-            "last_submit_error": {"code": code, "message": message, "at": now},
-            "updated_at": now,
-        },
-        "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
-    }
-    if orphan_sim_id:
-        update["$addToSet"] = {"orphan_sim_ids": orphan_sim_id}
-    await get_db().jobs.update_one({"_id": job_id, "status": "SUBMITTED"}, update)
+    """`slurm.return_to_draft` for a submit the route is ending. The orphan is
+    recorded even when a cancel has moved the job off SUBMITTED meanwhile."""
+    await slurm.return_to_draft(job_id, code, message, orphan_sim_id=orphan_sim_id)
+
+
+async def _abandon_submit(job_id: str, sim_id: str) -> None:
+    """Best effort after the submit lost its footing: scancel the attempt by
+    name, give the draft back (keeping the name when scancel could not run).
+    Anything that fails here is logged; the sweep reconciles what is left."""
+    try:
+        orphan = None if await _scancel_attempt(sim_id) else sim_id
+        await _return_to_draft(job_id, "submit_interrupted", slurm.SUBMIT_INTERRUPTED, orphan_sim_id=orphan)
+    except Exception as exc:
+        logger.error("Could not give back the draft %s of an interrupted submit: %s", job_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -985,6 +1063,7 @@ async def delete_simulation(
     doc = await _get_job_for(job_id, user, None)
     removed: list[str] = []
     if doc["status"] in TERMINAL_STATUSES:
+        await _cancel_orphans_of(doc)
         removed = await _remove_files_of(doc)
     elif not _is_editable(doc):
         raise _error(
@@ -992,7 +1071,19 @@ async def delete_simulation(
             "job_active",
             "Cancel the simulation before deleting this snapshot draft.",
         )
-    await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
+    else:
+        await _cancel_orphans_of(doc)
+    deleted = await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
+    if deleted.deleted_count == 0:
+        # A submit claimed the draft between the read and the delete, or
+        # another request deleted it: nothing was deleted, so nothing is said to
+        # have been.
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "job_changed",
+            "This snapshot draft changed while it was being deleted, so nothing was deleted. "
+            "Reload it and try again.",
+        )
     await log_event(
         "job_deleted",
         actor_id=user.sub,
@@ -1001,6 +1092,23 @@ async def delete_simulation(
         category=AuditCategory.JOB,
         detail={"sim_id": doc.get("sim_id"), "status": doc["status"], "removed": removed},
     )
+
+
+async def _cancel_orphans_of(doc: dict) -> None:
+    """Before a job's document goes, cancel by name every submit of it that may
+    have reached SLURM (`orphan_sim_ids`): the document is the only place those
+    names are kept, so deleting it first would leave a job running that nothing
+    knows of. If Anvil cannot be asked for any of them, nothing is deleted."""
+    names = [n for n in doc.get("orphan_sim_ids") or [] if job_script.is_valid_id(n)]
+    for sim_id in names:
+        if not await _scancel_attempt(sim_id):
+            raise _error(
+                status.HTTP_409_CONFLICT,
+                "orphan_cancel_failed",
+                "An earlier submit of this snapshot draft may still be on Anvil, and Anvil could "
+                "not be asked to cancel it, so nothing was deleted. Try again in a few minutes.",
+            )
+        await get_db().jobs.update_one({"_id": doc["_id"]}, {"$pull": {"orphan_sim_ids": sim_id}})
 
 
 async def _remove_files_of(doc: dict) -> list[str]:
@@ -1175,34 +1283,36 @@ async def cancel_job(
     now = datetime.now(timezone.utc)
 
     if doc["status"] not in CANCELLABLE_STATUSES:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot cancel job in state {doc['status']}",
-        )
+        raise _not_cancellable(doc["status"])
 
     immediate = False
     if not doc.get("slurm_job_id"):
         # `slurm_job_id: None` is in the filter: the submit may record its id
         # between the read above and this write, and then there is a job to
-        # scancel after all.
+        # scancel after all. And one may exist already: sbatch may have run and
+        # its answer not yet be recorded, so the name is kept, and the sweep
+        # (`slurm.clear_orphans`, every few seconds while one is kept) scancels
+        # it by name. The request itself makes no SSH call.
+        update: dict = {
+            "$set": {
+                "status": "CANCELLED",
+                "status_reason": _CANCELLED_FROM_OPENGHM,
+                "failure": {
+                    "cause": "cancelled_by_user",
+                    "phase": None,
+                    "message": _CANCELLED_FROM_OPENGHM,
+                    "excerpt": None,
+                },
+                **_cancel_request(user, now),
+                "completed_at": now,
+                "updated_at": now,
+            }
+        }
+        if job_script.is_valid_id(doc.get("sim_id")):
+            update["$addToSet"] = {"orphan_sim_ids": doc["sim_id"]}
         immediate = (
             await db.jobs.update_one(
-                {"_id": job_id, "status": doc["status"], "slurm_job_id": None},
-                {
-                    "$set": {
-                        "status": "CANCELLED",
-                        "status_reason": _CANCELLED_BY_USER,
-                        "failure": {
-                            "cause": "cancelled_by_user",
-                            "phase": None,
-                            "message": _CANCELLED_BY_USER,
-                            "excerpt": None,
-                        },
-                        **_cancel_request(user, now),
-                        "completed_at": now,
-                        "updated_at": now,
-                    }
-                },
+                {"_id": job_id, "status": doc["status"], "slurm_job_id": None}, update
             )
         ).matched_count == 1
         if not immediate:
@@ -1256,7 +1366,11 @@ async def cancel_job(
     return _status_response(await db.jobs.find_one({"_id": job_id}))
 
 
-_CANCELLED_BY_USER = "You cancelled this simulation."
+#: Stored for a cancel that needed no SLURM job. It names nobody: the owner,
+#: an administrator and any other viewer read the same document, and who asked
+#: is `cancel_requested_by_email` (the page words it from the viewer's side,
+#: `cancelledBy`).
+_CANCELLED_FROM_OPENGHM = "This simulation was cancelled from OpenGHM before it was queued on Anvil."
 _CANCEL_REQUEST_FIELDS = ("cancel_requested_at", "cancel_requested_by", "cancel_requested_by_email")
 
 
@@ -1266,6 +1380,15 @@ def _cancel_request(user: TokenPayload, now: datetime) -> dict:
         "cancel_requested_by": user.sub,
         "cancel_requested_by_email": user.email,
     }
+
+
+def _not_cancellable(current: str) -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT,
+        "not_cancellable",
+        f"Only a queued or running simulation can be cancelled; this one is {current.lower()}.",
+        current=current,
+    )
 
 
 def _job_changed() -> HTTPException:

@@ -20,7 +20,11 @@ from app.api.v1 import jobs as jobs_router
 from app.services import slurm
 
 from conftest import REMOTE_BASE
+from app.core.roles import Role
 from route_helpers import NOW, SUCCESS_OUTCOME, make_job, make_sent_job, make_user, token_for
+
+# conftest replaces this with a fake for the route tests.
+REAL_SCANCEL_BY_NAME = slurm.scancel_by_name
 
 OWNER = "owner"
 HEADERS = token_for(OWNER)
@@ -261,3 +265,81 @@ def test_if_that_scancel_fails_the_name_is_kept_for_the_sweep(client, db, monkey
     stored = db.jobs.docs["job-1"]
     assert stored["status"] == "CANCELLED"
     assert stored["orphan_sim_ids"] == [stored["sim_id"]]
+
+
+# ---- mission 2026-10-06: every failure is handled ---------------------------
+
+
+@pytest.mark.parametrize("status", ["DRAFT", "COMPLETED", "FAILED", "CANCELLED"])
+def test_cancelling_what_cannot_be_cancelled_answers_code_and_message(client, db, scancels, status):
+    db.jobs.docs["job-1"] = make_sent_job("job-1", OWNER, status)
+    response = client.post(CANCEL, headers=HEADERS)
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "not_cancellable"
+    assert detail["current"] == status
+    assert status.lower() in detail["message"]
+    assert "Cannot cancel job in state" not in detail["message"]
+
+
+def test_a_cancel_before_sbatch_answered_keeps_the_name_for_a_scancel(client, db, scancels):
+    """The submit may have run sbatch and not yet written the id: a job may
+    exist. The name is kept (the sweep scancels it by name) and the request
+    itself makes no SSH call."""
+    db.jobs.docs["job-1"] = make_job("job-1", OWNER, "SUBMITTED")
+    db.jobs.docs["job-1"]["slurm_job_id"] = None
+    assert client.post(CANCEL, headers=HEADERS).status_code == 200
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "CANCELLED"
+    assert stored["orphan_sim_ids"] == ["sim-job-1"]
+    assert db.cleanup_calls == []
+
+
+def test_the_sweep_then_scancels_that_name_and_clears_it(client, db, anvil, monkeypatch):
+    monkeypatch.setattr(slurm, "scancel_by_name", REAL_SCANCEL_BY_NAME)
+    db.jobs.docs["job-1"] = make_job("job-1", OWNER, "SUBMITTED")
+    db.jobs.docs["job-1"]["slurm_job_id"] = None
+    client.post(CANCEL, headers=HEADERS)
+    asyncio.run(slurm.clear_orphans())
+    assert anvil.commands == ["scancel --name=sim-job-1 --user=x-openghm"]
+    assert db.jobs.docs["job-1"]["orphan_sim_ids"] == []
+
+
+def test_an_admins_cancel_before_the_queue_does_not_say_you_cancelled(client, db, scancels):
+    db.users.docs["root"] = make_user("root", Role.ADMIN)
+    db.jobs.docs["job-1"] = make_job("job-1", OWNER, "SUBMITTED")
+    db.jobs.docs["job-1"]["slurm_job_id"] = None
+    response = client.post(CANCEL, headers=token_for("root", Role.ADMIN))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cancel_requested_by_email"] == "root@example.org"
+    for text in (body["status_reason"], body["failure"]["message"]):
+        assert "You" not in text and "OpenGHM" in text
+    assert body["failure"]["cause"] == "cancelled_by_user"  # a cancel the gateway recorded
+
+
+def test_a_cancel_the_sweep_confirms_does_not_say_you_cancelled_either(db, anvil):
+    db.jobs.docs["job-1"] = make_sent_job(
+        "job-1", OWNER, "RUNNING", cancel_requested_at=NOW, cancel_requested_by="root"
+    )
+    anvil.found["12345"] = _info("CANCELLED", "cancelled")
+    stored = _sweep(db, anvil)
+    assert "You" not in stored["failure"]["message"]
+
+
+def test_a_cancel_recorded_while_the_verdict_was_being_read_still_counts(db, anvil, monkeypatch):
+    """The sweep read the document, then SSH for the record and stderr, and the
+    user's cancel landed meanwhile: SLURM's CANCELLED is theirs, not the system's."""
+    db.jobs.docs["job-1"] = make_sent_job("job-1", OWNER, "RUNNING")
+    anvil.found["12345"] = _info("CANCELLED", "cancelled")
+    real = slurm.read_outcome
+
+    async def read_then_a_cancel_lands(remote_job_dir):
+        result = await real(remote_job_dir)
+        db.jobs.docs["job-1"].update(cancel_requested_at=NOW, cancel_requested_by=OWNER)
+        return result
+
+    monkeypatch.setattr(slurm, "read_outcome", read_then_a_cancel_lands)
+    stored = _sweep(db, anvil)
+    assert stored["status"] == "CANCELLED"
+    assert stored["failure"]["cause"] == "cancelled_by_user"

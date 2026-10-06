@@ -19,6 +19,10 @@ import type {
 type ApiClient = Awaited<ReturnType<typeof getApiClient>>;
 
 const SUBMIT_TIMEOUT_MS = 60_000;
+/** Cancelling and deleting open an SSH session to Anvil (`scancel`, removing
+ *  the job's directories) before they answer, which the 10 s default does not
+ *  allow for. */
+const ANVIL_ACTION_TIMEOUT_MS = 60_000;
 /** The first answer for a snapshot lists its published files in the public
  *  bucket, which the 10 s default may not allow for. */
 const PUBLISHED_ANSWER_TIMEOUT_MS = 20_000;
@@ -224,17 +228,21 @@ export async function pollJobStatus(
  * not change yet: `cancel_requested_at` is set and the job is *Cancelling*
  * until SLURM confirms. Without one it comes back CANCELLED at once. Failures
  * carry the backend's `code`: `cancel_failed` (502), or a 409 when the job can
- * no longer be cancelled.
+ * no longer be cancelled (`not_cancellable`).
  */
 export async function cancelJob(
   jobId: string
 ): Promise<ActionResult<JobStatusResponse>> {
-  return run(async (client) => {
-    const res = await client.post<JobStatusResponse>(
-      `/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`
-    );
-    return res.data;
-  });
+  return run(
+    async (client) => {
+      const res = await client.post<JobStatusResponse>(
+        `/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`
+      );
+      return res.data;
+    },
+    [404],
+    ANVIL_ACTION_TIMEOUT_MS
+  );
 }
 
 /**
@@ -242,13 +250,18 @@ export async function cancelJob(
  * directories on Anvil and then the record (ADR 0026). On any failure the
  * snapshot draft still exists, and `code` says why: `job_active` (409, cancel it
  * first), `refused_path` (409), `anvil_unreachable` (503) or `cleanup_failed`
- * (502). `not_found` means it is already gone.
+ * (502), among others: the UI shows the backend's `message` whatever the code.
+ * `not_found` means it is already gone.
  */
 export async function deleteDraft(jobId: string): Promise<ActionResult<null>> {
-  return run(async (client) => {
-    await client.delete(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
-    return null;
-  });
+  return run(
+    async (client) => {
+      await client.delete(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+      return null;
+    },
+    [404],
+    ANVIL_ACTION_TIMEOUT_MS
+  );
 }
 
 /**

@@ -152,7 +152,8 @@ class FakeCollection:
         for key, doc in list(self.docs.items()):
             if _matches(doc, query):
                 del self.docs[key]
-                break
+                return type("R", (), {"deleted_count": 1})()
+        return type("R", (), {"deleted_count": 0})()
 
     async def count_documents(self, query: dict) -> int:
         return sum(1 for d in self.docs.values() if _matches(d, query))

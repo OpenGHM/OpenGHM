@@ -95,7 +95,7 @@ describe("the detail page", () => {
 
   it("puts Cancel in the summary while it runs, and nothing in the header", () => {
     renderDetail("running");
-    expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Cancel simulation" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Delete snapshot draft" })).toBeNull();
   });
 });

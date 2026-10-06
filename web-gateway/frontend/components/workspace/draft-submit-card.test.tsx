@@ -455,6 +455,44 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     expect(onSubmitted).not.toHaveBeenCalled();
   });
 
+  it("shows the unreachable-backend sentence, in place of the stored reason of an earlier submit", async () => {
+    submit.mockResolvedValueOnce({
+      ok: false,
+      reason: "error",
+      message: "The gateway's server could not be reached. Nothing was changed; try again in a minute.",
+      code: "backend_unreachable",
+    });
+    card({ lastSubmitError: { code: "sbatch_rejected", message: "Anvil said no.", at: "2026-10-06T10:00:00Z" } });
+    expect(screen.getByRole("alert").textContent).toContain("The last submit didn't go through");
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());
+    const text = screen.getByRole("alert").textContent ?? "";
+    expect(text).toContain("The gateway's server could not be reached. Nothing was changed");
+    expect(text).not.toContain("Anvil said no");
+  });
+
+  it("never closes the confirmation and shows nothing: an empty message still says something", async () => {
+    await confirmWith({ ok: false, reason: "error", message: "" });
+    expect((screen.getByRole("alert").textContent ?? "").trim().length).toBeGreaterThan(0);
+  });
+
+  it("checks the server after a timeout the action reports as data, and takes the success path if the job went out", async () => {
+    const checkSubmitted = vi.fn().mockResolvedValue(SUBMITTED);
+    submit.mockResolvedValueOnce({
+      ok: false,
+      reason: "error",
+      message: "No answer yet; it may still have gone through. Reload the page to check.",
+      code: "backend_timeout",
+    });
+    card({ checkSubmitted });
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith(SUBMITTED));
+    expect(checkSubmitted).toHaveBeenCalledWith("job-1");
+    expect(onSubmitFailed).not.toHaveBeenCalled();
+  });
+
   it("does not check after a refusal: the backend answered", async () => {
     const checkSubmitted = vi.fn();
     submit.mockResolvedValueOnce({ ok: false, reason: "error", message: "no", code: "sbatch_rejected" });

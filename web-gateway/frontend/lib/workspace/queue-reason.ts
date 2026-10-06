@@ -1,7 +1,9 @@
 /**
  * SLURM's reason for a pending job, in words a person can act on. The raw
- * reason is always shown beside it, so this only has to be roughly right and
- * never wrong: an unknown reason says so and quotes SLURM.
+ * reason is always shown beside it (the status summary prints it in its own
+ * span), so this only has to be roughly right and never wrong. A reason it does
+ * not know is not quoted again here: the sentence stays generic and the raw
+ * reason is read once, beside it.
  */
 export function describeQueueReason(reason: string | null | undefined): string {
   const raw = (reason ?? "").trim();
@@ -20,5 +22,5 @@ export function describeQueueReason(reason: string | null | undefined): string {
   if (/^(ReqNodeNotAvail|Reservation|PartitionDown|PartitionInactive)/.test(raw) || /^maint/i.test(raw)) {
     return "Waiting: the nodes it needs are reserved or down for maintenance.";
   }
-  return `Waiting (SLURM reason: ${raw}).`;
+  return "Waiting for SLURM to start it.";
 }

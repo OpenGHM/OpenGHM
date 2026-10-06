@@ -56,13 +56,13 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   timeout: {
     title: "Ran out of time",
-    body: "The job hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil.",
+    body: "The job hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil. Try a longer walltime, or a shorter run period if the walltime is already at its limit.",
     nextStep: "resubmit_longer_walltime",
     tone: "warning",
   },
   out_of_memory: {
     title: "Ran out of memory",
-    body: "WBM needed more memory than the job was given, and Anvil stopped it. Try a smaller spatial domain or a shorter period.",
+    body: "WBM needed more memory than the job was given, and Anvil stopped it. Try more cores (each has about 1.9 GB) or a shorter run period.",
     nextStep: "new_draft",
     tone: "warning",
   },
@@ -98,11 +98,29 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
 };
 
+/** A verdict whose cause this frontend has no wording for (the backend gained
+ *  one first, or an old document names one that is gone). The card shows this
+ *  title and the verdict's own `message`, never a crash. */
+export const UNKNOWN_FAILURE_COPY: FailureCopy = {
+  title: "The simulation ended with a problem",
+  body: "This snapshot draft ended in a way this page has no wording for. The job's logs may say more.",
+  nextStep: "new_draft",
+  tone: "danger",
+};
+
+/** The copy for a verdict: its cause's, else `UNKNOWN_FAILURE_COPY`, and
+ *  `UNRECORDED_FAILURE_COPY` when there is no verdict. The one lookup: never
+ *  index `FAILURE_COPY` by a cause from the backend directly. */
+export function failureCopyFor(failure: Pick<JobFailure, "cause"> | null | undefined): FailureCopy {
+  if (!failure) return UNRECORDED_FAILURE_COPY;
+  return (Object.hasOwn(FAILURE_COPY, failure.cause) ? FAILURE_COPY[failure.cause] : undefined) ?? UNKNOWN_FAILURE_COPY;
+}
+
 /** The sentence under the body that says what to do. */
 export const NEXT_STEP_COPY: Record<NextStep, string> = {
   resubmit: "Try again from a new draft with the same settings.",
   resubmit_longer_walltime:
-    "Try again from a new draft with the same settings, and pick a longer walltime before you submit it.",
+    "Try again from a new draft with the same settings, and pick a longer walltime before you submit it, or a shorter run period if the walltime is already at its limit.",
   new_draft:
     "Try again from a new draft, change what caused this, and submit it.",
   contact_admin:
@@ -134,5 +152,5 @@ export const UNRECORDED_FAILURE_COPY: FailureCopy = {
 export function summaryOffersCopy(status: JobStatus, failure: JobFailure | null): boolean {
   if (status === "CANCELLED") return true;
   if (status !== "FAILED") return false;
-  return offersNewDraft((failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY).nextStep);
+  return offersNewDraft(failureCopyFor(failure).nextStep);
 }

@@ -19,6 +19,7 @@ async def _sync_once() -> None:
     for name, step in (
         ("jobs", slurm.sync_active_jobs),
         ("end times", slurm.backfill_slurm_end),
+        ("interrupted submits", slurm.reconcile_interrupted_submits),
         ("orphans", slurm.clear_orphans),
         ("purged files", slurm.detect_purged_files),
     ):
@@ -32,7 +33,9 @@ async def _sync_once() -> None:
 
 async def _next_interval() -> int:
     """The active interval while a job has a SLURM id and no verdict, or an
-    orphaned submit is still being cancelled; otherwise the idle one."""
+    orphaned submit is still being cancelled; otherwise the idle one. (A claim
+    with no SLURM id is a submit in flight, and the sweep gives it back only
+    minutes later: the idle interval finds it in time.)"""
     try:
         db = get_db()
         active = await db.jobs.find_one(

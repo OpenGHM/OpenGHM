@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -28,7 +29,7 @@ import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
 import { HUE, TONE_HUE } from "@/lib/jobs/status-hue";
 import { isTerminalStatus, type Job } from "@/lib/jobs/types";
 import { cancelledBy } from "@/lib/workspace/cancelled-by";
-import { FAILURE_COPY, UNRECORDED_FAILURE_COPY } from "@/lib/workspace/failure-copy";
+import { failureCopyFor } from "@/lib/workspace/failure-copy";
 import { describeQueueReason } from "@/lib/workspace/queue-reason";
 import {
   describeProgress,
@@ -148,11 +149,12 @@ function RunningBody() {
  * Not a live region: it changes every second and would be read out each time.
  */
 function FreshnessLine({ preview }: { preview: boolean }) {
-  const { status, live, lastSuccessAt, lastError, retryInSeconds, refresh, sessionExpired } =
+  const { status, live, lastSuccessAt, lastError, retryInSeconds, refresh, sessionExpired, gone } =
     useLiveJobContext();
   const now = useNow(1_000);
 
-  if (isTerminalStatus(status) || sessionExpired) return null;
+  // Nothing to refresh once the snapshot draft is gone: GoneNotice speaks.
+  if (isTerminalStatus(status) || sessionExpired || gone) return null;
 
   if (lastError !== null) {
     return (
@@ -213,6 +215,38 @@ function FreshnessLine({ preview }: { preview: boolean }) {
   );
 }
 
+/**
+ * The poll got a 404: the snapshot draft was deleted (from another tab, say)
+ * or was never the viewer's. What the card still says about it is the last
+ * thing the page knew, so this says it is out of date, and where to go.
+ */
+function GoneNotice() {
+  return (
+    <div
+      role="status"
+      className="mt-4 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <div className="space-y-0.5">
+          <p className="font-medium">This snapshot draft no longer exists.</p>
+          <p className="text-xs">
+            It was deleted, so what is shown above is out of date and is no longer being updated.
+          </p>
+        </div>
+      </div>
+      <Button
+        asChild
+        size="sm"
+        variant="outline"
+        className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
+      >
+        <Link href="/workspace">My snapshot drafts</Link>
+      </Button>
+    </div>
+  );
+}
+
 /** What the headline says, per status: the icon, the line, and the sentence under it. */
 function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus) {
   const { view, live, submittedAt, startedAt, completedAt, statusReason } = useLiveJobContext();
@@ -255,7 +289,7 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
       return { Icon: CheckCircle2, title: ran === null ? "Completed" : `Completed in ${shortDuration(ran)}`, sub: null };
     }
     case "FAILED": {
-      const copy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
+      const copy = failureCopyFor(failure);
       // The backend's message is the specific one. Without a verdict, the
       // reason the job stored; without either, the per-cause body.
       const message = (failure ? failure.message : (statusReason ?? job.status_reason)) || copy.body;
@@ -305,7 +339,7 @@ export function JobStatusSummary({
   viewerEmail: string | null;
   preview?: boolean;
 }) {
-  const { jobId, status, view, apply, refresh, sessionExpired, statusReason } = useLiveJobContext();
+  const { jobId, status, view, apply, refresh, sessionExpired, gone, statusReason } = useLiveJobContext();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelPending, setCancelPending] = useState(false);
   const [cancelExpired, setCancelExpired] = useState(false);
@@ -314,13 +348,15 @@ export function JobStatusSummary({
   const shown = displayStatus({ status, cancel_requested_at: view.cancel_requested_at });
   const headline = useHeadline(job, viewerEmail, shown);
   const failure = view.failure ?? job.failure;
-  const failureCopy = failure ? FAILURE_COPY[failure.cause] : UNRECORDED_FAILURE_COPY;
+  const failureCopy = failureCopyFor(failure);
   // A failed simulation reads amber when it hit a limit, grey when it was not its
   // owner's doing, and red otherwise.
   const hue = HUE[shown === "FAILED" ? TONE_HUE[failureCopy.tone] : shown];
   const active = !isTerminalStatus(status);
   const cancellable =
-    (status === "PENDING" || status === "SUBMITTED" || status === "RUNNING") && !view.cancel_requested_at;
+    (status === "PENDING" || status === "SUBMITTED" || status === "RUNNING") &&
+    !view.cancel_requested_at &&
+    !gone;
 
   // What the verdict knows, from the poll once it has moved on and else from
   // the page's own copy of the job.
@@ -353,7 +389,7 @@ export function JobStatusSummary({
             <p className="mt-1.5 min-w-0 break-words text-sm text-muted-foreground">{headline.sub}</p>
           )}
         </div>
-        {(cancellable || cancelPending) && (
+        {(cancellable || cancelPending) && !gone && (
           <Button
             ref={cancelRef}
             type="button"
@@ -367,7 +403,7 @@ export function JobStatusSummary({
             ) : (
               <Ban aria-hidden="true" />
             )}
-            {cancelPending ? "Cancelling…" : "Cancel"}
+            {cancelPending ? "Cancelling…" : "Cancel simulation"}
           </Button>
         )}
       </div>
@@ -407,9 +443,11 @@ export function JobStatusSummary({
 
       {(sessionExpired || cancelExpired) && <SessionExpiredBanner className="mt-4" />}
 
+      {gone && <GoneNotice />}
+
       <FreshnessLine preview={preview} />
 
-      {active && (
+      {active && !gone && (
         <CancelJobDialog
           open={cancelOpen}
           onOpenChange={setCancelOpen}

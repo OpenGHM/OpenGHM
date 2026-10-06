@@ -13,15 +13,23 @@ Mongo. The first rule that matches wins:
    record decides, first failing fact first.
 4. SLURM has no record of the job (`missing=True`): judged from the record as
    rule 3 would; no record is `lost`.
+
+`classify` is total: a record of the wrong shape (valid JSON, but `steps` a
+list, an exit code that is a string) is no record, `outcome_missing`, never an
+exception, because the sweep would then retry the same job forever.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Literal
 
-from app.models.job import FailureCause, JobFailure
+from app.models.job import MAX_WALLTIME_SECONDS, FailureCause, JobFailure
+from app.services.job_script import WBM_MARKERS
+
+logger = logging.getLogger(__name__)
 
 VerdictStatus = Literal["COMPLETED", "FAILED", "CANCELLED"]
 
@@ -55,19 +63,11 @@ _MESSAGE: dict[str, str] = {
         "started. Try again; if it keeps failing, the snapshot's files may be "
         "unavailable."
     ),
-    "timeout": (
-        "The job hit its walltime before WBM finished. Submit again with a "
-        "longer walltime."
-    ),
-    "out_of_memory": (
-        "The job ran out of memory and Anvil stopped it. Reduce what the "
-        "simulation asks for or request more resources, then submit again."
-    ),
     "node_failure": (
         "Anvil lost the job. This is not a problem with your input. Submit "
         "again."
     ),
-    "cancelled_by_user": "You cancelled this simulation.",
+    "cancelled_by_user": "This simulation was cancelled from OpenGHM.",
     "cancelled_by_system": (
         "Anvil or an administrator cancelled this job. It was not cancelled "
         "from OpenGHM."
@@ -77,6 +77,23 @@ _MESSAGE: dict[str, str] = {
         "behind. Submit again."
     ),
 }
+
+#: Memory comes with the cores on Anvil's `shared` partition, at most 1896 MiB
+#: a core (`MaxMemPerCPU`, gateway.md §5): so the lever on a job that ran out
+#: of memory is its cores, or the length of the run.
+_MORE_CORES = (
+    "Memory comes with the cores on Anvil's shared partition, about 1.9 GB each: "
+    "submit again with more cores, or with a shorter run period."
+)
+#: Exit codes of a process SLURM or the kernel killed with SIGKILL: 128 + 9,
+#: and the same signal as a shell reports it from a container runtime.
+_KILLED_EXIT_CODES = (137, 247)
+#: sysexits.h, `EX_USAGE` (64) to `EX_CONFIG` (78). In the fetch step `flock`
+#: answers with these when it cannot run the toolkit under the lock (seen live:
+#: 66 for a lock file whose directory does not exist, 69 for a toolkit that is
+#: not installed). The toolkit itself exits only 0, 1, 2 or a container's code,
+#: so a code in this range there is the gateway's Anvil setup, not the snapshot.
+_SETUP_EXIT_CODES = range(64, 79)
 
 _EXCERPT_LINES = 60
 _EXCERPT_BYTES = 8 * 1024
@@ -110,23 +127,28 @@ def classify(
     outcome: dict | None,
     stderr_tail: str,
     missing: bool,
+    slurm_exit_code: str | None = None,
+    walltime_seconds: int | None = None,
 ) -> Verdict:
     """The verdict on a job that is over.
 
     `slurm_state` is SLURM's raw state, and is ignored when `missing`: SLURM
     has no record of the job, which is rule 4. `outcome` is the parsed
     `outcome.json` or None, and `stderr_tail` the end of the job's stderr.
-    Raises ValueError for a state that is not an ending, because a job that
-    is still going has no verdict yet.
+    `slurm_exit_code` (`137:0`, sacct's form) and `walltime_seconds` (what the
+    job asked SLURM for) only sharpen a message. Raises ValueError for a state
+    that is not an ending, because a job that is still going has no verdict
+    yet. Anything else a record does to it is `outcome_missing`.
     """
     record = outcome if isinstance(outcome, dict) else None
     excerpt = _stderr_excerpt(stderr_tail)
-    phase = (record or {}).get("phase")
+    phase = _phase(record)
+    killed = _killed_exit(slurm_exit_code)
 
     if missing:
         if record is None:
             return _fail("lost", phase=None, excerpt=excerpt)
-        return _from_record(record, slurm_state=None, excerpt=excerpt)
+        return _judge(record, None, stderr_tail, excerpt)
 
     head = slurm_state_head(slurm_state)
     if head == "CANCELLED":
@@ -134,10 +156,48 @@ def classify(
         return Verdict("CANCELLED", _failure(cause, phase, excerpt=excerpt))
     if head in _KILLED_BY_SLURM:
         cause = _KILLED_BY_SLURM[head]
-        return _fail(cause, phase=phase, excerpt=excerpt, state=head)
+        return _fail(cause, phase=phase, excerpt=excerpt, state=head, walltime=walltime_seconds)
     if head in _EXITED:
-        return _from_record(record, slurm_state=head, excerpt=excerpt)
+        return _judge(record, head, stderr_tail, excerpt, killed=killed and head == "FAILED")
     raise ValueError(f"{slurm_state!r} is not a state a job ends in")
+
+
+def _phase(record: dict | None) -> str | None:
+    phase = (record or {}).get("phase")
+    return phase if isinstance(phase, str) else None
+
+
+def _killed_exit(slurm_exit_code: str | None) -> bool:
+    """Whether SLURM's `ExitCode` (`exit:signal`) says the script was killed:
+    exit 137 or 247, or signal 9."""
+    head, _, signal = (slurm_exit_code or "").partition(":")
+    try:
+        return int(head) in _KILLED_EXIT_CODES or int(signal) == 9
+    except ValueError:
+        return False
+
+
+class _Malformed(Exception):
+    """The record is JSON, but not the record `job_script.OUTCOME_PY` writes."""
+
+
+def _judge(
+    record: dict | None,
+    slurm_state: str | None,
+    stderr_tail: str,
+    excerpt: str | None,
+    *,
+    killed: bool = False,
+) -> Verdict:
+    """Rule 3 on a record that may be anything: a shape this gateway cannot
+    read is as good as no record."""
+    try:
+        return _from_record(record, slurm_state=slurm_state, stderr_tail=stderr_tail, excerpt=excerpt, killed=killed)
+    except _Malformed as exc:
+        logger.warning("outcome.json is not the record the job body writes: %s", exc)
+    except Exception:
+        logger.warning("outcome.json could not be judged", exc_info=True)
+    return _fail("outcome_missing", phase=None, excerpt=excerpt, detail="malformed")
 
 
 # ---------------------------------------------------------------------------
@@ -145,16 +205,50 @@ def classify(
 # ---------------------------------------------------------------------------
 
 
-def _from_record(record: dict | None, *, slurm_state: str | None, excerpt: str | None) -> Verdict:
-    if record is None:
-        return _fail("outcome_missing", phase=None, excerpt=excerpt)
+def _step(steps: dict, name: str) -> dict | None:
+    """The step's entry, None when it was not reached. An entry that is not an
+    object with an integer (or null) `exit_code` is a record this gateway cannot
+    read."""
+    step = steps.get(name)
+    if step is None:
+        return None
+    if not isinstance(step, dict):
+        raise _Malformed(f"steps.{name} is a {type(step).__name__}")
+    code = step.get("exit_code")
+    if code is not None and (isinstance(code, bool) or not isinstance(code, int)):
+        raise _Malformed(f"steps.{name}.exit_code is {code!r}")
+    return step
 
-    steps = record.get("steps") or {}
-    fetch, run = steps.get("fetch"), steps.get("run")
-    wbm = record.get("wbm") or {}
-    output = record.get("output") or {}
-    phase = record.get("phase")
+
+def _object(record: dict, key: str) -> dict:
+    value = record.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise _Malformed(f"{key} is a {type(value).__name__}")
+    return value
+
+
+def _from_record(
+    record: dict | None,
+    *,
+    slurm_state: str | None,
+    stderr_tail: str,
+    excerpt: str | None,
+    killed: bool = False,
+) -> Verdict:
+    if record is None:
+        return _fail("outcome_missing", phase=None, excerpt=excerpt, detail="killed" if killed else None)
+
+    steps = _object(record, "steps")
+    fetch, run = _step(steps, "fetch"), _step(steps, "run")
+    wbm = _object(record, "wbm")
+    output = _object(record, "output")
+    phase = _phase(record)
     wbm_tail = wbm.get("tail") or []
+    recorded_markers = wbm.get("markers") or []
+    if not isinstance(wbm_tail, list) or not isinstance(recorded_markers, list):
+        raise _Malformed("wbm.tail and wbm.markers must be lists")
 
     # First failing fact first. A step that has an exit code and did not
     # exit 0 is a verdict; one that has none means the script stopped inside
@@ -178,7 +272,9 @@ def _from_record(record: dict | None, *, slurm_state: str | None, excerpt: str |
     if record.get("signal"):
         return _fail("outcome_missing", phase=phase, excerpt=excerpt, detail="interrupted")
 
-    markers = wbm.get("markers") or []
+    # WBM prints "Failed to warp" to stderr, not to its log, and exits 0: the
+    # record's markers come from the log alone, so stderr is read for them too.
+    markers = [m for m in WBM_MARKERS if m in recorded_markers or m in (stderr_tail or "")]
     if markers:
         return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail=f"marker:{markers[0]}")
     if not wbm.get("all_done"):
@@ -206,10 +302,11 @@ def _fail(
     detail: str | None = None,
     code: int | None = None,
     state: str | None = None,
+    walltime: int | None = None,
 ) -> Verdict:
     return Verdict(
         "FAILED",
-        _failure(cause, phase, excerpt=excerpt, detail=detail, code=code, state=state),
+        _failure(cause, phase, excerpt=excerpt, detail=detail, code=code, state=state, walltime=walltime),
     )
 
 
@@ -221,20 +318,42 @@ def _failure(
     detail: str | None = None,
     code: int | None = None,
     state: str | None = None,
+    walltime: int | None = None,
 ) -> JobFailure:
+    phase = _PHASE.get(cause, phase)
     return JobFailure(
         cause=cause,
-        phase=_PHASE.get(cause, phase),
-        message=_message(cause, detail=detail, code=code, state=state),
+        phase=phase,
+        message=_message(cause, detail=detail, code=code, state=state, phase=phase, walltime=walltime),
         excerpt=excerpt,
     )
 
 
-def _message(cause: str, *, detail: str | None, code: int | None, state: str | None) -> str:
+def _message(
+    cause: str,
+    *,
+    detail: str | None,
+    code: int | None,
+    state: str | None,
+    phase: str | None = None,
+    walltime: int | None = None,
+) -> str:
+    if cause == "fetch_failed" and code in _SETUP_EXIT_CODES:
+        return (
+            f"The gateway's Anvil setup is broken: the snapshot download could not start "
+            f"(exit code {code}), and the snapshot is not at fault. Tell an administrator; "
+            "submitting again will not help."
+        )
     if cause == "run_refused":
-        why = detail or "the snapshot or its configuration is not valid"
-        return f"The toolkit refused to start this simulation: {why}. Check the snapshot's settings and submit again."
+        if not detail:
+            return (
+                f"The toolkit stopped before the simulation started (exit code {code}) and gave "
+                "no reason. The log below may show why."
+            )
+        return f"The toolkit refused to start this simulation: {detail}. Check the snapshot's settings and submit again."
     if cause == "wbm_error":
+        if code in _KILLED_EXIT_CODES:
+            return f"WBM was killed (exit code {code}), most likely because it ran out of memory. {_MORE_CORES}"
         if detail:
             return f"WBM stopped with an error (exit code {code}): {detail}"
         return (
@@ -244,12 +363,30 @@ def _message(cause: str, *, detail: str | None, code: int | None, state: str | N
     if cause == "wbm_silent_failure":
         if detail and detail.startswith("marker:"):
             return (
-                f"WBM exited normally but its log says \"{detail[7:]}\", so the "
+                f"WBM exited normally but its output says \"{detail[7:]}\", so the "
                 "simulation did not finish."
             )
         if detail == "no_nc":
             return "WBM finished, but it wrote no .nc output files."
         return "WBM exited without finishing: its log never reached \"All Done!\"."
+    if cause == "timeout":
+        if phase == "fetch":
+            return (
+                "The job hit its walltime while it was still fetching the snapshot, before the "
+                "simulation started. Fetches wait for each other, so this happens when Anvil is "
+                "busy. Submit again."
+            )
+        if walltime is not None and walltime >= MAX_WALLTIME_SECONDS:
+            return (
+                f"The job hit its walltime before WBM finished, and that was already the "
+                f"{MAX_WALLTIME_SECONDS // 3600} h maximum. Shorten the run period and submit again."
+            )
+        return (
+            "The job hit its walltime before WBM finished. Submit again with a longer walltime "
+            f"(up to {MAX_WALLTIME_SECONDS // 3600} h), or with a shorter run period."
+        )
+    if cause == "out_of_memory":
+        return f"The job ran out of memory and Anvil stopped it. {_MORE_CORES}"
     if cause == "node_failure" and state:
         return f"Anvil lost the job (SLURM state {state}). This is not a problem with your input. Submit again."
     if cause == "outcome_missing":
@@ -257,6 +394,13 @@ def _message(cause: str, *, detail: str | None, code: int | None, state: str | N
             return "The job was stopped part-way, and did not report a result."
         if detail == "stopped_before_run":
             return "The job ended before it ran the simulation, and did not report a result."
+        if detail == "killed":
+            return (
+                "The job was killed and did not report a result; most likely it ran out of "
+                f"memory. {_MORE_CORES}"
+            )
+        if detail == "malformed":
+            return "The job reported a result this gateway cannot read. Its logs may show why."
         if detail and detail.startswith("disagree:"):
             return (
                 f"SLURM says the job ended {detail[9:]}, but the job's own record says it "
@@ -316,18 +460,29 @@ def _last_bytes(text: str, limit: int) -> str:
     return cut.split("\n", 1)[1] if "\n" in cut else cut
 
 
+#: Lines of stderr that are the toolkit talking about itself, not the reason a
+#: program stopped: the spool cache's progress (`spool: downloaded ...`) and the
+#: toolkit's warnings. They share a block with the reason, and crowd it out.
+_NOT_A_REASON = ("spool:", "openghm: warning:")
+
+
 def _last_paragraph(excerpt: str | None) -> str | None:
     """The last block of consecutive non-blank lines, on one line, at most
-    200 characters: the reason a program gives just before it stops."""
+    200 characters: the reason a program gives just before it stops. The
+    toolkit's own progress lines are left out, and a block too long is cut at
+    its start, because what a program says last is why it stopped."""
     block: list[str] = []
     for line in reversed((excerpt or "").splitlines()):
-        if line.strip():
-            block.append(line.strip())
+        text = line.strip()
+        if text.startswith(_NOT_A_REASON):
+            continue
+        if text:
+            block.append(text)
         elif block:
             break
     text = " ".join(" ".join(reversed(block)).split())
     if len(text) > _REASON_CHARS:
-        text = text[:_REASON_CHARS - 1].rstrip() + "…"
+        text = "…" + text[-(_REASON_CHARS - 1):].lstrip()
     return text or None
 
 

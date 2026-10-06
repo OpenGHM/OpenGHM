@@ -167,6 +167,32 @@ describe("useLiveJob", () => {
     expect(pollJobStatus).toHaveBeenCalledTimes(1);
   });
 
+  it("says the snapshot draft is gone on a 404, and a manual refresh asks nothing more", async () => {
+    pollJobStatus.mockResolvedValue({ ok: false, reason: "not_found" });
+    const { result } = mount("RUNNING");
+    expect(result.current.gone).toBe(false);
+    await advance(0);
+    expect(result.current.gone).toBe(true);
+    expect(result.current.sessionExpired).toBe(false);
+    expect(result.current.lastError).toBeNull();
+    act(() => result.current.refresh());
+    await advance(0);
+    expect(pollJobStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not say gone for a 401 or a transient failure", async () => {
+    pollJobStatus.mockResolvedValue({ ok: false, reason: "session_expired" });
+    const expired = mount("RUNNING");
+    await advance(0);
+    expect(expired.result.current.gone).toBe(false);
+
+    pollJobStatus.mockReset();
+    pollJobStatus.mockResolvedValue(transient(502));
+    const flaky = mount("RUNNING");
+    await advance(0);
+    expect(flaky.result.current.gone).toBe(false);
+  });
+
   it("asks nothing while the tab is hidden, and polls at once when it is shown", async () => {
     pollJobStatus.mockResolvedValue(ok("RUNNING"));
     mount("RUNNING");

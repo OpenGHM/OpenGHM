@@ -158,8 +158,15 @@ class ToolkitRef(BaseModel):
 
 class SubmitError(BaseModel):
     """Why the last submit of a draft did not reach SLURM. The draft stays a
-    DRAFT; this is what the UI shows next to it. `code` is one of
-    `anvil_unreachable`, `sbatch_rejected`, `anvil_not_configured`."""
+    DRAFT; this is what the UI shows next to it, and every later refusal of a
+    submit replaces it, so it is never the reason of an earlier try. `code` is
+    the code of that refusal: `anvil_unreachable`, `sbatch_rejected`,
+    `anvil_not_configured`, `internal_error`, `submit_interrupted` (a submit
+    the gateway lost track of; the sweep returned the draft), or one of the
+    4xx codes a submit answers with before it is claimed
+    (`answered_by_published`, `unsupported_fields`, `walltime_over_limit`,
+    `run_start_not_aligned`, `run_dates_outside_aggregation`,
+    `invalid_parameters`, `active_job_limit`, ...)."""
 
     code: str
     message: str
@@ -368,11 +375,29 @@ class JobVerdictFields(BaseModel):
     output: JobOutputSummary | None = None
 
 
+#: SLURM reports a time it does not have (a job cancelled while queued never
+#: started) as NO_VAL, 4294967294 seconds, which is 2106-02-07T06:28:14Z.
+SLURM_NO_VAL = 4294967294
+_LATEST_REAL_YEAR = 2100
+
+
+def real_time(value: datetime | None) -> datetime | None:
+    """`value`, or None when it is SLURM's NO_VAL (or the epoch, or anything
+    past the year 2100) that an earlier gateway stored as a time. Applied when a
+    job is read, so such a job shows no start instead of "waited 695470 h"."""
+    if value is None:
+        return None
+    if value.year >= _LATEST_REAL_YEAR or value.year < 1971:
+        return None
+    return value
+
+
 def verdict_fields(doc: dict) -> dict:
     """The `JobVerdictFields` of a job document, for a response to be built
     with. `output` is read from the stored outcome record."""
     output = None
-    recorded = (doc.get("outcome") or {}).get("output")
+    outcome = doc.get("outcome")
+    recorded = outcome.get("output") if isinstance(outcome, dict) else None
     if isinstance(recorded, dict):
         try:
             output = JobOutputSummary(
@@ -387,8 +412,8 @@ def verdict_fields(doc: dict) -> dict:
     return {
         "slurm_state": doc.get("slurm_state"),
         "slurm_exit_code": doc.get("slurm_exit_code"),
-        "slurm_start": doc.get("slurm_start"),
-        "slurm_end": doc.get("slurm_end"),
+        "slurm_start": real_time(doc.get("slurm_start")),
+        "slurm_end": real_time(doc.get("slurm_end")),
         "failure": doc.get("failure"),
         "cancel_requested_at": doc.get("cancel_requested_at"),
         "cancel_requested_by_email": doc.get("cancel_requested_by_email"),

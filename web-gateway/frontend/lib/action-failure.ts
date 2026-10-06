@@ -1,5 +1,27 @@
 import type { ActionFailure } from "@/lib/jobs/types";
 
+/** Shown when the call got no answer at all (connection refused, DNS, reset):
+ *  the backend never saw it, so nothing changed. */
+export const BACKEND_UNREACHABLE_MESSAGE =
+  "The gateway's server could not be reached. Nothing was changed; try again in a minute.";
+/** Shown when the call timed out: the backend may have done it. */
+export const BACKEND_TIMEOUT_MESSAGE =
+  "No answer yet; it may still have gone through. Reload the page to check.";
+/** Shown for a 5xx that carried no message of its own. */
+export const SERVER_ERROR_MESSAGE =
+  "The gateway's server hit a problem and could not do this. Try again in a minute; if it keeps happening, tell an administrator.";
+
+/** Whether an error thrown without a response is a timeout (axios: `ECONNABORTED`
+ *  or `ETIMEDOUT`, message "timeout of Nms exceeded"). */
+function isTimeout(error: unknown): boolean {
+  const e = error as { code?: unknown; message?: unknown } | null;
+  return (
+    e?.code === "ECONNABORTED" ||
+    e?.code === "ETIMEDOUT" ||
+    (typeof e?.message === "string" && /timeout|timed out/i.test(e.message))
+  );
+}
+
 /** Folds what Axios threw into an `ActionFailure`, so a server action returns a
  *  refusal as data. Shared by the Workspace and Admin actions: the backend's
  *  error envelope (`detail`) is read in this one place. */
@@ -20,6 +42,18 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
   // `suggested_start`. A request body that fails validation is a 422 whose
   // `detail` is pydantic's array of `{ loc, msg, type }`.
   const detail = response?.data?.detail;
+
+  // No response: the request never got an answer. Axios gives a refused
+  // connection an EMPTY message (Node's AggregateError has none), so a
+  // missing message and an empty one are the same thing here.
+  if (response === undefined) {
+    const own = error instanceof Error ? error.message.trim() : "";
+    const isAxios = Boolean((error as { isAxiosError?: unknown } | null)?.isAxiosError);
+    if (isTimeout(error)) return noAnswer("backend_timeout", BACKEND_TIMEOUT_MESSAGE);
+    if (isAxios || own === "") return noAnswer("backend_unreachable", BACKEND_UNREACHABLE_MESSAGE);
+    return noAnswer(undefined, own);
+  }
+
   let message: string | null = null;
   let code: string | undefined;
   let fields: string[] | undefined;
@@ -52,10 +86,21 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
       suggestedStart = d.suggested_start;
     }
   }
-  if (message === null) {
-    message = error instanceof Error ? error.message : "Request failed.";
+  if (message === null || message.trim() === "") {
+    // A 5xx with no sentence of its own is never shown as axios words
+    // ("Request failed with status code 500").
+    if (status !== undefined && status >= 500) {
+      message = SERVER_ERROR_MESSAGE;
+      code ??= "server_error";
+    } else {
+      message = "Request failed.";
+    }
   }
   return { ok: false, reason: "error", message, status, code, fields, suggestedStart };
+}
+
+function noAnswer(code: string | undefined, message: string): ActionFailure {
+  return { ok: false, reason: "error", message, status: undefined, code };
 }
 
 /** A pydantic error's `loc` as a dotted path without the leading "body":

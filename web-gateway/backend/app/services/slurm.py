@@ -36,10 +36,10 @@ from slurmly.slurm.parser import parse_sacct_json_all
 from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.job import TERMINAL_STATUSES, JobDB, SlurmConfig
+from app.models.job import SLURM_NO_VAL, TERMINAL_STATUSES, JobDB, SlurmConfig, real_time
 from app.services import job_live
-from app.services.job_script import SubmitInputError, is_valid_id, with_headroom
-from app.services.job_verdict import classify
+from app.services.job_script import SubmitInputError, is_valid_id, parse_slurm_time, with_headroom
+from app.services.job_verdict import classify, slurm_state_head
 
 logger = logging.getLogger(__name__)
 
@@ -230,19 +230,6 @@ def build_job_spec(job: JobDB, snapshot: dict, body: str) -> JobSpec:
     )
 
 
-def _reconstruct_submitted_job(doc: dict[str, Any]) -> SubmittedJob:
-    """Rebuild a SubmittedJob from persisted DB fields (for tail/cleanup)."""
-    return SubmittedJob(
-        internal_job_id=doc["internal_job_id"],
-        slurm_job_id=doc["slurm_job_id"],
-        remote_job_dir=doc["remote_job_dir"],
-        remote_script_path=doc["remote_script_path"],
-        stdout_path=doc["stdout_path"],
-        stderr_path=doc["stderr_path"],
-        submitted_at=doc.get("slurmly_submitted_at"),
-    )
-
-
 # ---------------------------------------------------------------------------
 # submit
 # ---------------------------------------------------------------------------
@@ -318,16 +305,23 @@ async def read_outcome(remote_job_dir: str) -> dict | None:
 
 
 async def _stderr_tail(doc: dict) -> str:
-    try:
-        submitted = _reconstruct_submitted_job(doc)
-    except KeyError:
+    """The end of the job's stderr, for the verdict's excerpt and the markers
+    WBM prints there. Read through the base64 reader the logs route uses:
+    slurmly's own tail decodes strictly, so a stderr holding one byte that is
+    not UTF-8 (a log line from a tool in another encoding) made its command
+    fail and left the excerpt empty. Bytes that do not decode become U+FFFD."""
+    path = await log_path(doc, "stderr")
+    if path is None:
         return ""  # a row that pre-dates slurmly's fields: nothing to tail
-    client = await get_slurm_client()
-    chunk = await client.tail_stderr(submitted, lines=_STDERR_TAIL_LINES)
-    return getattr(chunk, "content", "") or ""
+    stdout = await _run_log_read(path, None, _STDERR_TAIL_BYTES)
+    if stdout is None:
+        return ""  # the job left no stderr file
+    return parse_log_read(stdout, offset=None, terminal=True)["data"]
 
 
-_STDERR_TAIL_LINES = 200
+#: How much of the end of stderr the verdict reads. The excerpt keeps the last
+#: 60 lines and 8 KB of it (`job_verdict`); the rest is for the marker scan.
+_STDERR_TAIL_BYTES = 64 * 1024
 _ACTIVE = ["PENDING", "SUBMITTED", "RUNNING", "COMPLETING"]
 # slurmly's `submit_grace_window_seconds` for the `purdue_anvil` preset: for
 # this long after sbatch, "not found" is a lookup that is too early.
@@ -341,23 +335,36 @@ _PROBE_CHUNK = 50
 # ---------------------------------------------------------------------------
 
 
-def _as_utc(value: datetime | str | None) -> datetime | None:
+def _as_utc(value: datetime | str | int | float | None) -> datetime | None:
     """A timestamp as an aware UTC datetime. Mongo's are already aware (the
     client is tz_aware); slurmly's are ISO strings, sometimes with a `Z` and
     sometimes bare (sacct's parsable form). `Unknown`, `None`, empty and
-    garbage are None."""
+    garbage are None.
+
+    So is a time SLURM does not have. A job that never started (cancelled
+    while queued) has NO_VAL, 4294967294 seconds, for its start, and slurmly
+    turns that into 2106-02-07T06:28:14Z. Epoch 0 is "unset" too. Both, and
+    anything after the year 2100, are None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        if value <= 0 or value >= SLURM_NO_VAL:
+            return None
+        return datetime.fromtimestamp(value, tz=timezone.utc)
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if not isinstance(value, str):
+        parsed = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in {"unknown", "none", "n/a"}:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    else:
         return None
-    text = value.strip()
-    if not text or text.lower() in {"unknown", "none", "n/a"}:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return real_time(parsed)
 
 
 async def _move(
@@ -400,6 +407,21 @@ async def _move(
     return True
 
 
+async def _walltime_seconds(doc: dict) -> int | None:
+    """The walltime the job asked SLURM for, in seconds, worked out the way the
+    submit worked it out: the draft's own, else the snapshot's recommendation
+    with headroom. The job stores neither. None when it cannot be told (the
+    snapshot is gone, say): a message then says less, not something false."""
+    try:
+        config = SlurmConfig(**(doc.get("slurm_config") or {}))
+        envelope = await get_db().datasets.find_one({"_id": doc.get("dataset_id")})
+        snapshot = (envelope or {}).get("document") or {}
+        return parse_slurm_time(resolve_compute(config, snapshot)[1])
+    except Exception as exc:
+        logger.info("Job %s: could not work out its walltime: %s", doc.get("_id"), exc)
+        return None
+
+
 async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None, missing: bool) -> bool:
     """Reach the verdict on a job that is over (or that SLURM has forgotten)
     and store it with everything it rests on. Reads `outcome.json` and the end
@@ -412,12 +434,23 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
         logger.warning("Job %s: could not read its result yet: %s", doc["_id"], exc)
         return False
 
+    # The document this tick started with may be seconds old, and the reads
+    # above took a while: a cancel recorded since then still counts, and a job
+    # someone else has already moved is theirs.
+    fresh = await get_db().jobs.find_one({"_id": doc["_id"]})
+    if fresh is None or fresh.get("status") != doc["status"]:
+        logger.info("Job %s left %s while its result was being read; leaving it", doc["_id"], doc["status"])
+        return False
+    doc = fresh
+
     verdict = classify(
         slurm_state=slurm_state,
         cancel_requested=bool(doc.get("cancel_requested_at")),
         outcome=outcome,
         stderr_tail=stderr_tail,
         missing=missing,
+        slurm_exit_code=info.exit_code if info else None,
+        walltime_seconds=await _walltime_seconds(doc) if slurm_state_head(slurm_state) == "TIMEOUT" else None,
     )
     now = datetime.now(timezone.utc)
     slurm_start = _as_utc(info.start_time) if info else None
@@ -738,6 +771,104 @@ async def scancel_by_name(sim_id: str) -> bool:
     if result.exit_status != 0:
         logger.warning("scancel --name=%s failed (%s): %s", sim_id, result.exit_status, result.stderr.strip())
     return result.exit_status == 0
+
+
+SUBMIT_INTERRUPTED = (
+    "The submit was interrupted before the gateway learned what Anvil answered, so any job "
+    "it started was cancelled. Your draft is unchanged. Submit again."
+)
+
+
+async def return_to_draft(
+    job_id: str,
+    code: str,
+    message: str,
+    *,
+    orphan_sim_id: str | None = None,
+    only_if: dict[str, Any] | None = None,
+) -> bool:
+    """Undo the claim of a submit that never reached SLURM: back to DRAFT, the
+    submit-time fields removed (a draft carries no `sim_id`, see
+    `jobs._new_draft_document`), and the reason kept for the UI (it replaces any
+    earlier one). `orphan_sim_id` is a `sim_id` whose job may exist after all,
+    kept for the sweep to cancel by name.
+
+    The orphan is recorded first and whatever the job's status is: a cancel can
+    have moved the job on while the submit was in flight, and the name must
+    outlive that, or nothing will ever scancel what sbatch started. `only_if`
+    narrows the move to the job as the caller saw it. Returns whether the job
+    went back to DRAFT."""
+    db = get_db()
+    if orphan_sim_id:
+        await db.jobs.update_one({"_id": job_id}, {"$addToSet": {"orphan_sim_ids": orphan_sim_id}})
+    now = datetime.now(timezone.utc)
+    result = await db.jobs.update_one(
+        {"_id": job_id, "status": "SUBMITTED", **(only_if or {})},
+        {
+            "$set": {
+                "status": "DRAFT",
+                "slurm_job_name": "",
+                "last_submit_error": {"code": code, "message": message, "at": now},
+                "updated_at": now,
+            },
+            "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
+        },
+    )
+    return result.matched_count == 1
+
+
+async def reconcile_interrupted_submits() -> None:
+    """Give back a draft whose submit the gateway lost track of.
+
+    The submit claims a draft (SUBMITTED, a `sim_id`) and only then runs sbatch;
+    the SLURM id is written after. If the process dies in between, or the write
+    fails, or something unexpected is raised, the job stays SUBMITTED with no
+    `slurm_job_id`, which `sync_active_jobs` cannot look up: it would sit there
+    forever while a job may be queued on Anvil that nobody tracks. One that has
+    not been written to for `JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS` (longer than
+    any submit takes) is cancelled by name, its leftover directory removed, and
+    the draft returned with `last_submit_error` `submit_interrupted`. If the
+    scancel cannot run, the name goes to `orphan_sim_ids` and `clear_orphans`
+    retries it."""
+    db = get_db()
+    due_before = datetime.now(timezone.utc) - timedelta(seconds=settings.JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS)
+    stuck = [doc async for doc in db.jobs.find({"status": "SUBMITTED", "slurm_job_id": None})]
+    for doc in stuck:
+        updated = _as_utc(doc.get("updated_at"))
+        if updated is not None and updated > due_before:
+            continue  # a submit that may still be running
+        try:
+            await _reconcile_interrupted(doc)
+        except Exception as exc:
+            logger.warning("Interrupted submit of job %s: %s", doc["_id"], exc)
+
+
+async def _reconcile_interrupted(doc: dict) -> None:
+    sim_id = doc.get("sim_id")
+    cancelled = False
+    if is_valid_id(sim_id):
+        try:
+            cancelled = await scancel_by_name(sim_id)
+        except Exception as exc:
+            logger.warning("scancel --name=%s failed: %s", sim_id, exc)
+        if cancelled:
+            await remove_failed_submit_dirs(sim_id)
+    moved = await return_to_draft(
+        doc["_id"],
+        "submit_interrupted",
+        SUBMIT_INTERRUPTED,
+        orphan_sim_id=sim_id if is_valid_id(sim_id) and not cancelled else None,
+        only_if={"slurm_job_id": None, "updated_at": doc.get("updated_at")},
+    )
+    if moved:
+        logger.warning("Job %s: its submit was interrupted (%s); returned to DRAFT", doc["_id"], sim_id)
+        await log_event(
+            "job_submit_interrupted",
+            actor_id=SYSTEM_ACTOR,
+            target_id=doc["_id"],
+            category=AuditCategory.JOB,
+            detail={"sim_id": sim_id, "cancelled": cancelled, "user_id": doc.get("user_id")},
+        )
 
 
 async def clear_orphans() -> None:
@@ -1111,7 +1242,9 @@ async def log_path(doc: dict, stream: str) -> str | None:
         return None
     sim_id = doc["sim_id"]
     out_dir = posixpath.join(work_dir, "wbm_output", sim_id)
-    recorded = ((doc.get("outcome") or {}).get("wbm") or {}).get("log")
+    outcome = doc.get("outcome")
+    wbm = outcome.get("wbm") if isinstance(outcome, dict) else None
+    recorded = wbm.get("log") if isinstance(wbm, dict) else None
     if isinstance(recorded, str):
         relative = posixpath.join(work_dir, recorded)
         if _own_path(relative, under=out_dir):
