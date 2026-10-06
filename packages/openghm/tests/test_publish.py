@@ -218,6 +218,7 @@ def make_metadata(root, mutate=None):
     meta["id"] = BASE        # a copy of the base's document: publish sets its own id
     meta["about"]["name"] = "A published run"
     meta["about"]["isBasedOn"] = [{"kind": "snapshot", "id": BASE}]
+    meta["about"]["url"] = "https://openghm.org/snapshots/"   # the caller builds it from the id it publishes
     if mutate:
         mutate(meta)
     path = root / "metadata.json"
@@ -330,7 +331,9 @@ def _drop(meta, *path):
     lambda m: m["uses"]["container"].__setitem__("version", "9.9.9"),
     lambda m: m["about"].__setitem__("isBasedOn", [{"kind": "snapshot", "id": "0" * 64}]),
     lambda m: _drop(m, "about", "isBasedOn"),
-], ids=["spec", "malformed-isBasedOn", "init", "model-input", "container", "other-base", "no-isBasedOn"])
+    lambda m: m["about"].__setitem__("url", f"https://openghm.org/snapshots/{BASE}"),
+], ids=["spec", "malformed-isBasedOn", "init", "model-input", "container", "other-base", "no-isBasedOn",
+        "url-of-another-id"])
 def test_a_metadata_that_fails_or_disagrees_is_bad_input(mutate, tmp_path, run, store):
     meta_path = make_metadata(tmp_path, mutate)
     assert code_of(run, meta_path, store) == pub.EXIT_BAD_INPUT

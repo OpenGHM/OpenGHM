@@ -431,6 +431,10 @@ def check_agreement(meta: dict, run: Run, base: Base) -> None:
     based_on = (meta.get("about") or {}).get("isBasedOn") or []
     if not any(isinstance(e, dict) and e.get("kind") == "snapshot" and e.get("id") == base.id for e in based_on):
         problems.append(f"about.isBasedOn does not name the base snapshot {base.id}")
+    # `id` was replaced by the one being published (read_metadata); a URL built from another id was not
+    url = str((meta.get("about") or {}).get("url") or "")
+    if any(i != meta.get("id") for i in re.findall(r"[0-9a-f]{64}", url)):
+        problems.append(f"about.url {url!r} names another id than {meta.get('id')}")
     if problems:
         raise PublishError(f"the given {METADATA_NAME} does not agree with the run:\n{_problems(problems)}")
 
