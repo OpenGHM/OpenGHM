@@ -60,6 +60,9 @@ are about it.
 
 ## Generate `SHA256SUMS`
 
+`openghm snapshot publish` builds it this way for a published run, taking a copied
+file's line from its base snapshot's `SHA256SUMS` ([s3-layout.md](s3-layout.md#upload-and-lock)).
+
 `SHA256SUMS` covers the snapshot's **inputs** — everything except
 `wbm_output/` (a result). A model input uses the same recipe with
 no exclusions ([s3-layout.md](s3-layout.md)).

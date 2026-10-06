@@ -179,18 +179,50 @@ Enforce immutability with the strongest option available:
    `model-inputs/` prefixes. Requires bucket versioning and RCAC enablement ([open-items.md](open-items.md)).
 2. **Bucket policy** denying `s3:PutObject` on existing keys for the publishing
    identity, with a separate write-once role.
-3. **Publisher-side check** — refuse to upload when the key already exists.
-   Needs no admin cooperation:
+3. **Publisher-side check**: refuse to replace a key that already holds
+   other bytes. It needs no admin cooperation, and it is what runs today.
 
-```bash
-# fail if the key is already present
-if curl -fsI "https://s3.anvil.rcac.purdue.edu/openghm/$KEY" >/dev/null; then
-  echo "refusing: $KEY already exists" >&2; exit 1
-fi
-```
+**`openghm snapshot publish <run dir> --metadata <file> [--id <id>]`**
+publishes a finished run this way
+([ADR 0031](../decisions/0031-a-snapshot-draft-is-published-by-a-job.md),
+[`packages/openghm/README.md`](../../packages/openghm/README.md)). It runs on
+Anvil in a SLURM job, with `x-openghm`'s own `~/.s3cfg`.
+
+- **Before it writes**, it checks the `metadata.json` given against the
+  spec and against the run. It also checks the run's output against what
+  its init asked for, and the tree against the layout.
+- **What it writes:**
+  - the base snapshot's code and fixtures, copied server-side, which keeps
+    their file modes;
+  - the run's `wbm_init/`, `wbm_output/<sim id>/` and `WBM_run_state/`,
+    uploaded public-read with their mode and an `x-amz-meta-sha256`;
+  - `SHA256SUMS`;
+  - `metadata.json`, last.
+- **Each key is read before it is written.** Absent: written. The same
+  bytes: skipped. Other bytes: the publish stops with exit 4, having
+  replaced nothing.
+- **After it writes**, it re-reads `SHA256SUMS` and every key anonymously.
+
+A retry with the same `--id` resumes. So **a `snapshots/<id>/` without a
+`metadata.json` is an unfinished publish**, not a snapshot. Nothing cites it,
+and the gateway's catalogue, not a listing of `snapshots/`, says what is
+published.
+
+The publish was verified on 2026-10-07 from run `sim-20261005-76c660`:
+
+- **The publish.** 26 keys copied and 48 uploaded (1.6 GB) in 28 s. Fetch
+  and validate passed on the result, and `model/wbm.pl` kept mode 755.
+- **A rerun** skipped all 74 keys.
+- **A changed `metadata.json`** stopped with exit 4 and left the published
+  one unchanged.
+- **A publish cancelled after 38 keys** had no `metadata.json`, and its
+  rerun completed.
+- **Cleanup.** Both test trees were deleted afterwards.
 
 S3 conditional writes (`If-None-Match: *`) would make option 3 atomic, but
-support is version-dependent ([open-items.md](open-items.md)).
+support is version-dependent ([open-items.md](open-items.md)). Between the
+read and the write, another writer with the same identity could still put
+the key.
 
 ## Publish a model input
 
