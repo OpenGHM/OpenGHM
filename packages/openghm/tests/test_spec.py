@@ -127,6 +127,52 @@ def test_wrong_projection_rejected():
     assert any("projection" in e for e in result.errors)
 
 
+# ---- about.isBasedOn (ADR 0031) -----------------------------------------------
+
+
+def _based_on(entries):
+    doc = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    doc["about"]["isBasedOn"] = entries
+    return spec.validate_document(doc, spec="snapshot-spec")
+
+
+def test_is_based_on_is_accepted():
+    ok = _based_on([{"kind": "snapshot", "id": "a" * 64}, {"kind": "modelInput", "id": "0" * 63 + "f"}])
+    assert ok.ok, ok.errors
+
+
+def test_is_based_on_is_optional():
+    assert "isBasedOn" not in SNAPSHOT_EXAMPLE["about"]
+    assert spec.validate_document(SNAPSHOT_EXAMPLE, spec="snapshot-spec").ok
+
+
+@pytest.mark.parametrize(
+    "entries, why",
+    [
+        ([], "empty list"),
+        ([{"kind": "run", "id": "a" * 64}], "kind outside the list"),
+        ([{"kind": "snapshot", "id": "a" * 63}], "id too short"),
+        ([{"kind": "snapshot", "id": "A" * 64}], "id in upper case"),
+        ([{"kind": "snapshot", "id": "g" * 64}], "id not hex"),
+        ([{"kind": "snapshot"}], "no id"),
+        ([{"id": "a" * 64}], "no kind"),
+        ([{"kind": "snapshot", "id": "a" * 64, "note": "x"}], "extra property"),
+    ],
+)
+def test_is_based_on_malformed_is_rejected(entries, why):
+    result = _based_on(entries)
+    assert not result.ok, why
+    assert any("isBasedOn" in e for e in result.errors), result.errors
+
+
+def test_is_based_on_is_accepted_by_the_model_input_spec_too():
+    doc = copy.deepcopy(MODEL_INPUT_EXAMPLE)
+    doc["about"]["isBasedOn"] = [{"kind": "modelInput", "id": "b" * 64}]
+    assert spec.validate_document(doc, spec="model-input-spec").ok
+    doc["about"]["isBasedOn"] = [{"kind": "modelInput", "id": "b"}]
+    assert not spec.validate_document(doc, spec="model-input-spec").ok
+
+
 # ---- validate_document — negative: uniqueness the schema can't express -------
 
 

@@ -329,6 +329,23 @@ be a `publication` and a model input an `ancillary-data`, `climate-forcing` and
 Adding a value is an additive MINOR change, the same as a new forcing role;
 removing or renaming one is breaking, because documents already carry it.
 
+#### `about.isBasedOn`
+
+Optional. The published artifacts this one was derived from, as a list of
+`{ "kind": "snapshot" | "modelInput", "id": <64 lowercase hex> }`, at least one
+entry when present. A snapshot published from a run of another snapshot names
+that snapshot, so a reader can follow it back
+([ADR 0031](../decisions/0031-a-snapshot-draft-is-published-by-a-job.md)):
+
+```json
+"isBasedOn": [{ "kind": "snapshot", "id": "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89" }]
+```
+
+It is provenance, not a dependency: nothing resolves it, and what a run needs
+stays in `uses`. The field lives in the shared `about` block, so a model input
+carries it with the same meaning. A snapshot that was not derived from another
+one omits it, as the three published snapshots do.
+
 #### `runtime.execution`
 
 Records the run that produced this snapshot's `wbm_output/` — not a rebuild,
@@ -439,7 +456,8 @@ snapshot mirrored to a second gateway would carry the same
 | `fileSize`, `format` | Properties of the stored tree, not of `metadata.json` — and the backend holds no S3 credentials by design ([`gateway.md` §5](../architecture/gateway.md#5-the-two-paths-that-leave-the-cluster)), so computing them from S3 was never architecturally available either |
 | `spatialCoverage.riverNetworkSource`, `majorRivers` | The network file's identity belongs to a model input's `networks[]`, which this mission's catalogue does not join (model input is out of scope — [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 | `spinupPeriod` | Matches the already-documented deliberate exclusion of `Spinup` (`.init` fields that are neither searchable nor part of the overview, [above](#where-simulation-comes-from)) |
-| `isBasedOn`, `datasetVersion` | No traceable source; legacy leftovers |
+| `datasetVersion` | No traceable source; legacy leftover |
+| the legacy `isBasedOn` | A free field with no traceable source. The spec's own [`about.isBasedOn`](#aboutisbasedon) replaces it: ids, not text, and carried through `about` as it is |
 | `processesOn` | Duplicated `activeProcesses` |
 | `variablesMeasured[].standardName` | A CF standard name is a controlled-vocabulary term; nothing populates it |
 | `datasetType` | The catalogue is snapshot-only for this mission — model input is out of scope. A discriminator with one possible value describes nothing; a later mission adds it against a real second case, not an imagined one. That case has since arrived: the mixed list `GET /repository/catalogue` tags each item with a computed `kind` ([gateway.md](../architecture/gateway.md#the-data-repository)), still not stored |

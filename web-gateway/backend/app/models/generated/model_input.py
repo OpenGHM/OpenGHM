@@ -127,6 +127,22 @@ class RelatedLinkItem(BaseModel):
     description: str | None = None
 
 
+class Kind(Enum):
+    snapshot = 'snapshot'
+    modelInput = 'modelInput'
+
+
+class IsBasedOnItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Kind
+    id: constr(pattern=r'^[0-9a-f]{64}$') = Field(
+        ...,
+        description='The minted id of that artifact: 256 bits as lowercase hex (ADR 0014).',
+    )
+
+
 class OpenGHMCitationBlock(BaseModel):
     """
     The 'who published this, and how to cite it' block, shared by every OpenGHM artifact spec (snapshot, model input) rather than defined once per spec (ADR 0018). Field names are schema.org/Dataset property names on purpose, so a JSON-LD island can be generated for Google Dataset Search at render time (see metadata-format.md#notes) — that projection is generated, never stored.
@@ -153,6 +169,11 @@ class OpenGHMCitationBlock(BaseModel):
         description="The canonical gateway URL, built from the artifact's minted id — never from its slug, which can be renamed later (see metadata-format.md).",
     )
     relatedLink: list[RelatedLinkItem] | None = None
+    isBasedOn: list[IsBasedOnItem] | None = Field(
+        None,
+        description="The published artifacts this one was derived from, by minted id: a snapshot published from a run of another snapshot names that snapshot (kind 'snapshot'). Optional, and absent for an artifact that was not derived from another published one. It is provenance for a reader, not something a run resolves — what a snapshot depends on stays in 'uses'. See metadata-format.md#aboutisbasedon.",
+        min_length=1,
+    )
 
 
 class Units(Enum):

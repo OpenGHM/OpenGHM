@@ -81,6 +81,27 @@ export interface OpenGHMCitationBlock {
     doi?: string | null;
     description?: string;
   }[];
+  /**
+   * The published artifacts this one was derived from, by minted id: a snapshot published from a run of another snapshot names that snapshot (kind 'snapshot'). Optional, and absent for an artifact that was not derived from another published one. It is provenance for a reader, not something a run resolves — what a snapshot depends on stays in 'uses'. See metadata-format.md#aboutisbasedon.
+   *
+   * @minItems 1
+   */
+  isBasedOn?: [
+    {
+      kind: "snapshot" | "modelInput";
+      /**
+       * The minted id of that artifact: 256 bits as lowercase hex (ADR 0014).
+       */
+      id: string;
+    },
+    ...{
+      kind: "snapshot" | "modelInput";
+      /**
+       * The minted id of that artifact: 256 bits as lowercase hex (ADR 0014).
+       */
+      id: string;
+    }[]
+  ];
 }
 export interface Simulation {
   /**
