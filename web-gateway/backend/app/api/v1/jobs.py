@@ -310,7 +310,8 @@ def _duplicate_document(
         slug=source.get("slug"),
         user=user,
         now=now,
-        model_input_id=source.get("model_input_id"),
+        # No model input: a copy inherits the snapshot's own, whatever the
+        # source overrode (choosing another is hidden, user decision 2026-10-06).
         about=about,
         slurm_config=SlurmConfig(**(source.get("slurm_config") or {})),
     )
@@ -399,6 +400,10 @@ async def derive_simulation(
     body: SimulationDeriveRequest = SimulationDeriveRequest(),
     user: TokenPayload = Depends(require_active_user),
 ):
+    # Choosing a model input other than the snapshot's own is hidden for now
+    # (user decision 2026-10-06); the field stays so existing drafts still read.
+    if body.model_input_id is not None:
+        raise _model_input_choice_unavailable()
     db = get_db()
     job_id = str(uuid.uuid4())
     doc = await _derived_draft(
@@ -511,6 +516,10 @@ async def update_simulation(
         raise _not_a_draft(doc["status"])
 
     changes = body.model_dump(exclude_unset=True, mode="json")
+    # Setting an override is hidden for now (user decision 2026-10-06); `null`
+    # (revert to the snapshot's own) stays, so a draft that has one can lose it.
+    if changes.get("model_input_id") is not None:
+        raise _model_input_choice_unavailable()
     if not changes:
         effective = await _resolve_effective_model_input(doc)
         return _doc_to_response(doc, effective=effective)
@@ -583,6 +592,14 @@ def _error(http_status: int, code: str, message: str, **extra) -> HTTPException:
     same shape `app.core.authz` refuses with."""
     return HTTPException(
         status_code=http_status, detail={"code": code, "message": message, **extra}
+    )
+
+
+def _model_input_choice_unavailable() -> HTTPException:
+    return _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "model_input_choice_unavailable",
+        "Choosing a model input other than the snapshot's own is not available yet.",
     )
 
 

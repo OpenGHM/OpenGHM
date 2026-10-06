@@ -254,11 +254,13 @@ export function buildDraftPatch(
     }
   };
 
-  // Model & input.
-  if (want.modelInputId !== have.modelInputId) {
-    const refusal = refusedGroup(refusals, "modelInput", want.modelInputId);
+  // Model & input. Only a revert (`null`) is ever sent: the API refuses to set
+  // one (`model_input_choice_unavailable`, user decision 2026-10-06), and the
+  // wizard has no way to choose one.
+  if (want.modelInputId === null && have.modelInputId !== null) {
+    const refusal = refusedGroup(refusals, "modelInput", null);
     if (refusal) withhold(refusal.fields, refusal.message);
-    else patch.model_input_id = want.modelInputId;
+    else patch.model_input_id = null;
   }
 
   // Run settings: parameters.

@@ -38,6 +38,27 @@ def _patch(client, **body):
     return client.patch(URL, json=body, headers=HEADERS)
 
 
+# ---- a model input other than the snapshot's own is hidden (user decision 2026-10-06) ----
+
+
+def test_setting_a_model_input_is_a_422_and_changes_nothing(client, db, draft):
+    before = copy.deepcopy(db.jobs.docs["job-1"])
+    response = _patch(client, model_input_id="mi-1", slug="renamed")
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "model_input_choice_unavailable"
+    assert detail["message"] == "Choosing a model input other than the snapshot's own is not available yet."
+    assert db.jobs.docs["job-1"] == before
+
+
+def test_null_model_input_reverts_a_draft_that_has_one(client, db, draft):
+    draft["model_input_id"] = "mi-1"  # a legacy override, written before the API refused it
+    response = _patch(client, model_input_id=None)
+    assert response.status_code == 200, response.text
+    assert response.json()["model_input_id"] is None
+    assert db.jobs.docs["job-1"]["model_input_id"] is None
+
+
 # ---- only a draft is written -------------------------------------------------
 
 

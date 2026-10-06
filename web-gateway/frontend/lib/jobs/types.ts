@@ -235,10 +235,6 @@ export interface JobListResponse {
 /** POST /jobs/derive/{dataset_id} body. */
 export interface DraftDeriveRequest {
   slug?: string | null;
-  /** Optional model-input override, set at creation time instead of only
-   *  by a later PATCH. Absent means inherit from the base snapshot, same
-   *  as everywhere else this field appears (app/models/job.py). */
-  model_input_id?: string | null;
 }
 
 /** PATCH /jobs/{job_id} body — only the fields supplied are changed.
@@ -252,10 +248,11 @@ export interface DraftUpdateRequest {
   /** Cores and walltime. Only the fields sent change; `null` goes back to
    *  the snapshot's recommended compute. */
   slurm_config?: Partial<SlurmConfig> | null;
-  /** Set to override the base snapshot's model input, or explicitly to
-   *  `null` to clear an override and go back to inheriting. Omitting the
-   *  key entirely leaves whatever was there untouched. */
-  model_input_id?: string | null;
+  /** `null` clears an override and goes back to the snapshot's own model
+   *  input. The API refuses to set one (`model_input_choice_unavailable`,
+   *  user decision 2026-10-06), so no other value is sent. Omitting the key
+   *  leaves whatever was there untouched. */
+  model_input_id?: null;
 }
 
 /** Where a running WBM has got to, read from the last progress line of its

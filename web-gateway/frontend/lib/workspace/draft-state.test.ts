@@ -198,6 +198,11 @@ describe("buildDraftPatch: each group sends only its own keys", () => {
     expect(patch).toHaveProperty("model_input_id", null);
   });
 
+  it("model input: a value is never sent, the API refuses to set one", () => {
+    const { patch } = buildDraftPatch(edited(job, { modelInputId: "other" }), job, FOUND);
+    expect(patch).toBeNull();
+  });
+
   it("run settings, parameters: the whole object and nothing else", () => {
     const { patch } = buildDraftPatch(edited(job, { params: { temporal_range_end: "2002-12-31" } }), job, FOUND);
     expect(patch).toEqual({

@@ -240,22 +240,20 @@ announce. `openghm sim run` and `sim submit` check the same rule on a
 `--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
 stop before staging.
 
-A draft's `model_input_id` is optional and, while `DRAFT`, editable —
-mission `2026-09-21-choose-a-model-input`. Absent means the snapshot draft
-inherits whichever model input its base snapshot's own `uses.modelInput.id`
-names; set, it overrides that. `_resolve_effective_model_input()` in
-`web-gateway/backend/app/api/v1/jobs.py` produces one of three states — `chosen`, `inherited`,
-or `inherited-missing` (the base snapshot cites an id the `model_inputs`
-catalogue does not hold, which is the common case among the shipped
-examples, not an edge case) — and the draft wizard's Run settings summary shows the
-inherited model input by name (a link to its catalogue page when the catalogue
-holds it, its short id when not). An override can be set only through the API,
-and Run settings shows one as a warning with a Revert button, so it never looks
-identical to an inheritance. The wizard has no step for choosing a model input:
-nothing there could be changed until the toolkit has an option for it. The override changes nothing about how a
-run would be invoked: nothing mints a real `apptainer` command yet ([open
-item 9](../reference/open-items.md)), so this is recorded and displayed, not
-yet consumed.
+A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
+whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
+overrides that. `_resolve_effective_model_input()` in
+`web-gateway/backend/app/api/v1/jobs.py` still reads it and produces one of three
+states — `chosen`, `inherited`, or `inherited-missing` (the base snapshot cites an
+id the `model_inputs` catalogue does not hold, which is the common case among the
+shipped examples, not an edge case) — and Run settings shows the inherited model
+input by name, and a `chosen` one as a warning with a Revert button. Choosing a
+model input other than the snapshot's own is hidden and deferred at low priority
+(user decision 2026-10-06): the wizard has no step for it, and the API refuses to
+set one (`POST /jobs/derive/{dataset_id}` and `PATCH /jobs/{id}` answer 422
+`model_input_choice_unavailable`). A `null` PATCH still reverts, `duplicate` does
+not copy an override, and submit refuses a draft that still has one (422
+`unsupported_fields`, [open item 9](../reference/open-items.md)).
 
 `model_inputs` holds the same envelope shape for the other published
 artifact: a model input's own `metadata.json` under `document`, written by

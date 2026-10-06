@@ -224,7 +224,12 @@ def test_the_active_job_limit_answers_429_and_leaves_the_draft(client, db, draft
     ],
 )
 def test_each_unsupported_field_is_a_422_naming_it(client, db, draft, sent, edit, fields):
-    assert _patch(client, **edit).status_code == 200
+    if "model_input_id" in edit:
+        # The API no longer sets an override (user decision 2026-10-06); a legacy
+        # draft that has one is written straight to the store.
+        draft.update(edit)
+    else:
+        assert _patch(client, **edit).status_code == 200
     response = client.post(SUBMIT, headers=HEADERS)
     assert response.status_code == 422
     detail = response.json()["detail"]

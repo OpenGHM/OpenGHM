@@ -362,6 +362,32 @@ def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
     assert event["detail"] == {"dataset_id": "ds-1"}
 
 
+def test_derive_refuses_a_model_input_choice_and_stores_nothing(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    response = client.post(
+        "/api/v1/jobs/derive/ds-1", json={"model_input_id": "mi-1"}, headers=token_for("alice")
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "model_input_choice_unavailable"
+    assert detail["message"] == "Choosing a model input other than the snapshot's own is not available yet."
+    assert not db.jobs.docs
+    assert not [e for e in db.audit_events.docs.values() if e["action"] == "simulation_derived"]
+
+
+def test_derive_still_accepts_an_explicit_null_model_input(client, db):
+    from route_helpers import make_user, token_for
+
+    db.users.docs["alice"] = make_user("alice")
+    response = client.post(
+        "/api/v1/jobs/derive/ds-1", json={"model_input_id": None}, headers=token_for("alice")
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["model_input_id"] is None
+
+
 # ---- previewing a derive: GET shows what POST would store, stores nothing ----
 
 
@@ -499,7 +525,7 @@ def test_duplicate_document_has_exactly_the_keys_of_a_fresh_draft():
     # What a copy does take.
     assert copy_["dataset_id"] == "dataset-1" and copy_["slug"] == "slug"
     assert copy_["about"] == {"name": "Basin (copy)", "keywords": ["k"]}
-    assert copy_["model_input_id"] == "mi-1"
+    assert copy_["model_input_id"] is None  # an override is not copied (user decision 2026-10-06)
     assert copy_["parameters"]["variables"] == ["runoff"]
     assert copy_["slurm_config"] == {"cores": 4, "walltime": "01:00:00"}
 
