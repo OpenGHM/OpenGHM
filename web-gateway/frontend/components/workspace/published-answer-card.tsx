@@ -1,4 +1,4 @@
-import { CheckCircle2, Download } from "lucide-react";
+import { Download, TriangleAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PublishedAnswer, PublishedFile, PublishedFileGroup } from "@/lib/jobs/types";
 import { formatBytes } from "@/lib/workspace/format";
@@ -50,8 +50,36 @@ function FileRow({ file, label }: { file: PublishedFile; label: string }) {
 }
 
 /**
+ * The warning at the top of Review when the published results already answer the
+ * draft: it has been run and published, so running it again is optional. A static
+ * notice (`role="status"`, not an alert), in the `warning` tokens like the other
+ * cautions. The files themselves are in `PublishedAnswerCard`.
+ */
+export function PublishedAnswerNotice() {
+  return (
+    <section
+      role="status"
+      aria-labelledby="published-notice-title"
+      className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning sm:gap-4 sm:p-5"
+    >
+      <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+      <div className="min-w-0 space-y-1">
+        <h3 id="published-notice-title" className="text-base font-semibold">
+          This simulation has already been run
+        </h3>
+        <p className="break-words text-sm">
+          This model snapshot already publishes the results these settings would compute, so there is no need to
+          run it again. Download the published files below. Run it again only to check that the results
+          reproduce: that uses compute time on your allocation.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/**
  * Review, when the snapshot's published results already answer the draft:
- * instead of the submit card, which run they come from and for which period,
+ * which run they come from and for which period,
  * and every file that answers it (daily, then monthly and yearly by variable)
  * with its year, its size and a plain link to the public file. Nothing here
  * runs anything. The card says that files are per year and that a daily file
@@ -76,20 +104,15 @@ export function PublishedAnswerCard({
 
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-success/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
+      <CardHeader className="border-b !py-4 !gap-0 grid-rows-1 items-center">
         <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-success/10">
-            <CheckCircle2 className="size-4 text-success" aria-hidden="true" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
+            <Download className="size-4 text-muted-foreground" aria-hidden="true" />
           </div>
-          <h3>Results already published</h3>
+          <h3>Published results</h3>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5 pt-5 pb-6">
-        <p className="text-sm text-foreground">
-          This model snapshot already publishes the results this simulation would compute, so there is nothing
-          to submit. Download them below.
-        </p>
-
         <dl className="grid gap-2 sm:grid-cols-2">
           {answer.period && (
             <div className="rounded-lg bg-muted px-3 py-2.5">

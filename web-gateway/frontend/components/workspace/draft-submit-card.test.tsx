@@ -488,7 +488,7 @@ describe("DraftSubmitCard: a rerun of published results", () => {
     expect(screen.queryByRole("button", { name: "Submit to Anvil" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Submit" })).toBeNull();
     expect(runAnyway().getAttribute("data-variant")).toBe("outline");
-    expect(screen.getByText(/uses compute time/)).toBeTruthy();
+    expect(screen.getByText(/Already published. Running it again repeats a published result and uses compute time./).parentElement?.className).toContain("text-warning");
   });
 
   it("saves first, then confirms with copy that says it reruns a published result and uses allocation", async () => {
@@ -496,10 +496,10 @@ describe("DraftSubmitCard: a rerun of published results", () => {
     fireEvent.click(runAnyway());
     await screen.findByRole("alertdialog");
     expect(calls).toEqual(["flush"]);
-    expect(within(dialog()).getByRole("heading", { name: "Run this again on Anvil?" })).toBeTruthy();
+    expect(within(dialog()).getByRole("heading", { name: "Run it again anyway?" })).toBeTruthy();
     const text = dialog().textContent ?? "";
     expect(text).toContain("already published");
-    expect(text).toContain("reproduces");
+    expect(text).toContain("they reproduce");
     expect(text).toContain("uses compute time");
     // What the server holds after the flush, as in a submit.
     expect(text).toContain("Saved snapshot title");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, RotateCw, Send } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, RotateCw, Send, TriangleAlert } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,8 +56,9 @@ type Stage = "idle" | "flushing" | "confirming" | "submitting" | "checking" | "d
  *
  * - `rerun` is the card for a draft the snapshot's published results already
  *   answer (the Review step shows those above it): the same save-confirm-submit
- *   path, but quiet, a secondary "Run anyway", and a confirmation that says it
- *   repeats a published result and uses allocation. The wizard passes a `submit`
+ *   path, but quiet, a secondary "Run anyway" under a warning line, and a
+ *   confirmation, with a warning icon, that says it repeats a published result
+ *   and uses allocation. The wizard passes a `submit`
  *   that asks the backend for a rerun.
  *
  * Everything with an effect is a prop, so this component calls no server action
@@ -279,11 +280,18 @@ export function DraftSubmitCard({
         )
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <p className="text-xs text-muted-foreground">
-            {rerun
-              ? "To check that the published results reproduce, run it again on Anvil. This saves your changes first and uses compute time."
-              : "Submitting saves your changes first, then runs it on Anvil and uses compute time."}
-          </p>
+          {rerun ? (
+            <p className="flex items-start gap-2 text-sm text-warning">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">
+                Already published. Running it again repeats a published result and uses compute time.
+              </span>
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Submitting saves your changes first, then runs it on Anvil and uses compute time.
+            </p>
+          )}
           <Button
             type="button"
             variant={rerun ? "outline" : "default"}
@@ -292,7 +300,7 @@ export function DraftSubmitCard({
             onClick={() => void start()}
             className={
               rerun
-                ? "min-h-10 w-full shrink-0 px-6 sm:w-auto"
+                ? "min-h-10 w-full shrink-0 border-warning/40 px-6 text-warning hover:bg-warning/10 hover:text-warning sm:w-auto"
                 : "min-h-10 w-full shrink-0 px-6 font-semibold sm:w-auto"
             }
           >
@@ -328,12 +336,13 @@ export function DraftSubmitCard({
             inside the dialog so Cancel and Submit stay reachable. */}
         <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {rerun ? "Run this again on Anvil?" : "Submit this snapshot draft to Anvil?"}
+            <AlertDialogTitle className={rerun ? "flex items-center gap-2 text-warning" : undefined}>
+              {rerun && <TriangleAlert className="size-5 shrink-0" aria-hidden="true" />}
+              {rerun ? "Run it again anyway?" : "Submit this snapshot draft to Anvil?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {rerun
-                ? "This result is already published. Running it again checks that it reproduces, and uses compute time on your allocation. Check the summary first."
+                ? "These results are already published, so running it again only checks that they reproduce. It uses compute time on your allocation. Check the summary first."
                 : "This starts the simulation and spends compute time. Check the summary first."}
             </AlertDialogDescription>
           </AlertDialogHeader>

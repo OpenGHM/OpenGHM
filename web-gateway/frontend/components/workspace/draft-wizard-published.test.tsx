@@ -123,7 +123,7 @@ afterEach(() => {
 
 const submitButton = () => screen.queryByRole("button", { name: "Submit to Anvil" });
 const runAnyway = () => screen.getByRole("button", { name: "Run anyway" });
-const resultsCard = () => screen.queryByRole("heading", { name: "Results already published" });
+const resultsCard = () => screen.queryByRole("heading", { name: "This simulation has already been run" });
 
 describe("Review, for a stored draft", () => {
   it("asks about the parameters on screen, once, and shows the results card instead of the submit card", async () => {
@@ -131,7 +131,7 @@ describe("Review, for a stored draft", () => {
     // Looking up: a skeleton, and nothing to submit yet.
     expect(screen.getByText(/Checking whether this is already published/).parentElement?.getAttribute("aria-busy")).toBe("true");
     expect(submitButton()).toBeNull();
-    expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This simulation has already been run" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledTimes(1);
     expect(publishedAnswer).toHaveBeenCalledWith(dataset.id, PARAMETERS, null);
     expect(submitButton()).toBeNull();
@@ -141,7 +141,7 @@ describe("Review, for a stored draft", () => {
 
   it("keeps Save draft in the header, off until there is something to save", async () => {
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     const save = screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
   });
@@ -186,22 +186,23 @@ describe("Review, for a stored draft", () => {
   it("says the years come from the published simulation when the draft starts later than it", async () => {
     publishedAnswer.mockResolvedValue({ ok: true, data: { ...ANSWERED, period: { start: "2000-01-01", end: "2001-12-31" } } });
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     expect(screen.getByText(/whose spinup began earlier/)).toBeTruthy();
   });
 
   it("does not say it when the draft starts with the published simulation", async () => {
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     expect(screen.queryByText(/whose spinup began earlier/)).toBeNull();
   });
 
   it("Run anyway saves, confirms with copy about rerunning and allocation, and submits with rerun: true", async () => {
     submitDraft.mockResolvedValue({ ok: true, data: { ...STORED, status: "PENDING" } });
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     fireEvent.click(runAnyway());
     const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByRole("heading", { name: "Run it again anyway?" })).toBeTruthy();
     expect(dialog.textContent).toContain("already published");
     expect(dialog.textContent).toContain("compute time");
     expect(submitDraft).not.toHaveBeenCalled();
@@ -213,7 +214,7 @@ describe("Review, for a stored draft", () => {
 
   it("Cancel in that dialog runs nothing", async () => {
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     fireEvent.click(runAnyway());
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -235,7 +236,7 @@ describe("Review, for a stored draft", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Submit to Anvil" }));
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
-    expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This simulation has already been run" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledTimes(2);
     expect(submitDraft).toHaveBeenCalledWith("job-1");
     expect(screen.getByRole("button", { name: "Run anyway" })).toBeTruthy();
@@ -244,12 +245,12 @@ describe("Review, for a stored draft", () => {
 
   it("asks again after the period is edited on Run settings, and not when nothing changed", async () => {
     stored();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     // Out to Run settings and back with nothing changed: no new question.
     fireEvent.click(screen.getByRole("button", { name: "Edit run period" }));
     await screen.findByRole("heading", { level: 2, name: "Run settings" });
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     expect(publishedAnswer).toHaveBeenCalledTimes(1);
   });
 });
@@ -257,7 +258,7 @@ describe("Review, for a stored draft", () => {
 describe("Review, for a new snapshot draft that is not saved", () => {
   it("asks with the preview's parameters and shows the results card; nothing is saved by looking", async () => {
     fresh();
-    expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This simulation has already been run" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledWith(dataset.id, PARAMETERS, null);
     expect(deriveDraft).not.toHaveBeenCalled();
     expect(updateDraft).not.toHaveBeenCalled();
@@ -266,7 +267,7 @@ describe("Review, for a new snapshot draft that is not saved", () => {
 
   it("keeps Save as draft working beside the results card", async () => {
     fresh();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     const save = screen.getAllByRole("button", { name: "Save as draft" })[0] as HTMLButtonElement;
     expect(save.disabled).toBe(false);
     fireEvent.click(save);
@@ -278,7 +279,7 @@ describe("Review, for a new snapshot draft that is not saved", () => {
   it("Run anyway saves the draft first, then submits it with rerun: true", async () => {
     submitDraft.mockResolvedValue({ ok: true, data: { ...CREATED, status: "PENDING" } });
     fresh();
-    await screen.findByRole("heading", { name: "Results already published" });
+    await screen.findByRole("heading", { name: "This simulation has already been run" });
     fireEvent.click(runAnyway());
     const dialog = await screen.findByRole("alertdialog");
     // The draft was created for the confirmation, not before the click.
@@ -302,7 +303,7 @@ describe("Review, for a new snapshot draft that is not saved", () => {
     await Promise.resolve();
     expect(publishedAnswer).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByRole("heading", { name: "Results already published" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This simulation has already been run" })).toBeTruthy();
     expect(publishedAnswer).toHaveBeenCalledTimes(1);
   });
 

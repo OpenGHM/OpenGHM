@@ -9,7 +9,7 @@ import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
-import { PublishedAnswerCard } from "@/components/workspace/published-answer-card";
+import { PublishedAnswerCard, PublishedAnswerNotice } from "@/components/workspace/published-answer-card";
 import {
   automaticWalltimeLabel,
   describeCoresBelowRecommendedShort,
@@ -132,7 +132,7 @@ function AnswerSkeleton() {
  * wizard can focus it.
  *
  * `publishedAnswer` is what the wizard learned about the snapshot's published
- * results for this draft (`usePublishedAnswer`). Answered: the panel ends with
+ * results for this draft (`usePublishedAnswer`). Answered: a warning notice comes first, the panel ends with
  * the summary, the published results card follows it, and `submitArea` (then the
  * secondary "Run anyway") goes under the card. Loading: a skeleton in place of
  * the submit area. Otherwise `submitArea` ends the panel as ever, with a note
@@ -178,6 +178,8 @@ export function DraftReviewStep({
           ? "Check what you asked for, then download the published results."
           : "Check what will run, then submit it to Anvil."}
       </DraftStepHeading>
+
+      {publishedAnswer.status === "answered" && <PublishedAnswerNotice />}
 
       <DraftPanel>
         <DraftSection>

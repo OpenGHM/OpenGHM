@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
-import { PublishedAnswerCard } from "@/components/workspace/published-answer-card";
+import { PublishedAnswerCard, PublishedAnswerNotice } from "@/components/workspace/published-answer-card";
 import type { PublishedAnswer, PublishedFile } from "@/lib/jobs/types";
 
 afterEach(cleanup);
@@ -38,7 +38,7 @@ const section = (name: string) => screen.getByRole("region", { name });
 describe("PublishedAnswerCard", () => {
   it("names the published period and the simulation it comes from", () => {
     render(<PublishedAnswerCard answer={ANSWER} draftStart="2000-01-01" />);
-    expect(screen.getByRole("heading", { name: "Results already published" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Published results" })).toBeTruthy();
     expect(screen.getByText("Published period").nextElementSibling?.textContent).toBe("2000-01-01 → 2001-12-31");
     expect(screen.getByText("Simulation").nextElementSibling?.textContent).toBe("WBM_test");
   });
@@ -118,5 +118,18 @@ describe("PublishedAnswerCard", () => {
     );
     expect(screen.queryByRole("region", { name: "Monthly files" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Yearly files" })).toBeNull();
+  });
+});
+
+describe("PublishedAnswerNotice", () => {
+  it("is a static warning region titled for what has already happened", () => {
+    render(<PublishedAnswerNotice />);
+    const notice = screen.getByRole("status");
+    expect(notice.getAttribute("role")).not.toBe("alert");
+    expect(within(notice).getByRole("heading", { name: "This simulation has already been run" })).toBeTruthy();
+    expect(notice.textContent).toContain("no need to run it again");
+    expect(notice.textContent).toContain("Download the published files below");
+    expect(notice.className).toMatch(/border-warning/);
+    expect(notice.className).toMatch(/bg-warning/);
   });
 });

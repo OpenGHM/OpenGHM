@@ -266,7 +266,8 @@ describe("DraftReviewStep: published results", () => {
   it("shows only the submit area when nothing is known or nothing answers", () => {
     review({ publishedAnswer: { status: "none" } });
     expect(screen.getByTestId("submit-area")).toBeTruthy();
-    expect(screen.queryByText("Results already published")).toBeNull();
+    expect(screen.queryByText("This simulation has already been run")).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Download / })).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -276,12 +277,13 @@ describe("DraftReviewStep: published results", () => {
     const status = screen.getByRole("status");
     expect(status.getAttribute("aria-busy")).toBe("true");
     expect(status.textContent).toContain("Checking whether this is already published");
-    expect(screen.queryByText("Results already published")).toBeNull();
+    expect(screen.queryByText("This simulation has already been run")).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Download / })).toBeNull();
   });
 
   it("replaces the submit card with the results card, and puts the submit area under it", () => {
     review({ publishedAnswer: answered });
-    const heading = screen.getByRole("heading", { name: "Results already published" });
+    const heading = screen.getByRole("heading", { name: "Published results" });
     const area = screen.getByTestId("submit-area");
     // Below the card, outside the review panel.
     expect(heading.compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -292,6 +294,31 @@ describe("DraftReviewStep: published results", () => {
     expect(screen.getByText("3.0 MB")).toBeTruthy();
     // The summary is still there.
     expect(within(row("Run period")).getByText("2001-03-01 → 2001-06-30")).toBeTruthy();
+  });
+
+  it("opens with a warning notice above the summary rows when the draft is answered", () => {
+    review({ publishedAnswer: answered });
+    const notice = screen.getByRole("status");
+    const title = within(notice).getByRole("heading", { name: "This simulation has already been run" });
+    expect(notice.getAttribute("aria-labelledby")).toBe(title.id);
+    expect(notice.textContent).toContain("no need to run it again");
+    expect(notice.textContent).toContain("uses compute time on your allocation");
+    expect(notice.className).toContain("text-warning");
+    // Above the summary, and above the published files.
+    const firstRow = screen.getByText("Run period");
+    expect(notice.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      notice.compareDocumentPosition(screen.getByRole("heading", { name: "Published results" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("shows no such notice for none, loading or error", () => {
+    for (const publishedAnswer of [{ status: "none" }, { status: "loading" }, { status: "error" }] as const) {
+      review({ publishedAnswer });
+      expect(screen.queryByText("This simulation has already been run")).toBeNull();
+      cleanup();
+    }
   });
 
   it("says the years come from the published simulation when the draft starts later than it", () => {
@@ -313,6 +340,7 @@ describe("DraftReviewStep: published results", () => {
     expect(screen.getByTestId("submit-area")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("couldn't check whether this is already published");
     expect(screen.getByRole("status").textContent).toContain("You can still submit it");
-    expect(screen.queryByText("Results already published")).toBeNull();
+    expect(screen.queryByText("This simulation has already been run")).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Download / })).toBeNull();
   });
 });
