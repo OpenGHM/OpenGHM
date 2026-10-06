@@ -718,7 +718,7 @@ def _validate_cmd(spec: str):
 
 @cli.group("snapshot")
 def snapshot_group() -> None:
-    """fetch a published snapshot, and validate a snapshot folder against the snapshot spec."""
+    """fetch a published snapshot, publish a run as one, and validate a snapshot folder against the snapshot spec."""
 
 
 snapshot_group.command("validate")(_validate_cmd("snapshot-spec"))
@@ -783,6 +783,65 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], no_image: bool,
         for line in format_failures(result):
             click.echo(line, err=True)
         raise SystemExit(1)
+
+
+@snapshot_group.command("publish")
+@click.argument("run_dir", metavar="<run dir>")
+@click.option("--metadata", "metadata_path", required=True, metavar="FILE",
+              help="the new snapshot's metadata.json (its id is set to the snapshot's own)")
+@click.option("--id", "snapshot_id", default=None, metavar="ID",
+              help="publish under this id (64 lowercase hex); default: mint one. Pass it again to retry")
+@click.option("--dry-run", "dry_run", is_flag=True,
+              help="print every key with its action (copy, upload, skip) and write nothing")
+@click.option("--s3cfg", default="~/.s3cfg", show_default=True, metavar="FILE",
+              help="s3cmd credentials file (only checked to exist; never read or printed)")
+@click.option("--s3cmd", default="s3cmd", show_default=True, metavar="EXE", help="the s3cmd executable")
+@click.option("--base-url", default=None, metavar="URL",
+              help="the bucket's public URL (default: Anvil S3); its last path segment is the bucket name")
+@click.option("--jobs", type=click.IntRange(min=1), default=4, show_default=True,
+              help="parallel copies and uploads")
+def snapshot_publish_cmd(run_dir: str, metadata_path: str, snapshot_id: Optional[str], dry_run: bool,
+                         s3cfg: str, s3cmd: str, base_url: Optional[str], jobs: int) -> None:
+    """publish a finished run's work directory as snapshots/<id>/
+
+    <run dir> is a simulation's work directory (simulation.json names the base
+    snapshot). The new tree is the base's code and fixtures copied server-side,
+    the run's wbm_init/, wbm_output/<sim id>/ and WBM_run_state/ uploaded, a new
+    SHA256SUMS, and your metadata.json last. Everything is checked before the first
+    write; a key that already holds other bytes stops it, and a retry with the same
+    --id continues where it stopped. It prints `snapshot id: <id>` before writing,
+    then re-reads the result anonymously.
+
+    \b
+    Exit codes:
+      0  done
+      2  bad input: unreadable run, base or metadata.json; metadata.json fails the
+         spec or disagrees with the run; a bad --id
+      3  output incomplete: the run failed, or lacks a year or variable the init
+         asked for, or holds an empty file; the tree fails the layout
+      4  a key already holds other bytes
+      5  no credentials: --s3cfg missing or unreadable, or no s3cmd
+      6  an s3cmd call failed
+      7  verification failed: a key is missing, not public-read, or the wrong size
+    """
+    from ..publish import PublishError, publish
+
+    try:
+        result = publish(run_dir, metadata_path, snapshot_id=snapshot_id, base_url=base_url, s3cfg=s3cfg,
+                         s3cmd=s3cmd, dry_run=dry_run, jobs=jobs, out=click.echo)
+    except PublishError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(e.code)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    c = result.counts
+    if result.dry_run:
+        click.echo(f"plan: {c.copy} copy, {c.upload} upload, {c.skip} skip ({c.bytes_uploaded} bytes to upload)")
+    else:
+        click.echo(f"done: {c.copy} copied, {c.upload} uploaded, {c.skip} skipped; "
+                   f"{result.verified} keys verified anonymously")
+        click.echo(f"published: snapshots/{result.snapshot_id}/")
 
 
 @cli.group("model-input")

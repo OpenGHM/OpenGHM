@@ -13,7 +13,7 @@ for notebooks, batch scripts, and a future GUI.
 > `temporal` — plus `sim`, WBM model runs either **locally** (`run`, foreground) or
 > on **SLURM** (`submit` / `status` / `list` / `logs` / `cancel`), setup
 > commands (`init`, `sif`), `snapshot` (`fetch` a published snapshot,
-> `validate` a folder), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
+> `publish` a finished run as one, `validate` a folder), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
 > `metadata.json`), and `sim` runs the folder you point it at.
 
 **Status:** `sim submit` has run a real WBM job to completion on Anvil (Python 3.9.5)
@@ -148,6 +148,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm init` | — | one-time setup: download image(s), configure runtime/SLURM |
 | `openghm sif list` / `pull <image[:version]>` | — | list published images / download one into `sif_dir` |
 | `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/`, the model input it links and the image it pins, verified; `--dest`, `--no-model-input`, `--no-image`, `--jobs` |
+| `openghm snapshot publish <run dir> --metadata FILE` | `s3cmd`, anonymous HTTPS | publish a finished run's work directory as `snapshots/<id>/`; `--id`, `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`, `--jobs`; see below |
 | `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec |
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
@@ -246,6 +247,82 @@ with the same anonymous HTTPS, `SHA256SUMS` check, modes and resume as
 `snapshot fetch`, and prints `model input: <dir>` and the `downloaded N, skipped M,
 failed K` line. `snapshot fetch` does this for the model input a snapshot links; use
 `model-input fetch` to get one alone.
+
+### Publishing a run (`openghm snapshot publish`)
+
+```sh
+openghm snapshot publish <run dir> --metadata metadata.json --dry-run     # the plan; writes nothing, needs no credentials
+openghm snapshot publish <run dir> --metadata metadata.json               # prints "snapshot id: <id>", then publishes
+openghm snapshot publish <run dir> --metadata metadata.json --id <id>     # a retry under the same id
+```
+
+`<run dir>` is a simulation's work directory, the one `sim submit` / `sim run` leave
+under `output_base`: its `simulation.json` names the base snapshot, and `wbm_init/`,
+`wbm_output/<sim id>/` and `WBM_run_state/` hold the run. `--metadata` is the new
+snapshot's `metadata.json`, which the caller composes; the command checks it and sets
+its `id`. Run it in a SLURM job on Anvil (a large output takes hours); it uses
+`s3cmd` with `--s3cfg` (default `~/.s3cfg`), whose contents it never reads or prints.
+ADR 0031 has the reasoning.
+
+The new `snapshots/<id>/` holds:
+
+- the base's files **copied server-side** (same bytes, same `x-amz-meta-*` and so the same
+  file modes, ADR 0022), except `metadata.json`, `SHA256SUMS`, `wbm_init/`, `wbm_output/`,
+  `WBM_run_state/` and `spool/`, and `data/` and `data_init/` as `snapshot fetch` leaves them;
+- the run's `wbm_init/`, `wbm_output/<sim id>/` and `WBM_run_state/`, **uploaded** public-read
+  with their file modes and each file's sha256 as `x-amz-meta-sha256`. The run's `spool/` and
+  `spool-cache` are not uploaded;
+- a new `SHA256SUMS` by the recipe in
+  [`snapshot-layout.md`](../../docs/reference/snapshot-layout.md#generate-sha256sums): the base's
+  own line for a copied file, a hash for an uploaded one, no line for `wbm_output/`;
+- `metadata.json`, **last**. A `snapshots/<id>/` without one is an unfinished publish.
+
+What it checks **before the first write** (a failure writes nothing):
+
+- the given `metadata.json` passes the snapshot spec once its `id` is set (whatever `id` it
+  carried is replaced, so a copy of the base's document cannot publish onto the base), and
+  agrees with the run: `simulation.init` is the run's init, `uses.modelInput.id` is the run's
+  model input, `uses.container` is the base's, and `about.isBasedOn` names the base;
+- the run succeeded (`exit_code` is not non-zero), `wbm_output/<sim id>/` holds no empty file, a
+  `daily/wbm_<year>.nc` for every year from the init's first year (`Run_Start`, else the spinup's
+  `Start`) to its `Run_End`, and, when the init sets `Temporal_Aggregation => 1`, a
+  `monthly/<variable>/wbm_<year>.nc` for every `Output_vars` entry and year. Other files are fine.
+  What the init does not state (no run dates, a monthly or sub-daily file size, no
+  `Output_vars`) is not checked, and a `note:` line says so;
+- the tree passes the layout spec.
+
+What it does **per key**: it reads the key first. Absent, it writes it. Present with the same
+bytes, it skips it. Present with other bytes, it stops, and nothing is replaced. So a retry
+with the same `--id` continues where the last attempt stopped. "Same bytes" is decided by:
+
+| Key | Same bytes when |
+|---|---|
+| uploaded (`wbm_init/`, `wbm_output/`, `WBM_run_state/`, `SHA256SUMS`, `metadata.json`) | the size is equal, and `x-amz-meta-sha256` is equal; an object with no such header is the same when its ETag equals the local file's MD5 |
+| copied | the size and the ETag equal the source's |
+
+Before writing anything it also reads `metadata.json`: one with other bytes under this id
+stops the publish with nothing changed. Order: copies, uploads, `SHA256SUMS`, `metadata.json`
+(`--jobs` parallelises within the copies and within the uploads). The exit code of every
+`s3cmd` call is checked. Afterwards it re-reads `SHA256SUMS` anonymously and HEADs every key
+anonymously: present, public-read, the size it wrote, and for an upload the mode and sha256 it
+sent.
+
+`--dry-run` prints every key with its action, `copy`, `upload` or `skip`, decided from
+anonymous reads, so it needs no credentials. It exits with the code a real run would stop at.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | done (with `--dry-run`: a plan that would go through) |
+| 2 | bad input: an unreadable run, base or `metadata.json`; `metadata.json` fails the spec or disagrees with the run; a bad `--id` |
+| 3 | output incomplete: the run failed, or lacks a year or variable the init asked for, or holds an empty file; the tree fails the layout |
+| 4 | a key already holds other bytes (nothing is replaced) |
+| 5 | no credentials: `--s3cfg` missing or unreadable, or no `s3cmd` |
+| 6 | an `s3cmd` call failed (a read, a copy or an upload) |
+| 7 | verification failed: a key is missing, not public-read, or the wrong size, mode or hash |
+
+A line `snapshot id: <id>` is printed, to stdout, before the first write.
 
 ### Simulations (`openghm sim`)
 
