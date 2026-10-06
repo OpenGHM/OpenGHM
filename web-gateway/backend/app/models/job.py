@@ -47,6 +47,7 @@ CANCELLABLE_STATUSES: set[str] = {"PENDING", "SUBMITTED", "RUNNING", "COMPLETING
 #: frontend's lib/jobs/types.ts (rule 4).
 FailureCause = Literal[
     "fetch_failed",
+    "gateway_setup",
     "run_refused",
     "wbm_error",
     "wbm_silent_failure",

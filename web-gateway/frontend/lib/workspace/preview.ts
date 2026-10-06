@@ -17,6 +17,7 @@ import type { FailureCause, JobStatus } from "@/lib/jobs/types";
 /** The causes a FAILED job can carry. The two cancels belong to CANCELLED. */
 export const FAILED_CAUSES: readonly FailureCause[] = [
   "fetch_failed",
+  "gateway_setup",
   "run_refused",
   "wbm_error",
   "wbm_silent_failure",

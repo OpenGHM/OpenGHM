@@ -7,6 +7,7 @@ export type NextStep =
   | "resubmit_longer_walltime"
   | "new_draft"
   | "contact_admin"
+  | "admin_fixes_setup"
   | "none";
 
 /** `danger`: something in this simulation's own setup. `warning`: a limit it hit.
@@ -35,6 +36,12 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
     body: "The job could not fetch the model snapshot's files onto Anvil, so WBM never started.",
     nextStep: "resubmit",
     tone: "danger",
+  },
+  gateway_setup: {
+    title: "Anvil isn't set up correctly for OpenGHM",
+    body: "The gateway's setup on Anvil is broken, so the snapshot download could not start. The snapshot is not at fault.",
+    nextStep: "admin_fixes_setup",
+    tone: "neutral",
   },
   run_refused: {
     title: "The simulation was refused before it started",
@@ -125,6 +132,8 @@ export const NEXT_STEP_COPY: Record<NextStep, string> = {
     "Try again from a new draft, change what caused this, and submit it.",
   contact_admin:
     "Try again from a new draft. If it keeps happening, tell an administrator this snapshot draft's ID.",
+  admin_fixes_setup:
+    "An administrator has to fix the gateway's Anvil setup. Once they have, this snapshot draft can be tried again.",
   none: "",
 };
 

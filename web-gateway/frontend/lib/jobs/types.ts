@@ -25,6 +25,7 @@ export function isTerminalStatus(s: JobStatus): boolean {
  *  a user reads for each live in lib/workspace/failure-copy.ts. */
 export type FailureCause =
   | "fetch_failed"
+  | "gateway_setup"
   | "run_refused"
   | "wbm_error"
   | "wbm_silent_failure"

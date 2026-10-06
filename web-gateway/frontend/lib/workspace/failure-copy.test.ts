@@ -14,6 +14,7 @@ import {
 // and this list, in the same commit: the record below will not compile without it.
 const ALL_CAUSES: Record<FailureCause, true> = {
   fetch_failed: true,
+  gateway_setup: true,
   run_refused: true,
   wbm_error: true,
   wbm_silent_failure: true,
@@ -75,8 +76,21 @@ describe("FAILURE_COPY", () => {
     expect(body).toMatch(/shorter run period/);
   });
 
+  it("says gateway_setup is Anvil's setup, for an administrator, not the snapshot's download", () => {
+    const copy = FAILURE_COPY.gateway_setup;
+    expect(copy.title).toBe("Anvil isn't set up correctly for OpenGHM");
+    expect(copy.body).toMatch(/snapshot is not at fault/);
+    expect(copy.nextStep).toBe("admin_fixes_setup");
+    expect(NEXT_STEP_COPY.admin_fixes_setup).toMatch(/administrator has to fix the gateway's Anvil setup/);
+    expect(NEXT_STEP_COPY.admin_fixes_setup).toMatch(/can be tried again/);
+    expect(NEXT_STEP_COPY.admin_fixes_setup).not.toMatch(/new draft/);
+    expect(offersNewDraft(copy.nextStep)).toBe(true);
+    expect(summaryOffersCopy("FAILED", { cause: "gateway_setup", phase: "fetch", message: "m", excerpt: null })).toBe(true);
+  });
+
   it("offers a new draft for every step except none", () => {
     expect(offersNewDraft("none")).toBe(false);
+    expect(offersNewDraft("admin_fixes_setup")).toBe(true);
     expect(offersNewDraft("resubmit")).toBe(true);
     expect(offersNewDraft("contact_admin")).toBe(true);
   });

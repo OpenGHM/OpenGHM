@@ -650,8 +650,12 @@ shorter run period. `timeout` says it by phase (while fetching, or before WBM
 finished) and, when the walltime the job asked for was already 96 h, to shorten
 the run period instead of a longer walltime. A fetch step that exits 64 to 78
 (sysexits, what `flock` answers with for a lock directory or a toolkit that is
-not there) is the gateway's Anvil setup, not the snapshot: the message says to
-tell an administrator. A `sim run` that stopped before staging with no
+not there) is its own cause, `gateway_setup` (phase `fetch`), not `fetch_failed`:
+the gateway's Anvil setup is at fault, not the snapshot. The message says to tell
+an administrator, and the page says the same under the title "Anvil isn't set up
+correctly for OpenGHM", with "Try again with these settings" kept for after they
+have fixed it. A toolkit that cannot run at all before any step is not told
+apart: it leaves no step exit code, so it is `outcome_missing`. A `sim run` that stopped before staging with no
 `openghm:` line gets a neutral message, not "check the snapshot's settings". A
 `wbm_error`'s reason is the last paragraph of stderr with the toolkit's own
 `spool:` lines and warnings left out, cut from its start so its end shows. The

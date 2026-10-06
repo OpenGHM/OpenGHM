@@ -50,6 +50,7 @@ _EXITED = {"COMPLETED", "FAILED", "SPECIAL_EXIT"}
 # cancels, a lost job) take whatever phase the record reached, if there is one.
 _PHASE: dict[str, str] = {
     "fetch_failed": "fetch",
+    "gateway_setup": "fetch",
     "run_refused": "run",
     "wbm_error": "run",
     "wbm_silent_failure": "check",
@@ -254,7 +255,10 @@ def _from_record(
     # exit 0 is a verdict; one that has none means the script stopped inside
     # it, which no cause can be drawn from.
     if fetch is not None and fetch.get("exit_code") not in (None, 0):
-        return _fail("fetch_failed", excerpt=_fetch_excerpt(excerpt), code=fetch["exit_code"])
+        code = fetch["exit_code"]
+        if code in _SETUP_EXIT_CODES:
+            return _fail("gateway_setup", excerpt=excerpt, code=code)
+        return _fail("fetch_failed", excerpt=_fetch_excerpt(excerpt), code=code)
     if run is not None and run.get("exit_code") not in (None, 0):
         code = run["exit_code"]
         if not record.get("staged"):
@@ -338,7 +342,7 @@ def _message(
     phase: str | None = None,
     walltime: int | None = None,
 ) -> str:
-    if cause == "fetch_failed" and code in _SETUP_EXIT_CODES:
+    if cause == "gateway_setup":
         return (
             f"The gateway's Anvil setup is broken: the snapshot download could not start "
             f"(exit code {code}), and the snapshot is not at fault. Tell an administrator; "

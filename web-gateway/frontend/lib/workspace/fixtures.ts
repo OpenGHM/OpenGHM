@@ -137,6 +137,16 @@ const FAILURE_FIXTURES: Record<
       excerpt: STDERR_TAIL,
     },
   },
+  gateway_setup: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "66:0",
+    failure: {
+      phase: "fetch",
+      message:
+        "The gateway's Anvil setup is broken: the snapshot download could not start (exit code 66), and the snapshot is not at fault. Tell an administrator; submitting again will not help.",
+      excerpt: "flock: cannot open lock file /home/x-openghm/locks/fetch.lock: No such file or directory",
+    },
+  },
   run_refused: {
     slurm_state: "FAILED",
     slurm_exit_code: "2:0",

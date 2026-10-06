@@ -576,7 +576,8 @@ def test_a_timeout_whose_walltime_is_unknown_offers_both_levers():
 def test_a_fetch_exit_in_the_sysexits_range_is_the_gateways_anvil_setup(code):
     rec = record(phase="fetch", steps={"fetch": {"exit_code": code}}, staged=False)
     v = verdict("FAILED", outcome=rec, err=stderr("flock: cannot open lock file /home/x/locks/fetch.lock"))
-    assert v.failure.cause == "fetch_failed"
+    assert v.failure.cause == "gateway_setup"
+    assert v.failure.phase == "fetch"
     msg = v.failure.message
     assert "Anvil setup is broken" in msg and "administrator" in msg and f"exit code {code}" in msg
     assert "could not be downloaded" not in msg
@@ -586,7 +587,9 @@ def test_a_fetch_exit_in_the_sysexits_range_is_the_gateways_anvil_setup(code):
 @pytest.mark.parametrize("code", [1, 2, 63, 79, 137])
 def test_other_fetch_exits_stay_a_download_failure(code):
     rec = record(phase="fetch", steps={"fetch": {"exit_code": code}}, staged=False)
-    assert "could not be downloaded" in verdict("FAILED", outcome=rec).failure.message
+    v = verdict("FAILED", outcome=rec)
+    assert v.failure.cause == "fetch_failed"
+    assert "could not be downloaded" in v.failure.message
 
 
 def test_a_sim_run_failure_with_no_openghm_line_does_not_blame_the_settings():

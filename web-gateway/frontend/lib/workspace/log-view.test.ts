@@ -35,6 +35,7 @@ describe("stoppedMessage", () => {
 
   it.each<FailureCause>([
     "fetch_failed",
+    "gateway_setup",
     "run_refused",
     "wbm_error",
     "wbm_silent_failure",
