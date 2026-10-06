@@ -230,6 +230,9 @@ an old tree whose listing still has a `spool/` is fetched without it).
 - It resumes: a file already at its path with the right size and hash is skipped
   (re-run it after an interruption; the last line is `downloaded N, skipped M,
   failed K`). Exit status is 1 if anything failed, with the paths listed.
+- A transient error is tried again, three attempts with a growing pause: for a file,
+  and for each page of the listing. Unreachable, a dropped connection and a 5xx are
+  transient; a 403 or 404 is an answer and is not.
 
 ### Fetching a model input (`openghm model-input fetch`)
 
@@ -309,7 +312,7 @@ and `model_input_path`.
   does not `stat` them; a unit with no readable index (a cache from before the index, a
   year only a failed fill left) is counted when pruning first sees it. A run holds the units it links through a lease,
   `<spool_cache>/.leases/<sim id>.json`, written by `prepare` before it links and removed
-  by `harvest`; it expires at the run's walltime (`simulation.json`'s, else 97 hours,
+  by `harvest`; it expires at the run's walltime (`simulation.json`'s, which `sim run --walltime` sets; else 97 hours,
   which covers a run that failed and so never harvested), and an expired lease is ignored
   and removed. Pruning skips every unit an unexpired lease names, and takes the others
   oldest last use first (by day; among units last used the same day, one S3 holds before
@@ -372,6 +375,15 @@ They differ only in **where** the model runs:
   SLURM. Best for small domains and testing; a big domain can take hours.
   Inside a SLURM allocation (a gateway job runs it that way) it reads
   `SLURM_CPUS_PER_TASK`; elsewhere WBM keeps its own thread default.
+  `--walltime TIME` tells it how long it may last, in SLURM's forms (`MM:SS`,
+  `HH:MM:SS`, `D-HH`, `D-HH:MM:SS`; a bad value stops with an `openghm:` message and
+  exit 2). It is recorded as `walltime` in `simulation.json`, and the run's spool
+  lease expires that long after it starts: pass the walltime the enclosing SLURM job
+  asked for, or a prune can delete units the run has linked. Without it the
+  metadata's `recommendedCompute.walltime` is used. After the container exits, a
+  failed write to `simulation.json` (the exit code, the harvest result) is a warning
+  on stderr and the command still exits with the container's exit code, so a
+  finished run is never reported as refused.
 - **`sim submit`** generates an `sbatch` script and submits it. Run `submit` and the
   management commands (`status`/`logs`/`cancel`, which call `sacct`/`scancel`) on a
   SLURM login node. `list` just reads the local sidecars.
@@ -400,6 +412,7 @@ openghm snapshot fetch <id> --dest /path/to/snap && cd /path/to/snap   # or any 
 
 # Local, foreground (no SLURM):
 openghm sim run --id smoke                  # runs here; records exit_code in simulation.json
+openghm sim run --id smoke --walltime 22:30:00   # the spool lease lasts 22 h 30 min (inside a 22:30:00 job)
 
 # On a SLURM cluster:
 openghm sim submit --id run-001             # sbatch the job; records the job id

@@ -45,6 +45,7 @@ import re
 import shlex
 import sys
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import List, Optional, Tuple
 
 from . import assets, fetch
@@ -556,6 +557,35 @@ class _Resolved:
     spool_plan: Optional[SpoolPlan] = None
 
 
+def slurm_walltime(text: object) -> Optional[timedelta]:
+    """A SLURM time (``--time``): ``M``, ``M:S``, ``H:M:S``, ``D-H``, ``D-H:M`` or ``D-H:M:S``;
+    ``None`` for anything else."""
+    m = re.fullmatch(r"(?:(\d+)-)?(\d+)(?::(\d+))?(?::(\d+))?", str(text or "").strip())
+    if m is None:
+        return None
+    days, a, b, c = m.groups()
+    nums = [int(x) for x in (a, b, c) if x is not None]
+    if days is not None:
+        hours, minutes, seconds = (nums + [0, 0])[:3]
+    elif len(nums) == 3:
+        hours, minutes, seconds = nums
+    else:
+        hours, minutes, seconds = 0, nums[0], (nums[1] if len(nums) > 1 else 0)
+    return timedelta(days=int(days or 0), hours=hours, minutes=minutes, seconds=seconds)
+
+
+def check_walltime(text: str) -> str:
+    """``text`` if it is a SLURM time longer than zero, else an :class:`OpenghmError` that names
+    the accepted forms."""
+    parsed = slurm_walltime(text)
+    if parsed is None or parsed <= timedelta(0):
+        raise OpenghmError(
+            f"--walltime {text!r} is not a SLURM time: use MM:SS, HH:MM:SS, D-HH or D-HH:MM:SS, "
+            "longer than zero (for example 22:30:00 or 4-00:00:00)"
+        )
+    return text
+
+
 def _resolve_run(
     opts: SubmitOptions,
     config,
@@ -778,6 +808,8 @@ def build_run(
     argv is the container ``exec`` line itself — no sbatch script is generated and
     the job runs synchronously on this machine.
     """
+    if opts.walltime is not None:
+        check_walltime(opts.walltime)
     r = _resolve_run(
         opts, config, runtime=runtime, sif=sif, check_assets=check_assets, slurm_script=False)
     init_file, copy, dirs = _persim_files(r)

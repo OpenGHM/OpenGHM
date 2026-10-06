@@ -369,6 +369,10 @@ def sim_submit_cmd(**p) -> None:
 @click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
 @click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
 @click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
+@click.option("--walltime", default=None, metavar="TIME",
+              help="how long this run may last, as SLURM writes it (MM:SS, HH:MM:SS, D-HH, D-HH:MM:SS); "
+                   "recorded in simulation.json, where the spool lease takes its length "
+                   "(default: the metadata's recommendedCompute.walltime)")
 @click.option("--user-info", "user_info", default=None,
               help="submitter info recorded in simulation.json (provenance only)")
 @output_options
@@ -380,7 +384,7 @@ def sim_run_cmd(**p) -> None:
     """
     opts = SubmitOptions(
         snapshot_dir=p["path"], simulation_id=p["sim_id"], output_base=p["output_base"],
-        spool=p["spool"], run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
+        walltime=p["walltime"], spool=p["spool"], run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
         spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
         user_info=p["user_info"], verbose=p["verbose"],
     )
@@ -398,7 +402,11 @@ def sim_run_cmd(**p) -> None:
         click.echo(f"openghm: {e}", err=True)
         raise SystemExit(2)
     if not result.dry_run:
-        record_exit_code(built, result.exit_code or 0)
+        # The run is over: a bookkeeping failure must not make it look refused.
+        try:
+            record_exit_code(built, result.exit_code or 0)
+        except Exception as e:  # noqa: BLE001
+            click.echo(f"openghm: warning: could not record the exit code in simulation.json: {e}", err=True)
     present("sim run", ctx, built, result, as_json=p["as_json"])
     if not result.dry_run and result.exit_code:
         raise SystemExit(result.exit_code)

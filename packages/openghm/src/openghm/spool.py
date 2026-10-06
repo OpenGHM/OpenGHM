@@ -71,7 +71,7 @@ from . import assets, fetch
 from .errors import OpenghmError
 from .run import run_command, stage_files
 from .runtime import RuntimeContext
-from .sim import SIDECAR_NAME, _wbm_exec_argv, read_sidecar
+from .sim import SIDECAR_NAME, _wbm_exec_argv, read_sidecar, slurm_walltime
 from .types import SPOOL_CACHE_BIND, BuiltCommand, Mount, RunResult, SpoolPlan
 
 #: Hex characters of the sha256 that name a variant.
@@ -628,20 +628,7 @@ def refresh_index(
         })
 
 
-def _walltime(text: object) -> Optional[timedelta]:
-    """A SLURM time (``--time``): ``M``, ``M:S``, ``H:M:S``, ``D-H``, ``D-H:M`` or ``D-H:M:S``."""
-    m = re.fullmatch(r"(?:(\d+)-)?(\d+)(?::(\d+))?(?::(\d+))?", str(text or "").strip())
-    if m is None:
-        return None
-    days, a, b, c = m.groups()
-    nums = [int(x) for x in (a, b, c) if x is not None]
-    if days is not None:
-        hours, minutes, seconds = (nums + [0, 0])[:3]
-    elif len(nums) == 3:
-        hours, minutes, seconds = nums
-    else:
-        hours, minutes, seconds = 0, nums[0], (nums[1] if len(nums) > 1 else 0)
-    return timedelta(days=int(days or 0), hours=hours, minutes=minutes, seconds=seconds)
+_walltime = slurm_walltime
 
 
 def _lease_path(cache_root: str, sim_id: str) -> str:
@@ -1247,7 +1234,8 @@ def run_cached(
     """Stage, :func:`prepare`, run ``built.argv``, and on exit 0 :func:`harvest`.
 
     A harvest that fails does not turn a finished run into a failed one: it is reported to
-    ``log`` and recorded as ``spool.harvest_error``.
+    ``log`` and recorded as ``spool.harvest_error``; if even that record cannot be written, that
+    too is only reported. Nothing after the run raises, so the caller still has its exit code.
     """
     plan = built.spool
     if plan is None:
@@ -1258,10 +1246,14 @@ def run_cached(
     if result.exit_code == 0:
         try:
             harvest(plan, log=log)
-        except (OpenghmError, OSError) as e:
+        except Exception as e:  # noqa: BLE001 - the run is over; nothing here may turn it into a refusal
             if log:
                 log(f"spool: harvest failed: {e}")
-            _update_sidecar(plan, {}, {"harvest_error": str(e)})
+            try:
+                _update_sidecar(plan, {}, {"harvest_error": str(e)})
+            except Exception as e2:  # noqa: BLE001
+                if log:
+                    log(f"spool: cannot record the harvest error in {SIDECAR_NAME}: {e2}")
     return result
 
 

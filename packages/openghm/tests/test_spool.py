@@ -1525,3 +1525,57 @@ def test_cli_sim_run_with_the_cache_fills_runs_and_harvests(tmp_path, bucket, mo
     side = json.loads((tmp_path / "out" / "cli1" / "simulation.json").read_text())
     assert side["exit_code"] == 0 and side["spool"]["harvested"] == 1 and side["spool_mode"] == "cache"
     assert "spool: variant" in out.output
+
+
+def test_a_lease_is_as_long_as_the_walltime_the_run_was_given(tmp_path, bucket, monkeypatch, fake_wbm):
+    snap = _runnable(tmp_path, bucket, monkeypatch)
+    runtime = fake_wbm(["2000-01-01"], exit=3)               # exits non-zero: no harvest, so the lease stays
+    before = datetime.now(timezone.utc)
+    result, sidecar, _report, _ = _run(snap, tmp_path, "long", runtime, walltime="22:30:00")
+    assert result.exit_code == 3 and sidecar["walltime"] == "22:30:00"
+    rec = json.loads((tmp_path / "spools" / ".leases" / "long.json").read_text())
+    until = spool._parse_utc(rec["expires"])
+    assert before + timedelta(hours=22, minutes=30) - timedelta(seconds=2) <= until
+    assert until <= datetime.now(timezone.utc) + timedelta(hours=22, minutes=30)
+    # without the option the metadata's 15 minutes still rule
+    _r, _s, _rep, _ = _run(snap, tmp_path, "short", runtime)
+    short = spool._parse_utc(json.loads((tmp_path / "spools" / ".leases" / "short.json").read_text())["expires"])
+    assert short <= datetime.now(timezone.utc) + timedelta(minutes=15)
+
+
+def test_a_finished_run_survives_a_harvest_and_the_record_of_it_both_failing(tmp_path, bucket, monkeypatch, fake_wbm):
+    snap = _runnable(tmp_path, bucket, monkeypatch)
+    runtime = fake_wbm(["2000-01-01"])
+
+    def harvest(plan, log=None):
+        raise OpenghmError("the cache is full")
+
+    real = spool._update_sidecar
+
+    def update(plan, top, sp):
+        if "harvest_error" in sp:
+            raise OSError("read-only file system")
+        real(plan, top, sp)
+    monkeypatch.setattr(spool, "harvest", harvest)
+    monkeypatch.setattr(spool, "_update_sidecar", update)
+    cfg = _config(tmp_path)
+    _c, built = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="x"), cfg, runtime=runtime)
+    logs = []
+    result = spool.run_cached(built, evaluator=_evaluate, log=logs.append, capture=True)
+    assert result.exit_code == 0
+    assert any("harvest failed: the cache is full" in l for l in logs)
+    assert any("cannot record the harvest error" in l and "read-only" in l for l in logs)
+
+
+def test_a_harvest_that_hits_an_unreadable_sidecar_is_recorded_or_reported_not_raised(
+        tmp_path, bucket, monkeypatch, fake_wbm):
+    snap = _runnable(tmp_path, bucket, monkeypatch)
+    runtime = fake_wbm(["2000-01-01"])
+    _c, built = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="y"), _config(tmp_path), runtime=runtime)
+
+    def harvest(plan, log=None):
+        (Path(plan.workdir) / "simulation.json").write_text("{not json")   # now no update can read it
+        raise OSError("boom")
+    monkeypatch.setattr(spool, "harvest", harvest)
+    result = spool.run_cached(built, evaluator=_evaluate, log=lambda m: None, capture=True)
+    assert result.exit_code == 0

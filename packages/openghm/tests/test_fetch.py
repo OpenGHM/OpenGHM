@@ -52,6 +52,7 @@ class Bucket:
         self.gets = []             # keys fetched, in order
         self.lists = 0
         self.fail_once = set()     # keys answered 503 the first time
+        self.list_failures = []    # statuses the next listing requests are answered with, in order
 
         bucket = self
 
@@ -79,6 +80,8 @@ class Bucket:
 
             def _list(self, q):
                 bucket.lists += 1
+                if bucket.list_failures:
+                    return self._send(bucket.list_failures.pop(0), b"")
                 prefix = q.get("prefix", [""])[0]
                 token = q.get("continuation-token", [""])[0]
                 keys = sorted(k for k in bucket.objects if k.startswith(prefix))
@@ -315,6 +318,40 @@ def test_a_transient_server_error_is_retried(bucket, tmp_path):
     bucket.fail_once.add(PREFIX + "model/wbm.pl")
     assert _run(bucket, tmp_path).ok
     assert (tmp_path / "snap" / "model" / "wbm.pl").exists()
+
+
+def test_a_transient_listing_error_is_retried(bucket, tmp_path):
+    bucket.list_failures = [503, 500]
+    assert _run(bucket, tmp_path).ok
+    assert (tmp_path / "snap" / "model" / "wbm.pl").exists()
+
+
+def test_a_listing_that_keeps_failing_gives_up_after_a_few_attempts(bucket):
+    bucket.list_failures = [503] * 10
+    with pytest.raises(OpenghmError, match="HTTP 503"):
+        fetch.list_objects(bucket.url, PREFIX)
+    assert bucket.lists == fetch._ATTEMPTS
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_a_listing_refusal_is_not_retried(bucket, status):
+    bucket.list_failures = [status, 200, 200]
+    with pytest.raises(OpenghmError, match=f"HTTP {status}"):
+        fetch.list_objects(bucket.url, PREFIX)
+    assert bucket.lists == 1
+
+
+def test_an_unreachable_listing_is_retried_then_reported(monkeypatch):
+    calls = []
+
+    def refuse(url):
+        calls.append(url)
+        raise fetch._TransientError("cannot reach " + url)
+    monkeypatch.setattr(fetch, "_open", refuse)
+    monkeypatch.setattr(fetch, "_BACKOFF", 0.0)
+    with pytest.raises(OpenghmError, match="cannot reach"):
+        fetch.list_objects("http://127.0.0.1:9/openghm", PREFIX)
+    assert len(calls) == fetch._ATTEMPTS
 
 
 # ── resume ─────────────────────────────────────────────────────────────────────

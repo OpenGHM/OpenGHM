@@ -205,3 +205,84 @@ def test_run_spool_modes(tmp_path):
     assert _find(cache_run, "/wbm/spool/.cache").readonly is True
     assert json.loads(_gen(cache_run, "simulation.json").content)["spool_mode"] == "cache"
     assert cache_run.spool is not None and fresh_run.spool is None
+
+
+# ── --walltime ─────────────────────────────────────────────────────────────────
+
+
+def _cli_config(tmp_path: Path) -> Path:
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'output_base = "{tmp_path / "out"}"\nsif_dir = "{tmp_path / "sif"}"\n'
+                   f'model_input_dir = "{tmp_path / "model-inputs"}"\n')
+    return cfg
+
+
+def _run_cli(tmp_path, *args):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    snap = _make_snapshot(tmp_path)
+    return CliRunner().invoke(cli, ["sim", "run", str(snap), "--id", "sim1", "--config", str(_cli_config(tmp_path)),
+                                    *args])
+
+
+@pytest.mark.parametrize("text", ["30:00", "22:30:00", "4-00:00:00", "1-12", "1-02:30", "90"])
+def test_cli_sim_run_walltime_is_recorded_in_the_sidecar(tmp_path, text):
+    out = _run_cli(tmp_path, "--walltime", text, "--dry-run", "--json")
+    assert out.exit_code == 0, out.output
+    payload = json.loads(out.stdout)
+    sidecar = next(f for f in payload["generatedFiles"] if f["hostPath"].endswith("simulation.json"))
+    assert json.loads(sidecar["content"])["walltime"] == text
+
+
+def test_cli_sim_run_without_walltime_keeps_the_metadatas(tmp_path):
+    out = _run_cli(tmp_path, "--dry-run", "--json")
+    assert out.exit_code == 0, out.output
+    sidecar = next(f for f in json.loads(out.stdout)["generatedFiles"] if f["hostPath"].endswith("simulation.json"))
+    assert json.loads(sidecar["content"])["walltime"] == "15:00"
+
+
+@pytest.mark.parametrize("text", ["soon", "", "1:2:3:4", "0", "00:00:00", "-5", "22h", "1-"])
+def test_cli_sim_run_rejects_a_walltime_that_is_not_slurms(tmp_path, text):
+    out = _run_cli(tmp_path, "--walltime", text, "--dry-run")
+    assert out.exit_code == 2
+    assert out.output.startswith("openghm: --walltime") and "HH:MM:SS" in out.output
+    assert "Traceback" not in out.output
+
+
+def test_build_run_validates_the_walltime(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    with pytest.raises(OpenghmError, match="not a SLURM time"):
+        build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="s", walltime="never"), _config(tmp_path))
+
+
+# ── a finished run is never reported as refused ────────────────────────────────
+
+
+def test_cli_sim_run_exits_with_the_containers_code_when_recording_it_fails(tmp_path, monkeypatch):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+
+    monkeypatch.setattr(cli_main, "run_command", lambda built, **kw: RunResult(
+        dry_run=False, argv=built.argv, display=built.display, exit_code=3))
+
+    def broken(built, code):
+        raise OSError("disk full")
+    monkeypatch.setattr(cli_main, "record_exit_code", broken)
+    out = _run_cli(tmp_path, "--spool", "fresh")
+    assert out.exit_code == 3, out.output
+    assert "openghm: warning: could not record the exit code" in out.output and "disk full" in out.output
+    assert "Traceback" not in out.output
+
+
+def test_cli_sim_run_a_corrupt_sidecar_does_not_turn_exit_0_into_a_traceback(tmp_path, monkeypatch):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+
+    def run(built, **kw):
+        stage_files(built)
+        Path(sidecar_path(built)).write_text("{not json")     # the run (or a disk) left it unreadable
+        return RunResult(dry_run=False, argv=built.argv, display=built.display, exit_code=0)
+    monkeypatch.setattr(cli_main, "run_command", run)
+    out = _run_cli(tmp_path, "--spool", "fresh")
+    assert out.exit_code == 0, out.output
+    assert "warning: could not record the exit code" in out.output

@@ -159,10 +159,26 @@ def _open(url: str):
         raise _TransientError(f"cannot reach {url}: {e.reason}")
 
 
+def _list_page(url: str):
+    """One listing page, parsed. A transient failure (unreachable, a 5xx, a dropped connection)
+    is tried again up to :data:`_ATTEMPTS` times with :data:`_BACKOFF` between; a 4xx (a 403, a
+    404) and an unparseable body are not."""
+    for attempt in range(1, _ATTEMPTS + 1):
+        try:
+            with _open(url) as resp:
+                return ET.fromstring(resp.read())
+        except (OpenghmError, OSError, http.client.HTTPException) as e:
+            if attempt == _ATTEMPTS or not _is_transient(e):
+                raise
+            time.sleep(_BACKOFF * attempt)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def list_objects(base_url: str, prefix: str) -> List[Tuple[str, int, str]]:
     """Every ``(key, size, etag)`` under ``prefix``, following pagination.
 
-    Anonymous ``GET <base>?list-type=2``. ETags are returned unquoted.
+    Anonymous ``GET <base>?list-type=2``. ETags are returned unquoted. Each page is retried on a
+    transient error (see :func:`_list_page`).
     """
     out: List[Tuple[str, int, str]] = []
     token: Optional[str] = None
@@ -172,8 +188,9 @@ def list_objects(base_url: str, prefix: str) -> List[Tuple[str, int, str]]:
             query += f"&continuation-token={urllib.parse.quote(token, safe='')}"
         url = f"{base_url}?{query}"
         try:
-            with _open(url) as resp:
-                root = ET.fromstring(resp.read())
+            root = _list_page(url)
+        except OpenghmError:
+            raise
         except (ET.ParseError, OSError, http.client.HTTPException) as e:
             raise OpenghmError(f"cannot read the listing at {url}: {e}")
         truncated, token = False, None
