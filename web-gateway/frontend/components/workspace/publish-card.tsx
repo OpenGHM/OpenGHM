@@ -19,6 +19,7 @@ import {
   canPublish,
   formFromAbout,
   isValid,
+  prefillAbout,
   validatePublishForm,
 } from "@/lib/workspace/publish";
 
@@ -71,7 +72,17 @@ function PublishAnnouncer({ state }: { state: string }) {
  * one that has not completed, failed, or whose files Anvil's purge removed.
  * Render it inside a `LiveJobProvider`.
  */
-export function PublishCard({ job, preview = false }: { job: Job; preview?: boolean }) {
+export function PublishCard({
+  job,
+  baseAbout = null,
+  preview = false,
+}: {
+  job: Job;
+  /** The base snapshot's `about`, for what the form starts from when the draft
+   *  stores none of its own. Null when it could not be read. */
+  baseAbout?: PartialAbout | null;
+  preview?: boolean;
+}) {
   const { jobId, status, view, applyPublish, refresh, gone, lastError, retryInSeconds } = useLiveJobContext();
   // The sheet is open for the attempt it was opened at: a publish record that
   // moves on under it (a submit that failed after claiming the draft, another
@@ -93,6 +104,9 @@ export function PublishCard({ job, preview = false }: { job: Job; preview?: bool
 
   // What the form starts from: the words a failed publish was composed from, else the draft's own.
   const stored: PartialAbout | null = aboutFromRecord(publish) ?? job.about;
+  // The form's start adds what the base snapshot says (creators, license,
+  // keywords, tags). "Try again" does not: it sends only what was written.
+  const prefill = prefillAbout(stored, baseAbout);
 
   const taken = (next: PublishRecord) => {
     setProblem(null);
@@ -334,7 +348,8 @@ export function PublishCard({ job, preview = false }: { job: Job; preview?: bool
         open={open}
         onOpenChange={setOpen}
         jobId={jobId}
-        about={stored}
+        about={prefill}
+        baseName={baseAbout?.name ?? null}
         preview={preview}
         onPublished={taken}
         onRefused={refresh}

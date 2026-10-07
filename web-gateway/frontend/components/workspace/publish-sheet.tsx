@@ -63,6 +63,7 @@ export function PublishSheet({
   onOpenChange,
   jobId,
   about,
+  baseName = null,
   preview = false,
   onPublished,
   onRefused,
@@ -72,8 +73,12 @@ export function PublishSheet({
   onOpenChange: (open: boolean) => void;
   jobId: string;
   /** What the form starts from: the draft's `about`, or the one a failed
-   *  publish was composed from. */
+   *  publish was composed from, filled from the base snapshot's where it is
+   *  missing (`prefillAbout`). */
   about: PartialAbout | null;
+  /** The base snapshot's name, shown beside the Name field as where this one
+   *  comes from; it is never filled in. Null when the base could not be read. */
+  baseName?: string | null;
   /** Fixture data: there is no real job behind `jobId`, and nothing is sent. */
   preview?: boolean;
   /** The backend took it; `publish` is the record now `publishing`. */
@@ -100,6 +105,7 @@ export function PublishSheet({
           jobId={jobId}
           onBusyChange={setBusy}
           about={about}
+          baseName={baseName}
           preview={preview}
           onClose={() => onOpenChange(false)}
           onPublished={onPublished}
@@ -114,6 +120,7 @@ export function PublishSheet({
 function PublishForm({
   jobId,
   about,
+  baseName,
   preview,
   onBusyChange,
   onClose,
@@ -123,6 +130,7 @@ function PublishForm({
   jobId: string;
   onBusyChange: (busy: boolean) => void;
   about: PartialAbout | null;
+  baseName: string | null;
   preview: boolean;
   onClose: () => void;
   onPublished: (publish: PublishRecord) => void;
@@ -213,6 +221,9 @@ function PublishForm({
     set({ creators: values.creators.map((c, i) => (i === index ? { ...c, ...patch } : c)) });
 
   const describedBy = (field: PublishField) => (shown(field) ? `${id}-${field}-error` : undefined);
+  const nameDescribedBy = [baseName ? `${id}-name-base` : null, describedBy("name") ?? null]
+    .filter(Boolean)
+    .join(" ") || undefined;
   const creatorProblem = shown("creator");
 
   return (
@@ -250,9 +261,14 @@ function PublishForm({
             className="h-10 md:h-9"
             placeholder="e.g. Global 2000–2009 baseline"
             aria-invalid={shown("name") ? true : undefined}
-            aria-describedby={describedBy("name")}
+            aria-describedby={nameDescribedBy}
             onChange={(e) => set({ name: e.target.value })}
           />
+          {baseName && (
+            <p id={`${id}-name-base`} className="break-words text-xs text-muted-foreground">
+              Based on: {baseName}
+            </p>
+          )}
           {shown("name") && <FieldError id={`${id}-name-error`}>{shown("name")}</FieldError>}
         </div>
 

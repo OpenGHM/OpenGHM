@@ -262,62 +262,62 @@ const PUBLISH_FAILURE_FIXTURES: Record<
   publish_bad_input: {
     retry: "edit",
     exit_code: 2,
-    message: "The snapshot's description was refused: its license must be a bare SPDX identifier. Edit it and publish again.",
+    message: "The checks run before the upload refused the snapshot's description: its license must be a bare SPDX identifier. Nothing was uploaded.",
   },
   publish_output_incomplete: {
     retry: "none",
     exit_code: 3,
-    message: "The simulation's output is missing the 2001 file of streamAge, so nothing was uploaded. An administrator has to look at this snapshot draft.",
+    message: "The simulation's output is missing the 2001 file of streamAge, so nothing was uploaded.",
   },
   publish_conflict: {
     retry: "none",
     exit_code: 4,
-    message: "A file of this snapshot is already stored with other content, so the publish stopped before it replaced anything. An administrator has to look.",
+    message: "A file of this snapshot is already in the repository with different contents. A published file is never overwritten, so the publish stopped before it replaced anything.",
   },
   publish_setup: {
     retry: "none",
     exit_code: 5,
-    message: "Publishing is not set up correctly on Anvil, so the upload could not start. The snapshot draft is not at fault. Tell an administrator.",
+    message: "The gateway's storage credentials or the s3cmd tool are missing on Anvil, so nothing was uploaded.",
   },
   publish_upload_failed: {
     retry: "same",
     exit_code: 6,
-    message: "3 of 412 files could not be uploaded. The files already uploaded are kept; try again to continue.",
+    message: "3 of 412 files could not be uploaded. The files already uploaded are kept.",
   },
   publish_verify_failed: {
     retry: "same",
     exit_code: 7,
-    message: "The files were uploaded, but 2 of them could not be read publicly. Try again to check them once more.",
+    message: "Every file was uploaded, but the check afterwards found 2 that are not public, so the snapshot is not published.",
   },
   publish_job_failed: {
     retry: "same",
     exit_code: null,
-    message: "The publish job ended without reporting a result. Try again; it publishes under the same snapshot id.",
+    message: "The publish job ended without reporting a result. What it had already uploaded is kept.",
   },
   publish_submit_interrupted: {
     retry: "same",
     exit_code: null,
-    message: "The gateway lost its connection to Anvil while it submitted the publish job. Try again; it publishes under the same snapshot id.",
+    message: "The gateway never learned what Anvil answered when it submitted the publish job, so it does not know whether the job started. One that did start is harmless: it skips what is already uploaded.",
   },
   anvil_not_configured: {
     retry: "same",
     exit_code: null,
-    message: "This gateway is not set up to run jobs on Anvil yet. Ask an administrator. Nothing was published.",
+    message: "The gateway's connection to Anvil is not configured, so the publish job was never submitted and nothing was uploaded.",
   },
   anvil_unreachable: {
     retry: "same",
     exit_code: null,
-    message: "Anvil could not be reached, so nothing was published. Try again in a few minutes.",
+    message: "The gateway could not reach Anvil while it submitted the publish job, so it does not know whether the job started. One that did start is harmless: it skips what is already uploaded.",
   },
   sbatch_rejected: {
     retry: "same",
     exit_code: null,
-    message: "SLURM refused the publish job: invalid account or partition. Nothing was published.",
+    message: "SLURM refused the job: invalid account or partition. Nothing was uploaded.",
   },
   internal_error: {
     retry: "same",
     exit_code: null,
-    message: "The publish failed unexpectedly, so anything it started on Anvil was cancelled. Try again, and if it keeps failing, tell an administrator.",
+    message: "The gateway hit an unexpected problem while it submitted the publish job, so it does not know whether the job started. One that did start is harmless: it skips what is already uploaded.",
   },
 };
 

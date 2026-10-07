@@ -106,6 +106,58 @@ describe("a publishable draft", () => {
     expect(within(sheet).getAllByRole("checkbox")).toHaveLength(6);
   });
 
+  it("fills creators, license, keywords and tags from the base's about when the draft stores none, and leaves name and description empty", async () => {
+    const base = {
+      name: "The base snapshot",
+      description: "The base's own description.",
+      tags: ["publication"],
+      creator: [{ name: "Base Author", email: "base@example.test" }],
+      license: "MIT",
+      keywords: ["base", "run"],
+    } as unknown as NonNullable<Job["about"]>;
+    const j = job("completed", { about: null });
+    render(
+      <LiveJobProvider jobId={j.id} initialStatus={j.status} initialData={{ files: j.files, publish: j.publish }}>
+        <PublishCard job={j} baseAbout={base} />
+      </LiveJobProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
+    const sheet = await screen.findByRole("dialog");
+    const name = within(sheet).getByLabelText("Name") as HTMLInputElement;
+    expect(name.value).toBe("");
+    expect((within(sheet).getByLabelText("Description") as HTMLTextAreaElement).value).toBe("");
+    expect(within(sheet).getByText("Based on: The base snapshot")).toBeTruthy();
+    expect(name.getAttribute("aria-describedby")).toBeTruthy();
+    expect((within(sheet).getByLabelText("Creator 1 name") as HTMLInputElement).value).toBe("Base Author");
+    expect((within(sheet).getByLabelText("Creator 1 email") as HTMLInputElement).value).toBe("base@example.test");
+    expect((within(sheet).getByLabelText(/^License/) as HTMLInputElement).value).toBe("MIT");
+    expect((within(sheet).getByLabelText(/^Keywords/) as HTMLInputElement).value).toBe("base, run");
+    expect((within(sheet).getByLabelText("Publication") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("keeps the draft's own name and description, and shows the base's name beside the field", async () => {
+    const base = { name: "The base snapshot", license: "MIT" } as unknown as NonNullable<Job["about"]>;
+    const j = job("completed");
+    render(
+      <LiveJobProvider jobId={j.id} initialStatus={j.status} initialData={{ files: j.files, publish: j.publish }}>
+        <PublishCard job={j} baseAbout={base} />
+      </LiveJobProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
+    const sheet = await screen.findByRole("dialog");
+    expect((within(sheet).getByLabelText("Name") as HTMLInputElement).value).toBe("A published run");
+    expect((within(sheet).getByLabelText(/^License/) as HTMLInputElement).value).toBe("CC-BY-4.0");
+    expect(within(sheet).getByText("Based on: The base snapshot")).toBeTruthy();
+  });
+
+  it("starts empty and shows no hint when there is no base about", async () => {
+    render(card(job("completed", { about: null })));
+    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
+    const sheet = await screen.findByRole("dialog");
+    expect((within(sheet).getByLabelText(/^License/) as HTMLInputElement).value).toBe("");
+    expect(within(sheet).queryByText(/Based on:/)).toBeNull();
+  });
+
   it("asks for what is missing, sends nothing, and puts focus on the first field", async () => {
     render(card(job("completed", { about: null })));
     fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));

@@ -768,11 +768,19 @@ SLURM job has ended is classified from its outcome file:
 
 The job page (`publish-card.tsx`, `publish-sheet.tsx`) shows:
 
-- **the form**, warning that the snapshot is public and cannot be changed;
+- **the form**, warning that the snapshot is public and cannot be changed. It
+  starts from the words of the failed attempt, else the draft's own `about`.
+  Deriving stores no `about` on a draft, so the page reads the base snapshot
+  and fills creators, license, keywords and tags from it where the draft has
+  none. Name and description are the draft's or empty, with the base's name
+  shown beside the Name field as "Based on";
 - **while publishing**, the SLURM job, polled by the same live hook, which
   keeps polling while `publish.state` is `publishing`;
 - **published**, the id and a link to the repository;
-- **failed**, the message and the action `retry` allows.
+- **failed**, a headline for the cause (frontend wording), the backend's
+  `message` as the detail (what happened, and whether anything was uploaded),
+  and the action `retry` allows. Each line says one thing, so the `message`
+  names no action and does not repeat the headline.
 
 The list marks a published draft *Published*.
 

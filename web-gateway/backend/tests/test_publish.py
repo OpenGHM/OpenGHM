@@ -371,7 +371,7 @@ def test_everything_else_is_a_job_that_failed_and_may_be_tried_again(state, outc
 def test_a_timeout_and_a_cancel_say_so():
     timeout = publish.classify_publish(slurm_state="TIMEOUT", outcome=None, snapshot_id=NEW_ID).failure.message
     cancel = publish.classify_publish(slurm_state="CANCELLED by 5", outcome=None, snapshot_id=NEW_ID).failure.message
-    assert "ran out of time" in timeout
+    assert "time limit" in timeout
     assert "cancelled" in cancel
     assert len({timeout, cancel, publish.MESSAGE["publish_job_failed"]}) == 3
 
@@ -383,3 +383,10 @@ def test_every_cause_has_a_sentence():
 
     assert set(get_args(PublishFailureCause)) - {"sbatch_rejected"} <= set(publish.MESSAGE)
     assert all(m.endswith(".") for m in publish.MESSAGE.values())
+
+
+def test_a_message_says_what_happened_and_leaves_what_to_do_to_the_retry_line():
+    # The card puts the message between a headline and the frontend's retry line,
+    # so a message that tells the owner to try again or to ask someone says it twice.
+    for message in [*publish.MESSAGE.values(), publish._TIMED_OUT, publish._CANCELLED]:
+        assert not re.search(r"try again|tell an administrator|ask an administrator|an administrator has to", message, re.I)

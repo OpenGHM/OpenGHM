@@ -464,11 +464,11 @@ def test_a_submit_that_fails_ends_the_publish_failed_and_keeps_its_id(client, db
     assert event["detail"]["cause"] == cause and event["detail"]["retry"] == "same"
 
 
-def test_an_sbatch_refusal_is_explained_in_slurms_words_and_says_nothing_was_published(client, db, monkeypatch):
+def test_an_sbatch_refusal_is_explained_in_slurms_words_and_says_nothing_was_uploaded(client, db, monkeypatch):
     completed(db)
     monkeypatch.setattr(slurm, "submit_publish", _raising(sbatch_says_no))
     detail = publish_it(client).json()["detail"]
-    assert detail["message"].endswith("Nothing was published.")
+    assert detail["message"].endswith("Nothing was uploaded.")
     assert "Your draft is unchanged" not in detail["message"]
 
 

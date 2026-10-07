@@ -9,6 +9,7 @@ import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
 import { submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
+import type { Dataset } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import { parseStep, recommendedComputeFor } from "@/lib/workspace/draft-wizard";
 
@@ -69,21 +70,24 @@ export default async function JobDetailPage({
   // "You cancelled this" needs to know who is looking.
   const viewerEmail = job.status === "CANCELLED" ? ((await fetchMe())?.email ?? null) : null;
 
-  // The base snapshot, for what the job asked for when it chose no cores or
-  // walltime of its own (its recommendation; snapshots never change, so reading
-  // it now gives what the submit read). Null when it cannot be read just now:
-  // the page then shows a dash rather than a guess.
-  let recommended = null;
+  // The base snapshot, read once for two things: what the job asked for when it
+  // chose no cores or walltime of its own (its recommendation; snapshots never
+  // change, so reading it now gives what the submit read), and the `about` the
+  // publish form fills from when the draft stores none. Null when it cannot be
+  // read just now: the page then shows a dash, and the form starts as the draft
+  // has it, rather than a guess.
+  let base: Dataset | null = null;
   try {
-    recommended = recommendedComputeFor(await fetchDatasetById(job.dataset_id));
+    base = await fetchDatasetById(job.dataset_id);
   } catch {
-    recommended = null;
+    base = null;
   }
+  const recommended = recommendedComputeFor(base);
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} />
+      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} baseAbout={base?.about ?? null} />
       <Footer />
     </div>
   );

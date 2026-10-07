@@ -455,60 +455,66 @@ _BY_EXIT: dict[int, tuple[PublishFailureCause, PublishRetry]] = {
     7: ("publish_verify_failed", "same"),
 }
 
-#: A sentence its owner can act on, per cause. The toolkit's stderr is logged
-#: by the sweep and never put in one.
+#: What happened, per cause, in a sentence that stands alone: the card shows it
+#: under a headline that names the cause (the frontend's `PUBLISH_FAILURE_COPY`)
+#: and above the line that says what to do (`PUBLISH_RETRY_COPY`), so it is the
+#: detail, says whether anything was uploaded where that matters, and tells the
+#: owner nothing to do. The toolkit's stderr is logged by the sweep and never put
+#: in one.
 MESSAGE: dict[str, str] = {
     "publish_bad_input": (
-        "Anvil's check refused this snapshot's description or this simulation's files, so "
-        "nothing was published. Check the description and publish again; if it keeps "
-        "failing, tell an administrator."
+        "The checks run before the upload refused this snapshot's description or this "
+        "simulation's files, so nothing was uploaded."
     ),
     "publish_output_incomplete": (
-        "This simulation's output is incomplete or does not match what the snapshot draft "
-        "asked for, so it cannot be published and nothing was uploaded. Tell an "
-        "administrator this snapshot draft's ID."
+        "This simulation's output does not hold every year and variable the snapshot draft "
+        "asked for, or it holds an empty file, so nothing was uploaded."
     ),
     "publish_conflict": (
-        "A file this snapshot would be stored as already exists with different contents, so "
-        "the publish stopped without replacing anything. An administrator has to look at it."
+        "A file of this snapshot is already in the repository with different contents. A "
+        "published file is never overwritten, so the publish stopped before it replaced anything."
     ),
     "publish_setup": (
-        "Anvil is not set up to publish: the gateway's storage credentials or the s3cmd "
-        "tool are missing. An administrator has to fix this before it can be tried again."
+        "The gateway's storage credentials or the s3cmd tool are missing on Anvil, so nothing "
+        "was uploaded."
     ),
     "publish_upload_failed": (
-        "An upload to the repository's storage failed part way. What was already uploaded "
-        "is kept: try again and it continues where it stopped."
+        "An upload to the repository's storage failed part way. What was already uploaded is kept."
     ),
     "publish_verify_failed": (
-        "The snapshot was uploaded, but the check afterwards found a file that is missing, "
-        "not public or the wrong size. Try again: it checks the files and finishes the upload."
+        "Every file was uploaded, but the check afterwards found one that is missing, not "
+        "public or the wrong size, so the snapshot is not published."
     ),
     "publish_job_failed": (
-        "The publish job ended without reporting a result. Try again: it continues where it "
-        "stopped."
+        "The publish job ended without reporting a result. What it had already uploaded is kept."
     ),
     "publish_submit_interrupted": (
-        "The publish was interrupted before the gateway learned what Anvil answered. Try "
-        "again: if a job did start, it is harmless, and the new one continues where it stopped."
+        "The gateway never learned what Anvil answered when it submitted the publish job, so "
+        "it does not know whether the job started. One that did start is harmless: it skips "
+        "what is already uploaded."
     ),
     "anvil_not_configured": (
-        "This gateway is not set up to run jobs on Anvil yet. Ask an administrator. "
-        "Nothing was published."
+        "The gateway's connection to Anvil is not configured, so the publish job was never "
+        "submitted and nothing was uploaded."
     ),
-    "anvil_unreachable": "Anvil could not be reached, so nothing was published. Try again in a few minutes.",
+    "anvil_unreachable": (
+        "The gateway could not reach Anvil while it submitted the publish job, so it does not "
+        "know whether the job started. One that did start is harmless: it skips what is "
+        "already uploaded."
+    ),
     "internal_error": (
-        "The publish failed unexpectedly. Try again, and if it keeps failing, tell an "
-        "administrator."
+        "The gateway hit an unexpected problem while it submitted the publish job, so it does "
+        "not know whether the job started. One that did start is harmless: it skips what is "
+        "already uploaded."
     ),
 }
 _TIMED_OUT = (
-    "The publish ran out of time before it finished. What was already uploaded is kept: try "
-    "again and it continues where it stopped."
+    "The publish job hit its time limit on Anvil before it finished. What it had already "
+    "uploaded is kept."
 )
 _CANCELLED = (
-    "The publish job was cancelled on Anvil, not from OpenGHM. What was already uploaded is "
-    "kept: try again and it continues where it stopped."
+    "The publish job was cancelled on Anvil, not from OpenGHM. What it had already uploaded "
+    "is kept."
 )
 
 # SLURM states that mean the job did not exit by itself: whatever its record

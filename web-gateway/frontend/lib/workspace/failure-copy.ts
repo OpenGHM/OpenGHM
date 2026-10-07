@@ -175,9 +175,11 @@ export function summaryOffersCopy(status: JobStatus, failure: JobFailure | null)
 
 export interface PublishFailureCopy {
   title: string;
-  /** What happened, for a failure that carries no `message` of its own. It
+  /** The detail of what happened, for a failure that carries no `message` of its
+   *  own. The `title` is the headline, so this does not restate it, and it
    *  never says what to do: the retry line under it does (`PUBLISH_RETRY_COPY`),
-   *  from the failure's `retry`. */
+   *  from the failure's `retry`. Where it matters it says whether anything was
+   *  uploaded. */
   body: string;
 }
 
@@ -190,7 +192,7 @@ export interface PublishFailureCopy {
 export const PUBLISH_FAILURE_COPY: Record<PublishFailureCause, PublishFailureCopy> = {
   publish_bad_input: {
     title: "Anvil's check refused the snapshot",
-    body: "The checks before the upload refused the snapshot's description or the simulation's files, so nothing was uploaded.",
+    body: "The checks made before the upload refused the snapshot's description or the simulation's files, so nothing was uploaded.",
   },
   publish_output_incomplete: {
     title: "The simulation's output is incomplete",
@@ -198,11 +200,11 @@ export const PUBLISH_FAILURE_COPY: Record<PublishFailureCause, PublishFailureCop
   },
   publish_conflict: {
     title: "Something already stored under this id differs",
-    body: "A file of this snapshot is already in the repository with other content. The publish stopped before it replaced anything, because a published file is never overwritten.",
+    body: "A file of this snapshot is already in the repository with different contents. A published file is never overwritten, so the publish stopped before it replaced anything.",
   },
   publish_setup: {
     title: "Anvil isn't set up to publish",
-    body: "The gateway's publishing setup on Anvil is broken, so the upload could not start. The snapshot draft is not at fault.",
+    body: "A credential or tool the upload needs is missing from the gateway's setup on Anvil, so nothing was uploaded. The snapshot draft is not at fault.",
   },
   publish_upload_failed: {
     title: "The upload didn't finish",
@@ -210,32 +212,32 @@ export const PUBLISH_FAILURE_COPY: Record<PublishFailureCause, PublishFailureCop
   },
   publish_verify_failed: {
     title: "The upload could not be verified",
-    body: "The files were uploaded, but the check that every one of them can be read publicly did not pass, so the snapshot is not published.",
+    body: "Every file was uploaded, but the check afterwards found one that is missing, not public or the wrong size, so the snapshot is not published.",
   },
   publish_job_failed: {
     title: "The publish job stopped",
-    body: "Anvil stopped the publish job before it reported a result: it ran out of time, was cancelled, or was lost.",
+    body: "The job ran out of time, was cancelled, or was lost before it reported a result. What it had already uploaded is kept.",
   },
   publish_submit_interrupted: {
     title: "The publish was interrupted before it started",
-    body: "The gateway lost its connection to Anvil while it submitted the publish job, so the job may never have started.",
+    body: "The gateway never learned what Anvil answered when it submitted the publish job, so it does not know whether the job started.",
   },
   // The submit's own refusals: the draft was claimed, then Anvil did not take the job.
   anvil_not_configured: {
     title: "Anvil isn't set up to run jobs yet",
-    body: "This gateway is not set up to run jobs on Anvil yet, so the publish job could not be submitted. Nothing was published.",
+    body: "The gateway's connection to Anvil is not configured, so the publish job was never submitted and nothing was uploaded.",
   },
   anvil_unreachable: {
     title: "Anvil couldn't be reached",
-    body: "The gateway could not reach Anvil to submit the publish job, so nothing was published.",
+    body: "The gateway could not reach Anvil while it submitted the publish job, so it does not know whether the job started. One that did start is harmless: it skips what is already uploaded.",
   },
   sbatch_rejected: {
     title: "Anvil refused the publish job",
-    body: "SLURM refused the publish job when the gateway submitted it, so nothing was published.",
+    body: "The job was never queued, so nothing was uploaded.",
   },
   internal_error: {
     title: "The publish failed unexpectedly",
-    body: "The gateway hit a problem while it submitted the publish job, and anything it had started on Anvil was cancelled.",
+    body: "The gateway hit an unexpected problem while it submitted the publish job, so it does not know whether the job started.",
   },
 };
 

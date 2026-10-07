@@ -10,6 +10,7 @@ import {
   formFromAbout,
   isValid,
   parseKeywords,
+  prefillAbout,
   publishPhase,
   splitServerErrors,
   validatePublishForm,
@@ -56,6 +57,59 @@ describe("publishPhase", () => {
     expect(publishPhase(fakePublish("publishing"))).toBe("publishing");
     expect(publishPhase(fakePublish("published"))).toBe("published");
     expect(publishPhase(fakePublish("publish_setup"))).toBe("failed");
+  });
+});
+
+const BASE_ABOUT = {
+  name: "The base snapshot",
+  description: "The base's own description.",
+  datePublished: "2026-01-01",
+  url: "https://gateway.example.test/snapshots/base",
+  isBasedOn: [{ kind: "snapshot", id: "ab".repeat(32) }],
+  tags: ["publication"],
+  creator: [{ name: "Base Author" }],
+  license: "MIT",
+  keywords: ["base"],
+  relatedLink: [{ kind: "paper", url: "https://example.test/paper" }],
+} as unknown as PartialAbout;
+
+describe("prefillAbout", () => {
+  it("takes creators, license, keywords and tags from the base when the draft stores no about", () => {
+    const filled = prefillAbout(null, BASE_ABOUT);
+    expect(filled).toEqual({
+      tags: ["publication"],
+      creator: [{ name: "Base Author" }],
+      license: "MIT",
+      keywords: ["base"],
+    });
+  });
+
+  it("never carries the base's name or description, or the fields the gateway sets, or its related links", () => {
+    const filled = prefillAbout(null, BASE_ABOUT) as Record<string, unknown>;
+    for (const key of ["name", "description", "datePublished", "url", "isBasedOn", "relatedLink"]) {
+      expect(filled).not.toHaveProperty(key);
+    }
+    expect(formFromAbout(prefillAbout(null, BASE_ABOUT))).toMatchObject({ name: "", description: "" });
+  });
+
+  it("prefers the draft's own value for each field, and fills only what it lacks", () => {
+    const own = { name: "Mine", license: "CC0-1.0", keywords: [], creator: [] } as unknown as PartialAbout;
+    expect(prefillAbout(own, BASE_ABOUT)).toEqual({
+      name: "Mine",
+      license: "CC0-1.0",
+      keywords: ["base"],
+      creator: [{ name: "Base Author" }],
+      tags: ["publication"],
+    });
+  });
+
+  it("keeps the draft's own about whole when it holds every field", () => {
+    expect(prefillAbout(GOOD_ABOUT, BASE_ABOUT)).toEqual(GOOD_ABOUT);
+  });
+
+  it("is today's behaviour when the base could not be read", () => {
+    expect(prefillAbout(null, null)).toBeNull();
+    expect(prefillAbout(GOOD_ABOUT, null)).toEqual(GOOD_ABOUT);
   });
 });
 

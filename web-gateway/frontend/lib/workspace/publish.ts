@@ -98,6 +98,37 @@ export function formFromAbout(about: PartialAbout | null | undefined): PublishFo
   };
 }
 
+/**
+ * What the form starts from: `own` (the failed attempt's words, else the
+ * draft's `about`), with what it lacks filled from the base snapshot's `about`
+ * (`base`). A derived draft may carry none of its own, so a form that opened
+ * empty would make the person retype what the base already says.
+ *
+ * Only what carries over to a rerun is taken from the base: `creator`,
+ * `license`, `keywords` and `tags`. `name` and `description` are the draft's own
+ * or empty, because a rerun must not silently be published under the base's
+ * title and description. `relatedLink` is not taken either: the form does not
+ * show it, so nothing the person has not seen is sent. Null when there is
+ * nothing to start from.
+ */
+export function prefillAbout(
+  own: PartialAbout | null | undefined,
+  base: PartialAbout | null | undefined
+): PartialAbout | null {
+  if (!own && !base) return null;
+  const pick = <K extends "creator" | "license" | "keywords" | "tags">(key: K): PartialAbout[K] | undefined => {
+    const mine = own?.[key];
+    const has = Array.isArray(mine) ? mine.length > 0 : Boolean(mine);
+    return has ? mine : base?.[key];
+  };
+  const filled: PartialAbout = { ...own };
+  for (const key of ["creator", "license", "keywords", "tags"] as const) {
+    const value = pick(key);
+    if (value !== undefined) (filled as Record<string, unknown>)[key] = value;
+  }
+  return filled;
+}
+
 /** The keywords typed on one line, trimmed, without blanks or repeats. */
 export function parseKeywords(text: string): string[] {
   const seen = new Set<string>();

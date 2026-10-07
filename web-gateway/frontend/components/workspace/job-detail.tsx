@@ -7,7 +7,7 @@ import { LogViewer } from "@/components/workspace/log-viewer";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
 import type { Recommended } from "@/lib/jobs/compute";
-import type { Job, JobLive, LogStream } from "@/lib/jobs/types";
+import type { Job, JobLive, LogStream, PartialAbout } from "@/lib/jobs/types";
 
 /**
  * The job detail page below the site header: the header (breadcrumb, the
@@ -26,6 +26,7 @@ export function JobDetail({
   job,
   viewerEmail,
   recommended = null,
+  baseAbout = null,
   preview = false,
   previewLogs,
   previewLive = null,
@@ -36,6 +37,9 @@ export function JobDetail({
   /** The base snapshot's `recommendedCompute`, for the cores and walltime a
    *  job asked for by default; null when the snapshot could not be read. */
   recommended?: Recommended | null;
+  /** The base snapshot's `about`, which the publish form fills what the draft
+   *  stores none of from; null when the snapshot could not be read. */
+  baseAbout?: PartialAbout | null;
   /** Fixture data: nothing is polled and the dialogs send nothing. */
   preview?: boolean;
   /** The logs to show instead of fetching them. Preview only. */
@@ -74,7 +78,7 @@ export function JobDetail({
         <JobHeader job={job} preview={preview} />
         <div className={`${WORKSPACE_CONTAINER} flex-1 space-y-8 py-6 sm:py-8`}>
           <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
-          <PublishCard job={job} preview={preview} />
+          <PublishCard job={job} baseAbout={baseAbout} preview={preview} />
           <LogViewer previewLogs={previewLogs} />
           <JobDetails job={job} recommended={recommended} />
           <AboutSummaryCard about={job.about} />

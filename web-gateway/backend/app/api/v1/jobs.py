@@ -1100,7 +1100,7 @@ def _publish_submit_failure(exc: Exception, job_id: str) -> tuple[int, publish.P
         http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_not_configured", None
     elif isinstance(exc, (SbatchError, InvalidJobSpec)):
         http_status, cause = status.HTTP_502_BAD_GATEWAY, "sbatch_rejected"
-        message = _sbatch_refusal_message(exc, "Nothing was published.")
+        message = _sbatch_refusal_message(exc, "Nothing was uploaded.")
     elif isinstance(exc, (SlurmlyError, OSError, asyncio.TimeoutError)):
         http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_unreachable", None
     else:

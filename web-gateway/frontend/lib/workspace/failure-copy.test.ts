@@ -197,6 +197,14 @@ describe("PUBLISH_FAILURE_COPY", () => {
     expect(PUBLISH_FAILURE_COPY.publish_conflict.body).toMatch(/never overwritten/);
     expect(PUBLISH_FAILURE_COPY.publish_setup.body).toMatch(/not at fault/);
   });
+
+  it("says in the body whether anything was uploaded, which the title does not", () => {
+    expect(PUBLISH_FAILURE_COPY.publish_setup.body).toMatch(/nothing was uploaded/);
+    expect(PUBLISH_FAILURE_COPY.publish_job_failed.body).toMatch(/already uploaded is kept/);
+    for (const copy of Object.values(PUBLISH_FAILURE_COPY)) {
+      expect(copy.body.toLowerCase()).not.toBe(copy.title.toLowerCase());
+    }
+  });
 });
 
 describe("publishFailureCopyFor", () => {
