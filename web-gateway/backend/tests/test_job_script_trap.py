@@ -71,6 +71,15 @@ exit 99
 """
 
 
+# A stand-in for SLURM's `scontrol`: records its arguments, and fails when
+# STUB_SCONTROL_RC says so. The body calls it to turn requeueing off.
+SCONTROL = r"""#!/bin/bash
+echo "$*" >> "$STUB_SCONTROL_LOG"
+if [ "${STUB_SCONTROL_RC:-0}" != 0 ]; then echo "scontrol: error: Access denied" >&2; fi
+exit "${STUB_SCONTROL_RC:-0}"
+"""
+
+
 class Job:
     """One rendered body, its temp tree and how to run it."""
 
@@ -103,6 +112,10 @@ class Job:
         self.script.write_text("#!/bin/bash\nset -euo pipefail\n" + self.body + "\n")
         self.bin = root / "bin"
         self.bin.mkdir()
+        scontrol = self.bin / "scontrol"
+        scontrol.write_text(SCONTROL)
+        scontrol.chmod(0o755)
+        self.scontrol_log = root / "scontrol.log"
         if shutil.which("flock") is None:
             flock = self.bin / "flock"
             flock.write_text('#!/bin/sh\nshift\nexec "$@"\n')  # no lock, same command
@@ -115,7 +128,10 @@ class Job:
             "SLURM_SUBMIT_DIR": str(self.submit_dir),
             "SLURM_JOB_ID": "4242",
             "STUB_WORK_DIR": str(self.work_dir),
+            "STUB_SCONTROL_LOG": str(self.scontrol_log),
         }
+        # A first run: the variable is set only in a run SLURM requeued.
+        env.pop("SLURM_RESTART_COUNT", None)
         env.update({k: str(v) for k, v in extra.items()})
         return env
 
@@ -167,6 +183,82 @@ def test_a_clean_run_exits_0_and_records_a_manifest(job):
         f"wbm_output/{SIM_ID}/daily/wbm_1.nc",
     }
     assert {f["bytes"] for f in out["files"] if f["path"].endswith(".nc")} == {4}
+
+
+def test_a_first_run_turns_requeueing_off_for_its_own_job(job):
+    done = job.run()
+    assert done.returncode == 0, done.stderr
+    assert job.scontrol_log.read_text().splitlines() == ["update JobId=4242 Requeue=0"]
+    assert job.record["restart_count"] == 0
+
+
+def test_a_zero_restart_count_is_a_first_run(job):
+    done = job.run(SLURM_RESTART_COUNT=0)
+    assert done.returncode == 0, done.stderr
+    assert job.scontrol_log.read_text().splitlines() == ["update JobId=4242 Requeue=0"]
+
+
+def test_without_a_slurm_job_id_scontrol_is_not_called(job):
+    env = job.env()
+    del env["SLURM_JOB_ID"]
+    done = subprocess.run(["bash", str(job.script)], env=env, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert not job.scontrol_log.exists()
+
+
+def test_a_scontrol_that_fails_warns_and_does_not_fail_the_job(job):
+    done = job.run(STUB_SCONTROL_RC=1)
+    assert done.returncode == 0, done.stderr
+    assert "could not turn requeueing off" in done.stderr
+    assert job.record["ok"] is True
+
+
+def test_a_scontrol_that_is_not_there_warns_and_does_not_fail_the_job(job):
+    (job.bin / "scontrol").unlink()
+    done = job.run()
+    assert done.returncode == 0, done.stderr
+    assert "could not turn requeueing off" in done.stderr
+    assert job.record["ok"] is True
+
+
+def test_a_requeued_run_fetches_and_runs_nothing_and_says_so(job):
+    done = job.run(SLURM_RESTART_COUNT=1)
+    assert done.returncode == 75
+    assert "requeued" in done.stderr
+    assert not job.scontrol_log.exists()
+    assert not job.work_dir.exists()
+    assert not (job.root / "cache").exists()  # not even the cache directory
+    r = job.record
+    assert r["restart_count"] == 1
+    assert r["ok"] is False
+    assert r["steps"] == {}
+    assert r["phase"] == "fetch" and r["staged"] is False
+    assert "outcome: fail" in done.stdout
+
+
+def test_a_requeued_run_leaves_the_first_attempts_output_alone(job):
+    job.run()
+    before = sorted(p.relative_to(job.work_dir) for p in job.work_dir.rglob("*"))
+    (job.submit_dir / "outcome.json").unlink()
+    done = job.run(SLURM_RESTART_COUNT=2)
+    assert done.returncode == 75
+    assert sorted(p.relative_to(job.work_dir) for p in job.work_dir.rglob("*")) == before
+    assert job.record["restart_count"] == 2
+
+
+def test_the_verdict_reads_a_requeued_runs_record_as_a_node_failure(job):
+    from app.services.job_verdict import classify
+
+    done = job.run(SLURM_RESTART_COUNT=1)
+    verdict = classify(
+        slurm_state="FAILED",
+        cancel_requested=False,
+        outcome=job.record,
+        stderr_tail=done.stderr,
+        missing=False,
+    )
+    assert verdict.status == "FAILED"
+    assert verdict.failure.cause == "node_failure"
 
 
 def test_the_body_adds_nothing_of_its_own_to_stderr(job):

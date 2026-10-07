@@ -394,6 +394,12 @@ def render_publish_body(
     read its end; the trap prints it to the job's stderr afterwards. The body
     does not stop at a failing command (`set +e`, slurmly's header sets `-e`): the
     trap records the toolkit's code in every case.
+
+    Unlike a simulation job (`job_script.render_job_body`), this body leaves
+    SLURM's requeue on: a rerun of `openghm snapshot publish` is idempotent (each
+    key that is absent is written, one with the same bytes is skipped, one with
+    other bytes stops it; `metadata.json` goes last), so a job requeued after a
+    node failure finishes the publish rather than damaging it.
     """
     if not _SNAPSHOT_ID_RE.match(snapshot_id or ""):
         raise job_script.SubmitInputError(f"snapshot id {snapshot_id!r} is not 64 lowercase hex")

@@ -28,6 +28,7 @@ it (the frontend gets `JobResponse.failure` and `.output`)::
       "started_at": "ISO-8601 UTC", "ended_at": "ISO-8601 UTC",
       "phase": "fetch" | "run" | "check",
       "signal": "TERM" | "INT" | "HUP" | null,
+      "restart_count": 0,
       "steps": {"fetch": {"exit_code": 0}, "run": {"exit_code": 0}},
       "staged": true,
       "wbm": {"log": "wbm_output/<sim_id>/<ID>.log" | null, "all_done": true,
@@ -37,6 +38,14 @@ it (the frontend gets `JobResponse.failure` and `.output`)::
                  "truncated": false},
       "ok": true
     }
+
+`restart_count` is SLURM's `SLURM_RESTART_COUNT`: 0 on a first run, more on a
+run SLURM requeued after a node failure. The first run turns requeueing off
+for the job (`scontrol update ... Requeue=0`), but a requeue that started
+before it got that far runs the body again: that run fetches and runs nothing,
+records its `restart_count` and exits non-zero, because it would otherwise write
+into the work directory the first attempt left half-written, under the same
+`sim_id`. `classify` reads a `restart_count` above 0 as `node_failure`.
 
 A step that was not reached is absent from `steps`; one the script was
 interrupted in has `"exit_code": null`. `staged` is whether `simulation.json`
@@ -177,10 +186,13 @@ output = {
 }
 
 signal = E.get("OG_SIGNAL") or None
+restart = E.get("SLURM_RESTART_COUNT") or ""
+restart_count = int(restart) if re.fullmatch(r"\d+", restart) else 0
 ok = (
     "fetch" in steps and "run" in steps
     and all(s["exit_code"] == 0 for s in steps.values())
     and signal is None
+    and restart_count == 0
     and wbm["all_done"] and not wbm["markers"] and nc_count > 0
 )
 record = {
@@ -194,6 +206,7 @@ record = {
     "ended_at": now(),
     "phase": E["OG_PHASE"],
     "signal": signal,
+    "restart_count": restart_count,
     "steps": steps,
     "staged": staged,
     "wbm": wbm,
@@ -299,6 +312,28 @@ finish() {
 }"""
 
 
+# SLURM requeues a batch job after a node failure (`JobRequeue=1`, up to
+# `MaxBatchRequeue=5` times on Anvil, read on 2026-10-07), and the requeued run
+# would write the same `sim_id` into the same work directory, on top of what the
+# first attempt left, while the gateway sees one job. slurmly has no JobSpec field
+# for `--no-requeue`, and a line after its `#SBATCH` lines is ignored by sbatch,
+# so the body turns requeueing off itself: the first run does it for the job
+# (`scontrol update Requeue=0`, run from inside the job; checked to return 0 and
+# show `Requeue=0` afterwards), and a run SLURM requeued before that happened
+# (`SLURM_RESTART_COUNT` is its restart count, unset on a first run) stops without
+# fetching or running, and says so in `outcome.json`. A failed `scontrol` is a
+# warning: the job is worth more than the guard. 75 is `EX_TEMPFAIL`.
+_REQUEUE_GUARD = """\
+if [ "${SLURM_RESTART_COUNT:-0}" != 0 ]; then
+  echo "openghm: SLURM requeued this job (restart count $SLURM_RESTART_COUNT); not running it again" >&2
+  exit 75
+fi
+if [ -n "${SLURM_JOB_ID:-}" ]; then
+  scontrol update JobId="$SLURM_JOB_ID" Requeue=0 \\
+    || echo "openghm: warning: could not turn requeueing off for this job" >&2
+fi"""
+
+
 def render_job_body(
     *,
     snapshot_id: str,
@@ -384,6 +419,7 @@ def render_job_body(
             "trap 'OG_SIGNAL=TERM; exit 143' TERM",
             "trap 'OG_SIGNAL=INT; exit 130' INT",
             "trap 'OG_SIGNAL=HUP; exit 129' HUP",
+            _REQUEUE_GUARD,
             f'echo "openghm $("$OPENGHM" --version) commit {commit}"',
             'mkdir -p "$CACHE/snapshots"',
             f'step fetch flock {shlex.quote(lock)} "$OPENGHM" snapshot fetch --config "$CONFIG" '

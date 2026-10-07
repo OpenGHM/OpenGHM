@@ -425,13 +425,27 @@ for the public commit it was built from:
    held under `flock ANVIL_FETCH_LOCK`. The lock lives on `/home`, because
    `flock` on the GPFS scratch filesystem only locks within one node. The
    fetch verifies the tree, the linked model input and the pinned image, and
-   downloads what is missing.
+   downloads what is missing. Verifying re-hashes every cached file, under
+   the lock: with all three snapshots cached it took 7 s for the v2 tutorial
+   and 23 s each for Wyoming and Global (SLURM 21162351, 4 cores,
+   2026-10-07), which is what one job can make the next one wait.
 2. `openghm sim run` on that tree, with `--id <sim_id>`, `--walltime <the
    `--time` the job asks SLURM for>` and `--spool cache`: the run links the days
    the shared spool cache holds and hands it the days it built after exiting 0
    ([simulation-reuse.md](simulation-reuse.md) §4), and its lease on them lasts
    as long as the job can. `--run-start`, `--run-end` and `--output-vars` are
    passed only when the draft differs from the snapshot's own values.
+
+Before the fetch the body turns SLURM's requeue off for its own job: Anvil
+requeues a batch job after a node failure (`JobRequeue=1`, `MaxBatchRequeue=5`,
+read on 2026-10-07), and the requeued run would write the same `sim_id` into the
+same work directory, over the first attempt's half-written output, while the
+gateway saw one job. slurmly has no `--no-requeue` field, so the body runs
+`scontrol update JobId=$SLURM_JOB_ID Requeue=0` (a failure of it is a warning,
+not a failed job). A run SLURM requeued before that happened has
+`SLURM_RESTART_COUNT` above 0: it fetches and runs nothing, records
+`restart_count` in `outcome.json` and exits 75. The publish job keeps the
+requeue, because a rerun of `openghm snapshot publish` is idempotent.
 
 Each step runs through a `step` wrapper that records its exit code, and an
 `EXIT` trap (with `TERM`, `INT` and `HUP` trapped too) writes `outcome.json`
@@ -628,7 +642,9 @@ shows a dash. The page is as wide as the Workspace list and the draft wizard.
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`
 and the stderr tail once, and `web-gateway/backend/app/services/job_verdict.py`'s `classify`
 names one cause: SLURM's `CANCELLED` first, then SLURM's kills (`TIMEOUT`,
-`OUT_OF_MEMORY`, the node-failure family), then the record. The job stores
+`OUT_OF_MEMORY`, the node-failure family), then the record. A record whose
+`restart_count` is above 0 is a requeued run the body refused to repeat, and is
+`node_failure`. The job stores
 `status`, `failure {cause, phase, message, excerpt}`, the record, the raw
 `slurm_state` and `slurm_exit_code`, and SLURM's own `slurm_start` and
 `slurm_end`. A time SLURM does not have, NO_VAL (4294967294, which slurmly turns

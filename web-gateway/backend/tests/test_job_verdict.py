@@ -298,6 +298,33 @@ def test_a_node_class_failure_is_node_failure_and_not_the_users(state):
     assert "not a problem with your input" in v.failure.message
 
 
+@pytest.mark.parametrize("state", ["FAILED", "COMPLETED", "SPECIAL_EXIT"])
+def test_a_requeued_run_is_a_node_failure_whatever_else_the_record_says(state):
+    """The body refuses to repeat a run SLURM requeued, and records its restart
+    count: the failure is the node's, not this run's (no steps are in the record)."""
+    v = verdict(state, outcome=record(restart_count=1, steps={}, staged=False, phase="fetch"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "node_failure"
+    assert v.failure.phase == "fetch"
+    assert "not a problem with your input" in v.failure.message
+
+
+def test_a_requeued_run_of_a_job_slurm_forgot_is_a_node_failure_too():
+    v = verdict(missing=True, outcome=record(restart_count=2, steps={}))
+    assert v.failure.cause == "node_failure"
+
+
+@pytest.mark.parametrize("count", [0, None, "1", True])
+def test_only_a_restart_count_above_zero_is_a_requeue(count):
+    v = verdict("COMPLETED", outcome={**SUCCESS, "restart_count": count})
+    assert v.status == "COMPLETED"
+
+
+def test_a_record_without_a_restart_count_is_not_a_requeue():
+    outcome = {k: v for k, v in SUCCESS.items() if k != "restart_count"}
+    assert verdict("COMPLETED", outcome=outcome).status == "COMPLETED"
+
+
 def test_slurms_kill_wins_over_whatever_the_record_says():
     # The record of a job that was killed is absent or cut short; if one
     # survived saying it failed some other way, SLURM's word still stands.

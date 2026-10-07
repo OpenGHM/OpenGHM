@@ -10,7 +10,9 @@ Mongo. The first rule that matches wins:
 2. SLURM killed the job (`TIMEOUT`, `OUT_OF_MEMORY`, `NODE_FAIL` and kin): its
    own cause. The script was killed, so its record is absent or cut short.
 3. SLURM says the script exited (`COMPLETED`, `FAILED`, `SPECIAL_EXIT`): the
-   record decides, first failing fact first.
+   record decides, first failing fact first. A record with a `restart_count`
+   above 0 is a run SLURM requeued after a node failure, which the body
+   refuses to repeat (`job_script._REQUEUE_GUARD`): `node_failure`.
 4. SLURM has no record of the job (`missing=True`): judged from the record as
    rule 3 would; no record is `lost`.
 
@@ -240,6 +242,11 @@ def _from_record(
 ) -> Verdict:
     if record is None:
         return _fail("outcome_missing", phase=None, excerpt=excerpt, detail="killed" if killed else None)
+
+    # A requeued run did nothing but say so; the failure is the first attempt's.
+    restarts = record.get("restart_count")
+    if isinstance(restarts, int) and not isinstance(restarts, bool) and restarts > 0:
+        return _fail("node_failure", phase=_phase(record), excerpt=excerpt)
 
     steps = _object(record, "steps")
     fetch, run = _step(steps, "fetch"), _step(steps, "run")

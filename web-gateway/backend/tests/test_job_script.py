@@ -99,11 +99,26 @@ trap finish EXIT
 trap 'OG_SIGNAL=TERM; exit 143' TERM
 trap 'OG_SIGNAL=INT; exit 130' INT
 trap 'OG_SIGNAL=HUP; exit 129' HUP
+if [ "${{SLURM_RESTART_COUNT:-0}}" != 0 ]; then
+  echo "openghm: SLURM requeued this job (restart count $SLURM_RESTART_COUNT); not running it again" >&2
+  exit 75
+fi
+if [ -n "${{SLURM_JOB_ID:-}}" ]; then
+  scontrol update JobId="$SLURM_JOB_ID" Requeue=0 \\
+    || echo "openghm: warning: could not turn requeueing off for this job" >&2
+fi
 echo "openghm $("$OPENGHM" --version) commit abc1234"
 mkdir -p "$CACHE/snapshots"
 step fetch flock {LOCK} "$OPENGHM" snapshot fetch --config "$CONFIG" {SNAPSHOT_ID} --dest "$CACHE/snapshots/{SNAPSHOT_ID}"
 step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" --id {SIM_ID} --spool cache
 OG_PHASE=check"""
+
+
+def test_the_requeue_guard_comes_before_the_fetch_and_after_the_traps(v2):
+    body = _body()
+    guard = body.index('if [ "${SLURM_RESTART_COUNT')
+    assert body.index("trap 'OG_SIGNAL=HUP") < guard < body.index("step fetch")
+    assert body.index("Requeue=0") < body.index("step fetch")
 
 
 def test_the_outcome_writer_is_python_3_9_stdlib_only():

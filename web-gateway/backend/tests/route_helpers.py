@@ -314,6 +314,7 @@ SUCCESS_OUTCOME = {
     "ended_at": "2026-09-30T14:14:00Z",
     "phase": "check",
     "signal": None,
+    "restart_count": 0,
     "steps": {"fetch": {"exit_code": 0}, "run": {"exit_code": 0}},
     "staged": True,
     "wbm": {
