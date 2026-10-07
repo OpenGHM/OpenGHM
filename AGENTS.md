@@ -26,12 +26,12 @@ this file.
    not the same artifact. Images and snapshots are stored and retrieved
    byte-for-byte.
 4. **One source of truth.** The snapshot spec lives in `schemas/`. Backend
-   models and frontend types are meant to be **generated** from it; that
-   generator does not exist yet, so today they are hand-maintained and must be
-   updated by hand, in the same commit, every time the spec changes (see
-   [open items](docs/reference/open-items.md)). The `openghm` wheel bundles no
-   copy at all. If two places state the same fact and neither is generated,
-   one of them is wrong.
+   models and frontend types are **generated** from it by `just codegen`,
+   rerun in the same commit as every spec change. The `openghm` wheel
+   carries `schemas/` itself, through the symlink
+   `packages/openghm/src/openghm/schemas`, not a copy of its own. If two
+   places state the same fact and neither is generated, one of them is
+   wrong.
 5. **Verify what you claim.** Every statement of fact about the environment — a
    path, an endpoint, a version, a capability — is checkable, and was checked.
    Write what is true now. If something is unverified, mark it open rather than
