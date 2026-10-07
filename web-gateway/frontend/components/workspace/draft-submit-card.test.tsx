@@ -575,3 +575,40 @@ describe("DraftSubmitCard: a rerun of published results", () => {
     expect(screen.queryByRole("button", { name: "Run anyway" })).toBeNull();
   });
 });
+
+describe("DraftSubmitCard: the Output row of the confirmation", () => {
+  const withOutput = (post_processing?: "standard" | "climatology" | null) =>
+    fakeDraft("DRAFT", {
+      ...SAVED,
+      parameters: { ...SAVED.parameters, ...(post_processing === undefined ? {} : { post_processing }) },
+    });
+
+  const outputRow = () => within(dialog()).getByText("Output").nextElementSibling?.textContent;
+
+  it("shows the draft's own choice", async () => {
+    flush.mockResolvedValueOnce({ ok: true, job: withOutput("climatology"), withheld: [] });
+    card();
+    await openDialog();
+    expect(outputRow()).toBe("Daily, monthly and yearly, and climatology");
+  });
+
+  it("shows standard when the draft chose standard, whatever the snapshot has", async () => {
+    flush.mockResolvedValueOnce({ ok: true, job: withOutput("standard"), withheld: [] });
+    card({ snapshotOutput: "climatology" });
+    await openDialog();
+    expect(outputRow()).toBe("Daily, monthly and yearly");
+  });
+
+  it("shows the snapshot's own output when the draft has no choice", async () => {
+    flush.mockResolvedValueOnce({ ok: true, job: withOutput(null), withheld: [] });
+    card({ snapshotOutput: "climatology" });
+    await openDialog();
+    expect(outputRow()).toBe("Daily, monthly and yearly, and climatology");
+  });
+
+  it("is standard for a draft and a snapshot that say nothing", async () => {
+    card();
+    await openDialog();
+    expect(outputRow()).toBe("Daily, monthly and yearly");
+  });
+});

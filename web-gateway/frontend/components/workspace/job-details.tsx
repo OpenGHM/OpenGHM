@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { describeOutput } from "@/components/workspace/output-choice-field";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { describeHours, effectiveCompute, parseSlurmTime, type Recommended } from "@/lib/jobs/compute";
@@ -136,6 +137,14 @@ export function JobDetails({ job, recommended }: { job: Job; recommended: Recomm
           <div className="mt-4 border-t pt-4">
             <div className="mb-1.5 text-xs text-muted-foreground">Output variables</div>
             <Variables variables={parameters.variables} />
+          </div>
+        )}
+
+        {/* Only when the draft chose: the snapshot's own is not known here. */}
+        {parameters.post_processing && (
+          <div className="mt-4 border-t pt-4">
+            <div className="mb-1.5 text-xs text-muted-foreground">Output</div>
+            <div className="text-sm text-foreground">{describeOutput(parameters.post_processing)}</div>
           </div>
         )}
       </div>

@@ -13,6 +13,11 @@ export function snapshotOutput(dataset: Dataset | null): PostProcessingChoice {
   return dataset?.postProcessing === "climatology" ? "climatology" : "standard";
 }
 
+/** The words for what a draft computes, wherever it is summarised. */
+export function describeOutput(choice: PostProcessingChoice): string {
+  return choice === "climatology" ? "Daily, monthly and yearly, and climatology" : "Daily, monthly and yearly";
+}
+
 /** WBM writes a daily, a monthly and a yearly climatology file per output variable. */
 const CLIMATOLOGY_FILES_PER_VARIABLE = 3;
 

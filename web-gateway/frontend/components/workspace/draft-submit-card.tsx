@@ -17,7 +17,7 @@ import { DraftSection } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
 import { describeCoresBelowRecommended, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
-import type { ActionResult, Job, SubmitError } from "@/lib/jobs/types";
+import type { ActionResult, Job, PostProcessingChoice, SubmitError } from "@/lib/jobs/types";
 import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
@@ -70,6 +70,7 @@ export function DraftSubmitCard({
   onFix,
   lastSubmitError,
   recommended,
+  snapshotOutput = "standard",
   flush,
   suspend,
   submit,
@@ -87,6 +88,8 @@ export function DraftSubmitCard({
   lastSubmitError: SubmitError | null;
   /** The snapshot's own `recommendedCompute`, for what an unset field means. */
   recommended: Recommended | null;
+  /** What the snapshot computes on its own (`snapshotOutput`), for a draft with no choice. */
+  snapshotOutput?: PostProcessingChoice;
   flush: () => Promise<FlushResult>;
   suspend: () => void;
   submit: (jobId: string) => Promise<ActionResult<Job>>;
@@ -359,6 +362,7 @@ export function DraftSubmitCard({
               start={saved.parameters.temporal_range_start}
               end={saved.parameters.temporal_range_end}
               variables={saved.parameters.variables}
+              output={saved.parameters.post_processing ?? snapshotOutput}
               cores={compute.cores}
               coresFromSnapshot={compute.coresSource === "snapshot"}
               walltime={compute.walltime}

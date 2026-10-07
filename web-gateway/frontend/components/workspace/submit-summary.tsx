@@ -4,7 +4,8 @@ import {
   describeSlurmTime,
   describeUnsupportedField,
 } from "@/lib/jobs/compute";
-import type { ActionFailure } from "@/lib/jobs/types";
+import { describeOutput } from "@/components/workspace/output-choice-field";
+import type { ActionFailure, PostProcessingChoice } from "@/lib/jobs/types";
 
 /** The words a person reads when a submit does not go through. The backend's
  *  own `message` is kept where it is already plain and carries the detail
@@ -55,7 +56,7 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
 
 /**
  * What a submit will run and spend, for the confirmation dialog: the snapshot,
- * the run period, the output variables, cores and walltime, and whose
+ * the run period, the output variables, the output, cores and walltime, and whose
  * allocation it is. `cores` and `walltime` are what SLURM will be asked for
  * (`effectiveCompute`); `*FromSnapshot` says the draft left them unset, which
  * means the snapshot's recommendation for cores and the recommendation plus 50%
@@ -66,6 +67,7 @@ export function SubmitSummary({
   start,
   end,
   variables,
+  output = "standard",
   cores,
   coresFromSnapshot,
   walltime,
@@ -77,6 +79,8 @@ export function SubmitSummary({
   start: string;
   end: string;
   variables: string[];
+  /** What the run computes: the draft's choice, else the snapshot's own. */
+  output?: PostProcessingChoice;
   cores: number | null;
   coresFromSnapshot: boolean;
   walltime: string | null;
@@ -97,6 +101,7 @@ export function SubmitSummary({
         <SummaryRow label={`Output variables (${variables.length})`}>
           {variables.length > 0 ? variables.join(", ") : "None chosen"}
         </SummaryRow>
+        <SummaryRow label="Output">{describeOutput(output)}</SummaryRow>
         <SummaryRow label="Cores">
           {cores ?? "Not known"}
           <Recommendation show={cores !== null && coresFromSnapshot}>

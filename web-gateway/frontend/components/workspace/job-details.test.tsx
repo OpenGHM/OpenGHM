@@ -93,4 +93,26 @@ describe("the details", () => {
     details(previewDraftJob("completed"), null);
     expect(screen.queryByRole("button", { name: /Show/ })).toBeNull();
   });
+
+  it("shows the output the draft chose, in the same words as the review", () => {
+    const base = previewDraftJob("completed").parameters;
+    const climatology = previewDraftJob("completed", {
+      overrides: { parameters: { ...base, post_processing: "climatology" } },
+    });
+    const first = details(climatology, null);
+    expect(first.container.textContent).toContain("OutputDaily, monthly and yearly, and climatology");
+    cleanup();
+
+    const standard = previewDraftJob("completed", {
+      overrides: { parameters: { ...base, post_processing: "standard" } },
+    });
+    const second = details(standard, null);
+    expect(second.container.textContent).toContain("OutputDaily, monthly and yearly");
+    expect(second.container.textContent).not.toContain("climatology");
+  });
+
+  it("has no Output row when the draft left the output to the snapshot", () => {
+    const { container } = details(previewDraftJob("completed"), null);
+    expect(container.textContent).not.toContain("Daily, monthly and yearly");
+  });
 });

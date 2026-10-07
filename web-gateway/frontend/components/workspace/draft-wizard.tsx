@@ -14,6 +14,7 @@ import { DraftProgress } from "@/components/workspace/draft-progress";
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import { stepHeadingId } from "@/components/workspace/draft-step-heading";
+import { snapshotOutput } from "@/components/workspace/output-choice-field";
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { LeaveDraftDialog } from "@/components/workspace/leave-draft-dialog";
@@ -601,6 +602,7 @@ function WizardBody({
         onFix={goTo}
         lastSubmitError={null}
         recommended={recommended}
+        snapshotOutput={snapshotOutput(ctx.dataset)}
         flush={newFlush}
         suspend={noop}
         submit={() => newSubmit(rerun ? { rerun: true } : undefined)}
@@ -618,6 +620,7 @@ function WizardBody({
         onFix={goTo}
         lastSubmitError={lastSubmitError}
         recommended={recommended}
+        snapshotOutput={snapshotOutput(ctx.dataset)}
         flush={flush}
         suspend={suspend}
         submit={(id) => storedSubmit(id, rerun ? { rerun: true } : undefined)}
