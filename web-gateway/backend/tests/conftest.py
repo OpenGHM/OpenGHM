@@ -102,6 +102,32 @@ def db(monkeypatch) -> FakeDB:
             submitted_at="2026-09-30T00:00:00Z",
         )
 
+    # The publish job (ADR 0031): what it was asked to write and run, and the id
+    # SLURM answers. A test that makes it fail replaces `slurm.submit_publish`.
+    async def submit_publish(name, body, *, job_id, snapshot_id, metadata_path, metadata_text):
+        publish_calls.append(
+            {
+                "name": name,
+                "body": body,
+                "job_id": job_id,
+                "snapshot_id": snapshot_id,
+                "metadata_path": metadata_path,
+                "metadata_text": metadata_text,
+            }
+        )
+        return SubmittedJob(
+            internal_job_id="slurmly-9f8e7d6c",
+            slurm_job_id="67890",
+            remote_job_dir="/anvil/scratch/x-openghm/openghm/jobs/slurmly-9f8e7d6c",
+            remote_script_path="/anvil/scratch/x-openghm/openghm/jobs/slurmly-9f8e7d6c/run.sh",
+            stdout_path="/anvil/scratch/x-openghm/openghm/jobs/slurmly-9f8e7d6c/stdout.log",
+            stderr_path="/anvil/scratch/x-openghm/openghm/jobs/slurmly-9f8e7d6c/stderr.log",
+            submitted_at="2026-10-07T00:00:00Z",
+        )
+
+    publish_calls: list[dict] = []
+    fake.publish_calls = publish_calls
+
     async def update_job_status(job_id: str) -> dict:
         return await fake.jobs.find_one({"_id": job_id})
 
@@ -124,6 +150,7 @@ def db(monkeypatch) -> FakeDB:
     fake.cleanup_calls = cleanup_calls
 
     monkeypatch.setattr(slurm, "submit_job", submit_job)
+    monkeypatch.setattr(slurm, "submit_publish", submit_publish)
     monkeypatch.setattr(slurm, "update_job_status", update_job_status)
     monkeypatch.setattr(slurm, "cancel_job", cancel_job)
     monkeypatch.setattr(slurm, "read_log", read_log)

@@ -20,6 +20,8 @@ async def _sync_once() -> None:
         ("jobs", slurm.sync_active_jobs),
         ("end times", slurm.backfill_slurm_end),
         ("interrupted submits", slurm.reconcile_interrupted_submits),
+        ("publishes", slurm.sync_publishes),
+        ("interrupted publishes", slurm.reconcile_interrupted_publishes),
         ("orphans", slurm.clear_orphans),
         ("purged files", slurm.detect_purged_files),
     ):
@@ -32,14 +34,17 @@ async def _sync_once() -> None:
 
 
 async def _next_interval() -> int:
-    """The active interval while a job has a SLURM id and no verdict, or an
-    orphaned submit is still being cancelled; otherwise the idle one. (A claim
-    with no SLURM id is a submit in flight, and the sweep gives it back only
-    minutes later: the idle interval finds it in time.)"""
+    """The active interval while a job has a SLURM id and no verdict, a publish
+    has a SLURM id and no verdict, or an orphaned submit is still being
+    cancelled; otherwise the idle one. (A claim with no SLURM id is a submit in
+    flight, and the sweep gives it back only minutes later: the idle interval
+    finds it in time.)"""
     try:
         db = get_db()
         active = await db.jobs.find_one(
             {"status": {"$in": ACTIVE_STATUSES}, "slurm_job_id": {"$ne": None}}
+        ) or await db.jobs.find_one(
+            {"publish.state": "publishing", "publish.slurm_job_id": {"$ne": None}}
         ) or await db.jobs.find_one({"orphan_sim_ids": {"$exists": True, "$ne": []}})
     except asyncio.CancelledError:
         raise

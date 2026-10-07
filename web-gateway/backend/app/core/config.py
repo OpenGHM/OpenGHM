@@ -109,6 +109,16 @@ class Settings(BaseSettings):
     # and 20974771), while on /home it serialised across nodes (20974926 on
     # a000, 20974927 on a004). The directory must exist on Anvil.
     ANVIL_FETCH_LOCK: str = "/home/x-openghm/apps/openghm/locks/fetch.lock"
+    # Publishing a snapshot draft (ADR 0031). The user-facing origin the new
+    # snapshot's canonical `about.url` is built on (`<origin>/snapshots/<id>`),
+    # the form the three published snapshots use. The s3cmd credentials file the
+    # publish job hands `openghm snapshot publish --s3cfg`, on Anvil, and
+    # never read by the gateway (`~` is expanded by the toolkit, on Anvil). The
+    # publish job's walltime: it copies and uploads a whole run, and one with
+    # a large output takes hours.
+    PUBLIC_SITE_URL: str = "https://openghm.org"
+    ANVIL_S3CFG: str = "~/.s3cfg"
+    PUBLISH_WALLTIME: str = "4:00:00"
 
     # Jobs
     JOB_STATUS_POLL_INTERVAL: int = 10

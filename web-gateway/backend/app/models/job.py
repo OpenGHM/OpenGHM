@@ -10,9 +10,9 @@ three").
 
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
 from app.models.generated.snapshot import OpenGHMCitationBlock
 from app.models.partial import _partial_model
@@ -36,6 +36,22 @@ JobStatus = Literal[
 #: a spec block, so it has no generated counterpart to derive from.
 PartialAbout = _partial_model(OpenGHMCitationBlock)
 
+#: The fields of `about` a person writes when they publish a snapshot draft
+#: (ADR 0031): derived from the generated `OpenGHMCitationBlock` (rule 4), minus
+#: the three the gateway sets itself (`datePublished`, `url`, `isBasedOn`).
+#: `extra="forbid"`: a field the form has no business sending is an error, not
+#: silently dropped (the three the gateway sets are dropped by the route first).
+GATEWAY_SET_ABOUT_FIELDS = ("datePublished", "url", "isBasedOn")
+PublishAbout = create_model(
+    "PublishAbout",
+    __config__=ConfigDict(extra="forbid"),
+    **{
+        name: (field.annotation, field)
+        for name, field in OpenGHMCitationBlock.model_fields.items()
+        if name not in GATEWAY_SET_ABOUT_FIELDS
+    },
+)
+
 TERMINAL_STATUSES: set[str] = {"COMPLETED", "FAILED", "CANCELLED"}
 #: Statuses that count against `JOB_MAX_ACTIVE_PER_USER` and that the
 #: `status=ACTIVE` list filter and the stats "running" count select.
@@ -58,6 +74,34 @@ FailureCause = Literal[
     "cancelled_by_system",
     "lost",
     "outcome_missing",
+]
+
+#: Where a publish (ADR 0031) is. `failed` is not final: `PublishFailure.retry` says
+#: whether the owner can try again. Mirrored by the frontend's lib/jobs/types.ts (rule 4).
+PublishState = Literal["publishing", "published", "failed"]
+
+#: What a failed publish allows: `same` publishes again under the stored
+#: metadata, `edit` composes it again from a new `about` (nothing was written
+#: for the old one), `none` has no retry for the owner: an administrator looks.
+PublishRetry = Literal["same", "edit", "none"]
+
+#: Why a publish failed (`app.services.publish`, the only place one is named).
+#: The first eight are the sweep's verdict on the job: the toolkit's exit codes
+#: 2 to 7, then no usable record, then a submit that was lost. The last four are
+#: the submit's own refusals, spelled as the 5xx the route answered with.
+PublishFailureCause = Literal[
+    "publish_bad_input",
+    "publish_output_incomplete",
+    "publish_conflict",
+    "publish_setup",
+    "publish_upload_failed",
+    "publish_verify_failed",
+    "publish_job_failed",
+    "publish_submit_interrupted",
+    "anvil_not_configured",
+    "anvil_unreachable",
+    "sbatch_rejected",
+    "internal_error",
 ]
 
 #: `purged`: Anvil's 30-day scratch purge removed the work directory (ADR 0026).
@@ -185,6 +229,35 @@ class JobFailure(BaseModel):
     excerpt: str | None = None
 
 
+class PublishFailure(BaseModel):
+    """Why a publish ended `failed`: the cause, a sentence its owner can act on,
+    what they can do about it, and the toolkit's exit code when there was one."""
+
+    cause: PublishFailureCause
+    message: str
+    retry: PublishRetry
+    exit_code: int | None = None
+
+
+class PublishRecord(BaseModel):
+    """A snapshot draft's publish (ADR 0031), stored on the job as `publish` and
+    returned as it is. `snapshot_id` is minted once, before the first submit,
+    and never changes; `metadata` is the composed `metadata.json`, stored at the
+    first submit (and replaced only by a retry that says `edit`). Null on the
+    job until the first publish."""
+
+    state: PublishState
+    snapshot_id: str
+    metadata: dict[str, Any]
+    attempts: int
+    slurm_job_id: str | None = None
+    remote_job_dir: str | None = None
+    submitted_at: datetime | None = None
+    finished_at: datetime | None = None
+    failure: PublishFailure | None = None
+    submitted_by: str
+
+
 # --- MongoDB document ---
 
 
@@ -273,6 +346,8 @@ class JobDB(BaseModel):
     # The WBM log's path on Anvil, stored the first time the logs route finds it
     # from the init files (ADR 0027); once the job has ended `outcome` names it.
     wbm_log_path: str | None = None
+    # The publish of a completed draft as a snapshot (ADR 0031); None until one starts.
+    publish: PublishRecord | None = None
     # On a draft: a `sim_id` whose submit may have reached SLURM without the
     # gateway learning of it, and whose `scancel --name` has not yet worked.
     orphan_sim_ids: list[str] = Field(default_factory=list)
@@ -342,6 +417,17 @@ class SimulationUpdateRequest(BaseModel):
         if v is None:
             raise ValueError("parameters cannot be null; leave it out to keep it as it is")
         return v
+
+
+class PublishRequest(BaseModel):
+    """POST /jobs/{job_id}/publish body: the `about` a person writes
+    (`PublishAbout`). It is checked by the route against `PublishAbout`, not
+    here, so a bad one answers 422 `invalid_about` with a list of field errors
+    rather than FastAPI's own shape, and so a body with no `about`, or one that
+    is not an object, answers it too. Needed whenever the metadata is composed:
+    the first attempt, and a retry whose failure says `retry: "edit"`."""
+
+    about: Any = None
 
 
 class OutputFile(BaseModel):
@@ -465,6 +551,8 @@ class JobResponse(JobVerdictFields):
     remote_job_dir: str | None = None
     #: Why the last submit of this draft did not reach SLURM, if it did not.
     last_submit_error: SubmitError | None = None
+    #: Its publish as a snapshot (ADR 0031), once one has started.
+    publish: PublishRecord | None = None
 
 
 class JobListResponse(BaseModel):
@@ -517,6 +605,8 @@ class JobStatusResponse(JobVerdictFields):
     status_reason: str | None = None
     work_dir: str | None = None
     live: JobLive | None = None
+    #: The publish record, so the polling hook sees it end after the run has.
+    publish: PublishRecord | None = None
 
 
 class JobStatsResponse(BaseModel):

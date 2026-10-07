@@ -261,10 +261,18 @@ async def get_published_answer(
         )
 
 
-@router.post("/datasets", status_code=201)
+@router.post(
+    "/datasets",
+    status_code=201,
+    dependencies=[Depends(require_permission(Permission.REPO_MANAGE))],
+)
 async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
     """Add a snapshot to the catalogue (this collection had no writer at all
-    before this endpoint). The body is exactly one
+    before this endpoint). Admin-only, like ``create_model_input``
+    (``Permission.REPO_MANAGE``: 401 without a session, 403 for anyone else): it
+    accepted any caller until 2026-10-07. A person's own snapshot reaches the
+    catalogue another way, by the gateway, when the job that publishes it has
+    proven the upload (ADR 0031, ``slurm.register_published``). The body is exactly one
     ``metadata.json`` document, stored under ``document`` in an envelope
     beside the gateway's own record of the registration
     (mission 2026-09-23-catalogue-envelope; see

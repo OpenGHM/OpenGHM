@@ -48,6 +48,7 @@ from app.models.job import (
     LogStream,
     ModelInputState,
     PartialAbout,
+    PublishRequest,
     SimulationDeriveRequest,
     SimulationUpdateRequest,
     SlurmConfig,
@@ -59,6 +60,7 @@ from app.models.user import TokenPayload
 from app.services import (
     job_live,
     job_script,
+    publish,
     published_answer,
     run_start,
     sbatch_refusal,
@@ -171,6 +173,7 @@ def _doc_to_response(
         work_dir=doc.get("work_dir"),
         remote_job_dir=doc.get("remote_job_dir"),
         last_submit_error=doc.get("last_submit_error"),
+        publish=doc.get("publish"),
         **verdict_fields(doc),
     )
 
@@ -189,6 +192,7 @@ def _status_response(doc: dict, live: dict | None = None) -> JobStatusResponse:
         status_reason=doc.get("status_reason"),
         work_dir=doc.get("work_dir"),
         live=live,
+        publish=doc.get("publish"),
         **verdict_fields(doc),
     )
 
@@ -687,12 +691,12 @@ _ANVIL_UNREACHABLE = (
 )
 
 
-def _sbatch_refusal_message(exc: Exception) -> str:
+def _sbatch_refusal_message(exc: Exception, unchanged: str = "Your draft is unchanged.") -> str:
     detail = also = ""
     if isinstance(exc, SbatchError):
         detail = (exc.stderr or exc.stdout or "").strip()
         also = f"{exc.stderr}\n{exc.stdout}"
-    return f"{sbatch_refusal.sentence(sbatch_refusal.explain(detail or str(exc), also))} Your draft is unchanged."
+    return f"{sbatch_refusal.sentence(sbatch_refusal.explain(detail or str(exc), also))} {unchanged}"
 
 
 async def _record_refusal(job_id: str, user_id: str, exc: HTTPException) -> None:
@@ -1046,6 +1050,279 @@ async def _abandon_submit(job_id: str, sim_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# POST /jobs/{job_id}/publish  —  Publish a completed draft as a snapshot
+# ---------------------------------------------------------------------------
+#
+# ADR 0031. The draft's owner (or an admin) of a draft whose simulation
+# succeeded gives the snapshot's `about`; the gateway mints its id, composes and
+# checks its `metadata.json` (`publish.compose_metadata`), claims the draft with
+# one conditional update, writes the document to Anvil and sbatches a job that runs
+# `openghm snapshot publish`. Nothing is awaited but the submit: the sweep
+# (`slurm.sync_publishes`) reaches the verdict and registers the snapshot in the
+# catalogue. Everything that refuses does so before the claim and changes nothing
+# (409 `not_publishable`, 422 `invalid_about`, 503 `anvil_not_configured`); once
+# claimed, a submit that fails ends the publish `failed` with `retry: "same"`, and
+# the id it minted stays.
+
+_PUBLISH_NOT_CONFIGURED = (
+    "This gateway is not set up to run jobs on Anvil yet. Ask an administrator. "
+    "Nothing was published."
+)
+
+
+def _not_publishable(reason: str) -> HTTPException:
+    return _error(
+        status.HTTP_409_CONFLICT, "not_publishable", publish.REFUSAL_MESSAGE[reason], reason=reason
+    )
+
+
+def _invalid_about(errors: list[dict[str, str]]) -> HTTPException:
+    first = errors[0]
+    return _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "invalid_about",
+        f"This snapshot's description is not valid ({first['field']}: {first['message']}). "
+        "Nothing was published.",
+        errors=errors,
+    )
+
+
+def _publish_submit_failure(exc: Exception, job_id: str) -> tuple[int, publish.PublishFailure]:
+    """The HTTP status and the stored failure for a submit of the publish job that
+    raised, sorted as a run's submit sorts them: a refusal by SLURM is 502, a
+    transport that failed is 503, anything else 500. Unlike a run's submit it
+    cancels nothing, even when sbatch may have run: a second publish job under
+    the same id is harmless, because the toolkit reads every key before it writes
+    it (see `slurm.reconcile_interrupted_publishes`). It also removes no leftover
+    job directory: the job's name is the same for every attempt, so a search for
+    it would reach an earlier attempt's."""
+    if isinstance(exc, slurm.AnvilNotConfigured):
+        http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_not_configured", None
+    elif isinstance(exc, (SbatchError, InvalidJobSpec)):
+        http_status, cause = status.HTTP_502_BAD_GATEWAY, "sbatch_rejected"
+        message = _sbatch_refusal_message(exc, "Nothing was published.")
+    elif isinstance(exc, (SlurmlyError, OSError, asyncio.TimeoutError)):
+        http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_unreachable", None
+    else:
+        logger.exception("Job %s: publish submit failed unexpectedly", job_id)
+        http_status, cause, message = status.HTTP_500_INTERNAL_SERVER_ERROR, "internal_error", None
+    logger.error("Job %s: publish submit failed (%s): %s", job_id, cause, exc)
+    return http_status, publish.failure(cause, "same", message)
+
+
+@router.post(
+    "/{job_id}/publish",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def publish_simulation(
+    job_id: str,
+    body: PublishRequest | None = None,
+    user: TokenPayload = Depends(require_active_user),
+):
+    db = get_db()
+    # The owner, or an admin (REPO_MANAGE: the permission that writes the
+    # catalogue): everyone else gets the 404 a missing id gets.
+    doc = await _get_job_for(job_id, user, Permission.REPO_MANAGE)
+    reason = publish.publish_refusal(doc)
+    if reason is not None:
+        raise _not_publishable(reason)
+    if not slurm.toolkit_configured():
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_not_configured", _PUBLISH_NOT_CONFIGURED
+        )
+
+    # A retry that says `same` publishes the stored document byte for byte: objects
+    # of it may already be in the bucket. A first attempt, and a retry that says
+    # `edit` (the toolkit refused the document before it wrote anything), compose
+    # it again from the `about` in the body.
+    record = doc.get("publish")
+    reuse = record is not None and (record.get("failure") or {}).get("retry") != "edit"
+    if reuse:
+        snapshot_id, metadata = record["snapshot_id"], record["metadata"]
+    else:
+        snapshot_id = record["snapshot_id"] if record else publish.mint_snapshot_id()
+        envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
+        if envelope is None:
+            raise _error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "snapshot_not_found",
+                "The snapshot this snapshot draft is based on is no longer in the repository, "
+                "so what it was based on cannot be recorded. Nothing was published.",
+            )
+        about = body.about if body is not None else None
+        if not isinstance(about, dict):
+            raise _invalid_about(
+                [{"field": "about", "message": "Field required" if about is None else "Input should be an object"}]
+            )
+        try:
+            cores = slurm.resolve_compute(
+                SlurmConfig(**(doc.get("slurm_config") or {})), envelope["document"]
+            )[0]
+        except job_script.SubmitInputError:
+            cores = None
+        try:
+            metadata = publish.compose_metadata(
+                base=envelope["document"],
+                job=doc,
+                about=about,
+                snapshot_id=snapshot_id,
+                now=datetime.now(timezone.utc),
+                site_url=settings.PUBLIC_SITE_URL,
+                cores=cores,
+            )
+        except publish.ComposeError as exc:
+            raise _invalid_about(exc.errors)
+
+    try:
+        remote_dir, work_dir = slurm.removable_paths(doc)
+    except slurm.RefusedPath as exc:
+        logger.error("Job %s: refused to publish from %s", job_id, exc)
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "refused_path",
+            "This snapshot draft's files are not where the gateway expects them, so nothing "
+            "was published. Ask an administrator.",
+        )
+    if doc.get("files") == "purged" or not remote_dir or not work_dir:
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "run_files_missing",
+            "This snapshot draft's simulation files are no longer on Anvil (it deletes them "
+            "after 30 days), so there is nothing to publish.",
+        )
+    name = slurm.publish_job_name(snapshot_id)
+    try:
+        script = publish.render_publish_body(
+            snapshot_id=snapshot_id,
+            openghm_home=settings.ANVIL_OPENGHM_HOME,
+            work_dir=work_dir,
+            metadata_path=publish.metadata_path_of(remote_dir),
+            s3cfg=settings.ANVIL_S3CFG,
+        )
+    except job_script.SubmitInputError as exc:
+        logger.error("Job %s: the publish script cannot be rendered: %s", job_id, exc)
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_not_configured", _PUBLISH_NOT_CONFIGURED
+        )
+
+    # The claim: one conditional update, so a double click or a second tab cannot
+    # publish twice. A first attempt claims a draft with no `publish`; a retry
+    # claims the `failed` one it read, by its attempt number.
+    now = datetime.now(timezone.utc)
+    if record is None:
+        claimed = await db.jobs.update_one(
+            {"_id": job_id, "status": "COMPLETED", "publish": None},
+            {
+                "$set": {
+                    "publish": {
+                        "state": "publishing",
+                        "snapshot_id": snapshot_id,
+                        "metadata": metadata,
+                        "attempts": 1,
+                        "slurm_job_id": None,
+                        "remote_job_dir": None,
+                        "submitted_at": now,
+                        "finished_at": None,
+                        "failure": None,
+                        "submitted_by": user.sub,
+                    },
+                    "updated_at": now,
+                }
+            },
+        )
+    else:
+        claimed = await db.jobs.update_one(
+            {
+                "_id": job_id,
+                "status": "COMPLETED",
+                "publish.state": "failed",
+                "publish.attempts": record["attempts"],
+            },
+            {
+                "$set": {
+                    "publish.state": "publishing",
+                    "publish.metadata": metadata,
+                    "publish.attempts": record["attempts"] + 1,
+                    "publish.slurm_job_id": None,
+                    "publish.remote_job_dir": None,
+                    "publish.submitted_at": now,
+                    "publish.finished_at": None,
+                    "publish.failure": None,
+                    "publish.submitted_by": user.sub,
+                    "updated_at": now,
+                }
+            },
+        )
+    if claimed.matched_count == 0:
+        fresh = await db.jobs.find_one({"_id": job_id})
+        reason = publish.publish_refusal(fresh) if fresh else None
+        if reason is not None:
+            raise _not_publishable(reason)
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "job_changed",
+            "This snapshot draft changed while it was being published. Reload it and try again.",
+        )
+    claimed_doc = await db.jobs.find_one({"_id": job_id})
+
+    try:
+        submitted = await slurm.submit_publish(
+            name,
+            script,
+            job_id=job_id,
+            snapshot_id=snapshot_id,
+            metadata_path=publish.metadata_path_of(remote_dir),
+            metadata_text=publish.metadata_text(metadata),
+        )
+    except Exception as exc:
+        http_status, failure = _publish_submit_failure(exc, job_id)
+        await slurm.fail_publish(claimed_doc, failure, actor=user.sub, actor_email=user.email)
+        raise _error(http_status, failure.cause, failure.message)
+
+    try:
+        await slurm.write_publish(
+            claimed_doc,
+            {
+                "slurm_job_id": submitted.slurm_job_id,
+                "remote_job_dir": submitted.remote_job_dir,
+                "submitted_at": datetime.now(timezone.utc),
+            },
+        )
+    except Exception:
+        # SLURM has the job and the gateway could not write its id. The record stays
+        # `publishing` with no SLURM id, and the sweep ends it as interrupted
+        # (`slurm.reconcile_interrupted_publishes`). Nothing is scancelled: a retry
+        # under the same id is harmless beside it.
+        logger.exception(
+            "Job %s: sbatch took %s for publish %s but its id was not recorded",
+            job_id,
+            submitted.slurm_job_id,
+            snapshot_id,
+        )
+        raise
+
+    await log_event(
+        "job_publish_submitted",
+        actor_id=user.sub,
+        actor_email=user.email,
+        target_id=job_id,
+        category=AuditCategory.JOB,
+        detail={
+            "snapshot_id": snapshot_id,
+            "attempt": claimed_doc["publish"]["attempts"],
+            "slurm_job_id": submitted.slurm_job_id,
+            "dataset_id": doc["dataset_id"],
+            "metadata": "reused" if reuse else "composed",
+        },
+    )
+
+    updated = await db.jobs.find_one({"_id": job_id})
+    effective = await _resolve_effective_model_input(updated)
+    return _doc_to_response(updated, effective=effective)
+
+
+# ---------------------------------------------------------------------------
 # DELETE /jobs/{job_id}  —  Delete a snapshot draft, edited or finished
 # ---------------------------------------------------------------------------
 #
@@ -1061,6 +1338,16 @@ async def delete_simulation(
 ):
     db = get_db()
     doc = await _get_job_for(job_id, user, None)
+    if (doc.get("publish") or {}).get("state") == "publishing":
+        # Its job reads this draft's work directory and the sweep concludes it on
+        # this document: neither may go. A published draft may be deleted: the
+        # snapshot is its own artifact (ADR 0031).
+        raise _error(
+            status.HTTP_409_CONFLICT,
+            "publish_in_progress",
+            "This snapshot draft is being published as a snapshot. Wait until that has "
+            "finished before deleting it.",
+        )
     removed: list[str] = []
     if doc["status"] in TERMINAL_STATUSES:
         await _cancel_orphans_of(doc)
@@ -1073,7 +1360,9 @@ async def delete_simulation(
         )
     else:
         await _cancel_orphans_of(doc)
-    deleted = await db.jobs.delete_one({"_id": job_id, "status": doc["status"]})
+    deleted = await db.jobs.delete_one(
+        {"_id": job_id, "status": doc["status"], "publish.state": {"$ne": "publishing"}}
+    )
     if deleted.deleted_count == 0:
         # A submit claimed the draft between the read and the delete, or
         # another request deleted it: nothing was deleted, so nothing is said to

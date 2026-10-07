@@ -29,6 +29,7 @@ from slurmly import (
 )
 from slurmly.cleanup import assert_safe_to_remove
 from slurmly.exceptions import InvalidConfig
+from pymongo.errors import DuplicateKeyError
 from slurmly.models import JobInfo
 from slurmly.slurm.commands import build_sacct_json_many
 from slurmly.slurm.parser import parse_sacct_json_all
@@ -37,7 +38,8 @@ from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.job import SLURM_NO_VAL, TERMINAL_STATUSES, JobDB, SlurmConfig, real_time
-from app.services import job_live
+from app.models.repository import build_envelope
+from app.services import job_live, publish
 from app.services.job_script import SubmitInputError, is_valid_id, parse_slurm_time, with_headroom
 from app.services.job_verdict import classify, slurm_state_head
 
@@ -256,6 +258,68 @@ async def submit_job(job: JobDB, snapshot: dict, body: str) -> SubmittedJob:
     return submitted
 
 
+#: What a publish job asks SLURM for besides its walltime (`PUBLISH_WALLTIME`):
+#: one task, two cores. It copies and uploads files and waits on `s3cmd`, and
+#: the toolkit's `--jobs` (4) parallelises I/O, not computation.
+PUBLISH_CORES = 2
+
+
+def publish_job_name(snapshot_id: str) -> str:
+    """The SLURM name of a snapshot's publish job: `publish-` and the first 12
+    characters of its id. One name per snapshot, so `scancel --name` for a
+    submit whose answer was lost reaches that publish and no other."""
+    return f"publish-{snapshot_id[:12]}"
+
+
+def build_publish_spec(name: str, body: str, *, job_id: str, snapshot_id: str) -> JobSpec:
+    """The slurmly spec of a publish job (ADR 0031). The account and partition are
+    the gateway's, as for a run; the execution profile is the run's too, so the
+    body finds the toolkit's venv the same way."""
+    return JobSpec(
+        name=name,
+        command_template=body,
+        partition=settings.ANVIL_PARTITION,
+        account=settings.ANVIL_ACCOUNT or None,
+        qos=settings.ANVIL_QOS,
+        ntasks=1,
+        cpus_per_task=PUBLISH_CORES,
+        time_limit=settings.PUBLISH_WALLTIME,
+        execution_profile=settings.ANVIL_EXECUTION_PROFILE,
+        metadata={"openghm_job_id": job_id, "snapshot_id": snapshot_id},
+    )
+
+
+async def upload_text(path: str, content: str, *, mode: int = 0o600) -> None:
+    """Write a text file on Anvil over SFTP, replacing one that is there. The
+    client's `_upload` is private to a pinned commit of slurmly (rule 2), like
+    `run_remote`'s `_run`: this is the one place to change when the pin moves.
+    A write into a directory that does not exist raises."""
+    client = await get_slurm_client()
+    await client._upload(path, content, mode=mode)
+
+
+async def submit_publish(
+    name: str, body: str, *, job_id: str, snapshot_id: str, metadata_path: str, metadata_text: str
+) -> SubmittedJob:
+    """Write the publish's `metadata.json` to `metadata_path` over SFTP, then
+    sbatch the publish job whose body is `body`. Transport only, like
+    `submit_job`: the route owns the job's state and decides from the exception
+    what to tell the user. The file is written first and replaced by a retry
+    that says `edit`, so the job reads exactly the document the record holds."""
+    spec = build_publish_spec(name, body, job_id=job_id, snapshot_id=snapshot_id)
+    await upload_text(metadata_path, metadata_text)
+    client = await get_slurm_client()
+    submitted: SubmittedJob = await client.submit(spec)
+    logger.info(
+        "Job %s: publish %s submitted → slurm=%s remote=%s",
+        job_id,
+        snapshot_id,
+        submitted.slurm_job_id,
+        submitted.remote_job_dir,
+    )
+    return submitted
+
+
 # ---------------------------------------------------------------------------
 # raw remote commands
 # ---------------------------------------------------------------------------
@@ -282,11 +346,11 @@ async def run_remote(
     )
 
 
-async def read_outcome(remote_job_dir: str) -> dict | None:
-    """The job's `outcome.json`, or None when there is none or it does not
-    parse to an object. A transport failure raises, because that is not the
-    same as "the job left no record"."""
-    path = posixpath.join(remote_job_dir, "outcome.json")
+async def read_outcome(remote_job_dir: str, name: str = "outcome.json") -> dict | None:
+    """The job's `outcome.json` (a publish job's `publish-outcome.json`: `name`),
+    or None when there is none or it does not parse to an object. A transport
+    failure raises, because that is not the same as "the job left no record"."""
+    path = posixpath.join(remote_job_dir, name)
     result = await run_remote(
         f"[ -f {shlex.quote(path)} ] && cat -- {shlex.quote(path)}",
         operation="read_outcome",
@@ -299,7 +363,7 @@ async def read_outcome(remote_job_dir: str) -> dict | None:
     try:
         record = json.loads(result.stdout)
     except ValueError:
-        logger.warning("outcome.json in %s is not valid JSON", remote_job_dir)
+        logger.warning("%s in %s is not valid JSON", name, remote_job_dir)
         return None
     return record if isinstance(record, dict) else None
 
@@ -914,6 +978,233 @@ async def remove_failed_submit_dirs(sim_id: str) -> None:
                 logger.warning("Leftover %s of a failed submit not removed: %s", directory, result.errors)
     except Exception as exc:
         logger.warning("Could not clean up after failed submit %s: %s", sim_id, exc)
+
+
+# ---------------------------------------------------------------------------
+# publishes (ADR 0031)
+# ---------------------------------------------------------------------------
+#
+# A completed draft's publish is a second SLURM job on the same job document, in
+# `publish`, and does not touch `status`: a published draft is still COMPLETED.
+# The route claims it and submits; the two passes below bring it to a verdict, as
+# `sync_active_jobs` and `reconcile_interrupted_submits` do for a run. Every
+# write is conditional on the attempt the pass read (`state` and `attempts`), so
+# a retry that has claimed the record since is never overwritten.
+
+
+async def write_publish(doc: dict, fields: dict[str, Any], *, only_if: dict[str, Any] | None = None) -> bool:
+    """Write `fields` (keys of `publish`) of a job only while its publish is
+    still the attempt `doc` was read with: `publishing`, the same `attempts`.
+    Returns whether the write happened."""
+    record = doc["publish"]
+    update = {f"publish.{key}": value for key, value in fields.items()}
+    result = await get_db().jobs.update_one(
+        {
+            "_id": doc["_id"],
+            "publish.state": "publishing",
+            "publish.attempts": record["attempts"],
+            **(only_if or {}),
+        },
+        {"$set": {**update, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return result.matched_count == 1
+
+
+async def fail_publish(doc: dict, failure: publish.PublishFailure, *, actor: str, actor_email: str | None = None,
+                       only_if: dict[str, Any] | None = None) -> bool:
+    """End a publish `failed` with `failure` and write the `job_publish_failed`
+    audit event, once: only the writer that won it gets to the event."""
+    record = doc["publish"]
+    written = await write_publish(
+        doc,
+        {"state": "failed", "finished_at": datetime.now(timezone.utc), "failure": failure.model_dump()},
+        only_if=only_if,
+    )
+    if written:
+        await log_event(
+            "job_publish_failed",
+            actor_id=actor,
+            actor_email=actor_email,
+            target_id=doc["_id"],
+            category=AuditCategory.JOB,
+            detail={
+                "snapshot_id": record["snapshot_id"],
+                "attempt": record["attempts"],
+                "cause": failure.cause,
+                "retry": failure.retry,
+                "exit_code": failure.exit_code,
+                "slurm_job_id": record.get("slurm_job_id"),
+                "user_id": doc.get("user_id"),
+            },
+        )
+    return written
+
+
+async def register_published(doc: dict) -> None:
+    """Add the published snapshot to the catalogue, as the draft's owner's and
+    public (ADR 0031): the stored `publish.metadata` in an envelope, which is
+    what lists it in the Data Repository. Nothing else registers a snapshot for
+    a user. A duplicate key means an earlier pass registered it and was stopped
+    before it could say so: that is success, not an error."""
+    record = doc["publish"]
+    envelope = build_envelope(record["metadata"], owner_user_id=doc["user_id"], visibility="public")
+    try:
+        await get_db().datasets.insert_one(envelope)
+    except DuplicateKeyError:
+        logger.info("Snapshot %s was already registered", record["snapshot_id"])
+
+
+async def _conclude_publish(doc: dict, *, slurm_state: str | None, missing: bool) -> bool:
+    """Reach the verdict on a publish whose job is over (or that SLURM has
+    forgotten): read `publish-outcome.json`, name the result
+    (`publish.classify_publish`), and for a success register the snapshot before
+    marking it `published`, so a snapshot that reads as published is listed (and a
+    registration that fails leaves the record `publishing`, to be done again next
+    tick: a second one is a duplicate key, which counts as done). If the record
+    cannot be read nothing is written and the next tick tries again. A job
+    SLURM has forgotten that left no record is not judged until it has been gone
+    `JOB_LOST_AFTER_SECONDS`, as a run is not. Returns whether a verdict was
+    written."""
+    record = doc["publish"]
+    try:
+        outcome = (
+            await read_outcome(record["remote_job_dir"], publish.OUTCOME_NAME)
+            if record.get("remote_job_dir")
+            else None
+        )
+    except Exception as exc:
+        logger.warning("Job %s: could not read its publish result yet: %s", doc["_id"], exc)
+        return False
+    if missing and publish.exit_code_of(outcome, record["snapshot_id"]) is None:
+        submitted = _as_utc(record.get("submitted_at"))
+        lost_after = timedelta(seconds=settings.JOB_LOST_AFTER_SECONDS + _SUBMIT_GRACE_SECONDS)
+        if submitted is not None and datetime.now(timezone.utc) - submitted < lost_after:
+            return False
+
+    # The reads above took a while: a retry cannot have claimed the record
+    # (only a `failed` one is claimed), but a delete can have removed the job.
+    fresh = await get_db().jobs.find_one({"_id": doc["_id"]})
+    if fresh is None or (fresh.get("publish") or {}).get("attempts") != record["attempts"]:
+        logger.info("Job %s left its publish while the result was being read; leaving it", doc["_id"])
+        return False
+    if fresh["publish"].get("state") != "publishing":
+        return False
+    doc = fresh
+
+    verdict = publish.classify_publish(
+        slurm_state=slurm_state, outcome=outcome, snapshot_id=record["snapshot_id"]
+    )
+    if verdict.state == "failed":
+        logger.warning(
+            "Job %s: publish %s failed (%s, exit %s): %s",
+            doc["_id"],
+            record["snapshot_id"],
+            verdict.failure.cause,
+            verdict.failure.exit_code,
+            publish.stderr_tail_of(outcome) or "no stderr tail",
+        )
+        return await fail_publish(doc, verdict.failure, actor=SYSTEM_ACTOR)
+
+    try:
+        await register_published(doc)
+    except Exception as exc:
+        logger.warning("Job %s: could not register published snapshot %s yet: %s", doc["_id"], record["snapshot_id"], exc)
+        return False
+    written = await write_publish(
+        doc, {"state": "published", "finished_at": datetime.now(timezone.utc), "failure": None}
+    )
+    if written:
+        await log_event(
+            "job_published",
+            actor_id=SYSTEM_ACTOR,
+            target_id=doc["_id"],
+            category=AuditCategory.JOB,
+            detail={
+                "snapshot_id": record["snapshot_id"],
+                "attempt": record["attempts"],
+                "slurm_job_id": record.get("slurm_job_id"),
+                "user_id": doc.get("user_id"),
+            },
+        )
+    return written
+
+
+async def _settle_publish(doc: dict, info: JobInfo | None, *, absent_confirmed: bool) -> None:
+    """Bring one `publishing` record in line with what SLURM reported for its
+    job: nothing while it is queued or running, a verdict once it is over."""
+    if info is None:
+        if absent_confirmed:  # an unchecked absence is a lookup that may have failed
+            await _conclude_publish(doc, slurm_state=None, missing=True)
+        return
+    if info.lifecycle in _ENDED_LIFECYCLES:
+        await _conclude_publish(
+            doc, slurm_state=info.raw_state or _LIFECYCLE_STATE[info.lifecycle], missing=False
+        )
+
+
+async def sync_publishes() -> None:
+    """One sweep of the publishes: look up every job whose publish has a SLURM id
+    and is still `publishing`, in one batched call, and settle each. As
+    `sync_active_jobs` does for runs, a lookup that fails skips the tick and a job
+    SLURM did not report is only absent once a second `sacct` shows it."""
+    db = get_db()
+    docs = [
+        doc
+        async for doc in db.jobs.find(
+            {"publish.state": "publishing", "publish.slurm_job_id": {"$ne": None}}
+        )
+    ]
+    if not docs:
+        return
+    ids = [str(doc["publish"]["slurm_job_id"]) for doc in docs]
+    try:
+        found = await job_live.slurm_info(ids, refresh=True)
+    except Exception as exc:
+        logger.warning("Publish sweep: batched lookup of %d jobs failed, skipping this tick: %s", len(ids), exc)
+        return
+    confirmed = await _resolve_absent(found, ids)
+
+    for doc, slurm_id in zip(docs, ids):
+        try:
+            await _settle_publish(doc, found.get(slurm_id), absent_confirmed=slurm_id in confirmed)
+        except Exception as exc:
+            logger.warning("Publish sweep: job %s failed: %s", doc["_id"], exc)
+
+
+async def reconcile_interrupted_publishes() -> None:
+    """End a publish the gateway lost track of. The route claims it (`publishing`)
+    and only then writes the metadata and runs sbatch; the SLURM id is recorded
+    after. If the process dies in between, the record is `publishing` with no
+    `slurm_job_id`, which `sync_publishes` cannot look up. One that has been so
+    for `JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS` (longer than a submit takes)
+    becomes `failed`, `publish_submit_interrupted`, `retry: "same"`.
+
+    Unlike an interrupted run's, it is not scancelled by name. A job that sbatch
+    did start is harmless beside the retry's: under the same id both run the
+    toolkit, which reads every key before it writes it and never replaces one that
+    holds other bytes, so two publishes of one id cannot damage each other and the
+    second only skips what the first wrote."""
+    db = get_db()
+    due_before = datetime.now(timezone.utc) - timedelta(seconds=settings.JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS)
+    stuck = [
+        doc
+        async for doc in db.jobs.find({"publish.state": "publishing", "publish.slurm_job_id": None})
+    ]
+    for doc in stuck:
+        submitted = _as_utc(doc["publish"].get("submitted_at"))
+        if submitted is not None and submitted > due_before:
+            continue  # a submit that may still be running
+        try:
+            moved = await fail_publish(
+                doc,
+                publish.failure("publish_submit_interrupted", "same"),
+                actor=SYSTEM_ACTOR,
+                only_if={"publish.slurm_job_id": None},
+            )
+            if moved:
+                logger.warning("Job %s: its publish %s was interrupted", doc["_id"], doc["publish"]["snapshot_id"])
+        except Exception as exc:
+            logger.warning("Interrupted publish of job %s: %s", doc["_id"], exc)
 
 
 # ---------------------------------------------------------------------------

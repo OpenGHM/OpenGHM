@@ -42,7 +42,7 @@ class Permission(StrEnum):
     USER_MANAGE = "user:manage"  # create / change role / deactivate
     # repository
     REPO_VIEW = "repository:view"
-    REPO_MANAGE = "repository:manage"  # reserved — no endpoint yet
+    REPO_MANAGE = "repository:manage"  # register a snapshot or a model input in the catalogue
     # system
     SYSTEM_VIEW = "system:view"  # read-only infra/health/config surface
     SYSTEM_MANAGE = "system:manage"  # changes shared system state (clearing the Anvil spool cache)

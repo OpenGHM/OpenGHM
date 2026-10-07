@@ -1,9 +1,11 @@
 """In-memory stand-in for the Mongo collections the job and user routes
 touch, plus document and token builders for route-level tests.
 
-The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`,
+The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`
+(a second document with the same `_id` raises `DuplicateKeyError`),
 `update_one` (`$set`, `$unset`, `$addToSet`, `$pull`), `delete_one`,
-`count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching. It is not a Mongo emulator: a route that starts using
+`count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching,
+on a dotted path (`publish.state`) as well as a plain key. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
 
 Datetimes behave like a `tz_aware=True` Motor client (app/core/database.py):
@@ -17,6 +19,8 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timezone
 from typing import Any
+
+from pymongo.errors import DuplicateKeyError
 
 from app.core.roles import Role
 from app.core.security import create_access_token
@@ -37,9 +41,31 @@ def bson_roundtrip(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
+_ABSENT = object()
+
+
+def _lookup(doc: dict, key: str) -> Any:
+    """The value at a dotted path, or `_ABSENT` when any step of it is missing."""
+    value: Any = doc
+    for part in key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return _ABSENT
+        value = value[part]
+    return value
+
+
+def _assign(doc: dict, key: str, value: Any) -> None:
+    """Set the value at a dotted path, creating the dicts on the way."""
+    *parents, last = key.split(".")
+    for part in parents:
+        doc = doc.setdefault(part, {})
+    doc[last] = value
+
+
 def _matches(doc: dict, query: dict) -> bool:
     for key, cond in query.items():
-        value = doc.get(key)
+        found = _lookup(doc, key)
+        value = None if found is _ABSENT else found
         cond = bson_roundtrip(cond)
         if isinstance(cond, dict):
             for op, arg in cond.items():
@@ -48,7 +74,7 @@ def _matches(doc: dict, query: dict) -> bool:
                 elif op == "$ne":
                     ok = value != arg
                 elif op == "$exists":
-                    ok = (key in doc) == arg
+                    ok = (found is not _ABSENT) == arg
                 elif op == "$gte":
                     ok = value is not None and value >= arg
                 else:
@@ -127,6 +153,8 @@ class FakeCollection:
         return FakeAggregate([{"_id": k, "count": v} for k, v in counts.items()])
 
     async def insert_one(self, doc: dict):
+        if doc["_id"] in self.docs:
+            raise DuplicateKeyError(f"E11000 duplicate key error: {{ _id: {doc['_id']!r} }}")
         self.docs[doc["_id"]] = bson_roundtrip(doc)
 
     async def update_one(self, query: dict, update: dict):
@@ -135,7 +163,8 @@ class FakeCollection:
         )
         for doc in self.docs.values():
             if _matches(doc, query):
-                doc.update(bson_roundtrip(update.get("$set", {})))
+                for key, value in update.get("$set", {}).items():
+                    _assign(doc, key, bson_roundtrip(value))
                 for key in update.get("$unset", {}):
                     doc.pop(key, None)
                 for key, item in update.get("$addToSet", {}).items():
