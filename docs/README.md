@@ -128,6 +128,8 @@ and 0012 were folded into 0010.
 | [0028](decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md) | A new simulation is stored when the user saves it, and a stored draft saves its own edits | accepted |
 | [0029](decisions/0029-a-run-computes-only-what-is-not-published.md) | A run computes only what is not already published | accepted |
 | [0030](decisions/0030-what-a-person-creates-is-a-snapshot-draft.md) | What a person creates is a snapshot draft; "simulation" means one WBM execution | accepted |
+| [0031](decisions/0031-a-snapshot-draft-is-published-by-a-job.md) | A snapshot draft is published by a job on Anvil, under an id the gateway minted first | accepted |
+| [0032](decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md) | WBM code is published under `wbm-code/` and pinned by its tree hash | accepted |
 
 ## Missions
 

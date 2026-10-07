@@ -8,7 +8,7 @@ The GPFS project space (`ops/docs/reference/anvil-environment.md`, private) is s
 where compute jobs read from. Anvil S3 is the published, immutable
 destination — everything in this document pins against it.
 
-One bucket, `openghm`, nine prefixes (`wbm-code/` is designed but holds nothing yet):
+One bucket, `openghm`, nine prefixes:
 
 ```
 openghm/
@@ -99,7 +99,7 @@ One rule decides the key, and it is the **namespace**, not the artifact:
   cannot collide.
 - **Curated namespace → name + version.** We publish code and images, so
   collisions are a review problem rather than a storage problem, and a readable
-  path is worth more: `wbm-code/wbm/2.0.0/` says what it is, `wbm-code/3ab7…/`
+  path is worth more: `wbm-code/wbm/23.9.0/` says what it is, `wbm-code/3ab7…/`
   does not.
 
 Integrity does not depend on the key in either case. Every prefix ships a
@@ -327,17 +327,26 @@ openghm/
   `wbm-code/` instead is not built.
 - **A new version is a new directory**, never an edit to an existing one.
 
-The first two versions are published by mission
-`2026-10-07-wbm-code-is-pinned`, copied server-side from the published
-snapshots whose code ran:
+The first two versions were published on 2026-10-07 (mission
+`2026-10-07-wbm-code-is-pinned`, private), copied server-side from the
+published snapshots whose code ran:
 
 | Version | Copied from | Tree hash |
 |---|---|---|
 | `22.1.1` | Wyoming `245430de…` (Global `4604e608…` carries the same bytes) | `f210a78bd43a870cfdde3c0b80c293134fb2a40dc45128688d23a9dfc2014eec` |
 | `23.9.0` | v2 tutorial `fc66a2cd…` | `664c291d7a5b98d5587d63b20f0e288fffa7f175d1e389068bfae2f445515190` |
 
-Both hashes were computed from the snapshots' `SHA256SUMS` (anonymous reads,
-2026-10-07). `23.9.0` is also the hash of `images/wbm-tools-lite/wbm/`.
+Each was downloaded anonymously afterwards:
+
+- every file matched its `SHA256SUMS` line;
+- every mode matched its source's (`model/wbm.pl` is `mode:33261`);
+- the tree hash recomputed from the download equals `TREEHASH`.
+
+`23.9.0` is also the hash of `images/wbm-tools-lite/wbm/`. The three
+published snapshots' `metadata.json` gained `uses.modelCode` in place, and
+their `SHA256SUMS` changed with it. `openghm snapshot fetch` and `validate`
+(toolkit `abf0c37`) pass on all three on Anvil, and a copy with one line
+added to `model/wbm.pl` fails `validate`, naming both hashes.
 
 Because the key is a name rather than a hash, two versions holding byte-identical
 code are stored twice. At this size that is not worth solving; what matters is
