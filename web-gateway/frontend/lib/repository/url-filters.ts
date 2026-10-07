@@ -7,7 +7,7 @@
  *
  * Every param name here matches what the backend route actually accepts
  * (`app/api/v1/repository.py`'s `list_catalogue`) — `q`, `year_start`,
- * `year_end`, `spatial_res_min`, `spatial_res_max`, `sort`, `page`, and the
+ * `year_end`, `spatial_res_min`, `spatial_res_max`, `north`, `south`, `east`, `west`, `sort`, `page`, and the
  * repeatable facet keys — so a shared link is also a valid direct API call
  * shape, not a second vocabulary to translate.
  */
@@ -16,6 +16,7 @@ import {
   EMPTY_CATALOGUE_FILTERS,
   pickerFilterKeys,
 } from "./catalogue";
+import { regionFromNumbers } from "./region";
 import type {
   CatalogueFilterState,
   CatalogueKind,
@@ -87,6 +88,20 @@ export function parseCatalogueFilters(params: URLSearchParams): CatalogueFilterS
     view: parseView(params.get("view")),
     page: parsePageParam(params.get("page")),
   };
+  // The box is all four edges or none: a link with a partial or invalid one
+  // would make the backend answer 422 for the whole page, so it is dropped.
+  const box = regionFromNumbers(
+    parseNumberParam(params.get("north")),
+    parseNumberParam(params.get("south")),
+    parseNumberParam(params.get("east")),
+    parseNumberParam(params.get("west"))
+  );
+  if (box) {
+    state.boxNorth = box.north;
+    state.boxSouth = box.south;
+    state.boxEast = box.east;
+    state.boxWest = box.west;
+  }
   for (const key of CATALOGUE_FACET_KEYS) state[key] = allValues(params, key);
   // An unknown `type` would make the backend answer 422 for the whole page.
   state.type = state.type.filter((v) => (CATALOGUE_KINDS as readonly string[]).includes(v));
@@ -104,6 +119,14 @@ export function catalogueFiltersToParams(filters: CatalogueFilterState): URLSear
   if (filters.yearEnd != null) params.set("year_end", String(filters.yearEnd));
   if (filters.spatialResMin != null) params.set("spatial_res_min", String(filters.spatialResMin));
   if (filters.spatialResMax != null) params.set("spatial_res_max", String(filters.spatialResMax));
+  // Only a whole, valid box goes out; the control never sets anything else.
+  const box = regionFromNumbers(filters.boxNorth, filters.boxSouth, filters.boxEast, filters.boxWest);
+  if (box) {
+    params.set("north", String(box.north));
+    params.set("south", String(box.south));
+    params.set("east", String(box.east));
+    params.set("west", String(box.west));
+  }
   if (filters.sortBy !== "relevance") params.set("sort", filters.sortBy);
   if (filters.view !== "list") params.set("view", filters.view);
   if (filters.page !== 1) params.set("page", String(filters.page));

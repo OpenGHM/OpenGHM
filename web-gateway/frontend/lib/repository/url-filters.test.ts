@@ -24,6 +24,10 @@ const FULL: CatalogueFilterState = {
   yearEnd: 2009,
   spatialResMin: 0.0833,
   spatialResMax: 0.25,
+  boxNorth: 45,
+  boxSouth: 40,
+  boxEast: -100,
+  boxWest: -110.5,
   sortBy: "coverage-start",
   view: "grid",
   page: 3,
@@ -91,6 +95,43 @@ describe("catalogue filters in the URL", () => {
     expect(parsed.view).toBe("list");
     expect(parsed.page).toBe(1);
     expect(parsed.yearStart).toBeNull();
+  });
+});
+
+describe("the region box in the URL", () => {
+  it("writes and reads the four edges under the API's own parameter names", () => {
+    const qs = catalogueFiltersToParams(FULL);
+    expect(qs.get("north")).toBe("45");
+    expect(qs.get("south")).toBe("40");
+    expect(qs.get("east")).toBe("-100");
+    expect(qs.get("west")).toBe("-110.5");
+    const parsed = parseCatalogueFilters(new URLSearchParams("north=10&south=-10&east=-170&west=170"));
+    // west above east is a box across the antimeridian, not an error
+    expect([parsed.boxNorth, parsed.boxSouth, parsed.boxEast, parsed.boxWest]).toEqual([10, -10, -170, 170]);
+  });
+
+  it("writes nothing for a box that is not whole and valid", () => {
+    const partial = { ...FULL, boxWest: null };
+    expect(catalogueFiltersToParams(partial).toString()).not.toMatch(/north|south|east|west/);
+    const inverted = { ...FULL, boxNorth: 10, boxSouth: 20 };
+    expect(catalogueFiltersToParams(inverted).toString()).not.toMatch(/north|south|east|west/);
+  });
+
+  it.each([
+    ["a partial box", "north=10&south=0&east=5"],
+    ["an out-of-range edge", "north=95&south=0&east=5&west=0"],
+    ["a south above the north", "north=0&south=10&east=5&west=0"],
+    ["a non-numeric edge", "north=a&south=0&east=5&west=0"],
+  ])("drops %s from a pasted link, as the API would answer 422 for it", (_name, qs) => {
+    const parsed = parseCatalogueFilters(new URLSearchParams(qs));
+    expect([parsed.boxNorth, parsed.boxSouth, parsed.boxEast, parsed.boxWest]).toEqual([null, null, null, null]);
+  });
+
+  it("is kept by the picker, whose More filters dialog has the Region group", () => {
+    const qs = "north=45&south=40&east=-100&west=-110";
+    const filters = parsePickerFilters(new URLSearchParams(qs));
+    expect(filters.boxWest).toBe(-110);
+    expect(pickerFiltersToParams(filters).toString()).toBe(qs);
   });
 });
 

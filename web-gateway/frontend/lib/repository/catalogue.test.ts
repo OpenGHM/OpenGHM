@@ -109,6 +109,18 @@ describe("active filters", () => {
     expect(countActiveFilters(filters({ tag: ["a", "b"] }))).toBe(2);
   });
 
+  it("counts a whole box once, builds a Region chip that removes all four edges, and ignores a partial one", () => {
+    const box = { boxNorth: 45, boxSouth: 40, boxEast: -100, boxWest: -110 };
+    expect(countActiveFilters(filters(box))).toBe(1);
+    const chips = activeFilterChips(filters(box), FACETS);
+    expect(chips.map((c) => [c.id, c.label])).toEqual([["region", "Region: 40°N – 45°N, 110°W – 100°W"]]);
+    expect(chips[0].remove).toEqual({ boxNorth: null, boxSouth: null, boxEast: null, boxWest: null });
+    // a box missing an edge is not a filter: the API would refuse it
+    expect(countActiveFilters(filters({ ...box, boxWest: null }))).toBe(0);
+    expect(activeFilterChips(filters({ ...box, boxWest: null }), FACETS)).toEqual([]);
+    expect(hasActiveFilters(filters(box))).toBe(true);
+  });
+
   it("names a preset resolution by its preset", () => {
     expect(formatResolutionRange(5 / 60, 5 / 60)).toBe("5 arc-min");
     expect(formatResolutionRange(0.1, 0.3)).toBe("0.1° – 0.3°");
@@ -122,7 +134,7 @@ describe("active filters", () => {
 });
 
 describe("the filter groups", () => {
-  it("name every facet once, with its title from the facet names, and add the two ranges", () => {
+  it("name every facet once, with its title from the facet names, and add the three ranges and boxes", () => {
     const facetKeys = CATALOGUE_FILTER_GROUPS.filter((g) => g.kind === "facet").map((g) => g.key);
     expect([...facetKeys].sort()).toEqual([...CATALOGUE_FACET_KEYS].sort());
     for (const g of CATALOGUE_FILTER_GROUPS) {
@@ -131,6 +143,7 @@ describe("the filter groups", () => {
     expect(CATALOGUE_FILTER_GROUPS.filter((g) => g.kind !== "facet").map((g) => g.title)).toEqual([
       "Temporal coverage",
       "Spatial resolution",
+      "Region",
     ]);
   });
 
@@ -175,6 +188,10 @@ describe("the filter groups", () => {
   it("read and write in the picker the keys of every group but the fixed type, flagged or not", () => {
     expect(pickerFilterKeys().sort()).toEqual(
       [
+        "boxEast",
+        "boxNorth",
+        "boxSouth",
+        "boxWest",
         "creator",
         "forcing",
         "keyword",

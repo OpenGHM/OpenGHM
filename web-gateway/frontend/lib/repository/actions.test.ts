@@ -62,6 +62,18 @@ describe("fetchSnapshots", () => {
     });
   });
 
+  it("sends the region box as north, south, east and west only when all four are set", async () => {
+    get.mockResolvedValue({ data: {} });
+    const box = { boxNorth: 10, boxSouth: -10, boxEast: -170, boxWest: 170 };
+    await fetchCatalogue({ ...EMPTY_CATALOGUE_FILTERS, ...box });
+    expect(get.mock.calls[0][1].params).toMatchObject({ north: 10, south: -10, east: -170, west: 170 });
+
+    get.mockClear();
+    await fetchCatalogue({ ...EMPTY_CATALOGUE_FILTERS, ...box, boxWest: null });
+    const params = get.mock.calls[0][1].params;
+    expect(["north", "south", "east", "west"].filter((k) => k in params)).toEqual([]);
+  });
+
   it("replaces a type the filters hold, so the picker never lists a model input", async () => {
     get.mockResolvedValue({ data: {} });
     await fetchSnapshots({ ...EMPTY_CATALOGUE_FILTERS, type: ["model-input"] });

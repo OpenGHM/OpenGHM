@@ -21,7 +21,15 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import repository as repository_router
 from app.models.repository import ModelInputCatalogueItem, SnapshotCatalogueItem, build_envelope
-from app.services.catalogue import CatalogueQuery, build_catalogue, relevance_score
+from app.services import catalogue as catalogue_service
+from app.services.catalogue import (
+    BoundingBox,
+    CatalogueQuery,
+    InvalidBoundingBox,
+    build_catalogue,
+    parse_box,
+    relevance_score,
+)
 
 SCHEMAS = Path(__file__).resolve().parents[3] / "schemas"
 
@@ -226,6 +234,135 @@ def test_year_overlap_both_kinds_and_missing_coverage(items):
     assert set(_ids(_run(items, year_end=2000))) == {GLOBAL_ID, WYOMING_ID, V2_ID, MI1_ID, MI2_ID}
     assert set(_ids(_run(items, year_start=2020))) == set()
     assert SOIL_ID in _ids(_run(items))
+
+
+def _box_snap(north, south, east, west) -> SnapshotCatalogueItem:
+    """The zeta snapshot with its spatial coverage replaced by the given box."""
+    d = _zeta_doc()
+    d["simulation"]["spatialCoverage"].update(
+        northlimit=north, southlimit=south, eastlimit=east, westlimit=west
+    )
+    return _snap(d)
+
+
+def _box(north, south, east, west) -> BoundingBox:
+    return BoundingBox(north=north, south=south, east=east, west=west)
+
+
+def test_box_overlap_containment_and_disjoint(items):
+    # The coverages: Global and the first model input are -180..180 x -60..85,
+    # Wyoming -123.75..-77.83 x 28.92..52.92, and the CONUS ones (v2, zeta, the
+    # second model input, soil) -127.83..-60.58 x 21.75..57.17.
+    conus = {V2_ID, ZETA_ID, MI2_ID, SOIL_ID}
+    # a box inside Wyoming's extent: contained by every coverage that has it
+    got = _run(items, box=_box(45, 40, -100, -110))
+    assert set(_ids(got)) == {GLOBAL_ID, WYOMING_ID, MI1_ID} | conus
+    # a box that only clips the CONUS corner: overlap, not containment
+    got = _run(items, box=_box(60, 50, -50, -70))
+    assert set(_ids(got)) == {GLOBAL_ID, MI1_ID} | conus
+    # a box around the whole of CONUS contains Wyoming's coverage and overlaps the rest
+    assert set(_ids(_run(items, box=_box(80, 0, 0, -170)))) == {i.id for i in items}
+    # disjoint in longitude, then in latitude
+    assert set(_ids(_run(items, box=_box(10, 0, 140, 100)))) == {GLOBAL_ID, MI1_ID}
+    assert set(_ids(_run(items, box=_box(-61, -90, 180, -180)))) == set()
+    assert set(_ids(_run(items, box=_box(90, 86, 180, -180)))) == set()
+
+
+def test_box_edges_touching_count_as_overlap():
+    snap = _box_snap(north=50, south=40, east=-70, west=-80)
+    for box in (
+        _box(60, 50, -70, -80),    # south edge on the coverage's north edge
+        _box(40, 30, -70, -80),    # north edge on the coverage's south edge
+        _box(50, 40, -60, -70),    # west edge on the coverage's east edge
+        _box(50, 40, -80, -90),    # east edge on the coverage's west edge
+        _box(50, 50, -70, -70),    # a point on the north-east corner
+    ):
+        assert catalogue_service._matches_box(snap, box), box
+    assert not catalogue_service._matches_box(snap, _box(60, 50.0001, -70, -80))
+    assert not catalogue_service._matches_box(snap, _box(50, 40, -59.9999, -60))
+
+
+def test_box_antimeridian_on_the_query_or_the_coverage():
+    pacific = _box_snap(north=10, south=-10, east=-170, west=170)  # 170..180 and -180..-170
+    plain_east = _box_snap(north=10, south=-10, east=175, west=160)
+    plain_west = _box_snap(north=10, south=-10, east=-175, west=-179)
+    atlantic = _box_snap(north=10, south=-10, east=0, west=-30)
+
+    # a query box that crosses the antimeridian
+    crossing = _box(5, -5, -178, 172)
+    assert catalogue_service._matches_box(pacific, crossing)
+    assert catalogue_service._matches_box(plain_east, crossing)   # 172..175 is inside [172, 180]
+    assert catalogue_service._matches_box(plain_west, crossing)   # -179..-175 overlaps [-180, -178]
+    assert not catalogue_service._matches_box(atlantic, crossing)
+
+    # a plain query box against a crossing coverage, on either side of the line
+    assert catalogue_service._matches_box(pacific, _box(5, -5, 179, 175))
+    assert catalogue_service._matches_box(pacific, _box(5, -5, -172, -178))
+    assert not catalogue_service._matches_box(pacific, _box(5, -5, 100, 0))
+    assert not catalogue_service._matches_box(pacific, _box(5, -5, 169, 150))
+    # 180 and -180 are one meridian, so spans that end and start there touch
+    to_180 = _box_snap(north=10, south=-10, east=180, west=160)
+    from_minus_180 = _box_snap(north=10, south=-10, east=-170, west=-180)
+    assert catalogue_service._matches_box(to_180, _box(5, -5, -170, -180))
+    assert catalogue_service._matches_box(from_minus_180, _box(5, -5, 180, 175))
+    assert not catalogue_service._matches_box(plain_east, _box(5, -5, -170, -180))
+
+
+def test_box_filter_through_the_catalogue_with_antimeridian(items):
+    doc = _zeta_doc()
+    doc["id"] = "c" * 64
+    doc["simulation"]["spatialCoverage"].update(
+        northlimit=10, southlimit=-10, eastlimit=-170, westlimit=170
+    )
+    items = items + [_snap(doc)]
+    got = _run(items, box=_box(5, -5, -175, 175))
+    assert set(_ids(got)) == {GLOBAL_ID, MI1_ID, "c" * 64}  # the global ones always overlap
+    got = _run(items, box=_box(5, -5, 100, 0))
+    assert "c" * 64 not in _ids(got)
+
+
+def test_box_item_without_spatial_coverage_never_matches(items, monkeypatch):
+    # Both specs require a spatial coverage, so a model cannot be built without
+    # one; stub the accessor, as the year filter's "no coverage" case needs a
+    # real one only because the temporal field is optional.
+    monkeypatch.setattr(catalogue_service, "_spatial", lambda item: None)
+    assert _run(items, box=_box(90, -90, 180, -180)).items == []
+    assert len(_run(items).items) == len(items)  # no box, no effect
+
+
+def test_box_inactive_filter_and_facet_counts(items):
+    assert set(_ids(_run(items, box=None))) == {i.id for i in items}
+    resp = _run(items, box=_box(80, 70, 0, -10))  # only the global coverages reach this
+    assert set(_ids(resp)) == {GLOBAL_ID, MI1_ID}
+    assert _facet(resp, "type") == {"snapshot": 1, "model-input": 1}
+    assert resp.facets.yearBounds.model_dump() == {"min": 1980, "max": 2019}  # whole catalogue
+
+
+def test_parse_box_all_none_and_valid():
+    assert parse_box(None, None, None, None) is None
+    assert parse_box(10, -10, 20, -20) == _box(10, -10, 20, -20)
+    assert parse_box(0, 0, 0, 0) == _box(0, 0, 0, 0)  # a degenerate box is a point
+    assert parse_box(90, -90, 180, -180) == _box(90, -90, 180, -180)
+    assert parse_box(10, -10, -170, 170) == _box(10, -10, -170, 170)  # west > east: antimeridian
+
+
+@pytest.mark.parametrize(
+    "args, message",
+    [
+        ((10, None, None, None), "missing: south, east, west"),
+        ((10, -10, 20, None), "missing: west"),
+        ((None, -10, 20, -20), "missing: north"),
+        ((10, 20, 20, -20), "south (20) must not be above north (10)"),
+        ((91, -10, 20, -20), "north must be between -90 and 90"),
+        ((10, -91, 20, -20), "south must be between -90 and 90"),
+        ((10, -10, 181, -20), "east must be between -180 and 180"),
+        ((10, -10, 20, -181), "west must be between -180 and 180"),
+        ((float("nan"), -10, 20, -20), "north must be between -90 and 90"),
+    ],
+)
+def test_parse_box_rejects(args, message):
+    with pytest.raises(InvalidBoundingBox, match=message.replace("(", r"\(").replace(")", r"\)")):
+        parse_box(*args)
 
 
 def test_spatial_resolution_snapshots_and_model_input_networks(items):
@@ -451,3 +588,36 @@ def test_route_validation(http):
     assert http.get("/api/v1/repository/catalogue", params={"page": 0}).status_code == 422
     assert http.get("/api/v1/repository/catalogue", params={"page_size": 101}).status_code == 422
     assert http.get("/api/v1/repository/catalogue", params={"page": 9}).json()["items"] == []
+
+
+def test_route_box_filter(http):
+    r = http.get("/api/v1/repository/catalogue", params={"north": 45, "south": 40, "east": -100, "west": -110})
+    assert r.status_code == 200
+    assert r.json()["totalCount"] == 7  # every coverage reaches the middle of Wyoming
+    r = http.get("/api/v1/repository/catalogue", params={"north": 10, "south": 0, "east": 140, "west": 100})
+    assert {i["id"] for i in r.json()["items"]} == {GLOBAL_ID, MI1_ID}
+    # west > east is an antimeridian box, not an error
+    r = http.get("/api/v1/repository/catalogue", params={"north": 10, "south": 0, "east": -170, "west": 170})
+    assert r.status_code == 200 and {i["id"] for i in r.json()["items"]} == {GLOBAL_ID, MI1_ID}
+
+
+@pytest.mark.parametrize(
+    "params, message",
+    [
+        ({"north": 10}, "missing: south, east, west"),
+        ({"north": 10, "south": 0, "east": 20}, "missing: west"),
+        ({"north": 0, "south": 10, "east": 20, "west": 10}, "must not be above north"),
+        ({"north": 95, "south": 0, "east": 20, "west": 10}, "north must be between -90 and 90"),
+        ({"north": 10, "south": 0, "east": 200, "west": 10}, "east must be between -180 and 180"),
+    ],
+)
+def test_route_box_rejects_with_a_clear_message(http, params, message):
+    r = http.get("/api/v1/repository/catalogue", params=params)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "invalid_bounding_box" and message in detail["message"]
+
+
+def test_route_box_non_numeric_is_422(http):
+    assert http.get("/api/v1/repository/catalogue", params={
+        "north": "x", "south": 0, "east": 1, "west": 0}).status_code == 422

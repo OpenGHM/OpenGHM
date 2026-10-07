@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { CatalogueSidebar } from "./catalogue-sidebar";
@@ -244,6 +245,7 @@ describe("CatalogueSidebar Reset", () => {
     ["a facet value", filters({ license: ["CC-BY-4.0"] })],
     ["a year", filters({ yearStart: 2000 })],
     ["a resolution", filters({ spatialResMax: 0.5 })],
+    ["a region", filters({ boxNorth: 45, boxSouth: 40, boxEast: -100, boxWest: -110 })],
     ["a search", filters({ searchQuery: "storage" })],
   ])("appears for %s and clears when pressed", (_name, state) => {
     const { onClearAll } = setup(state);
@@ -539,5 +541,179 @@ describe("CatalogueSidebar on a phone", () => {
     setup();
     const label = screen.getByRole("checkbox", { name: "Publication 2" }).closest("label");
     expect(label?.className).toContain("min-h-10");
+  });
+});
+
+describe("CatalogueSidebar region", () => {
+  const BOX = { boxNorth: 45, boxSouth: 40, boxEast: -100, boxWest: -110 };
+  const NO_BOX = { boxNorth: null, boxSouth: null, boxEast: null, boxWest: null };
+  const open = () => fireEvent.click(group(/^Region/));
+  const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement;
+  const type = (name: string, value: string) => fireEvent.change(field(name), { target: { value } });
+
+  /** Holds the filter state as the page does, so a change comes back as props. */
+  function Harness({
+    initial,
+    onChange,
+  }: {
+    initial: CatalogueFilterState;
+    onChange: (updates: Partial<CatalogueFilterState>) => void;
+  }) {
+    const [state, setState] = useState(initial);
+    return (
+      <>
+        <button type="button" onClick={() => setState(filters())}>
+          reset from outside
+        </button>
+        <CatalogueSidebar
+          filters={state}
+          facets={FACETS}
+          onChange={(updates) => {
+            onChange(updates);
+            setState((prev) => ({ ...prev, ...updates }));
+          }}
+          onClearAll={vi.fn()}
+        />
+      </>
+    );
+  }
+  const setupBox = (initial: CatalogueFilterState = filters()) => {
+    const onChange = vi.fn();
+    render(<Harness initial={initial} onChange={onChange} />);
+    return { onChange };
+  };
+
+  it("comes after Spatial resolution, folded until a box is set", () => {
+    setup();
+    const titles = screen
+      .getAllByRole("button")
+      .filter((b) => b.hasAttribute("aria-controls"))
+      .map((b) => b.textContent ?? "");
+    expect(titles.indexOf("Region")).toBe(titles.indexOf("Spatial resolution") + 1);
+    expect(group(/^Region/).getAttribute("aria-expanded")).toBe("false");
+    cleanup();
+    setup(filters(BOX));
+    expect(group(/^Region/).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("offers North, South, West and East, empty, with the unit and the overlap rule said once", () => {
+    setup();
+    open();
+    for (const name of ["North", "South", "West", "East"]) expect(field(name).value).toBe("");
+    const g = screen.getByRole("group", { name: "Region" });
+    expect(within(g).getByText(/Decimal degrees/).textContent).toMatch(/overlaps the box/);
+    expect(within(g).queryByRole("button", { name: "Clear region" })).toBeNull();
+  });
+
+  it("shows the box from the URL state", () => {
+    setup(filters({ ...BOX, boxWest: -110.5 }));
+    expect(field("North").value).toBe("45");
+    expect(field("South").value).toBe("40");
+    expect(field("West").value).toBe("-110.5");
+    expect(field("East").value).toBe("-100");
+  });
+
+  it("sets the filter only once all four are valid, then on every valid change", () => {
+    const { onChange } = setupBox();
+    open();
+    type("North", "45");
+    type("South", "40");
+    type("West", "-110");
+    expect(onChange).not.toHaveBeenCalled();
+    type("East", "-100");
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(BOX);
+    type("East", "-95");
+    expect(onChange).toHaveBeenLastCalledWith({ ...BOX, boxEast: -95 });
+  });
+
+  it("takes west above east as a box across the antimeridian", () => {
+    const { onChange } = setupBox();
+    open();
+    type("North", "10");
+    type("South", "-10");
+    type("West", "170");
+    type("East", "-170");
+    expect(onChange).toHaveBeenLastCalledWith({
+      boxNorth: 10,
+      boxSouth: -10,
+      boxEast: -170,
+      boxWest: 170,
+    });
+    expect(screen.queryByText(/must/i)).toBeNull();
+  });
+
+  it("clears the filter when an edge stops being valid, and keeps what was typed", () => {
+    const { onChange } = setupBox(filters(BOX));
+    type("West", "-");
+    expect(onChange).toHaveBeenLastCalledWith(NO_BOX);
+    expect(field("West").value).toBe("-");
+    expect(field("North").value).toBe("45");
+    // the text on the way to a number is not an error while the field has focus
+    fireEvent.focus(field("West"));
+    expect(screen.queryByText("Enter a number")).toBeNull();
+    type("West", "-1");
+    expect(onChange).toHaveBeenLastCalledWith({ ...BOX, boxWest: -1 });
+  });
+
+  it("does not report anything while the box is only incomplete", () => {
+    const { onChange } = setupBox(filters(BOX));
+    type("North", "");
+    expect(onChange).toHaveBeenLastCalledWith(NO_BOX);
+    // clearing an edge twice over, or typing in an unset box, sends nothing more
+    onChange.mockClear();
+    type("South", "");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("says what is wrong with an edge, inline, once the field is left", () => {
+    const { onChange } = setupBox();
+    open();
+    fireEvent.focus(field("North"));
+    type("North", "95");
+    fireEvent.blur(field("North"));
+    expect(screen.getByText("Must be between -90 and 90")).toBeTruthy();
+    expect(field("North").getAttribute("aria-invalid")).toBe("true");
+    expect(field("North").getAttribute("aria-describedby")).toBe(
+      screen.getByText("Must be between -90 and 90").id
+    );
+    type("East", "181");
+    fireEvent.blur(field("East"));
+    expect(screen.getByText("Must be between -180 and 180")).toBeTruthy();
+    type("West", "abc");
+    fireEvent.blur(field("West"));
+    expect(screen.getByText("Enter a number")).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("refuses a south above the north, on South, and applies once it is fixed", () => {
+    const { onChange } = setupBox(filters(BOX));
+    type("South", "50");
+    fireEvent.blur(field("South"));
+    expect(screen.getByText("Must not be above North")).toBeTruthy();
+    expect(onChange).toHaveBeenLastCalledWith(NO_BOX);
+    type("South", "44");
+    expect(screen.queryByText("Must not be above North")).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith({ ...BOX, boxSouth: 44 });
+  });
+
+  it("has a Clear region button that empties the fields and the filter", () => {
+    const { onChange } = setupBox(filters(BOX));
+    fireEvent.click(screen.getByRole("button", { name: "Clear region" }));
+    expect(onChange).toHaveBeenLastCalledWith(NO_BOX);
+    for (const name of ["North", "South", "West", "East"]) expect(field(name).value).toBe("");
+  });
+
+  it("follows a box that changes from outside (Reset, a chip, the back button)", () => {
+    setupBox(filters(BOX));
+    expect(field("North").value).toBe("45");
+    fireEvent.click(screen.getByRole("button", { name: "reset from outside" }));
+    for (const name of ["North", "South", "West", "East"]) expect(field(name).value).toBe("");
+  });
+
+  it("counts as one active filter, and Reset's state has no box", () => {
+    setup(filters(BOX));
+    expect(screen.getByRole("button", { name: /^Filters/ }).textContent).toContain("1");
+    expect(clearedFilters(filters(BOX))).toMatchObject(NO_BOX);
   });
 });

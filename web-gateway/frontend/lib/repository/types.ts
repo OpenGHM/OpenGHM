@@ -145,6 +145,15 @@ export interface CatalogueFilterState extends Record<CatalogueFacetKey, string[]
   /** Degrees. */
   spatialResMin: number | null;
   spatialResMax: number | null;
+  /**
+   * A bounding box in decimal degrees (EPSG:4326): the filter matches an item
+   * whose spatial coverage overlaps it. All four are set or none is; `west`
+   * above `east` crosses the antimeridian.
+   */
+  boxNorth: number | null;
+  boxSouth: number | null;
+  boxEast: number | null;
+  boxWest: number | null;
   sortBy: CatalogueSortOption;
   /** Kept in the URL as `view=grid`; `list` is the default and is omitted. */
   view: CatalogueView;

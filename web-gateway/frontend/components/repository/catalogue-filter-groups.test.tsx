@@ -103,7 +103,12 @@ describe("the sidebar and the picker's panel share their filter groups", () => {
       creator: [],
       license: [],
     };
-    expect(sidebarTitles(filters(), empty)).toEqual(["Type", "Temporal coverage", "Spatial resolution"]);
+    expect(sidebarTitles(filters(), empty)).toEqual([
+      "Type",
+      "Temporal coverage",
+      "Spatial resolution",
+      "Region",
+    ]);
     expect(pickerTitles(filters(), empty)).toEqual(["Temporal coverage", "Spatial resolution"]);
   });
 
@@ -158,9 +163,19 @@ describe("the sidebar and the picker's panel share their filter groups", () => {
       creator: [],
       license: [],
     };
-    render(<SnapshotPickerFilters filters={filters()} facets={only} onChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
-    expect(screen.queryByRole("button", { name: /^More filters/ })).toBeNull();
+    // Region is a group the compact panel lacks, so with it in the definition
+    // the button is there; take it out to see the case this test is about.
+    const groups = CATALOGUE_FILTER_GROUPS as CatalogueFilterGroup[];
+    const region = groups.find((g) => g.key === "region") as CatalogueFilterGroup;
+    const at = groups.indexOf(region);
+    groups.splice(at, 1);
+    try {
+      render(<SnapshotPickerFilters filters={filters()} facets={only} onChange={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+      expect(screen.queryByRole("button", { name: /^More filters/ })).toBeNull();
+    } finally {
+      groups.splice(at, 0, region);
+    }
   });
 
   describe("a group added to the definition", () => {

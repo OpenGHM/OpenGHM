@@ -7,6 +7,7 @@ import {
   SNAPSHOT_PICKER_FIXED_FILTERS,
   SNAPSHOT_PICKER_PAGE_SIZE,
 } from "@/lib/repository/catalogue";
+import { regionFromNumbers } from "@/lib/repository/region";
 import {
   CatalogueFilterState,
   CatalogueResponse,
@@ -50,6 +51,14 @@ export async function fetchCatalogue(
   if (filters.yearEnd !== null) params.year_end = filters.yearEnd;
   if (filters.spatialResMin !== null) params.spatial_res_min = filters.spatialResMin;
   if (filters.spatialResMax !== null) params.spatial_res_max = filters.spatialResMax;
+
+  const box = regionFromNumbers(filters.boxNorth, filters.boxSouth, filters.boxEast, filters.boxWest);
+  if (box) {
+    params.north = box.north;
+    params.south = box.south;
+    params.east = box.east;
+    params.west = box.west;
+  }
 
   const response = await client.get<CatalogueResponse>("/api/v1/repository/catalogue", {
     params,

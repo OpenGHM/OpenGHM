@@ -13,6 +13,13 @@ import {
   formatResolution,
   type ResolutionUnit,
 } from "@/lib/repository/resolution";
+import {
+  EDGE_LABELS,
+  REGION_EDGES,
+  regionErrors,
+  regionFromText,
+  type RegionEdge,
+} from "@/lib/repository/region";
 import type {
   CatalogueFacetKey,
   CatalogueFacetOption,
@@ -424,3 +431,135 @@ export function ResolutionFilter({
   );
 }
 
+
+// ─── Region: four numeric edges of a bounding box ────────────────────────────
+
+type BoxKeys = Pick<CatalogueFilterState, "boxNorth" | "boxSouth" | "boxEast" | "boxWest">;
+
+const NO_BOX: BoxKeys = { boxNorth: null, boxSouth: null, boxEast: null, boxWest: null };
+
+const EDGE_PLACEHOLDERS: Record<RegionEdge, string> = {
+  north: "e.g. 45",
+  south: "e.g. 40",
+  west: "e.g. -110",
+  east: "e.g. -100",
+};
+
+/**
+ * The region group's body: North, South, West and East in decimal degrees. The
+ * filter is set only while all four are valid, and cleared as soon as one is
+ * not, so the list never stays filtered by a box the fields no longer show. The
+ * text is the control's own (typing "-" on the way to "-110" is not a value);
+ * a box that arrives from outside (a link, the back button, Reset) replaces it.
+ */
+export function RegionFilter({
+  north,
+  south,
+  east,
+  west,
+  onChange,
+}: {
+  north: number | null;
+  south: number | null;
+  east: number | null;
+  west: number | null;
+  onChange: (updates: BoxKeys) => void;
+}) {
+  const idBase = useId();
+  const fromProps = (): Record<RegionEdge, string> => ({
+    north: north === null ? "" : String(north),
+    south: south === null ? "" : String(south),
+    west: west === null ? "" : String(west),
+    east: east === null ? "" : String(east),
+  });
+  const [text, setText] = useState(fromProps);
+  const [focused, setFocused] = useState<RegionEdge | null>(null);
+
+  const propsKey = [north, south, east, west].join("|");
+  const [seen, setSeen] = useState(propsKey);
+  if (seen !== propsKey) {
+    setSeen(propsKey);
+    // What this control sent comes back as the box its text makes, or as no box
+    // while its text is incomplete; anything else came from outside.
+    const own = regionFromText(text);
+    const ours = own
+      ? own.north === north && own.south === south && own.east === east && own.west === west
+      : north === null && south === null && east === null && west === null;
+    if (!ours) setText(fromProps());
+  }
+
+  const active = north !== null || south !== null || east !== null || west !== null;
+  const errors = regionErrors(text);
+  const anyText = REGION_EDGES.some((e) => text[e].trim() !== "");
+
+  const edit = (edge: RegionEdge, value: string) => {
+    const next = { ...text, [edge]: value };
+    setText(next);
+    const box = regionFromText(next);
+    if (box) {
+      if (
+        box.north !== north ||
+        box.south !== south ||
+        box.east !== east ||
+        box.west !== west
+      ) {
+        onChange({ boxNorth: box.north, boxSouth: box.south, boxEast: box.east, boxWest: box.west });
+      }
+    } else if (active) {
+      onChange(NO_BOX);
+    }
+  };
+
+  const clear = () => {
+    setText({ north: "", south: "", west: "", east: "" });
+    if (active) onChange(NO_BOX);
+  };
+
+  const hintId = `${idBase}-hint`;
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        {REGION_EDGES.map((edge) => {
+          const id = `${idBase}-${edge}`;
+          const message = focused === edge ? null : (errors[edge] ?? null);
+          const invalid = errors[edge] !== undefined;
+          return (
+            <div key={edge} className="min-w-0">
+              <label htmlFor={id} className="mb-1 block text-xs text-muted-foreground">
+                {EDGE_LABELS[edge]}
+              </label>
+              <Input
+                id={id}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder={EDGE_PLACEHOLDERS[edge]}
+                value={text[edge]}
+                aria-invalid={invalid || undefined}
+                aria-describedby={message ? `${id}-error` : hintId}
+                onChange={(e) => edit(edge, e.target.value)}
+                onFocus={() => setFocused(edge)}
+                onBlur={() => setFocused((f) => (f === edge ? null : f))}
+                className="h-10 rounded-lg border-border bg-input px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
+              />
+              {message && (
+                <p id={`${id}-error`} className="mt-1 text-xs text-destructive">
+                  {message}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p id={hintId} className="text-xs text-muted-foreground">
+        Decimal degrees (EPSG:4326). Matches anything whose coverage overlaps the box, edges
+        included. Applies once all four are valid; West above East crosses the antimeridian.
+      </p>
+      {anyText && (
+        <Button type="button" variant="ghost" size="sm" onClick={clear} className="h-8 px-2">
+          Clear region
+        </Button>
+      )}
+    </div>
+  );
+}

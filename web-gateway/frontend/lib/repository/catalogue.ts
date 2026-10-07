@@ -6,6 +6,7 @@
  */
 import { SPATIAL_RES_PRESETS } from "./data";
 import type { OpenGHMCitationBlock } from "./generated";
+import { formatRegion, regionFromNumbers, type Region } from "./region";
 import type {
   CatalogueFacetKey,
   CatalogueFacetOption,
@@ -73,7 +74,8 @@ export type CatalogueFilterGroup =
       shortAtMost?: number;
     }
   | { kind: "temporal"; key: "temporal"; title: string; picker: boolean; defaultOpen: boolean }
-  | { kind: "resolution"; key: "resolution"; title: string; picker: boolean; defaultOpen: boolean };
+  | { kind: "resolution"; key: "resolution"; title: string; picker: boolean; defaultOpen: boolean }
+  | { kind: "region"; key: "region"; title: string; picker: boolean; defaultOpen: boolean };
 
 /** A group in `CATALOGUE_FILTER_GROUPS`, titled from `CATALOGUE_FACET_NAMES`. */
 function facetGroup(
@@ -94,6 +96,7 @@ export const CATALOGUE_FILTER_GROUPS: readonly CatalogueFilterGroup[] = [
   facetGroup("keyword", false, "when-short"),
   { kind: "temporal", key: "temporal", title: "Temporal coverage", picker: true, defaultOpen: true },
   { kind: "resolution", key: "resolution", title: "Spatial resolution", picker: true, defaultOpen: true },
+  { kind: "region", key: "region", title: "Region", picker: false, defaultOpen: false },
   facetGroup("output", false, false),
   facetGroup("forcing", false, false),
   facetGroup("wbm", false, false),
@@ -106,6 +109,7 @@ export const CATALOGUE_FILTER_GROUPS: readonly CatalogueFilterGroup[] = [
 export function groupFilterKeys(group: CatalogueFilterGroup): (keyof CatalogueFilterState)[] {
   if (group.kind === "temporal") return ["yearStart", "yearEnd"];
   if (group.kind === "resolution") return ["spatialResMin", "spatialResMax"];
+  if (group.kind === "region") return ["boxNorth", "boxSouth", "boxEast", "boxWest"];
   return [group.key];
 }
 
@@ -123,12 +127,18 @@ export function facetGroupOptions(
   return facets[key].length === 0 && key === "type" ? TYPE_FALLBACK : facets[key];
 }
 
+/** The region filter's box, or `null` when it is off (all four edges set means on). */
+export function filterRegion(filters: CatalogueFilterState): Region | null {
+  return regionFromNumbers(filters.boxNorth, filters.boxSouth, filters.boxEast, filters.boxWest);
+}
+
 /** How many filters one group has on: one per selected value, one for a range. */
 export function groupActiveCount(group: CatalogueFilterGroup, filters: CatalogueFilterState): number {
   if (group.kind === "temporal") return filters.yearStart !== null || filters.yearEnd !== null ? 1 : 0;
   if (group.kind === "resolution") {
     return filters.spatialResMin !== null || filters.spatialResMax !== null ? 1 : 0;
   }
+  if (group.kind === "region") return filterRegion(filters) ? 1 : 0;
   return filters[group.key].length;
 }
 
@@ -209,6 +219,10 @@ export const EMPTY_CATALOGUE_FILTERS: CatalogueFilterState = {
   yearEnd: null,
   spatialResMin: null,
   spatialResMax: null,
+  boxNorth: null,
+  boxSouth: null,
+  boxEast: null,
+  boxWest: null,
   sortBy: "relevance",
   view: "list",
   page: 1,
@@ -361,7 +375,7 @@ export interface ActiveFilterChip {
   remove: Partial<CatalogueFilterState>;
 }
 
-/** One chip per selected value, plus one each for the search, the years and the resolution; none for a filter the context fixes. */
+/** One chip per selected value, plus one each for the search, the years, the resolution and the region; none for a filter the context fixes. */
 export function activeFilterChips(
   filters: CatalogueFilterState,
   facets: CatalogueFacets,
@@ -396,6 +410,14 @@ export function activeFilterChips(
       id: "resolution",
       label: `Resolution: ${formatResolutionRange(filters.spatialResMin, filters.spatialResMax)}`,
       remove: { spatialResMin: null, spatialResMax: null },
+    });
+  }
+  const region = filterRegion(filters);
+  if (region) {
+    chips.push({
+      id: "region",
+      label: `Region: ${formatRegion(region)}`,
+      remove: { boxNorth: null, boxSouth: null, boxEast: null, boxWest: null },
     });
   }
   return chips;

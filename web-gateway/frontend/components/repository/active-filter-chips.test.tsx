@@ -42,6 +42,19 @@ describe("ActiveFilterChips", () => {
     expect(onChange).toHaveBeenLastCalledWith({ searchQuery: "" });
   });
 
+  it("has a Region chip that takes all four edges off", () => {
+    const { onChange } = setup(
+      filters({ boxNorth: 45, boxSouth: 40, boxEast: -100, boxWest: -110 })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Region: 40°N – 45°N, 110°W – 100°W" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      boxNorth: null,
+      boxSouth: null,
+      boxEast: null,
+      boxWest: null,
+    });
+  });
+
   it("labels a keyword chip Keyword: X and removes just that keyword", () => {
     const { onChange } = setup(filters({ keyword: ["storage", "soils"] }));
     fireEvent.click(screen.getByRole("button", { name: "Remove filter: Keyword: storage" }));

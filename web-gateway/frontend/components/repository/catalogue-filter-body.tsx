@@ -10,6 +10,7 @@ import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/typ
 import {
   COLLAPSED_OPTION_COUNT,
   FacetCheckboxList,
+  RegionFilter,
   ResolutionFilter,
   YearRangeFilter,
 } from "./catalogue-filter-controls";
@@ -50,6 +51,16 @@ export function CatalogueFilterBody({
         <ResolutionFilter
           min={filters.spatialResMin}
           max={filters.spatialResMax}
+          onChange={onChange}
+        />
+      );
+    case "region":
+      return (
+        <RegionFilter
+          north={filters.boxNorth}
+          south={filters.boxSouth}
+          east={filters.boxEast}
+          west={filters.boxWest}
           onChange={onChange}
         />
       );

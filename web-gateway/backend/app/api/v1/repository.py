@@ -34,7 +34,13 @@ from app.models.repository import (
 )
 from app.models.user import TokenPayload
 from app.services import published_answer, run_start
-from app.services.catalogue import CatalogueQuery, build_catalogue, newest_registered_first
+from app.services.catalogue import (
+    CatalogueQuery,
+    InvalidBoundingBox,
+    build_catalogue,
+    newest_registered_first,
+    parse_box,
+)
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -150,16 +156,28 @@ async def list_catalogue(
     year_end: int | None = Query(default=None),
     spatial_res_min: float | None = Query(default=None, description="Min spatial resolution in degrees"),
     spatial_res_max: float | None = Query(default=None, description="Max spatial resolution in degrees"),
+    north: float | None = Query(default=None, description="Box north edge, decimal degrees (EPSG:4326); the box filter needs all four of north, south, east, west"),
+    south: float | None = Query(default=None, description="Box south edge, decimal degrees"),
+    east: float | None = Query(default=None, description="Box east edge, decimal degrees"),
+    west: float | None = Query(default=None, description="Box west edge, decimal degrees; west > east crosses the antimeridian"),
     sort: str = Query(default="relevance", pattern="^(relevance|newest|title-az|title-za|coverage-start)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
 ) -> CatalogueResponse:
     """Snapshots and model inputs in one list, with facet counts
     (gateway.md, Data Repository). The facet parameters repeat
-    (``?tag=a&tag=b``), they are not comma lists."""
+    (``?tag=a&tag=b``), they are not comma lists. ``north``/``south``/``east``/
+    ``west`` select by overlap with the spatial coverage; a partial or invalid
+    box is 422 ``invalid_bounding_box``."""
+    try:
+        box = parse_box(north, south, east, west)
+    except InvalidBoundingBox as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_bounding_box", "message": str(exc)}
+        ) from exc
     query = CatalogueQuery(
         q=q, year_start=year_start, year_end=year_end,
-        spatial_res_min=spatial_res_min, spatial_res_max=spatial_res_max,
+        spatial_res_min=spatial_res_min, spatial_res_max=spatial_res_max, box=box,
         selected={
             name: tuple(values)
             for name, values in {

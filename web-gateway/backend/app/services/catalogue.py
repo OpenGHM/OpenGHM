@@ -32,12 +32,53 @@ KIND_LABELS: dict[str, str] = {"snapshot": "Model Snapshot", "model-input": "Mod
 
 
 @dataclass(frozen=True)
+class BoundingBox:
+    """A box in decimal degrees (EPSG:4326), in DCMI Box element order."""
+
+    north: float
+    south: float
+    east: float
+    west: float
+
+
+class InvalidBoundingBox(ValueError):
+    """The four box parameters do not describe a box; the message says why."""
+
+
+def parse_box(
+    north: float | None, south: float | None, east: float | None, west: float | None
+) -> BoundingBox | None:
+    """``None`` when no value is given (no box filter); a box when all four
+    are; :class:`InvalidBoundingBox` for a partial box, a value outside its
+    range or a south edge above the north. West > east is valid: the box
+    crosses the antimeridian."""
+    given = {"north": north, "south": south, "east": east, "west": west}
+    if all(v is None for v in given.values()):
+        return None
+    missing = [k for k, v in given.items() if v is None]
+    if missing:
+        raise InvalidBoundingBox(
+            f"A bounding box needs all of north, south, east and west; missing: {', '.join(missing)}."
+        )
+    for name, lo, hi in (("north", -90, 90), ("south", -90, 90), ("east", -180, 180), ("west", -180, 180)):
+        value = given[name]
+        if not (lo <= value <= hi):  # also false for NaN
+            raise InvalidBoundingBox(f"{name} must be between {lo} and {hi} degrees, got {value}.")
+    if south > north:
+        raise InvalidBoundingBox(f"south ({south}) must not be above north ({north}).")
+    return BoundingBox(north=north, south=south, east=east, west=west)
+
+
+@dataclass(frozen=True)
 class CatalogueQuery:
     q: str | None = None
     year_start: int | None = None
     year_end: int | None = None
     spatial_res_min: float | None = None
     spatial_res_max: float | None = None
+    #: A query box, all four or none (``parse_box``); west > east crosses the
+    #: antimeridian.
+    box: BoundingBox | None = None
     #: facet name -> selected values (OR within a facet, AND across facets).
     #: A missing or empty entry means the facet is not filtering.
     selected: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -56,6 +97,14 @@ def _temporal(item: Item):
     if isinstance(item, SnapshotCatalogueItem):
         return item.simulation.temporalCoverage
     return item.coverage.temporalCoverage
+
+
+def _spatial(item: Item):
+    """The artifact's spatial coverage box (a model input's is
+    ``coverage.spatialCoverage``, the union over its networks and datasets)."""
+    if isinstance(item, SnapshotCatalogueItem):
+        return item.simulation.spatialCoverage
+    return item.coverage.spatialCoverage
 
 
 def _resolutions_degrees(item: Item) -> list[float]:
@@ -120,6 +169,45 @@ def _matches_years(item: Item, year_start: int | None, year_end: int | None) -> 
     return True
 
 
+def _longitude_spans(west: float, east: float) -> list[tuple[float, float]]:
+    """The longitudes a west/east pair covers; west > east crosses the
+    antimeridian, so the span is [west, 180] and [-180, east]."""
+    if west <= east:
+        return [(west, east)]
+    return [(west, 180.0), (-180.0, east)]
+
+
+def _longitudes_overlap(a: tuple[float, float], b: tuple[float, float]) -> bool:
+    spans_a, spans_b = _longitude_spans(*a), _longitude_spans(*b)
+    if any(lo_a <= hi_b and lo_b <= hi_a for lo_a, hi_a in spans_a for lo_b, hi_b in spans_b):
+        return True
+    # 180 and -180 are the same meridian, so a span that ends at 180 touches one
+    # that starts at -180.
+    return _touches_antimeridian(spans_a, spans_b) or _touches_antimeridian(spans_b, spans_a)
+
+
+def _touches_antimeridian(
+    east_side: list[tuple[float, float]], west_side: list[tuple[float, float]]
+) -> bool:
+    return any(hi == 180.0 for _, hi in east_side) and any(lo == -180.0 for lo, _ in west_side)
+
+
+def _matches_box(item: Item, box: BoundingBox | None) -> bool:
+    """Overlap with the spatial coverage, edges touching included, like
+    ``_matches_years``; an artifact with no coverage never matches an active
+    box. West > east on either side crosses the antimeridian."""
+    if box is None:
+        return True
+    coverage = _spatial(item)
+    if coverage is None:
+        return False
+    if coverage.southlimit > box.north or coverage.northlimit < box.south:
+        return False
+    return _longitudes_overlap(
+        (box.west, box.east), (coverage.westlimit, coverage.eastlimit)
+    )
+
+
 def _matches_resolution(item: Item, lo: float | None, hi: float | None) -> bool:
     """A snapshot has one resolution; a model input matches when any of its
     networks' resolutions is in range, and one with none never does."""
@@ -142,6 +230,7 @@ def _matches_base(item: Item, query: CatalogueQuery) -> bool:
         (not q or _matches_q(item, q))
         and _matches_years(item, query.year_start, query.year_end)
         and _matches_resolution(item, query.spatial_res_min, query.spatial_res_max)
+        and _matches_box(item, query.box)
     )
 
 

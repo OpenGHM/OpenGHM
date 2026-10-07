@@ -299,7 +299,8 @@ plus a computed `kind`, `"snapshot"` or `"model-input"`. The response is
 
 **Query parameters**, all optional: `q`; `type` (`snapshot` or `model-input`,
 anything else is `422`); the facet parameters below; `year_start`, `year_end`;
-`spatial_res_min`, `spatial_res_max` (degrees); `sort`
+`spatial_res_min`, `spatial_res_max` (degrees); `north`, `south`, `east`, `west`
+(a bounding box in decimal degrees, EPSG:4326); `sort`
 (`relevance` default, `newest`, `title-az`, `title-za`, `coverage-start`); `page` (>= 1);
 `page_size` (default 10, 1 to 100). Facet and `type` parameters **repeat**
 (`?tag=a&tag=b`); they are not comma lists, because a value can
@@ -315,7 +316,7 @@ contain a comma.
 | `output` | `simulation.outputVariables[].name` | `fullName` | snapshots |
 | `forcing` | `simulation.inputVariables[].role` | the raw role (the UI humanises it) | snapshots |
 | `process` | `simulation.activeProcesses[]` | the value | snapshots |
-| `wbm` | `uses.container.version` | the value | snapshots |
+| `wbm` | `uses.modelCode.version` | the value | snapshots |
 
 **Semantics.** Values within one facet are OR, different facets are AND. A
 filter a kind cannot satisfy excludes that kind: a model input has no output
@@ -332,9 +333,22 @@ facets leaves only snapshots.
   `spatialResolutionDegrees`. A model input matches when **any** of its
   `networks[].resolution` is in range; networks without one are ignored, and
   a model input with none never matches an active resolution filter.
+- `north`/`south`/`east`/`west` select by overlap with the spatial coverage
+  (`simulation.spatialCoverage`; a model input's `coverage.spatialCoverage`,
+  the union over its networks and datasets), edges touching included, the
+  same rule as the years. The filter is active only when all four are given;
+  a partial box, a south above the north, or a value outside -90 to 90
+  (latitudes) or -180 to 180 (longitudes) is `422` with `detail.code`
+  `invalid_bounding_box` and a message that names the fault. A west above the
+  east is a box across the antimeridian, its longitudes `[west, 180]` and
+  `[-180, east]`; so is a coverage with `westlimit` above `eastlimit`, and
+  180 and -180 count as the same meridian. An item with no spatial
+  coverage never matches an active box; both specs require one, so none does
+  today. The UI takes the four edges as numbers (the Region group of the
+  sidebar, and of the snapshot picker's "More filters" dialog).
 
 **Facet counts** are disjunctive. For each group, the count is the items that
-match `q`, the ranges and every *other* group's selection, ignoring the group's
+match `q`, the ranges, the box and every *other* group's selection, ignoring the group's
 own, so choosing one option leaves its siblings' counts visible. A selected
 value with no match is still listed, with count 0; other zero-count options
 are not. Groups sort by count descending, then label case-insensitively;
