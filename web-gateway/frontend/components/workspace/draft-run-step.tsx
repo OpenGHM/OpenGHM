@@ -10,6 +10,7 @@ import { DraftBasis } from "@/components/workspace/draft-basis";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
+import { OutputChoiceSection } from "@/components/workspace/output-choice-field";
 import {
   OutputVariablesSection,
   type VariableOption,
@@ -43,7 +44,8 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
  * card whose first part is the snapshot draft's name and description (the first
  * thing a new draft asks for, so the Name takes focus when it has none and
  * `autoFocusName` is set), followed by the run period, the output variables,
- * and cores and walltime. Most people keep the defaults, so the last two are a line saying
+ * the output (daily, monthly and yearly, or also climatology), and cores and
+ * walltime. Most people keep the defaults, so the variables and compute are a line saying
  * what they hold and a button that opens them (`DraftCollapsible`); what is
  * wrong with them stays in view either way.
  *
@@ -307,6 +309,14 @@ export function DraftRunStep({
           error={serverErrors.variables ?? null}
           errorId={`${id}-variables-error`}
           describedBy={serverErrors.variables ? `${id}-variables-error` : undefined}
+        />
+
+        <OutputChoiceSection
+          dataset={dataset}
+          value={parameters.post_processing ?? null}
+          variableCount={parameters.variables.length}
+          error={serverErrors.postProcessing ?? null}
+          onChange={(post_processing) => set({ post_processing })}
         />
 
         {(spatial !== null || customEntries.length > 0) && (

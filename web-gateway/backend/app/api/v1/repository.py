@@ -280,6 +280,7 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
     if rules is not None:
         detail.runStartAlignment = rules.alignment
         detail.aggregationStartYear = rules.aggregation_start_year
+        detail.postProcessing = rules.post_processing
     return detail
 
 

@@ -100,7 +100,7 @@ def test_a_copy_is_a_201_with_the_sources_settings(client, db, source):
     assert body["slug"] == "my-run"
     assert _set(body["about"]) == {"name": "River basin (copy)", "description": "d", "keywords": ["a", "b"]}
     assert body["model_input_id"] is None
-    assert body["parameters"] == SETTINGS["parameters"]
+    assert body["parameters"] == {**SETTINGS["parameters"], "post_processing": None}
     assert body["slurm_config"] == SETTINGS["slurm_config"]
     assert body["updated_at"] == body["created_at"]
     assert body["slurm_job_id"] is None and body["failure"] is None and body["files"] is None

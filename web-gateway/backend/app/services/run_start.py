@@ -44,6 +44,16 @@ toolkit (`_check_run_dates_vs_aggregation`) checks overrides only. A December 30
 end is let through: a 360-day calendar counts it as a year's last day, and the
 calendar is the forcing data's, not the init's, so WBM has the last word.
 
+The post-processing choice. The same read gives `post_processing`, what the
+init's `PostProcessing => { Run => … }` block asks WBM for: `"none"` when the init
+has no such block or the block has no `Run` of its own (a toolkit flag cannot
+change what is not there), `"standard"` when `Run` is false in Perl's sense (`0`,
+`'0'`, `''`), `"climatology"` when it is true. Only the block's own top-level
+`Run` counts, never `Run_Start`/`Run_End` or a `Run` in a nested hash. The
+backend does not import the toolkit, so `post_processing_from_init` is a compact
+reader of its own; `openghm.post_processing.requested_run_value` is the toolkit's,
+and both are tested on the same real inits (tests/test_post_processing.py).
+
 The init is read over Anvil S3's public HTTPS, as the backend has no S3
 credentials: `<S3_PUBLIC_BASE_URL>/<S3_BUCKET>/snapshots/<id>/wbm_init/<init>`,
 where `<init>` is the snapshot's `simulation.init` (a path relative to
@@ -68,6 +78,9 @@ import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+#: What a snapshot's init asks of WBM's post-processing (see the module docstring).
+PostProcessing = Literal["none", "standard", "climatology"]
 
 #: `"year"`: a simulation starts on January 1. `"month"`: on the first of a month.
 #: `"none"`: the init was read and sets no rule (`File_Size 'day'`, another
@@ -120,17 +133,85 @@ def aggregation_start_year_from_init(content: str) -> int | None:
     return int(first)
 
 
+_PP_BLOCK_RE = re.compile(r"""(?<!\w)(?:(['"])PostProcessing\1|PostProcessing)\s*=>\s*\{""")
+_PP_RUN_KEY_RE = re.compile(r"""(?:(['"])Run\1|(?<![\w$@%])Run(?!\w))\s*=>\s*""")
+# A Perl scalar: quoted, or bare up to `,`, `}`, `#` or the end of the line (possibly empty).
+_PP_VALUE_RE = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|[^,}\n#]*""")
+
+
+def _is_perl_true(literal: str) -> bool:
+    """Perl's truth of a `Run` literal: false for `0`, `'0'`, `''`, `""`, nothing and `undef`."""
+    s = literal.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        return s[1:-1] not in ("", "0")
+    if s in ("", "undef"):
+        return False
+    try:
+        return float(s) != 0
+    except ValueError:
+        return True
+
+
+def post_processing_from_init(content: str) -> PostProcessing:
+    """What the init's `PostProcessing` block asks for. The block is read
+    brace-balanced, skipping quoted strings and `#` comments, and only a `Run` key
+    at the block's own depth counts. Total: an unbalanced block, or any text at all,
+    answers `"none"` rather than raising."""
+    for block in _PP_BLOCK_RE.finditer(content):
+        line_start = content.rfind("\n", 0, block.start()) + 1
+        if content[line_start:block.start()].lstrip().startswith("#"):
+            continue
+        depth, quote, i, n, found = 0, None, block.end(), len(content), None
+        while i < n:
+            c = content[i]
+            if quote:
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == quote:
+                    quote = None
+            elif c == "#":
+                j = content.find("\n", i)
+                i = n if j == -1 else j
+                continue
+            elif c == "}" and depth == 0:
+                return found or "none"  # the block's own closing brace
+            else:
+                if depth == 0 and found is None and (key := _PP_RUN_KEY_RE.match(content, i)):
+                    found = _run_literal(content, key.end())
+                if c in "'\"":
+                    quote = c
+                elif c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+            i += 1
+        return "none"  # the braces do not balance
+    return "none"
+
+
+def _run_literal(content: str, value_start: int) -> PostProcessing:
+    value = _PP_VALUE_RE.match(content, value_start)
+    return "climatology" if _is_perl_true(value.group(0) if value else "") else "standard"
+
+
 @dataclass(frozen=True)
 class InitRules:
-    """What a snapshot's init asks of a simulation's dates, as read."""
+    """What a snapshot's init asks of a simulation's dates and post-processing, as read."""
 
     alignment: RunStartAlignment
     #: The year multi-year aggregation starts in; None when the init sets none.
     aggregation_start_year: int | None
+    #: What the init's `PostProcessing => { Run => … }` asks for.
+    post_processing: PostProcessing = "none"
 
 
 def rules_from_init(content: str) -> InitRules:
-    return InitRules(alignment_from_init(content), aggregation_start_year_from_init(content))
+    return InitRules(
+        alignment_from_init(content),
+        aggregation_start_year_from_init(content),
+        post_processing_from_init(content),
+    )
 
 
 @dataclass(frozen=True)

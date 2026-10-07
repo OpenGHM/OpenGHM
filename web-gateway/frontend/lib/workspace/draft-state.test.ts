@@ -444,11 +444,19 @@ describe("fieldsForPaths", () => {
     expect(fieldsForPaths(["parameters.temporal_range_end"])).toEqual(["end"]);
     expect(fieldsForPaths(["parameters.variables.0"])).toEqual(["variables"]);
     expect(fieldsForPaths(["about.name", "model_input_id"])).toEqual(["modelInput", "name"]);
+    expect(fieldsForPaths(["parameters.post_processing"])).toEqual(["postProcessing"]);
   });
 
   it("places a path that names a whole group on all its fields, and one that names nothing of ours on none", () => {
     expect(fieldsForPaths(["slurm_config"])).toEqual(["cores", "walltime"]);
-    expect(fieldsForPaths(["parameters"])).toEqual(["start", "end", "variables", "spatial", "custom"]);
+    expect(fieldsForPaths(["parameters"])).toEqual([
+      "start",
+      "end",
+      "variables",
+      "spatial",
+      "custom",
+      "postProcessing",
+    ]);
     expect(fieldsForPaths(["slug"])).toEqual([]);
     expect(fieldsForPaths([])).toEqual([]);
   });
@@ -666,6 +674,12 @@ describe("isDirty", () => {
     expect(isDirty(edited(baseline, { params: { temporal_range_end: "2002-12-31" } }), baseline, FOUND)).toBe(true);
     expect(isDirty(edited(baseline, { params: { variables: ["runoff"] } }), baseline, FOUND)).toBe(true);
     expect(isDirty(edited(baseline, { slurm: { cores: 8, walltime: null } }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { params: { post_processing: "climatology" } }), baseline, FOUND)).toBe(true);
+  });
+
+  it("does not count an absent post_processing and null as different", () => {
+    expect(isDirty(edited(baseline, { params: { post_processing: null } }), baseline, FOUND)).toBe(false);
+    expect(isDirty(edited(baseline, { params: { post_processing: undefined } }), baseline, FOUND)).toBe(false);
   });
 
   it("does not count what canonical form ignores: blanks around text, variables in another order", () => {
@@ -706,6 +720,7 @@ describe("unsavedFields", () => {
         variables: ["runoff"],
         spatial_domain: { north: 1, south: -1, east: 2, west: -2 },
         custom_params: { A: "1" },
+        post_processing: "climatology",
       },
       modelInputId: "other",
     });
@@ -716,6 +731,7 @@ describe("unsavedFields", () => {
       "variables",
       "spatial",
       "custom",
+      "postProcessing",
       "cores",
       "walltime",
       "name",
@@ -728,5 +744,63 @@ describe("unsavedFields", () => {
     const local = edited(saved, { params: { temporal_range_start: "2001-07-01" } });
     expect(buildDraftPatch(local, saved, FOUND).withheld).toEqual(["start"]);
     expect(unsavedFields(local, saved, FOUND)).toEqual(["start"]);
+  });
+});
+
+describe("post_processing: the Output choice", () => {
+  const job = draft();
+
+  it("is not sent while nobody chose: the parameters carry no post_processing key", () => {
+    const { patch } = buildDraftPatch(edited(job, { params: { temporal_range_end: "2002-12-31" } }), job, FOUND);
+    expect(patch!.parameters).not.toHaveProperty("post_processing");
+    expect(canonical(fromJob(job)).parameters).not.toHaveProperty("post_processing");
+  });
+
+  it("is sent inside parameters, whole, once chosen, and is a change that is not yet saved", () => {
+    const local = edited(job, { params: { post_processing: "climatology" } });
+    const { patch, withheld } = buildDraftPatch(local, job, FOUND);
+    expect(patch).toEqual({
+      parameters: {
+        temporal_range_start: "2001-01-01",
+        temporal_range_end: "2003-12-31",
+        spatial_domain: null,
+        variables: NAMES,
+        custom_params: null,
+        post_processing: "climatology",
+      },
+    });
+    expect(withheld).toEqual([]);
+    expect(unsavedFields(local, job, FOUND)).toEqual(["postProcessing"]);
+    expect(isDirty(local, job, FOUND)).toBe(true);
+  });
+
+  it("stores the snapshot's own value when that is what was picked", () => {
+    const { patch } = buildDraftPatch(edited(job, { params: { post_processing: "standard" } }), job, FOUND);
+    expect(patch!.parameters).toHaveProperty("post_processing", "standard");
+  });
+
+  it("is saved once the server holds it, and a change back to the other value is dirty again", () => {
+    const stored = draft({
+      parameters: { ...job.parameters, post_processing: "climatology" },
+    });
+    expect(unsavedFields(fromJob(stored), stored, FOUND)).toEqual([]);
+    expect(buildDraftPatch(fromJob(stored), stored, FOUND).patch).toBeNull();
+    const back = edited(stored, { params: { post_processing: "standard" } });
+    expect(unsavedFields(back, stored, FOUND)).toEqual(["postProcessing"]);
+  });
+
+  it("post_processing_unavailable withholds the field, with the server's words, until it changes", () => {
+    const local = edited(job, { params: { post_processing: "climatology" } });
+    const sent = buildDraftPatch(local, job, FOUND).patch!;
+    const refusals = refuseGroups({}, sent, {
+      message: "This snapshot's init has no post-processing settings.",
+      code: "post_processing_unavailable",
+    });
+    const out = buildDraftPatch(local, job, FOUND, refusals);
+    expect(out.patch).toBeNull();
+    expect(out.withheld).toEqual(["postProcessing"]);
+    expect(out.errors).toEqual({ postProcessing: "This snapshot's init has no post-processing settings." });
+    const changed = edited(job, { params: { post_processing: "standard" } });
+    expect(buildDraftPatch(changed, job, FOUND, refusals).patch).not.toBeNull();
   });
 });

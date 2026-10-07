@@ -184,10 +184,10 @@ describe("the draft run step: the quiet path", () => {
     expect(screen.getByRole("button", { name: "Change compute" }).textContent).toBe("Change");
   });
 
-  it("is one card of four parts, with no tinted band", () => {
+  it("is one card of five parts, with no tinted band", () => {
     const { container } = step();
     const panel = container.querySelector(".divide-y") as HTMLElement;
-    expect(panel.querySelectorAll(":scope > section")).toHaveLength(4);
+    expect(panel.querySelectorAll(":scope > section")).toHaveLength(5);
     expect(panel.className).toContain("rounded-xl");
     expect(container.innerHTML).not.toContain("bg-muted/40");
   });
@@ -833,5 +833,93 @@ describe("the draft run step: what the draft is based on", () => {
   it("has no revert when the draft inherits the snapshot's model input", () => {
     step();
     expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
+  });
+});
+
+describe("the draft run step: the Output choice", () => {
+  const radio = (name: string | RegExp) => screen.getByRole("radio", { name }) as HTMLInputElement;
+  const STANDARD = /Daily, monthly and yearly/;
+  const CLIMATOLOGY = /Also climatology/;
+  const climatologyDataset = fakeDataset({
+    ...dataset,
+    postProcessing: "climatology",
+  });
+
+  it("is two radios in a group named Output, the snapshot's own choice ticked when the draft has none", () => {
+    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "standard" }), snapshotState: "found" } });
+    expect(screen.getByRole("radiogroup", { name: "Output" })).toBeTruthy();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(radio(STANDARD).checked).toBe(true);
+    expect(radio(CLIMATOLOGY).checked).toBe(false);
+    expect(screen.getByText(/as the published simulation/)).toBeTruthy();
+  });
+
+  it("defaults to the snapshot's climatology, and to standard when the init could not be read", () => {
+    const { unmount } = step({ ctx: { dataset: climatologyDataset, snapshotState: "found" } });
+    expect(radio(CLIMATOLOGY).checked).toBe(true);
+    unmount();
+    const unread = step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null }), snapshotState: "found" } });
+    expect(radio(STANDARD).checked).toBe(true);
+    expect(radio(STANDARD).disabled).toBe(false);
+    expect(radio(CLIMATOLOGY).disabled).toBe(false);
+    unread.unmount();
+    step({ ctx: NO_SNAPSHOT });
+    expect(radio(STANDARD).checked).toBe(true);
+  });
+
+  it("shows the draft's own choice over the snapshot's", () => {
+    step({
+      ctx: { dataset: climatologyDataset, snapshotState: "found" },
+      parameters: { ...PARAMETERS, post_processing: "standard" },
+    });
+    expect(radio(STANDARD).checked).toBe(true);
+    expect(radio(CLIMATOLOGY).checked).toBe(false);
+  });
+
+  it("reports the picked value whole, even the snapshot's own, and changes nothing else", () => {
+    const first = step();
+    fireEvent.click(radio(CLIMATOLOGY));
+    expect(first.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "climatology" });
+    first.unmount();
+    // On a climatology snapshot, standard is the one that is not ticked.
+    const second = step({ ctx: { dataset: climatologyDataset, snapshotState: "found" } });
+    fireEvent.click(radio(STANDARD));
+    expect(second.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "standard" });
+  });
+
+  it("notes, under Also climatology, the file count (variables chosen x 3) and the measurement", () => {
+    const { unmount } = step();
+    expect(screen.getByText(/9 files for this snapshot/)).toBeTruthy();
+    expect(screen.getByText(/about a fifth more run time, and 2\.2 GB of climatology on 1\.5 GB of output/)).toBeTruthy();
+    unmount();
+    step({ parameters: { ...PARAMETERS, variables: ["runoff"] } });
+    expect(screen.getByText(/3 files for this snapshot/)).toBeTruthy();
+  });
+
+  it("leaves the count out when no variable is chosen", () => {
+    step({ parameters: { ...PARAMETERS, variables: [] } });
+    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+  });
+
+  it("is disabled, with one line, for a snapshot whose init has no post-processing settings", () => {
+    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "none" }), snapshotState: "found" } });
+    expect(radio(STANDARD).disabled).toBe(true);
+    expect(radio(CLIMATOLOGY).disabled).toBe(true);
+    expect(screen.getByText("This snapshot's init has no post-processing settings.")).toBeTruthy();
+    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+  });
+
+  it("shows what the server said about it, tied to the group", () => {
+    step({ serverErrors: { postProcessing: "Not for this snapshot." } });
+    const group = screen.getByRole("radiogroup", { name: "Output" });
+    expect(group.getAttribute("aria-describedby")).toContain(screen.getByText("Not for this snapshot.").id);
+  });
+
+  it("is marked for the wizard's focus, and switched off while a submit is under way", () => {
+    const { unmount } = step();
+    expect(screen.getByRole("radiogroup", { name: "Output" }).getAttribute("data-draft-field")).toBe("postProcessing");
+    unmount();
+    step({ disabled: true });
+    expect(radio(STANDARD).matches(":disabled")).toBe(true);
   });
 });

@@ -5,7 +5,10 @@ ADR 0029, docs/architecture/simulation-reuse.md section 3).
 A draft is answered when it asks for nothing the snapshot did not run: the
 snapshot's own model input, spatial domain and parameters
 (`job_script.unsupported_fields`), a period inside
-`simulation.temporalCoverage`, and variables among `simulation.outputVariables`.
+`simulation.temporalCoverage`, variables among `simulation.outputVariables`, and no
+climatology unless the snapshot's init asked for one (`climatology_not_published`;
+a draft asking for `"standard"` is answered by a climatology snapshot, whose daily,
+monthly and yearly files are a subset of what it published).
 Otherwise it comes back with one reason for each way it differs, so the Review
 step can say which change makes a run necessary. A draft that names no variable
 asks for every published one.
@@ -50,7 +53,7 @@ from app.models.repository import (
     PublishedPeriod,
     s3_url,
 )
-from app.services import job_script
+from app.services import job_script, run_start
 
 logger = logging.getLogger(__name__)
 
@@ -167,9 +170,14 @@ def _parse_date(kind: str, value: str) -> date:
 
 
 def _reasons(
-    parameters: JobParameters, model_input_id: str | None, snapshot: dict
+    parameters: JobParameters,
+    model_input_id: str | None,
+    snapshot: dict,
+    own_post_processing: str | None = None,
 ) -> list[PublishedAnswerReason]:
-    """Every way the draft differs from the snapshot, without any network."""
+    """Every way the draft differs from the snapshot, without any network.
+    `own_post_processing` is what the snapshot's init asks of post-processing
+    (`run_start.InitRules.post_processing`), or None when it could not be read."""
     reasons = [
         PublishedAnswerReason(code=code, message=message)
         for code, message in (
@@ -211,6 +219,14 @@ def _reasons(
                 code="variables_not_published",
                 message=f"The published simulation does not hold {', '.join(missing)}; "
                 "a variable it does not hold needs a new simulation.",
+            )
+        )
+    if parameters.post_processing == "climatology" and own_post_processing != "climatology":
+        reasons.append(
+            PublishedAnswerReason(
+                code="climatology_not_published",
+                message="The published simulation has no climatology; "
+                "asking for it needs a new simulation.",
             )
         )
     return reasons
@@ -294,7 +310,15 @@ async def answer(
         if coverage.get("start") and coverage.get("end")
         else None
     )
-    reasons = _reasons(parameters, model_input_id, snapshot)
+    # Read only when the draft asks for climatology: a published simulation's output
+    # holds daily, monthly and yearly files, which answer "standard" and the snapshot's
+    # own. An init that cannot be read counts as one without climatology: answering a
+    # draft that asks for it from output that may have none would be the wrong error.
+    own = None
+    if parameters.post_processing == "climatology":
+        rules = await run_start.read_init_rules(snapshot, snapshot_id)
+        own = rules.post_processing if rules else None
+    reasons = _reasons(parameters, model_input_id, snapshot, own)
     run = None
     files: list[PublishedFile] = []
     if not reasons:

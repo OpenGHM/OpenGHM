@@ -42,6 +42,11 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
    *  reach (`lib/jobs/aggregation-window.ts`); `null` when the init sets none
    *  or could not be read. Absent on a list row. */
   aggregationStartYear?: number | null;
+  /** What the snapshot's own init does after the simulation, read from it by the
+   *  single snapshot route only: `none` the init has no post-processing settings,
+   *  `standard` daily, monthly and yearly output, `climatology` that and
+   *  the climatologies; `null` the init could not be read. Absent on a list row. */
+  postProcessing?: "none" | "standard" | "climatology" | null;
 }
 
 // ─── Model input ───────────────────────────────────────────────────────────────

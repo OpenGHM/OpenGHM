@@ -353,10 +353,11 @@ def render_job_body(
     run_start: str | None = None,
     run_end: str | None = None,
     output_vars: str | None = None,
+    post_processing: str | None = None,
     walltime: str | None = None,
 ) -> str:
-    """The job's bash body. `run_start`, `run_end` and `output_vars` are passed
-    to `sim run` only when given — the caller gives one only when the draft
+    """The job's bash body. `run_start`, `run_end`, `output_vars` and `post_processing`
+    are passed to `sim run` only when given — the caller gives one only when the draft
     differs from the snapshot's own value (see `run_overrides`).
 
     `walltime` is the value the job asks SLURM for (`--time`, as
@@ -405,6 +406,8 @@ def render_job_body(
         run.append(f"--run-end {shlex.quote(_check_date('run end', run_end))}")
     if output_vars is not None:
         run.append(f"--output-vars {shlex.quote(_check_output_vars(output_vars))}")
+    if post_processing is not None:
+        run.append(f"--post-processing {_check_post_processing(post_processing)}")
     if walltime is not None:
         run.append(f"--walltime {shlex.quote(_check_walltime(walltime))}")
     run.append("--spool cache")
@@ -445,6 +448,15 @@ def _check_date(kind: str, value: str) -> str:
         date.fromisoformat(value)
     except ValueError:
         raise SubmitInputError(f"The {kind} {value!r} is not a real date.")
+    return value
+
+
+_POST_PROCESSING_CHOICES = ("standard", "climatology")
+
+
+def _check_post_processing(value: str) -> str:
+    if value not in _POST_PROCESSING_CHOICES:
+        raise SubmitInputError("The output choice must be 'standard' or 'climatology'.")
     return value
 
 
@@ -577,16 +589,31 @@ class RunOverrides:
     run_start: str | None = None
     run_end: str | None = None
     output_vars: str | None = None
+    post_processing: str | None = None
 
 
-def run_overrides(parameters: JobParameters, snapshot: dict) -> RunOverrides:
+def _post_processing_override(value: str | None, own: str | None) -> str | None:
+    """The flag value for a draft's choice: none when the draft leaves it unset or
+    asks for what the snapshot's init already has. `own` is None when the init
+    could not be read, and then any set choice is passed (the toolkit, which reads
+    the init, is the last line)."""
+    if value is None or value == own:
+        return None
+    return _check_post_processing(value)
+
+
+def run_overrides(
+    parameters: JobParameters, snapshot: dict, own_post_processing: str | None = None
+) -> RunOverrides:
     """The flags that turn the snapshot's init into the draft's simulation, in the
     toolkit's formats: dates as `YYYY-MM-DD`, output variables as one
     space-separated string (WBM's `Output_vars` is whitespace-separated).
 
     A value equal to the snapshot's own is not passed: a draft left at its
     defaults runs the published init, which is what makes its output
-    comparable with the published one. Raises `SubmitInputError` for a period
+    comparable with the published one. `own_post_processing` is what the snapshot's
+    init asks of post-processing (`run_start.InitRules.post_processing`), which
+    needs a read of the init and so is the caller's to give. Raises `SubmitInputError` for a period
     that is not two real dates in order, or for no output variable at all.
     """
     defaults = snapshot_defaults(snapshot)
@@ -607,6 +634,7 @@ def run_overrides(parameters: JobParameters, snapshot: dict) -> RunOverrides:
         output_vars=(
             output_vars if parameters.variables != defaults.variables else None
         ),
+        post_processing=_post_processing_override(parameters.post_processing, own_post_processing),
     )
 
 

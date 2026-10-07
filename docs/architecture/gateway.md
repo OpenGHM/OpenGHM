@@ -240,6 +240,32 @@ announce. `openghm sim run` and `sim submit` check the same rule on a
 `--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
 stop before staging.
 
+A draft also chooses what WBM's post-processing adds to the daily, monthly and
+yearly output, which is all a published snapshot holds. The init's
+`PostProcessing => { Run => … }` block decides: with `Run` false the post-processing does not run,
+with `Run` true it adds the daily, monthly and yearly climatologies of the run's period for every output
+variable (variables × 3 files). The same init read as above gives the snapshot's own choice, which
+`GET /api/v1/repository/datasets/{id}` carries as `postProcessing`: `standard` (`Run` false in Perl's
+sense: `0`, `'0'`, `''`), `climatology` (`Run` true), `none` (no `PostProcessing` block, or none
+with a `Run` key of its own, directly in it, not `Run_Start`/`Run_End` or a `Run` in a nested hash), or `null` when the init could
+not be read. The backend reads the block brace-balanced with a reader of its own
+(`run_start.post_processing_from_init`, tested on the same real inits as the toolkit's
+`openghm.post_processing`). A draft holds the choice as `parameters.post_processing`:
+`"standard"`, `"climatology"` or `null`, the snapshot's own, which a new draft starts at and a
+draft stored before the field has. Run settings shows it as an "Output" choice
+between "Daily, monthly and yearly" and "Also climatology", defaulting to the snapshot's own. The note on the
+climatology option gives what was measured on the CONUS tutorial snapshot: about 22% more run time, and
+2.2 GB of climatology beside 1.5 GB of output; it is a measurement of that
+snapshot, not an estimate for another. The 51-variable Global snapshot would hold 153 climatology files.
+A snapshot whose choice is `none` shows the control disabled. `PATCH /jobs/{id}` stores the value with
+the rest of `parameters`, and the submit passes `--post-processing <value>` to `sim run` only when the
+value is set and differs from the snapshot's own (a snapshot whose init could not be read gets the flag
+for any set value, and the toolkit has the last word). A set value on a `none` snapshot is refused with
+`422 post_processing_unavailable`, on the PATCH and on the submit; an init that cannot be read blocks
+nothing. A stored value that is neither choice reads as `null`, so an old draft is never unreadable. The
+toolkit applies the flag to the staged init, and its post-processing step runs, checks and records the
+result ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
+
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
 overrides that. `_resolve_effective_model_input()` in
@@ -484,8 +510,8 @@ for the public commit it was built from:
    `--time` the job asks SLURM for>` and `--spool cache`: the run links the days
    the shared spool cache holds and hands it the days it built after exiting 0
    ([simulation-reuse.md](simulation-reuse.md) §4), and its lease on them lasts
-   as long as the job can. `--run-start`, `--run-end` and `--output-vars` are
-   passed only when the draft differs from the snapshot's own values.
+   as long as the job can. `--run-start`, `--run-end`, `--output-vars` and
+   `--post-processing` are passed only when the draft differs from the snapshot's own values.
 
 Before the fetch the body turns SLURM's requeue off for its own job: Anvil
 requeues a batch job after a node failure (`JobRequeue=1`, `MaxBatchRequeue=5`,
@@ -541,8 +567,13 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 model input and says whether the snapshot's published output answers it: no
 model input, spatial domain or custom parameters of its own, the period inside
 `simulation.temporalCoverage` (a later start included), and every variable
-among `simulation.outputVariables`. Otherwise it gives one reason code per
-difference. When it is answered it lists the public files that hold the
+among `simulation.outputVariables`, and no climatology the snapshot's own init did not
+ask for (a draft that asks for `standard` is answered by a climatology snapshot, whose daily, monthly and
+yearly files are a subset of what it published). Otherwise it gives one reason code per
+difference: `model_input_override`, `spatial_domain`, `custom_params`,
+`period_before_published_start`, `period_after_published_end`, `variables_not_published`,
+`climatology_not_published` (the published simulation has no climatology; asking for it needs
+a new simulation) and `published_output_missing`. When it is answered it lists the public files that hold the
 answer: `<run>/daily/wbm_<year>.nc` for each asked year and
 `<run>/{monthly,yearly}/<variable>/wbm_<year>.nc` for each asked variable,
 read from an anonymous listing of `snapshots/<id>/wbm_output/`, which the
@@ -561,6 +592,9 @@ submitting.
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
+- A set output choice on a snapshot whose init has no post-processing setting
+  to change: 422 `post_processing_unavailable`. An init that cannot be read
+  blocks nothing, and the toolkit refuses the flag there as the last line.
 - A start date the snapshot's model cannot start a simulation on: 422
   `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
   the snapshot's period.
@@ -594,7 +628,7 @@ submitting.
 After a refusal the draft goes **back to DRAFT**, with `last_submit_error`
 `{code, message, at}`. Every refusal of a submit replaces it, the ones before
 the claim included (`answered_by_published`, `unsupported_fields`,
-`walltime_over_limit`, the run-date refusals, `anvil_not_configured`, an
+`walltime_over_limit`, `post_processing_unavailable`, the run-date refusals, `anvil_not_configured`, an
 account that may not run, the active-job limit), so a reopened draft never shows
 the reason of an earlier try; the claim itself clears it. A refusal's message always
 ends in a full stop (`sbatch_refusal.sentence`), so "Your draft is unchanged."

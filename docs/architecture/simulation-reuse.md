@@ -27,10 +27,14 @@ What a draft can change today is narrow. The wizard bounds the run period to
 the snapshot's `simulation.temporalCoverage`, the output variables are chosen
 from the snapshot's list, and a submit naming a model input, a spatial domain or
 custom parameters is refused (`unsupported_fields`, open item 9). So **every run
-the gateway can submit today asks for output the snapshot already carries**: a
-period inside the published one, and variables among the published ones. Such
-a draft is now answered from that output instead of run (section 3), unless the
-person asks for a rerun.
+the gateway can submit today asks for output the snapshot already carries**, with
+one exception: a draft can ask for WBM's climatology, which no published snapshot
+holds (the output choice, [gateway.md](gateway.md)). Apart from that, a draft
+asks for a period inside the published one and variables among the published
+ones. Such a draft is now answered from that output instead of run (section 3),
+unless the person asks for a rerun. A draft that asks for climatology is not
+answered by a snapshot whose own init did not (`climatology_not_published`), so it
+runs.
 
 The cost of that, measured on Anvil (toolkit README, "WBM threads" and the
 spool measurement after it): a published Global run is 20 simulated years
@@ -71,7 +75,7 @@ from fields it already holds.
 
 | Kind | When | What runs |
 |---|---|---|
-| **Published** | same model input, domain and parameters as the snapshot; period inside the published one; variables among the published ones | nothing; the draft is answered by the snapshot's `wbm_output/` |
+| **Published** | same model input, domain and parameters as the snapshot; period inside the published one; variables among the published ones; no climatology unless the snapshot's init asked for it | nothing; the draft is answered by the snapshot's `wbm_output/` |
 | **Continue** | as Published, but the period ends after the published end | WBM from the snapshot's end-of-run state, for the added years only |
 | **Compute** | anything else: another model input, domain or parameters (once open item 9 allows them) | WBM from an empty state, spinup included, as today |
 

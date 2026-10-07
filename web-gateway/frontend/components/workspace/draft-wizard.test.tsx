@@ -595,6 +595,42 @@ describe("saving is a button", () => {
   });
 });
 
+describe("the Output choice is saved like the run period", () => {
+  const climatology = () => screen.getByRole("radio", { name: /Also climatology/ });
+
+  it("is Unsaved changes at once, sent by nothing until Save draft, and then sent inside parameters", async () => {
+    wizard({ step: "run" });
+    fireEvent.click(climatology());
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    await pause(1_500);
+    expect(updateDraft).not.toHaveBeenCalled();
+    pressSave();
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
+    expect(updateDraft).toHaveBeenCalledWith("job-1", {
+      parameters: { ...JOB.parameters, post_processing: "climatology" },
+    });
+    await waitFor(() => expect(screen.queryByText("Unsaved changes")).toBeNull());
+  });
+
+  it("is saved by Ctrl+S too", async () => {
+    wizard({ step: "run" });
+    fireEvent.click(climatology());
+    expect(keydown({ key: "s", ctrlKey: true }).defaultPrevented).toBe(true);
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
+    expect(updateDraft.mock.calls[0][1]).toEqual({
+      parameters: { ...JOB.parameters, post_processing: "climatology" },
+    });
+  });
+
+  it("sends nothing for a draft nobody chose an output for", async () => {
+    wizard({ step: "run" });
+    type("Colorado");
+    pressSave();
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
+    expect(updateDraft.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
+  });
+});
+
 describe("Ctrl/Cmd+S", () => {
   it("saves, and keeps the browser's own save-page dialog away, with Ctrl and with Cmd", async () => {
     wizard({ step: "run" });

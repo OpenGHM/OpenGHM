@@ -84,7 +84,7 @@ describe("DraftReviewStep: name and description", () => {
 });
 
 describe("DraftReviewStep: the summary", () => {
-  it("is one list: name, description, based on, run period, output variables, cores, walltime", () => {
+  it("is one list: name, description, based on, run period, output variables, output, cores, walltime", () => {
     review();
     expect(screen.getAllByRole("term").map((t) => t.textContent)).toEqual([
       "Name",
@@ -92,6 +92,7 @@ describe("DraftReviewStep: the summary", () => {
       "Based on",
       "Run period",
       "Output variables",
+      "Output",
       "Cores",
       "Walltime",
     ]);
@@ -342,5 +343,42 @@ describe("DraftReviewStep: published results", () => {
     expect(screen.getByRole("status").textContent).toContain("You can still submit it");
     expect(screen.queryByText("This simulation has already been run")).toBeNull();
     expect(screen.queryByRole("link", { name: /^Download / })).toBeNull();
+  });
+});
+
+describe("DraftReviewStep: output", () => {
+  const withOutput = (post_processing: "standard" | "climatology" | null) => ({
+    ...LOCAL,
+    parameters: { ...LOCAL.parameters, post_processing },
+  });
+
+  it("says daily, monthly and yearly for a draft with no choice on a standard snapshot", () => {
+    review();
+    expect(within(row("Output")).getByText("Daily, monthly and yearly")).toBeTruthy();
+  });
+
+  it("adds climatology when the draft chose it, or has none and the snapshot's own is climatology", () => {
+    review({ local: withOutput("climatology") });
+    expect(within(row("Output")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+    cleanup();
+    review({
+      local: withOutput(null),
+      ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
+    });
+    expect(within(row("Output")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+  });
+
+  it("takes the draft's standard over the snapshot's climatology", () => {
+    review({
+      local: withOutput("standard"),
+      ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
+    });
+    expect(within(row("Output")).getByText("Daily, monthly and yearly")).toBeTruthy();
+  });
+
+  it("sends Edit to the Output control on Run settings", () => {
+    const { onEditStep } = review();
+    fireEvent.click(screen.getByRole("button", { name: "Edit output" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "postProcessing");
   });
 });

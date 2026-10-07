@@ -53,6 +53,7 @@ from app.models.job import (
     SimulationUpdateRequest,
     SlurmConfig,
     SubmitRequest,
+    read_stored_parameters,
     real_time,
     verdict_fields,
 )
@@ -318,7 +319,7 @@ def _duplicate_document(
         job_id=job_id,
         dataset_id=source["dataset_id"],
         dataset_title=dataset_title,
-        parameters=JobParameters.model_validate(source["parameters"]),
+        parameters=JobParameters.model_validate(read_stored_parameters(source["parameters"])),
         slug=source.get("slug"),
         user=user,
         now=now,
@@ -564,6 +565,10 @@ async def update_simulation(
         envelope = await db.datasets.find_one({"_id": doc["dataset_id"]})
         if envelope is not None and start != stored_start:
             await _refuse_unaligned_start(doc["dataset_id"], envelope["document"], start)
+        if envelope is not None and changes["parameters"].get("post_processing") is not None:
+            await _refuse_unavailable_post_processing(
+                doc["dataset_id"], envelope["document"], changes["parameters"]["post_processing"]
+            )
 
     if "slurm_config" in changes:
         # Only the fields the client sent change; `null` goes back to the
@@ -643,6 +648,26 @@ async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -
             "run_start_not_aligned",
             violation.message,
             suggested_start=violation.suggested_start,
+        )
+
+
+async def _refuse_unavailable_post_processing(
+    dataset_id: str, snapshot: dict, value: str | None
+) -> None:
+    """422 when the draft asks for a post-processing choice (`standard` or
+    `climatology`) of a snapshot whose init has no `PostProcessing` block with a
+    `Run` to set: the toolkit refuses the flag there, after a queue wait. A choice
+    the draft leaves unset (`None`, the snapshot's own) is never refused, and an init
+    that cannot be read blocks nothing."""
+    if value is None:
+        return
+    rules = await run_start.read_init_rules(snapshot, dataset_id)
+    if rules is not None and rules.post_processing == "none":
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "post_processing_unavailable",
+            "This snapshot's init has no post-processing setting to change, so its "
+            "output choice cannot be set. Leave it as the snapshot's own.",
         )
 
 
@@ -823,6 +848,10 @@ async def submit_simulation(
                 fields=fields,
             )
 
+        await _refuse_unavailable_post_processing(
+            job.dataset_id, snapshot, job.parameters.post_processing
+        )
+
         over = job_script.walltime_over_limit(job.slurm_config, snapshot)
         if over is not None:
             raise _error(
@@ -852,7 +881,10 @@ async def submit_simulation(
         home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
         work_dir = posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
         try:
-            overrides = job_script.run_overrides(job.parameters, snapshot)
+            rules = await run_start.read_init_rules(snapshot, job.dataset_id)
+            overrides = job_script.run_overrides(
+                job.parameters, snapshot, rules.post_processing if rules else None
+            )
             # What sbatch is asked for (`--time`), told to the toolkit too so the
             # spool lease lasts as long as the job can.
             _, walltime = slurm.resolve_compute(job.slurm_config, snapshot)
@@ -866,6 +898,7 @@ async def submit_simulation(
                 run_start=overrides.run_start,
                 run_end=overrides.run_end,
                 output_vars=overrides.output_vars,
+                post_processing=overrides.post_processing,
                 walltime=walltime,
             )
             toolkit = {"home": home, "commit": job_script.toolkit_commit(home)}

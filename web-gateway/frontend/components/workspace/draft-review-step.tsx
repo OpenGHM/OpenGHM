@@ -6,6 +6,7 @@ import { ArrowUpRight, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
+import { snapshotOutput } from "@/components/workspace/output-choice-field";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
@@ -230,6 +231,14 @@ export function DraftReviewStep({
               edit={<EditLink step="run" field="variables" label="output variables" onEditStep={onEditStep} />}
             >
               <VariablesValue names={parameters.variables} />
+            </Row>
+            <Row
+              label="Output"
+              edit={<EditLink step="run" field="postProcessing" label="output" onEditStep={onEditStep} />}
+            >
+              {(parameters.post_processing ?? snapshotOutput(ctx.dataset)) === "climatology"
+                ? "Daily, monthly and yearly, and climatology"
+                : "Daily, monthly and yearly"}
             </Row>
             <Row
               label="Cores"

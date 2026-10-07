@@ -71,7 +71,7 @@ type DraftGroup = "modelInput" | "parameters" | "slurm" | "about";
 
 const GROUP_FIELDS: Record<DraftGroup, readonly DraftField[]> = {
   modelInput: ["modelInput"],
-  parameters: ["start", "end", "variables", "spatial", "custom"],
+  parameters: ["start", "end", "variables", "spatial", "custom", "postProcessing"],
   slurm: ["cores", "walltime"],
   about: ["name", "description"],
 };
@@ -156,6 +156,9 @@ export function canonical(local: DraftLocal, order: readonly string[] = []): Can
       spatial_domain: canonicalDomain(p.spatial_domain),
       variables: orderVariables(p.variables, order),
       custom_params: canonicalCustom(p.custom_params),
+      // Only a choice is a key: a draft nobody chose for sends nothing, and
+      // `null` and absent are the same draft.
+      ...(p.post_processing ? { post_processing: p.post_processing } : {}),
     },
     slurm: { cores: local.slurm.cores, walltime: local.slurm.walltime },
     modelInputId: local.modelInputId,
@@ -188,6 +191,7 @@ export function unsavedFields(local: DraftLocal, saved: Job, ctx: DraftContext):
     variables: fingerprint(want.parameters.variables) !== fingerprint(have.parameters.variables),
     spatial: fingerprint(want.parameters.spatial_domain) !== fingerprint(have.parameters.spatial_domain),
     custom: fingerprint(want.parameters.custom_params) !== fingerprint(have.parameters.custom_params),
+    postProcessing: (want.parameters.post_processing ?? null) !== (have.parameters.post_processing ?? null),
     cores: want.slurm.cores !== have.slurm.cores,
     walltime: want.slurm.walltime !== have.slurm.walltime,
     name: want.name !== have.name,
@@ -217,7 +221,8 @@ function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown
  * when there is nothing to send. Groups, each sent whole when it differs:
  *
  * - Model input: `model_input_id`.
- * - Run settings: `parameters` (the full object), and `slurm_config`.
+ * - Run settings: `parameters` (the full object, with `post_processing` only
+ *   when one was chosen), and `slurm_config`.
  * - Name and description (Run settings): `about` as `{ name, description }` and nothing else, so the
  *   citation fields the wizard never shows are not touched. Empty becomes
  *   `null`, which the backend reads as "remove the key".
@@ -341,6 +346,7 @@ const PARAMETER_FIELDS: Record<string, DraftField> = {
   spatial_domain: "spatial",
   variables: "variables",
   custom_params: "custom",
+  post_processing: "postProcessing",
 };
 
 /** The fields a validation error's dotted paths (`slurm_config.walltime`, see
@@ -386,7 +392,12 @@ export function refuseGroups(
   failure: { message: string; code?: string; paths?: readonly string[] }
 ): ServerRefusals {
   const sent = groupsOf(patch);
-  const named = failure.code === "invalid_about" ? [...GROUP_FIELDS.about] : fieldsForPaths(failure.paths ?? []);
+  const named =
+    failure.code === "invalid_about"
+      ? [...GROUP_FIELDS.about]
+      : failure.code === "post_processing_unavailable"
+        ? (["postProcessing"] as DraftField[])
+        : fieldsForPaths(failure.paths ?? []);
   const hit = sent.filter((g) => GROUP_FIELDS[g].some((f) => named.includes(f)));
   const targets = hit.length > 0 ? hit : sent;
   const groups = { ...refusals.groups };

@@ -141,6 +141,24 @@ class JobParameters(BaseModel):
     spatial_domain: SpatialDomain | None = None
     variables: list[str] = Field(default_factory=list, description="Output variables")
     custom_params: dict[str, str] | None = None
+    #: What to ask of WBM's post-processing: `"standard"` daily, monthly and yearly
+    #: output only, `"climatology"` also the climatologies; `None` is the snapshot's
+    #: own (the init is left as published). A draft stored before this field has none.
+    post_processing: Literal["standard", "climatology"] | None = None
+
+
+_POST_PROCESSING_CHOICES = ("standard", "climatology")
+
+
+def read_stored_parameters(raw: Any) -> Any:
+    """A stored draft's `parameters` as `JobParameters` should read them: a
+    `post_processing` that is not one of the two choices (a hand-edited document,
+    a value a later version retired) is read as unset, the snapshot's own, rather
+    than failing every read of the draft. A request is not read through this: it is
+    held to the two literals. Anything that is not a dict passes through."""
+    if isinstance(raw, dict) and raw.get("post_processing") not in (None, *_POST_PROCESSING_CHOICES):
+        return {**raw, "post_processing": None}
+    return raw
 
 
 class SlurmConfig(BaseModel):
@@ -303,6 +321,8 @@ class JobDB(BaseModel):
     # Parameters & config
     parameters: JobParameters
     slurm_config: SlurmConfig
+
+    _read_parameters = field_validator("parameters", mode="before")(read_stored_parameters)
 
     # Remote paths managed by slurmly's SubmittedJob — persisted so we can
     # reconstruct a SubmittedJob for tail_*/cleanup operations on later requests.
@@ -539,6 +559,7 @@ class JobResponse(JobVerdictFields):
     status_reason: str | None = None
     parameters: JobParameters
     slurm_config: SlurmConfig
+    _read_parameters = field_validator("parameters", mode="before")(read_stored_parameters)
     created_at: datetime
     submitted_at: datetime | None = None
     started_at: datetime | None = None

@@ -151,6 +151,13 @@ class DatasetDetailResponse(DatasetResponse):
     #: must reach (``run_start.check_run_dates``); ``null`` when the init sets
     #: none or could not be read, and then nothing is blocked.
     aggregationStartYear: int | None = None
+    #: What the snapshot's own init asks of WBM's post-processing
+    #: (``app.services.run_start``): ``"none"`` the init has no
+    #: ``PostProcessing`` block with a ``Run``, so a draft cannot ask for either;
+    #: ``"standard"`` it runs daily, monthly and yearly output only (``Run`` false);
+    #: ``"climatology"`` it also runs the climatologies (``Run`` true). ``null``
+    #: when the init could not be read: nothing is known and nothing is blocked.
+    postProcessing: Literal["none", "standard", "climatology"] | None = None
 
 
 class RepositoryListResponse(BaseModel):
@@ -470,6 +477,7 @@ class PublishedAnswerReason(BaseModel):
         "period_before_published_start",
         "period_after_published_end",
         "variables_not_published",
+        "climatology_not_published",
         "published_output_missing",
     ]
     message: str
