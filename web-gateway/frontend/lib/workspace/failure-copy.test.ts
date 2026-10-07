@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { FailureCause, JobFailure } from "@/lib/jobs/types";
+import type { FailureCause, JobFailure, PublishFailureCause, PublishRetry } from "@/lib/jobs/types";
+import { fakePublish } from "@/lib/workspace/fixtures";
 import {
   FAILURE_COPY,
   NEXT_STEP_COPY,
+  PUBLISH_FAILURE_COPY,
+  PUBLISH_RETRY_COPY,
   UNKNOWN_FAILURE_COPY,
+  UNKNOWN_PUBLISH_FAILURE_COPY,
   UNRECORDED_FAILURE_COPY,
   failureCopyFor,
   offersNewDraft,
+  publishFailureCopyFor,
   summaryOffersCopy,
 } from "@/lib/workspace/failure-copy";
 
@@ -125,5 +130,85 @@ describe("failureCopyFor", () => {
 
   it("lets the summary offer the copy action for an unknown cause", () => {
     expect(summaryOffersCopy("FAILED", failure("brand_new_cause"))).toBe(true);
+  });
+});
+
+// The backend's vocabulary for a failed publish (`PublishFailureCause` in
+// app/models/job.py): the cause and the retry the backend gives it. A cause
+// added there must be added here, and the record will not compile without it.
+const ALL_PUBLISH_CAUSES: Record<PublishFailureCause, PublishRetry> = {
+  publish_bad_input: "edit",
+  publish_output_incomplete: "none",
+  publish_conflict: "none",
+  publish_setup: "none",
+  publish_upload_failed: "same",
+  publish_verify_failed: "same",
+  publish_job_failed: "same",
+  publish_submit_interrupted: "same",
+  anvil_not_configured: "same",
+  anvil_unreachable: "same",
+  sbatch_rejected: "same",
+  internal_error: "same",
+};
+
+describe("PUBLISH_FAILURE_COPY", () => {
+  it.each(Object.keys(ALL_PUBLISH_CAUSES) as PublishFailureCause[])("has plain copy for %s", (cause) => {
+    const copy = PUBLISH_FAILURE_COPY[cause];
+    expect(copy).toBeDefined();
+    expect(copy.title.length).toBeGreaterThan(0);
+    expect(copy.body.length).toBeGreaterThan(0);
+    expect(copy.body).toMatch(/\.$/);
+  });
+
+  it("is previewed with the retry the backend gives each cause", () => {
+    for (const [cause, retry] of Object.entries(ALL_PUBLISH_CAUSES)) {
+      expect(fakePublish(cause as PublishFailureCause).failure?.retry).toBe(retry);
+    }
+  });
+
+  it("has no entry for a cause the backend does not name", () => {
+    expect(Object.keys(PUBLISH_FAILURE_COPY).sort()).toEqual(Object.keys(ALL_PUBLISH_CAUSES).sort());
+  });
+
+  it("never leaks internal words to the user", () => {
+    for (const copy of [...Object.values(PUBLISH_FAILURE_COPY), UNKNOWN_PUBLISH_FAILURE_COPY]) {
+      for (const text of [copy.title, copy.body]) {
+        expect(text).not.toMatch(/s3cmd|sbatch|slurmly|stderr|outcome\.json|exit code|toolkit|openghm snapshot/i);
+      }
+    }
+  });
+
+  it("has a body that stands on its own and says nothing of what to do, which the retry line does", () => {
+    for (const copy of Object.values(PUBLISH_FAILURE_COPY)) {
+      expect(copy.body).not.toMatch(/\b(below|above)\b/i);
+      expect(copy.body).not.toMatch(/try again|edit |administrator/i);
+    }
+  });
+
+  it("says what each retry means, in the owner's terms", () => {
+    expect(Object.keys(PUBLISH_RETRY_COPY).sort()).toEqual(["edit", "none", "same"]);
+    expect(PUBLISH_RETRY_COPY.same).toMatch(/same snapshot id/);
+    expect(PUBLISH_RETRY_COPY.edit).toMatch(/Edit the description/);
+    expect(PUBLISH_RETRY_COPY.none).toMatch(/administrator has to look/);
+  });
+
+  it("names a failure that the upload can resume as one that keeps what it uploaded", () => {
+    expect(PUBLISH_FAILURE_COPY.publish_upload_failed.body).toMatch(/already uploaded are kept/);
+    expect(PUBLISH_FAILURE_COPY.publish_conflict.body).toMatch(/never overwritten/);
+    expect(PUBLISH_FAILURE_COPY.publish_setup.body).toMatch(/not at fault/);
+  });
+});
+
+describe("publishFailureCopyFor", () => {
+  const failure = (cause: string) => ({ cause: cause as PublishFailureCause });
+
+  it("is the cause's copy for a known cause", () => {
+    expect(publishFailureCopyFor(failure("publish_setup"))).toBe(PUBLISH_FAILURE_COPY.publish_setup);
+  });
+
+  it("is a generic copy, not undefined, for a cause the frontend does not know, or none", () => {
+    expect(publishFailureCopyFor(failure("brand_new_cause"))).toBe(UNKNOWN_PUBLISH_FAILURE_COPY);
+    expect(publishFailureCopyFor(failure("constructor"))).toBe(UNKNOWN_PUBLISH_FAILURE_COPY);
+    expect(publishFailureCopyFor(null)).toBe(UNKNOWN_PUBLISH_FAILURE_COPY);
   });
 });

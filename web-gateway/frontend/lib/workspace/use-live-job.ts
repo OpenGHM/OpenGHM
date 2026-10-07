@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { pollJobStatus } from "@/lib/jobs/actions";
-import type { JobLive, JobStatus, JobStatusResponse } from "@/lib/jobs/types";
+import type { JobLive, JobStatus, JobStatusResponse, PublishRecord } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import {
   POLL_INTERVAL_MS,
   describePollError,
+  isFollowed,
   mergeView,
   nextPollDelay,
   toView,
@@ -49,8 +50,12 @@ export interface UseLiveJobResult {
    *  from another tab, or never the viewer's). Polling has stopped for good;
    *  the page shows a notice, with no Cancel and no Refresh. */
   gone: boolean;
-  /** Ask now, without waiting for the timer. */
+  /** Ask now, without waiting for the timer, and even when polling has stopped:
+   *  the answer decides whether it starts again. */
   refresh: () => void;
+  /** Take the publish record the publish route answered with, and follow it
+   *  while it is `publishing`. */
+  applyPublish: (publish: PublishRecord) => void;
   /** Take a status response that came from somewhere else (the cancel route
    *  answers with one) and resume polling if the job has not ended. */
   apply: (data: JobStatusResponse) => void;
@@ -58,7 +63,9 @@ export interface UseLiveJobResult {
 
 /**
  * Follows a job (ADR 0027): asks for its status every 5 s while it is queued,
- * running or cancelling, and not at all while the tab is hidden. After a failed
+ * running or cancelling, and not at all while the tab is hidden. A job whose
+ * draft is being published is asked about the same way after its own simulation
+ * has ended, until the publish is `published` or `failed`. After a failed
  * poll it backs off (5, 10, 20, 40, then 60 s) and resets on the next good
  * answer. A 401 or a 404 stops it (a 404 sets `gone`), as does a terminal status. Every change of
  * status asks Next for the page again, because the verdict cards beside the
@@ -77,7 +84,7 @@ export function useLiveJob(
   const router = useRouter();
 
   const [view, setView] = useState<StatusView>(() => toView(initialStatus, initialData));
-  const [polling, setPolling] = useState(!disabled && !isTerminalStatus(initialStatus));
+  const [polling, setPolling] = useState(!disabled && isFollowed(initialStatus, initialData?.publish));
   const [sessionExpired, setSessionExpired] = useState(false);
   const [gone, setGone] = useState(false);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
@@ -89,12 +96,14 @@ export function useLiveJob(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightRef = useRef(false);
   const failuresRef = useRef(0);
-  const stoppedRef = useRef(disabled || isTerminalStatus(initialStatus));
+  const stoppedRef = useRef(disabled || !isFollowed(initialStatus, initialData?.publish));
   // The status the page was last rendered with (by the server, or by the
   // refresh this hook asked for): a different one means ask for the page again.
   const renderedStatusRef = useRef(initialStatus);
+  // The publish record on screen, for `commit` to decide with.
+  const publishRef = useRef<PublishRecord | null>(initialData?.publish ?? null);
   // The latest `poll`, so a timer can call it without naming itself.
-  const pollRef = useRef<() => Promise<void>>(async () => {});
+  const pollRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -116,6 +125,7 @@ export function useLiveJob(
       // elsewhere (the cancel route's) has no say about it: its null is only a
       // default, so the held one stays until the next poll.
       setView((previous) => mergeView(previous, keepLive ? { ...data, live: undefined } : data));
+      if (data.publish !== undefined) publishRef.current = data.publish;
       setSessionExpired(false);
       setFailure(null);
       setLastSuccessAt(Date.now());
@@ -126,7 +136,10 @@ export function useLiveJob(
         router.refresh();
       }
 
-      if (isTerminalStatus(data.status)) {
+      // A publish is followed past the end of the run; an answer with no
+      // `publish` key (the cancel route's) leaves the held one in charge.
+      const publish = data.publish === undefined ? publishRef.current : data.publish;
+      if (!isFollowed(data.status, publish)) {
         stoppedRef.current = true;
         clearTimer();
         setPolling(false);
@@ -146,13 +159,15 @@ export function useLiveJob(
       const at = Date.now();
       setNow(at);
       setFailure({ message, retryAt: at + delay });
-      schedule(delay);
+      // A look asked for after the job had ended (`refresh`) that fails has
+      // nothing to keep retrying.
+      if (!stoppedRef.current) schedule(delay);
     },
     [schedule]
   );
 
-  const poll = useCallback(async () => {
-    if (disabled || stoppedRef.current || inFlightRef.current) return;
+  const poll = useCallback(async (force = false) => {
+    if (disabled || (stoppedRef.current && !force) || inFlightRef.current) return;
     // Nothing to watch in a hidden tab; showing it again polls at once.
     if (document.visibilityState === "hidden") return;
 
@@ -229,8 +244,24 @@ export function useLiveJob(
   const refresh = useCallback(() => {
     if (disabled || gone) return;
     clearTimer();
-    void pollRef.current();
+    // Also when polling has stopped: a person who asks (the page is out of
+    // date, a 409 said so) is answered, and the answer decides whether to go on.
+    void pollRef.current(true);
   }, [disabled, gone, clearTimer]);
+
+  const applyPublish = useCallback(
+    (publish: PublishRecord) => {
+      if (!mountedRef.current) return;
+      publishRef.current = publish;
+      setView((previous) => ({ ...previous, publish }));
+      if (publish.state === "publishing" && !disabled) {
+        stoppedRef.current = false;
+        setPolling(true);
+        schedule(POLL_INTERVAL_MS);
+      }
+    },
+    [disabled, schedule]
+  );
 
   const apply = useCallback(
     (data: JobStatusResponse) => {
@@ -259,5 +290,6 @@ export function useLiveJob(
     gone,
     refresh,
     apply,
+    applyPublish,
   };
 }

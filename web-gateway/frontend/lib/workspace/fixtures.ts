@@ -21,6 +21,9 @@ import type {
   JobStatus,
   LogStream,
   OutputManifest,
+  PublishFailureCause,
+  PublishRecord,
+  PublishRetry,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 
@@ -103,6 +106,7 @@ export function fakeDraft(status: JobStatus, overrides: Partial<Job> = {}): Job 
     cancel_requested_by_email: null,
     files: null,
     output: null,
+    publish: null,
     ...overrides,
   };
 }
@@ -245,6 +249,123 @@ function fakeOutput(): OutputManifest {
   };
 }
 
+/** The id a fake publish mints: 256 bits as lowercase hex, like a real one. */
+const FAKE_SNAPSHOT_ID = "9f2c41d07be6a35c8e10d4f7a2b96c3e5d08a1f47c6b29e3d5a07b8c1e4f6a92";
+
+/** What a failed publish looks like, per cause: the retry the backend gives it
+ *  (`app/services/publish.py`), and a message in its style. Invented words,
+ *  real shape (`PublishFailure`). */
+const PUBLISH_FAILURE_FIXTURES: Record<
+  PublishFailureCause,
+  { retry: PublishRetry; exit_code: number | null; message: string }
+> = {
+  publish_bad_input: {
+    retry: "edit",
+    exit_code: 2,
+    message: "The snapshot's description was refused: its license must be a bare SPDX identifier. Edit it and publish again.",
+  },
+  publish_output_incomplete: {
+    retry: "none",
+    exit_code: 3,
+    message: "The simulation's output is missing the 2001 file of streamAge, so nothing was uploaded. An administrator has to look at this snapshot draft.",
+  },
+  publish_conflict: {
+    retry: "none",
+    exit_code: 4,
+    message: "A file of this snapshot is already stored with other content, so the publish stopped before it replaced anything. An administrator has to look.",
+  },
+  publish_setup: {
+    retry: "none",
+    exit_code: 5,
+    message: "Publishing is not set up correctly on Anvil, so the upload could not start. The snapshot draft is not at fault. Tell an administrator.",
+  },
+  publish_upload_failed: {
+    retry: "same",
+    exit_code: 6,
+    message: "3 of 412 files could not be uploaded. The files already uploaded are kept; try again to continue.",
+  },
+  publish_verify_failed: {
+    retry: "same",
+    exit_code: 7,
+    message: "The files were uploaded, but 2 of them could not be read publicly. Try again to check them once more.",
+  },
+  publish_job_failed: {
+    retry: "same",
+    exit_code: null,
+    message: "The publish job ended without reporting a result. Try again; it publishes under the same snapshot id.",
+  },
+  publish_submit_interrupted: {
+    retry: "same",
+    exit_code: null,
+    message: "The gateway lost its connection to Anvil while it submitted the publish job. Try again; it publishes under the same snapshot id.",
+  },
+  anvil_not_configured: {
+    retry: "same",
+    exit_code: null,
+    message: "This gateway is not set up to run jobs on Anvil yet. Ask an administrator. Nothing was published.",
+  },
+  anvil_unreachable: {
+    retry: "same",
+    exit_code: null,
+    message: "Anvil could not be reached, so nothing was published. Try again in a few minutes.",
+  },
+  sbatch_rejected: {
+    retry: "same",
+    exit_code: null,
+    message: "SLURM refused the publish job: invalid account or partition. Nothing was published.",
+  },
+  internal_error: {
+    retry: "same",
+    exit_code: null,
+    message: "The publish failed unexpectedly, so anything it started on Anvil was cancelled. Try again, and if it keeps failing, tell an administrator.",
+  },
+};
+
+/** The `about` a fake publish was composed from, as it sits in the stored
+ *  `metadata.json` (with the fields the gateway sets). */
+const FAKE_PUBLISH_ABOUT = {
+  name: "WBM v2 tutorial, 2001, rerun",
+  description: "A one-year global run of the v2 tutorial snapshot, published from a snapshot draft.",
+  datePublished: "2026-10-07",
+  tags: ["tutorial"],
+  creator: [{ name: "Test Author", email: "author@example.test" }],
+  license: "GPL-3.0-only",
+  keywords: ["wbm", "tutorial"],
+  url: `https://openghm.org/snapshots/${FAKE_SNAPSHOT_ID}`,
+  isBasedOn: [{ kind: "snapshot", id: "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89" }],
+};
+
+/** A publish record in a given state. The `variant` of a failed one is its cause. */
+export function fakePublish(
+  variant: "publishing" | "published" | PublishFailureCause,
+  overrides: Partial<PublishRecord> = {}
+): PublishRecord {
+  const base: PublishRecord = {
+    state: "publishing",
+    snapshot_id: FAKE_SNAPSHOT_ID,
+    metadata: { about: FAKE_PUBLISH_ABOUT },
+    attempts: 1,
+    slurm_job_id: "12345911",
+    remote_job_dir: FAKE_JOB_DIR,
+    submitted_at: iso(4 * 60_000),
+    finished_at: null,
+    failure: null,
+    submitted_by: "mock-user-001",
+  };
+  if (variant === "publishing") return { ...base, ...overrides };
+  if (variant === "published") {
+    return { ...base, state: "published", finished_at: iso(60_000), ...overrides };
+  }
+  const f = PUBLISH_FAILURE_FIXTURES[variant];
+  return {
+    ...base,
+    state: "failed",
+    finished_at: iso(60_000),
+    failure: { cause: variant, ...f },
+    ...overrides,
+  };
+}
+
 /**
  * The fixture behind a preview state key (lib/workspace/preview.ts): a job with
  * the fields that state would really have — a failed one its verdict, a
@@ -281,6 +402,20 @@ export function previewDraftJob(
         return { ...base, work_dir: null, remote_job_dir: null, files: null, output: null };
       }
       return base;
+    }
+
+    if (kind === "publish") {
+      // A completed, publishable-or-published draft: `publish:<variant>`, a
+      // variant being `publishing`, `published` or the cause of a failure.
+      const completed = fakeDraft("COMPLETED", {
+        ...onAnvil,
+        slurm_state: "COMPLETED",
+        slurm_exit_code: "0:0",
+        output: fakeOutput(),
+        about: FAKE_PUBLISH_ABOUT as unknown as Job["about"],
+      });
+      const which = (variant ?? "publishing") as Parameters<typeof fakePublish>[0];
+      return { ...completed, publish: fakePublish(which) };
     }
 
     if (kind === "failed") {

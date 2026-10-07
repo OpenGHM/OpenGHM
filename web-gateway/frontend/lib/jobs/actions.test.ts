@@ -15,7 +15,7 @@ import {
   BACKEND_UNREACHABLE_MESSAGE,
   SERVER_ERROR_MESSAGE,
 } from "@/lib/action-failure";
-import { cancelJob, deleteDraft, duplicateDraft, pollJobStatus, publishedAnswer, submitDraft, updateDraft } from "./actions";
+import { cancelJob, deleteDraft, duplicateDraft, pollJobStatus, publishDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
@@ -350,5 +350,78 @@ describe("publishedAnswer", () => {
     await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "not_found" });
     post.mockRejectedValueOnce(refused(401));
     await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "session_expired" });
+  });
+});
+
+describe("publishDraft", () => {
+  const about = {
+    name: "A run",
+    description: "What it holds.",
+    creator: [{ name: "Ada" }],
+    license: "CC-BY-4.0",
+    keywords: ["wbm"],
+    tags: ["tutorial"],
+  } as unknown as Parameters<typeof publishDraft>[1];
+
+  it("posts the about, in a body of its own, to the job's publish route with the 60 s timeout", async () => {
+    const publish = { state: "publishing", snapshot_id: "ab" };
+    post.mockResolvedValue({ data: { publish } });
+    await expect(publishDraft("job 1", about)).resolves.toEqual({ ok: true, data: { publish } });
+    expect(post).toHaveBeenCalledWith("/api/v1/jobs/job%201/publish", { about });
+    expect(getApiClient).toHaveBeenCalledWith({ timeoutMs: 60_000 });
+  });
+
+  it("answers 401 as session_expired and 404 as not_found", async () => {
+    post.mockRejectedValue(refused(401));
+    await expect(publishDraft("j", about)).resolves.toEqual({ ok: false, reason: "session_expired" });
+    post.mockRejectedValue(refused(404));
+    await expect(publishDraft("j", about)).resolves.toEqual({ ok: false, reason: "not_found" });
+  });
+
+  it("carries a 409's code, message and reason", async () => {
+    post.mockRejectedValue(
+      refused(409, { code: "not_publishable", message: "A publish is already running.", reason: "publishing" })
+    );
+    await expect(publishDraft("j", about)).resolves.toEqual({
+      ok: false,
+      reason: "error",
+      message: "A publish is already running.",
+      status: 409,
+      code: "not_publishable",
+      conflictReason: "publishing",
+    });
+  });
+
+  it("carries a 422 invalid_about's errors, from pydantic's shape or a plain one", async () => {
+    post.mockRejectedValue(
+      refused(422, {
+        code: "invalid_about",
+        message: "The about block is not valid.",
+        errors: [
+          { loc: ["body", "about", "tags", 0], msg: "Input should be one of the known tags", type: "enum" },
+          { field: "about.license", message: "Not an SPDX identifier." },
+          "The document is not valid.",
+          { nothing: true },
+        ],
+      })
+    );
+    const result = await publishDraft("j", about);
+    expect(result).toMatchObject({ ok: false, reason: "error", status: 422, code: "invalid_about" });
+    expect((result as { errors?: unknown }).errors).toEqual([
+      { path: "about.tags.0", message: "Input should be one of the known tags" },
+      { path: "about.license", message: "Not an SPDX identifier." },
+      { path: null, message: "The document is not valid." },
+    ]);
+  });
+
+  it("carries a 503's code and message, as a submit does", async () => {
+    post.mockRejectedValue(refused(503, { code: "anvil_unreachable", message: "Anvil could not be reached." }));
+    await expect(publishDraft("j", about)).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 503,
+      code: "anvil_unreachable",
+      message: "Anvil could not be reached.",
+    });
   });
 });

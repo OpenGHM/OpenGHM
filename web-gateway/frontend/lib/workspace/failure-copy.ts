@@ -1,4 +1,11 @@
-import type { FailureCause, JobFailure, JobStatus } from "@/lib/jobs/types";
+import type {
+  FailureCause,
+  JobFailure,
+  JobStatus,
+  PublishFailure,
+  PublishFailureCause,
+  PublishRetry,
+} from "@/lib/jobs/types";
 
 /** What the person can do about it. The card turns this into a sentence
  *  (`NEXT_STEP_COPY`) and the buttons it offers. */
@@ -163,3 +170,95 @@ export function summaryOffersCopy(status: JobStatus, failure: JobFailure | null)
   if (status !== "FAILED") return false;
   return offersNewDraft(failureCopyFor(failure).nextStep);
 }
+
+// ─── Publishing a snapshot draft as a snapshot (ADR 0031) ────────────────────
+
+export interface PublishFailureCopy {
+  title: string;
+  /** What happened, for a failure that carries no `message` of its own. It
+   *  never says what to do: the retry line under it does (`PUBLISH_RETRY_COPY`),
+   *  from the failure's `retry`. */
+  body: string;
+}
+
+/**
+ * The wording for each cause a publish can fail with. The backend names the
+ * cause and the retry (`app/services/publish.py`); nothing else in the
+ * frontend spells one out. When the failure carries a `message` the card shows that
+ * instead of `body`, because it is written for this publish.
+ */
+export const PUBLISH_FAILURE_COPY: Record<PublishFailureCause, PublishFailureCopy> = {
+  publish_bad_input: {
+    title: "Anvil's check refused the snapshot",
+    body: "The checks before the upload refused the snapshot's description or the simulation's files, so nothing was uploaded.",
+  },
+  publish_output_incomplete: {
+    title: "The simulation's output is incomplete",
+    body: "The output does not hold every year and variable this snapshot draft asked for, or it holds an empty file, so nothing was uploaded.",
+  },
+  publish_conflict: {
+    title: "Something already stored under this id differs",
+    body: "A file of this snapshot is already in the repository with other content. The publish stopped before it replaced anything, because a published file is never overwritten.",
+  },
+  publish_setup: {
+    title: "Anvil isn't set up to publish",
+    body: "The gateway's publishing setup on Anvil is broken, so the upload could not start. The snapshot draft is not at fault.",
+  },
+  publish_upload_failed: {
+    title: "The upload didn't finish",
+    body: "Some of the snapshot's files could not be uploaded to the repository. The files already uploaded are kept.",
+  },
+  publish_verify_failed: {
+    title: "The upload could not be verified",
+    body: "The files were uploaded, but the check that every one of them can be read publicly did not pass, so the snapshot is not published.",
+  },
+  publish_job_failed: {
+    title: "The publish job stopped",
+    body: "Anvil stopped the publish job before it reported a result: it ran out of time, was cancelled, or was lost.",
+  },
+  publish_submit_interrupted: {
+    title: "The publish was interrupted before it started",
+    body: "The gateway lost its connection to Anvil while it submitted the publish job, so the job may never have started.",
+  },
+  // The submit's own refusals: the draft was claimed, then Anvil did not take the job.
+  anvil_not_configured: {
+    title: "Anvil isn't set up to run jobs yet",
+    body: "This gateway is not set up to run jobs on Anvil yet, so the publish job could not be submitted. Nothing was published.",
+  },
+  anvil_unreachable: {
+    title: "Anvil couldn't be reached",
+    body: "The gateway could not reach Anvil to submit the publish job, so nothing was published.",
+  },
+  sbatch_rejected: {
+    title: "Anvil refused the publish job",
+    body: "SLURM refused the publish job when the gateway submitted it, so nothing was published.",
+  },
+  internal_error: {
+    title: "The publish failed unexpectedly",
+    body: "The gateway hit a problem while it submitted the publish job, and anything it had started on Anvil was cancelled.",
+  },
+};
+
+/** A publish failure this frontend has no wording for (the backend gained a
+ *  cause first). The card shows this title and the failure's own `message`. */
+export const UNKNOWN_PUBLISH_FAILURE_COPY: PublishFailureCopy = {
+  title: "The publish ended with a problem",
+  body: "The snapshot was not published, in a way this page has no wording for.",
+};
+
+/** The copy for a failed publish: its cause's, else the unknown one. The one
+ *  lookup: never index `PUBLISH_FAILURE_COPY` by a cause from the backend. */
+export function publishFailureCopyFor(failure: Pick<PublishFailure, "cause"> | null | undefined): PublishFailureCopy {
+  if (!failure) return UNKNOWN_PUBLISH_FAILURE_COPY;
+  return (
+    (Object.hasOwn(PUBLISH_FAILURE_COPY, failure.cause) ? PUBLISH_FAILURE_COPY[failure.cause] : undefined) ??
+    UNKNOWN_PUBLISH_FAILURE_COPY
+  );
+}
+
+/** The line under a failed publish that says what may be done, by its `retry`. */
+export const PUBLISH_RETRY_COPY: Record<PublishRetry, string> = {
+  same: "Trying again continues under the same snapshot id.",
+  edit: "Edit the description and publish again.",
+  none: "There is nothing you can retry. An administrator has to look at this.",
+};

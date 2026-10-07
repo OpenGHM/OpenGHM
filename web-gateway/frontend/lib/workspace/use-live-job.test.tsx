@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import type { JobStatus, JobStatusResponse } from "@/lib/jobs/types";
+import type { JobStatus, JobStatusResponse, PublishRecord } from "@/lib/jobs/types";
+import { fakePublish } from "@/lib/workspace/fixtures";
 
 const pollJobStatus = vi.fn();
 const refresh = vi.fn();
@@ -263,5 +264,105 @@ describe("useLiveJob", () => {
     // A poll's explicit null still replaces it.
     await advance(5_000);
     expect(result.current.live).toBeNull();
+  });
+
+  describe("while a draft is being published", () => {
+    const done = (publish: PublishRecord) => ({ ok: true as const, data: { ...answer("COMPLETED"), publish } });
+    const mountPublishing = (publish: PublishRecord | null = fakePublish("publishing")) =>
+      renderHook(() => useLiveJob("j1", "COMPLETED", { publish }));
+
+    it("keeps polling after the run has ended, and stops when the publish has", async () => {
+      pollJobStatus
+        .mockResolvedValueOnce(done(fakePublish("publishing")))
+        .mockResolvedValueOnce(done(fakePublish("publishing")))
+        .mockResolvedValue(done(fakePublish("published")));
+      const { result } = mountPublishing();
+      expect(result.current.polling).toBe(true);
+      await advance(0);
+      await advance(5_000);
+      await advance(5_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(3);
+      expect(result.current.view.publish?.state).toBe("published");
+      expect(result.current.polling).toBe(false);
+      await advance(60_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(3);
+      // The status never changed, so the page is not asked for again.
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("stops on a failed publish too", async () => {
+      pollJobStatus.mockResolvedValue(done(fakePublish("publish_job_failed")));
+      const { result } = mountPublishing();
+      await advance(0);
+      expect(result.current.view.publish?.failure?.cause).toBe("publish_job_failed");
+      expect(result.current.polling).toBe(false);
+      await advance(30_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not poll a completed draft that is published, failed, or never published", async () => {
+      renderHook(() => useLiveJob("j1", "COMPLETED", { publish: fakePublish("published") }));
+      renderHook(() => useLiveJob("j1", "COMPLETED", { publish: fakePublish("publish_setup") }));
+      renderHook(() => useLiveJob("j1", "COMPLETED"));
+      await advance(30_000);
+      expect(pollJobStatus).not.toHaveBeenCalled();
+    });
+
+    it("does not poll in the preview, whatever the publish says", async () => {
+      renderHook(() => useLiveJob("j1", "COMPLETED", { publish: fakePublish("publishing") }, { disabled: true }));
+      await advance(30_000);
+      expect(pollJobStatus).not.toHaveBeenCalled();
+    });
+
+    it("starts following when applyPublish gives it a publishing record, and shows the record at once", async () => {
+      pollJobStatus.mockResolvedValue(done(fakePublish("published")));
+      const { result } = renderHook(() => useLiveJob("j1", "COMPLETED"));
+      await advance(30_000);
+      expect(pollJobStatus).not.toHaveBeenCalled();
+
+      act(() => result.current.applyPublish(fakePublish("publishing")));
+      expect(result.current.view.publish?.state).toBe("publishing");
+      expect(result.current.polling).toBe(true);
+      await advance(5_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(1);
+      expect(result.current.view.publish?.state).toBe("published");
+      expect(result.current.polling).toBe(false);
+    });
+
+    it("answers a manual refresh after polling stopped, and goes on if the publish is under way", async () => {
+      pollJobStatus.mockResolvedValue(done(fakePublish("publishing", { slurm_job_id: "777" })));
+      const { result } = mountPublishing(fakePublish("publish_job_failed"));
+      await advance(30_000);
+      expect(pollJobStatus).not.toHaveBeenCalled();
+
+      act(() => result.current.refresh());
+      await advance(0);
+      expect(pollJobStatus).toHaveBeenCalledTimes(1);
+      expect(result.current.view.publish?.slurm_job_id).toBe("777");
+      expect(result.current.polling).toBe(true);
+      await advance(5_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not retry a refresh that failed once the job is over", async () => {
+      pollJobStatus.mockResolvedValue(transient());
+      const { result } = mountPublishing(fakePublish("published"));
+      act(() => result.current.refresh());
+      await advance(0);
+      expect(result.current.lastError).toBe("Couldn't reach Anvil");
+      await advance(120_000);
+      expect(pollJobStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps backing off after a failed poll, as for a run", async () => {
+      pollJobStatus.mockResolvedValue(transient());
+      const { result } = mountPublishing();
+      await advance(0);
+      expect(result.current.lastError).toBe("Couldn't reach Anvil");
+      pollJobStatus.mockResolvedValue(done(fakePublish("published")));
+      await advance(5_000);
+      expect(result.current.lastError).toBeNull();
+      expect(result.current.polling).toBe(false);
+    });
   });
 });

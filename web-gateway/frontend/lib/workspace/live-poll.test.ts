@@ -3,6 +3,7 @@ import {
   BACKOFF_STEPS_MS,
   POLL_INTERVAL_MS,
   describePollError,
+  isFollowed,
   mergeView,
   nextPollDelay,
   toView,
@@ -91,5 +92,38 @@ describe("mergeView", () => {
     const next = mergeView(first, { ...RESPONSE, cancel_requested_at: "2026-09-30T12:01:00Z" });
     expect(next.live).toEqual(LIVE);
     expect(next.cancel_requested_at).toBe("2026-09-30T12:01:00Z");
+  });
+});
+
+describe("isFollowed", () => {
+  it("follows a job until it is over", () => {
+    expect(isFollowed("PENDING", null)).toBe(true);
+    expect(isFollowed("RUNNING", undefined)).toBe(true);
+    expect(isFollowed("COMPLETED", null)).toBe(false);
+    expect(isFollowed("FAILED", null)).toBe(false);
+    expect(isFollowed("CANCELLED", undefined)).toBe(false);
+  });
+
+  it("keeps following a finished job while its draft is being published, and stops when the publish has ended", () => {
+    const record = (state: "publishing" | "published" | "failed") => ({ state }) as never;
+    expect(isFollowed("COMPLETED", record("publishing"))).toBe(true);
+    expect(isFollowed("COMPLETED", record("published"))).toBe(false);
+    expect(isFollowed("COMPLETED", record("failed"))).toBe(false);
+  });
+});
+
+describe("the publish record in the view", () => {
+  const base = { job_id: "j", sim_id: "s", status: "COMPLETED" } as JobStatusResponse;
+  const record = { state: "publishing", snapshot_id: "ab" } as never;
+
+  it("is null until the answer carries one, and the answer's otherwise", () => {
+    expect(toView("COMPLETED").publish).toBeNull();
+    expect(toView("COMPLETED", { publish: record }).publish).toBe(record);
+  });
+
+  it("is kept across an answer without a `publish` key, and replaced by an explicit one", () => {
+    const held = toView("COMPLETED", { publish: record });
+    expect(mergeView(held, { ...base }).publish).toBe(record);
+    expect(mergeView(held, { ...base, publish: null }).publish).toBeNull();
   });
 });

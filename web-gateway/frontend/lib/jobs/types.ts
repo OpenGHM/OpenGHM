@@ -84,6 +84,92 @@ export interface JobVerdictFields {
   output: OutputManifest | null;
 }
 
+// ─── Publishing a draft as a snapshot (ADR 0031) ─────────────────────────────
+
+/** `publishing`: the publish job is submitted or running on Anvil. `published`:
+ *  it proved the upload and the snapshot is in the catalogue. `failed`: it
+ *  ended without one; `failure.retry` says what may be done about it. */
+export type PublishState = "publishing" | "published" | "failed";
+
+/** Why a publish failed. The backend's `app/services/publish.py` is the only
+ *  place a cause is named (`PublishFailureCause` in app/models/job.py); the
+ *  words a user reads for each live in lib/workspace/failure-copy.ts
+ *  (`PUBLISH_FAILURE_COPY`). The first eight are the sweep's verdict on the
+ *  publish job (the toolkit's exit codes 2 to 7, then no usable record, then a
+ *  submit that was lost); the last four are the submit's own refusals, kept on
+ *  the record because the draft was claimed before the submit failed. */
+export type PublishFailureCause =
+  | "publish_bad_input"
+  | "publish_output_incomplete"
+  | "publish_conflict"
+  | "publish_setup"
+  | "publish_upload_failed"
+  | "publish_verify_failed"
+  | "publish_job_failed"
+  | "publish_submit_interrupted"
+  | "anvil_not_configured"
+  | "anvil_unreachable"
+  | "sbatch_rejected"
+  | "internal_error";
+
+/** What may be done about a failed publish. `same`: submit again with the
+ *  same `about` (the stored `metadata.json` is reused). `edit`: the `about`
+ *  was refused, so the person edits it first. `none`: nothing the owner can
+ *  do; an administrator has to look. */
+export type PublishRetry = "same" | "edit" | "none";
+
+export interface PublishFailure {
+  cause: PublishFailureCause;
+  /** A sentence for the owner. The stderr tail stays in the backend's log. */
+  message: string;
+  retry: PublishRetry;
+  /** The publish job's exit code, when it left one. */
+  exit_code: number | null;
+}
+
+/** `Job.publish`, on `JobResponse`, `JobStatusResponse` and the list items:
+ *  null until a publish has been asked for. `snapshot_id` is minted before the
+ *  first submit and never changes, so a retry publishes under the same id. */
+export interface PublishRecord {
+  state: PublishState;
+  /** 256 random bits as lowercase hex (ADR 0014). */
+  snapshot_id: string;
+  /** The composed `metadata.json`, as stored at the first submit. */
+  metadata: Record<string, unknown>;
+  attempts: number;
+  slurm_job_id: string | null;
+  remote_job_dir: string | null;
+  submitted_at: string | null;
+  finished_at: string | null;
+  failure: PublishFailure | null;
+  /** The user id that pressed Publish. */
+  submitted_by: string;
+}
+
+/** The `about` fields a person writes to publish (`POST /jobs/{id}/publish`):
+ *  the generated citation block less what the gateway sets (`datePublished`,
+ *  `url`, `isBasedOn`). Derived from `OpenGHMCitationBlock` (rule 4). */
+export type PublishAbout = Omit<OpenGHMCitationBlock, "datePublished" | "url" | "isBasedOn">;
+
+/** `POST /jobs/{id}/publish` body. */
+export interface PublishRequest {
+  about: PublishAbout;
+}
+
+/** What the publish route answers with (202): the draft as the backend now
+ *  has it (`JobResponse`). Only `publish` is read, and it is never null here. */
+export interface PublishResponse {
+  publish: PublishRecord;
+}
+
+/** Why `POST /jobs/{id}/publish` answers 409 `not_publishable`. */
+export type NotPublishableReason =
+  | "not_completed"
+  | "run_failed"
+  | "answered_by_published"
+  | "publishing"
+  | "already_published";
+
 // ─── Value objects ───────────────────────────────────────────────────────────
 
 export interface SpatialDomain {
@@ -224,6 +310,8 @@ export interface Job extends JobVerdictFields {
   work_dir: string | null;
   remote_job_dir: string | null;
   last_submit_error: SubmitError | null;
+  /** Null until the draft's owner has asked to publish it as a snapshot. */
+  publish: PublishRecord | null;
 }
 
 export interface JobListResponse {
@@ -297,6 +385,9 @@ export interface JobStatusResponse extends JobVerdictFields {
   completed_at: string | null;
   status_reason: string | null;
   work_dir: string | null;
+  /** The draft's publish, so the page can follow it after the simulation has
+   *  ended; null until one was asked for. */
+  publish?: PublishRecord | null;
   /** Null for a draft or ended job, and before SLURM has ever answered. */
   live?: JobLive | null;
 }
@@ -343,6 +434,17 @@ export type ActionFailure =
       fields?: string[];
       /** A `run_start_not_aligned` refusal's nearest allowed start. */
       suggestedStart?: string | null;
+      /** A 409 `not_publishable` answer's `reason` (`NotPublishableReason`). */
+      conflictReason?: string;
+      /** A 422 `invalid_about` answer's `errors`, one per problem. `path` is
+       *  the dotted path of the field (`about.tags.0`), null when it names none. */
+      errors?: ActionFieldError[];
     };
+
+/** One problem a refusal names about a field of what was sent. */
+export interface ActionFieldError {
+  path: string | null;
+  message: string;
+}
 
 export type ActionResult<T> = { ok: true; data: T } | ActionFailure;

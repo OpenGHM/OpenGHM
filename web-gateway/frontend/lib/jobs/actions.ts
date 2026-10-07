@@ -11,7 +11,10 @@ import type {
   JobStatsResponse,
   JobStatusResponse,
   LogStream,
+  PublishAbout,
   PublishedAnswer,
+  PublishRequest,
+  PublishResponse,
   DraftDeriveRequest,
   DraftUpdateRequest,
 } from "@/lib/jobs/types";
@@ -74,6 +77,42 @@ export async function submitDraft(
     },
     [404],
     SUBMIT_TIMEOUT_MS
+  );
+}
+
+/**
+ * Publish a snapshot draft whose simulation succeeded, as a snapshot (ADR
+ * 0031). Owner (or an administrator) only. The gateway mints the snapshot's id,
+ * composes its `metadata.json` from `about` and submits a publish job on
+ * Anvil: the answer carries `publish` with `state: "publishing"`, and the
+ * outcome arrives through the job's status. A retry after a failure calls this
+ * again, with the same `about` for `retry: "same"`.
+ *
+ * Failures come back as `{ reason: "error", code, message }`:
+ * - 409 `not_publishable`, with `conflictReason` (`not_completed`,
+ *   `run_failed`, `answered_by_published`, `publishing`, `already_published`);
+ * - 422 `invalid_about`, with `errors` naming the fields; nothing was stored;
+ * - 503 `anvil_not_configured` / `anvil_unreachable`, as for a submit.
+ * `not_found` means the draft is missing or not the caller's.
+ *
+ * Its own 60 s timeout: the backend writes the metadata to Anvil and submits
+ * the job before it answers, which the 10 s default does not allow for.
+ */
+export async function publishDraft(
+  jobId: string,
+  about: PublishAbout
+): Promise<ActionResult<PublishResponse>> {
+  return run(
+    async (client) => {
+      const body: PublishRequest = { about };
+      const res = await client.post<PublishResponse>(
+        `/api/v1/jobs/${encodeURIComponent(jobId)}/publish`,
+        body
+      );
+      return res.data;
+    },
+    [404],
+    ANVIL_ACTION_TIMEOUT_MS
   );
 }
 

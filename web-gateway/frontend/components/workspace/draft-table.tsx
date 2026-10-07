@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Globe, Loader2 } from "lucide-react";
 import { JobStatusDot } from "@/components/jobs/job-status-badge";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -14,6 +15,36 @@ import { displayName, listName } from "@/lib/jobs/display-name";
 import { draftSource } from "@/lib/jobs/draft-source";
 import { kindLabel } from "@/lib/repository/catalogue-format";
 import type { Job } from "@/lib/jobs/types";
+
+/**
+ * The status column of a row. A draft that was published reads *Published* and
+ * links to its snapshot, raised above the row's own stretched link; one being
+ * published reads *Publishing*; every other draft reads its status.
+ */
+function PublishedOrStatus({ job }: { job: Job }) {
+  const publish = job.publish;
+  if (publish?.state === "published") {
+    return (
+      <Link
+        href={`/repository/${publish.snapshot_id}`}
+        title="Open the published snapshot"
+        className="relative z-10 inline-flex min-h-6 items-center gap-1.5 rounded text-[13px] font-medium text-status-completed underline-offset-2 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <Globe className="size-3.5 shrink-0" aria-hidden="true" />
+        Published
+      </Link>
+    );
+  }
+  if (publish?.state === "publishing") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-status-running">
+        <Loader2 className="size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+        Publishing
+      </span>
+    );
+  }
+  return <JobStatusDot status={displayStatus(job)} />;
+}
 
 /**
  * The snapshot drafts as one card of rows, each row a link to the snapshot draft: its
@@ -115,7 +146,7 @@ export function DraftTable({
                 <div className="col-start-1 flex items-center gap-2 sm:contents">
                   <span>
                     <span className="sr-only">Status: </span>
-                    <JobStatusDot status={displayStatus(job)} />
+                    <PublishedOrStatus job={job} />
                   </span>
                   <span aria-hidden="true" className="text-muted-foreground sm:hidden">
                     ·

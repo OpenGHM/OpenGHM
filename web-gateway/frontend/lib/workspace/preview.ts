@@ -12,7 +12,7 @@
  * Keys are lower case, `<status>` or `<status>:<variant>`. A bare upper-case
  * status (`/dev/workspace/FAILED`) still works.
  */
-import type { FailureCause, JobStatus } from "@/lib/jobs/types";
+import type { FailureCause, JobStatus, PublishFailureCause } from "@/lib/jobs/types";
 
 /** The causes a FAILED job can carry. The two cancels belong to CANCELLED. */
 export const FAILED_CAUSES: readonly FailureCause[] = [
@@ -26,6 +26,23 @@ export const FAILED_CAUSES: readonly FailureCause[] = [
   "node_failure",
   "lost",
   "outcome_missing",
+];
+
+/** The causes a failed publish can carry (`PublishFailureCause` in the
+ *  backend's app/models/job.py). */
+export const PUBLISH_FAILED_CAUSES: readonly PublishFailureCause[] = [
+  "publish_bad_input",
+  "publish_output_incomplete",
+  "publish_conflict",
+  "publish_setup",
+  "publish_upload_failed",
+  "publish_verify_failed",
+  "publish_job_failed",
+  "publish_submit_interrupted",
+  "anvil_not_configured",
+  "anvil_unreachable",
+  "sbatch_rejected",
+  "internal_error",
 ];
 
 export interface PreviewOption {
@@ -63,6 +80,18 @@ export const PREVIEW_GROUPS: readonly PreviewGroup[] = [
       { key: "completed", label: "manifest", status: "COMPLETED" },
       { key: "completed:purged", label: "purged", status: "COMPLETED" },
       { key: "completed:legacy", label: "no record", status: "COMPLETED" },
+    ],
+  },
+  {
+    title: "Publish",
+    options: [
+      { key: "publish:publishing", label: "publishing", status: "COMPLETED" },
+      { key: "publish:published", label: "published", status: "COMPLETED" },
+      ...PUBLISH_FAILED_CAUSES.map((cause) => ({
+        key: `publish:${cause}`,
+        label: cause.replace(/^publish_/, "").replace(/_/g, " "),
+        status: "COMPLETED" as const,
+      })),
     ],
   },
   {

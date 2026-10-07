@@ -1,4 +1,4 @@
-import type { ActionFailure } from "@/lib/jobs/types";
+import type { ActionFailure, ActionFieldError } from "@/lib/jobs/types";
 
 /** Shown when the call got no answer at all (connection refused, DNS, reset):
  *  the backend never saw it, so nothing changed. */
@@ -58,6 +58,8 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
   let code: string | undefined;
   let fields: string[] | undefined;
   let suggestedStart: string | null | undefined;
+  let conflictReason: string | undefined;
+  let errors: ActionFieldError[] | undefined;
   if (typeof detail === "string") {
     message = detail;
   } else if (Array.isArray(detail)) {
@@ -76,6 +78,8 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
       message?: unknown;
       fields?: unknown;
       suggested_start?: unknown;
+      reason?: unknown;
+      errors?: unknown;
     };
     if (typeof d.message === "string") message = d.message;
     if (typeof d.code === "string") code = d.code;
@@ -84,6 +88,13 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
     }
     if (typeof d.suggested_start === "string" || d.suggested_start === null) {
       suggestedStart = d.suggested_start;
+    }
+    // The publish route's 409 `not_publishable` names a `reason`, and its 422
+    // `invalid_about` an `errors` list.
+    if (typeof d.reason === "string") conflictReason = d.reason;
+    if (Array.isArray(d.errors)) {
+      const listed = d.errors.map(fieldError).filter((e): e is ActionFieldError => e !== null);
+      if (listed.length > 0) errors = listed;
     }
   }
   if (message === null || message.trim() === "") {
@@ -96,7 +107,7 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
       message = "Request failed.";
     }
   }
-  return { ok: false, reason: "error", message, status, code, fields, suggestedStart };
+  return { ok: false, reason: "error", message, status, code, fields, suggestedStart, conflictReason, errors };
 }
 
 function noAnswer(code: string | undefined, message: string): ActionFailure {
@@ -113,4 +124,17 @@ function validationPath(loc: unknown): string | null {
     .map(String);
   if (parts[0] === "body") parts.shift();
   return parts.length > 0 ? parts.join(".") : null;
+}
+
+/** One entry of an `errors` list as a field error. The backend may send a
+ *  pydantic error (`{ loc, msg }`), `{ field | path, message }`, or a bare
+ *  sentence; anything with no sentence in it is dropped. */
+function fieldError(item: unknown): ActionFieldError | null {
+  if (typeof item === "string") return item.trim() ? { path: null, message: item } : null;
+  if (!item || typeof item !== "object") return null;
+  const e = item as { loc?: unknown; msg?: unknown; message?: unknown; field?: unknown; path?: unknown };
+  const message = typeof e.msg === "string" ? e.msg : typeof e.message === "string" ? e.message : "";
+  if (!message.trim()) return null;
+  const named = typeof e.field === "string" ? e.field : typeof e.path === "string" ? e.path : null;
+  return { path: named ?? validationPath(e.loc), message };
 }

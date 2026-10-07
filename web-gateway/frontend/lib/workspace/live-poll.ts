@@ -3,10 +3,21 @@
  * polls, when to poll at all, what a failed poll is called, and the shape of
  * the answer the screen holds. `use-live-job.ts` wires them to timers.
  */
-import type { JobLive, JobStatus, JobStatusResponse } from "@/lib/jobs/types";
+import type { JobLive, JobStatus, JobStatusResponse, PublishRecord } from "@/lib/jobs/types";
+import { isTerminalStatus } from "@/lib/jobs/types";
 
 /** How often a queued, running or cancelling job is asked about. */
 export const POLL_INTERVAL_MS = 5_000;
+
+/**
+ * Whether a job is still worth asking about: it has not ended, or it has and
+ * its draft is being published. A publish outlives the simulation (the run is
+ * COMPLETED while the publish job is on Anvil), so a terminal status alone is
+ * not a reason to stop.
+ */
+export function isFollowed(status: JobStatus, publish: PublishRecord | null | undefined): boolean {
+  return !isTerminalStatus(status) || publish?.state === "publishing";
+}
 
 /** The wait after the 1st, 2nd, 3rd ... failed poll in a row; the last repeats. */
 export const BACKOFF_STEPS_MS = [5_000, 10_000, 20_000, 40_000, 60_000] as const;
@@ -38,8 +49,9 @@ export function describePollError(
 }
 
 /** Everything a status response carries except the ids; `live` is always set. */
-export type StatusView = Omit<JobStatusResponse, "job_id" | "sim_id" | "live"> & {
+export type StatusView = Omit<JobStatusResponse, "job_id" | "sim_id" | "live" | "publish"> & {
   live: JobLive | null;
+  publish: PublishRecord | null;
 };
 
 /** The fields of a (possibly partial) status response, with nulls for the rest. */
@@ -61,14 +73,17 @@ export function toView(status: JobStatus, data?: Partial<JobStatusResponse>): St
     cancel_requested_by_email: data?.cancel_requested_by_email ?? null,
     files: data?.files ?? null,
     output: data?.output ?? null,
+    publish: data?.publish ?? null,
     live: data?.live ?? null,
   };
 }
 
 /** The view after a new answer. An answer without a `live` key (the cancel
- *  route's) keeps the one already held; an explicit `null` replaces it. */
+ *  route's) keeps the one already held; an explicit `null` replaces it. The
+ *  same goes for `publish`. */
 export function mergeView(previous: StatusView, data: JobStatusResponse): StatusView {
   const next = toView(data.status, data);
   if (data.live === undefined) next.live = previous.live;
+  if (data.publish === undefined) next.publish = previous.publish;
   return next;
 }

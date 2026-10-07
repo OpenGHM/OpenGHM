@@ -1,6 +1,7 @@
 import { JobHeader } from "@/components/workspace/job-header";
 import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
+import { PublishCard } from "@/components/workspace/publish-card";
 import { JobDetails } from "@/components/workspace/job-details";
 import { LogViewer } from "@/components/workspace/log-viewer";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
@@ -64,6 +65,7 @@ export function JobDetail({
         cancel_requested_by_email: job.cancel_requested_by_email,
         files: job.files,
         output: job.output,
+        publish: job.publish,
         live: previewLive,
       }}
       preview={preview}
@@ -72,6 +74,7 @@ export function JobDetail({
         <JobHeader job={job} preview={preview} />
         <div className={`${WORKSPACE_CONTAINER} flex-1 space-y-8 py-6 sm:py-8`}>
           <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
+          <PublishCard job={job} preview={preview} />
           <LogViewer previewLogs={previewLogs} />
           <JobDetails job={job} recommended={recommended} />
           <AboutSummaryCard about={job.about} />

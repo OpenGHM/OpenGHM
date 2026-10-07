@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { Job } from "@/lib/jobs/types";
+import { fakePublish } from "@/lib/workspace/fixtures";
 
 vi.mock("@/lib/jobs/actions", () => ({ cancelJob: vi.fn(), deleteDraft: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
@@ -232,5 +233,45 @@ describe("the list's search", () => {
   it("is left alone when the table is rendered without a search box", () => {
     render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     expect(items()).toHaveLength(1);
+  });
+});
+
+describe("a published snapshot draft in the list", () => {
+  const ID = "9f2c41d07be6a35c8e10d4f7a2b96c3e5d08a1f47c6b29e3d5a07b8c1e4f6a92";
+
+  it("reads Published, linking to its snapshot, above the row's own link", () => {
+    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("published") })]} runNotes={NOTES} />);
+    const row = items()[0];
+    const published = within(row).getByRole("link", { name: "Published" });
+    expect(published.getAttribute("href")).toBe(`/repository/${ID}`);
+    expect(published.className).toContain("relative");
+    expect(published.className).toContain("z-10");
+    // The row still opens the snapshot draft, and Completed is no longer its status.
+    expect(within(row).getByRole("link", { name: "Run a" }).getAttribute("href")).toBe("/workspace/a");
+    expect(within(row).queryByText("Completed")).toBeNull();
+  });
+
+  it("reads Publishing, with no link, while its publish runs", () => {
+    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("publishing") })]} runNotes={NOTES} />);
+    const row = items()[0];
+    expect(within(row).getByText("Publishing")).toBeTruthy();
+    expect(within(row).getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("reads Completed for a draft whose publish failed, and for one that never had one", () => {
+    render(
+      <DraftTable
+        jobs={[
+          job("a", "COMPLETED", { publish: fakePublish("publish_job_failed") }),
+          job("b", "COMPLETED", { publish: null }),
+          job("c", "COMPLETED"),
+        ]}
+        runNotes={NOTES}
+      />
+    );
+    for (const row of items()) {
+      expect(within(row).getByText("Completed")).toBeTruthy();
+      expect(within(row).queryByText("Published")).toBeNull();
+    }
   });
 });
