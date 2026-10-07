@@ -326,6 +326,10 @@ def sim_group() -> None:
 @click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
 @click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
 @click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
+@click.option("--post-processing", "post_processing", type=click.Choice(["standard", "climatology"]),
+              default=None,
+              help="init override: PostProcessing.Run (standard = 0, climatology = 1: daily, monthly and "
+                   "yearly climatologies); refused when the init has no PostProcessing block with a Run")
 @click.option("--user-info", "user_info", default=None,
               help="submitter info recorded in simulation.json (provenance only)")
 @output_options
@@ -337,7 +341,7 @@ def sim_submit_cmd(**p) -> None:
         partition=p["partition"], output_base=p["output_base"], spool=p["spool"],
         run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
         spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
-        user_info=p["user_info"], verbose=p["verbose"],
+        post_processing=p["post_processing"], user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
@@ -374,6 +378,10 @@ def sim_submit_cmd(**p) -> None:
               help="how long this run may last, as SLURM writes it (MM:SS, HH:MM:SS, D-HH, D-HH:MM:SS); "
                    "recorded in simulation.json, where the spool lease takes its length "
                    "(default: the metadata's recommendedCompute.walltime)")
+@click.option("--post-processing", "post_processing", type=click.Choice(["standard", "climatology"]),
+              default=None,
+              help="init override: PostProcessing.Run (standard = 0, climatology = 1: daily, monthly and "
+                   "yearly climatologies); refused when the init has no PostProcessing block with a Run")
 @click.option("--user-info", "user_info", default=None,
               help="submitter info recorded in simulation.json (provenance only)")
 @output_options
@@ -387,7 +395,7 @@ def sim_run_cmd(**p) -> None:
         snapshot_dir=p["path"], simulation_id=p["sim_id"], output_base=p["output_base"],
         walltime=p["walltime"], spool=p["spool"], run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
         spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
-        user_info=p["user_info"], verbose=p["verbose"],
+        post_processing=p["post_processing"], user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:

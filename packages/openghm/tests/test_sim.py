@@ -1070,3 +1070,72 @@ def test_run_value_overrides_do_not_disturb_the_held_run(tmp_path):
     staged = _gen(built, "wbm_init/wbm_test.init").content
     assert "Run_End    => '2000-12-31'" in staged and "Run_Start  => '2000-01-01'" in staged
     assert json.loads(_gen(built, "simulation.json").content)["post_processing"]["run_value"] == "1"
+
+
+# ── --post-processing standard|climatology ─────────────────────────────────────
+
+
+def test_post_processing_climatology_asks_for_a_run_the_init_did_not(tmp_path):
+    """fc66a2cd's wbm_test.init says Run => 0: staged held at 0, the sidecar records what was asked."""
+    from openghm.post_processing import requested_run_value
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_test.init")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="climatology")
+    _ctx, built = build_submit(opts, _config(tmp_path))
+    assert requested_run_value(_gen(built, "wbm_init/wbm_test.init").content) == "0"
+    pp = json.loads(_gen(built, "simulation.json").content)["post_processing"]
+    assert pp["requested"] is True and pp["run_value"] == "1"
+    body = _gen(built, ".sbatch").content
+    assert "sim post-process" in body
+
+
+def test_post_processing_standard_turns_a_requested_run_off(tmp_path):
+    """fc66a2cd's SHORT init says Run => 1: with standard it is staged 0 and nothing is recorded."""
+    from openghm.post_processing import requested_run_value, set_run_value
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    template = (snap / "wbm_init" / "wbm_test.init").read_text()
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard")
+    _ctx, built = build_submit(opts, _config(tmp_path))
+    staged = _gen(built, "wbm_init/wbm_test.init").content
+    assert requested_run_value(staged) == "0"
+    assert staged == set_run_value(build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1")), "0")
+    assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
+    body = _gen(built, ".sbatch").content
+    assert "rc=" not in body and "post-process" not in body
+
+
+def test_post_processing_overrides_only_the_blocks_run_value():
+    from openghm.post_processing import requested_run_value
+    template = (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text()
+    plain = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1"))
+    out = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="climatology"))
+    assert requested_run_value(out) == "1" and requested_run_value(plain) == "0"
+    assert out.replace("Run\t\t=> 1", "Run\t\t=> 0") == plain
+
+
+def test_without_the_post_processing_flag_the_init_is_byte_for_byte_what_it_was():
+    for init in ("fc66a2cd_wbm_test.init", "fc66a2cd_wbm_SHORT.init"):
+        template = (_PP_FIXTURES / init).read_text()
+        a = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1"))
+        b = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing=None))
+        assert a == b
+
+
+@pytest.mark.parametrize("choice", ["standard", "climatology"])
+def test_post_processing_is_refused_on_an_init_without_a_block(tmp_path, choice):
+    snap = _make_snapshot(tmp_path)         # the shared _INIT_TEMPLATE has no PostProcessing block
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing=choice)
+    with pytest.raises(OpenghmError, match="no PostProcessing block with a Run key"):
+        build_submit(opts, _config(tmp_path))
+
+
+def test_post_processing_is_refused_on_a_block_without_a_run_key():
+    template = "{\n  MT_Code_Name => { Output_dir => 'x', Run_Start => '2000-01-01' },\n" \
+               "  PostProcessing => { Polygon_Aggregation => , Var_list => 'a b' },\n}\n"
+    with pytest.raises(OpenghmError, match="no PostProcessing block with a Run key"):
+        build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="climatology"))
+
+
+def test_post_processing_rejects_a_value_that_is_not_a_choice():
+    template = (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text()
+    with pytest.raises(OpenghmError, match="standard, climatology"):
+        build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="daily"))

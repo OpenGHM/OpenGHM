@@ -511,3 +511,51 @@ def test_sim_post_process_without_a_sidecar_keeps_wbms_code(tmp_path):
     for code, want in (("0", 2), ("9", 9)):
         out = CliRunner().invoke(cli, ["sim", "post-process", str(tmp_path), "--wbm-exit-code", code])
         assert out.exit_code == want and "post-processing could not be completed" in out.output
+
+
+# ── --post-processing standard|climatology (CLI) ───────────────────────────────
+
+
+def test_cli_sim_run_climatology_on_a_run_0_init_runs_post_processing(tmp_path, monkeypatch):
+    """fc66a2cd's wbm_test.init (Run => 0): WBM sees Run => 0, the step runs, the init gets Run => 1 back."""
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_test.init")
+    out = _invoke(tmp_path, snap, "--post-processing", "climatology")
+    assert out.exit_code == 0, out.output
+    assert fake.run_during_wbm == "0"
+    assert len(fake.pp_calls) == 1
+    pp = fake.sidecar()["post_processing"]
+    assert pp["requested"] is True and pp["run_value"] == "1" and pp["ok"] is True
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_cli_sim_run_standard_on_a_run_1_init_runs_no_post_processing(tmp_path, monkeypatch):
+    """fc66a2cd's SHORT init (Run => 1) with standard: Run => 0 staged, no step, nothing recorded."""
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap, "--post-processing", "standard")
+    assert out.exit_code == 0, out.output
+    assert fake.run_during_wbm == "0" and fake.pp_calls == []
+    assert "post_processing" not in fake.sidecar()
+    assert fake.run_values() == ["0", "0"]
+
+
+def test_cli_sim_run_post_processing_on_an_init_without_a_block_exits_2(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    out = _invoke(tmp_path, snap, "--post-processing", "climatology", "--dry-run")
+    assert out.exit_code == 2
+    assert "openghm: --post-processing climatology: this init has no PostProcessing block" in out.output
+
+
+def test_cli_sim_submit_post_processing_is_refused_the_same_way(tmp_path):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    snap = _make_snapshot(tmp_path)
+    out = CliRunner().invoke(cli, [
+        "sim", "submit", str(snap), "--id", "sim1", "--spool", "fresh", "--dry-run",
+        "--config", str(_cli_config(tmp_path)), "--post-processing", "standard"])
+    assert out.exit_code == 2
+    assert "openghm: --post-processing standard" in out.output
+
+
+def test_cli_sim_post_processing_choice_is_checked_by_click(tmp_path):
+    out = _invoke(tmp_path, _make_snapshot(tmp_path), "--post-processing", "daily", "--dry-run")
+    assert out.exit_code == 2 and "daily" in out.output

@@ -73,6 +73,8 @@ SIDECAR_NAME = "simulation.json"
 #: ``--spool`` choices: a per-simulation spool fed by (and feeding) the shared cache,
 #: or an empty per-simulation one.
 SPOOL_MODES = ("cache", "fresh")
+#: ``--post-processing`` choices and the ``PostProcessing.Run`` value each one sets.
+POST_PROCESSING_CHOICES = {"standard": "0", "climatology": "1"}
 
 
 @dataclass
@@ -101,6 +103,9 @@ class SubmitOptions:
     spinup_start: Optional[str] = None
     spinup_end: Optional[str] = None
     spinup_loops: Optional[int] = None
+    #: ``standard`` / ``climatology``: sets ``PostProcessing => { Run }`` to ``0`` / ``1`` (see
+    #: :data:`POST_PROCESSING_CHOICES`); refused on an init with no such block or no ``Run`` in it.
+    post_processing: Optional[str] = None
     # provenance only (recorded in simulation.json, not used for submission)
     user_info: Optional[str] = None
     verbose: Optional[bool] = None
@@ -410,6 +415,22 @@ def _check_run_dates_vs_aggregation(content: str) -> None:
         )
 
 
+def _apply_post_processing(init_text: str, choice: str) -> str:
+    """``init_text`` with ``PostProcessing => { Run }`` set for ``--post-processing``: ``0`` for
+    ``standard``, ``1`` for ``climatology``. Raises when the init has no such block or no ``Run``
+    in it (:func:`openghm.post_processing.set_run_value` would leave it unchanged, silently)."""
+    if choice not in POST_PROCESSING_CHOICES:
+        raise OpenghmError(
+            f"--post-processing must be one of {', '.join(POST_PROCESSING_CHOICES)}, not {choice!r}"
+        )
+    if post_processing.requested_run_value(init_text) is None:
+        raise OpenghmError(
+            f"--post-processing {choice}: this init has no PostProcessing block with a Run key "
+            "to set, so it cannot ask for post-processing"
+        )
+    return post_processing.set_run_value(init_text, POST_PROCESSING_CHOICES[choice])
+
+
 def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) -> str:
     """Normalize output paths to absolute container paths, then apply overrides.
 
@@ -450,6 +471,8 @@ def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) ->
     # A published run is left as it was published; a changed period is checked.
     if opts.run_start is not None or opts.run_end is not None:
         _check_run_dates_vs_aggregation(out)
+    if opts.post_processing is not None:
+        out = _apply_post_processing(out, opts.post_processing)
     return out
 
 

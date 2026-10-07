@@ -501,6 +501,11 @@ when that is not 0. A run that is killed by its walltime never gets there, so it
 `Run => 0`, which is what ran. Polygon aggregation calls `nc_aggr_read.pl`, which is not in any
 snapshot's `utilities/`, so a run that asks for it fails the check.
 
+`--post-processing standard|climatology` (on `sim run` and `sim submit`) sets that `Run` to `0` or
+`1` in the run's init, so a run can ask for the daily, monthly and yearly climatologies, or turn them
+off, whatever the snapshot's init says. It is an error (exit 2) on an init with no `PostProcessing`
+block, or none with a `Run` key in it; without the flag the init is left as it is.
+
 **WBM threads.** Both pass `wbm.pl` `-t N` (`wbm_threads` in `sim.py`): one thread
 per core the run holds, at most 8, which is all `wbm.pl` accepts. `submit` knows the
 cores because it writes `--cpus-per-task` itself (`--cores`, else
