@@ -1,0 +1,108 @@
+{
+ID		=> 'Global_tracking',
+Comment		=> 'WBM Open Source paper: tracking demonstration',
+MT_Code_Name	=>  {
+	  Output_dir	=> '/wbm/wbm_output/Global_tracking',
+	  Run_Start 	=> '2000-01-01',
+          Run_End	=> '2009-12-31',
+	  spool_dir     => '/wbm/spool/'
+        },
+Spinup =>	{
+	Start	=> '2000-01-01',
+	End	=> '2004-12-31',
+	Loops	=> 2
+	},
+Output_vars	=> '	 runoff
+			 runoff_ps
+			 runoff_pu
+			 runoff_pr
+			 runoff_pg
+			 irrRunoff
+			 glMelt
+                    	 discharge
+			 discharge_ps
+			 discharge_pu
+			 discharge_pr
+			 soilMoist
+			 soilMoist_ps
+			 soilMoist_pg
+			 soilMoist_pr
+			 soilMoist_pu
+			 grdWater
+			 grndWater_ps
+			 grndWater_pu
+			 grndWater_pr
+			 grndWater_pg
+			 irrigationGross
+			 GrossIrr_ps
+			 GrossIrr_pu
+			 GrossIrr_pr
+			 GrossIrr_pg
+			 irrigationFlow
+			 IrrFlow_mm_ps
+			 IrrFlow_mm_pg
+			 IrrFlow_mm_pr
+			 IrrFlow_mm_pu
+			 irrigationGrwt
+			 IrrGrwt_mm_ps
+			 IrrGrwt_mm_pg
+			 IrrGrwt_mm_pr
+			 IrrGrwt_mm_pu
+			 irrigationExtra
+			 etIrrCrops
+			 etIrrCrops_mm_ps
+			 etIrrCrops_mm_pg
+			 etIrrCrops_mm_pr
+			 etIrrCrops_mm_pu
+			 runoff_pst
+			 runoff_irr
+			 runoff_rlt
+			 discharge_pst
+			 discharge_irr
+			 discharge_rlt
+			 grndWater_pst
+			 grndWater_irr
+			 grndWater_rlt',
+MT_Precip	=>  {
+          Primary	=> '/wbm/data_init/climate/merra2_prectotcorr_d.init'},
+precipFraction	=> '',
+MT_airT		=>  {
+          Primary	=> '/wbm/data_init/climate/merra2_t2m_d.init'},
+Network		=> '/wbm/data/network/05min_flwdir.tif',
+Projection	=> 'epsg:4326',
+Routing		=> 'LRR',
+wbmParam	=>  {
+          outputScale	=> 'Cell',
+	  compBalance   => 1 },
+ConnectivityNetwork	=> '',
+Reservoirs	=> '/wbm/data_init/dams/HydConDams_Global_v2.0.init',
+soilAWCapacity	=> '/wbm/data_init/soil/harmonized_AWC_5min.init',
+rootingDepth	=> '/wbm/data_init/soil/Effective_Rooting_Depth_mod.init',
+Glaciers	=>  {
+          glArea	=> '/wbm/data_init/glaciers/global_rgi6_glaciers_area_1km.init',
+          glMelt	=> '/wbm/data_init/glaciers/glacier_RDI40_6min_ERA-Interim_hindcast_Discharge_m.init',
+          glVolume	=> '/wbm/data_init/glaciers/glacier_RDI40_6min_ERA-Interim_hindcast_Volume_y.init'
+        },
+landCollapse	=> 'average',
+Irrigation	=>  {
+          CropAreaFrac	=> '/wbm/data_init/crops/mirca_cropAreaFraction.init',
+          CropParFile	=> '/wbm/data_init/crops/MIRCA2000_average_landCoverParameters.csv',	
+          ExtraCoeff	=> 1,
+          IrrEfficiency	=> '/wbm/data_init/irrigation/irrEfficiency.init',
+          Order		=> 1,
+          ReturnCoeff	=> '0.5',
+          SearchDist	=> 100,
+	  useVIS	=> 0,
+	  SW_GW_ratio	=> '/wbm/data_init/irrigation/FAO_SWGW_ratio_mod.init',
+          ricePaddyDepth	=> 50,
+          ricePercolation	=> '/wbm/data_init/crops/rice_percolationRate.init'
+        },
+PostProcessing	=>  {
+          Forks		=> 8,
+          Polygon_Aggregation	=> '',
+          Run		=> 0,									
+          TA_multi_year_start	=> '',
+          TA_multi_year_timestep	=> '',
+          Temporal_Aggregation	=> 1
+        },
+}

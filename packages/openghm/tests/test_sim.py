@@ -921,3 +921,152 @@ def test_quoted_aggregation_year_and_a_run_start_in_the_init_are_read():
 def test_an_init_with_no_run_end_is_left_alone():
     tpl = _V2_AGGREGATED.replace("          Run_End\t=> '2001-12-31'\n", "          Run_Start => '2000-01-01'\n")
     _build(tpl, run_start="2000-01-01")  # WBM would take the forcing's last day: unknown here
+
+
+# ── post-processing: PostProcessing => { Run => 1 } ───────────────────────────
+#
+# WBM would start PostProcessing.pl detached, which a container does not survive. The run is
+# staged with Run => 0 and `openghm sim post-process` runs the script after WBM (see
+# openghm/post_processing.py). The inits are real ones, from tests/fixtures/post_processing/.
+
+_PP_FIXTURES = Path(__file__).parent / "fixtures" / "post_processing"
+
+
+def _pp_snapshot(tmp_path: Path, init: str) -> Path:
+    snap = _make_snapshot(tmp_path)
+    (snap / "wbm_init" / "wbm_test.init").write_text((_PP_FIXTURES / init).read_text(encoding="utf-8"))
+    return snap
+
+
+def test_a_post_processing_init_is_staged_with_run_held_at_0(tmp_path):
+    from openghm.post_processing import requested_run_value, set_run_value
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    template = (snap / "wbm_init" / "wbm_test.init").read_text()
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1")
+    _ctx, built = build_submit(opts, _config(tmp_path))
+    staged = _gen(built, "wbm_init/wbm_test.init").content
+    assert requested_run_value(staged) == "0"
+    # nothing but that value differs from what the run would have had
+    assert set_run_value(staged, "1") == build_persim_init(template, "sim1", opts)
+
+
+def test_the_sidecar_of_a_post_processing_run_holds_what_the_step_needs(tmp_path):
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    pp = json.loads(_gen(built, "simulation.json").content)["post_processing"]
+    assert set(pp) == {"requested", "run_value", "argv"}
+    assert pp["requested"] is True and pp["run_value"] == "1"
+    # the same container and mounts as WBM, running the script WBM wrote into the output directory
+    exec_argv = [a for a in pp["argv"][:-3]]
+    assert pp["argv"][-3:] == ["perl", "-w", "/wbm/wbm_output/sim1/PostProcessing.pl"]
+    assert exec_argv[:2] == ["singularity", "exec"]
+    binds = [exec_argv[i + 1] for i, a in enumerate(exec_argv) if a == "-B"]
+    assert binds == [f"{m.host}:{m.container}:ro" if m.readonly else f"{m.host}:{m.container}" for m in built.mounts]
+    assert exec_argv[-1].endswith("wbm-v2-lite-2.0.0.sif")
+
+
+def test_the_sbatch_script_of_a_post_processing_run_runs_the_step_after_wbm(tmp_path):
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    body = _gen(built, ".sbatch").content
+    work = str(tmp_path / "out" / "sim1")
+    lines = body.splitlines()
+    assert lines[lines.index("set -euo pipefail") + 2:][:1] == ["rc=0"]
+    assert any(l.endswith(f"-m openghm.cli.main sim post-process {work} --wbm-exit-code \"$rc\" || exit $?")
+               for l in lines)
+    assert body.endswith('exit "$rc"\n')
+    # prepare, exec, harvest, post-process, in that order
+    order = [next(i for i, l in enumerate(lines) if needle in l)
+             for needle in ("spool prepare", "singularity exec", "spool harvest", "sim post-process")]
+    assert order == sorted(order)
+
+
+def test_the_sbatch_script_without_the_spool_cache_has_one_exec_line(tmp_path):
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool="fresh"), _config(tmp_path))
+    lines = _gen(built, ".sbatch").content.splitlines()
+    body = lines[lines.index("rc=0"):]
+    assert len(body) == 4 and body[1].startswith("singularity exec ") and body[1].endswith(" || rc=$?")
+    assert "openghm.cli.main spool" not in "\n".join(body)
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not installed")
+@pytest.mark.parametrize("spool", ["cache", "fresh"])
+@pytest.mark.parametrize("fails,pp_exit,job_exit,calls", [
+    # what fails          the step's exit   the job's exit   what runs
+    (None,                0,                0,               ["prepare", "exec", "harvest", "post 0"]),
+    (None,                1,                1,               ["prepare", "exec", "harvest", "post 0"]),
+    ("exec",              3,                3,               ["prepare", "exec", "post 3"]),         # no harvest
+    ("prepare",           2,                2,               ["prepare", "post 2"]),                  # no exec
+    ("harvest",           0,                0,               ["prepare", "exec", "harvest", "post 0"]),
+])
+def test_the_post_processing_sbatch_body_keeps_wbms_exit_code_and_runs_the_step_always(
+        tmp_path, spool, fails, pp_exit, job_exit, calls):
+    """The body under `set -euo pipefail`, with stubs for the container and for openghm."""
+    import stat
+    import subprocess
+    import sys
+    if fails == "prepare" and spool == "fresh":
+        pytest.skip("--spool fresh has no prepare step")
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", spool=spool), _config(tmp_path))
+    log = tmp_path / "calls.log"
+    stub = tmp_path / "openghm-stub"
+    stub.write_text(f"""#!/bin/bash
+case "$1 $2" in
+  "spool prepare") echo prepare >> {log}; [ "$FAILS" = prepare ] && exit 2; exit 0;;
+  "spool harvest") echo harvest >> {log}; [ "$FAILS" = harvest ] && exit 4; exit 0;;
+  "sim post-process") echo "post $5" >> {log}; exit $PP_EXIT;;
+esac
+exit 99
+""")
+    singularity = tmp_path / "bin" / "singularity"
+    singularity.parent.mkdir()
+    singularity.write_text(f"""#!/bin/bash
+echo exec >> {log}
+[ "$FAILS" = exec ] && exit 3
+exit 0
+""")
+    for f in (stub, singularity):
+        f.chmod(f.stat().st_mode | stat.S_IEXEC)
+    body = _gen(built, ".sbatch").content.replace(f"{sys.executable} -m openghm.cli.main", str(stub))
+    script = tmp_path / "job.sbatch"
+    script.write_text(body)
+    env = {"PATH": f"{singularity.parent}:/usr/bin:/bin", "FAILS": fails or "", "PP_EXIT": str(pp_exit)}
+    proc = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True)
+    expected = [c for c in calls if spool == "cache" or c not in ("prepare", "harvest")]
+    assert log.read_text().split("\n")[:-1] == expected, proc.stderr
+    assert proc.returncode == job_exit, proc.stderr
+
+
+def test_an_init_without_post_processing_is_unchanged(tmp_path):
+    """Run => 0, a v1 init with Run => 0, and an init with no block at all."""
+    for init in ("fc66a2cd_wbm_test.init", "v1_Global_tracking.init", "v1_test.init"):
+        root = tmp_path / init
+        root.mkdir()
+        snap = _pp_snapshot(root, init)
+        # Output_dir is required by build_persim_init; v1's Global init has one in its MT block
+        template = (snap / "wbm_init" / "wbm_test.init").read_text()
+        opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1")
+        _ctx, built = build_submit(opts, _config(root))
+        assert _gen(built, "wbm_init/wbm_test.init").content == build_persim_init(template, "sim1", opts)
+        assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
+        body = _gen(built, ".sbatch").content
+        assert "rc=" not in body and "post-process" not in body
+        assert body.endswith("spool harvest " + str(root / "out" / "sim1") + " || echo 'openghm: the spool harvest failed' >&2\n")
+    snap = _make_snapshot(tmp_path)            # the shared _INIT_TEMPLATE has no PostProcessing block
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
+
+
+def test_run_value_overrides_do_not_disturb_the_held_run(tmp_path):
+    """--run-start/--run-end edit Run_Start/Run_End; the PostProcessing block's Run is its own."""
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", run_start="2000-01-01", run_end="2000-12-31"),
+        _config(tmp_path))
+    staged = _gen(built, "wbm_init/wbm_test.init").content
+    assert "Run_End    => '2000-12-31'" in staged and "Run_Start  => '2000-01-01'" in staged
+    assert json.loads(_gen(built, "simulation.json").content)["post_processing"]["run_value"] == "1"

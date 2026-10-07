@@ -286,3 +286,228 @@ def test_cli_sim_run_a_corrupt_sidecar_does_not_turn_exit_0_into_a_traceback(tmp
     out = _run_cli(tmp_path, "--spool", "fresh")
     assert out.exit_code == 0, out.output
     assert "warning: could not record the exit code" in out.output
+
+
+# ── post-processing: PostProcessing => { Run => 1 } ───────────────────────────
+#
+# `sim run` holds the init at Run => 0 while WBM runs, runs PostProcessing.pl itself afterwards, and
+# puts the requested value back whatever happened. WBM and the container are faked; the inits and the
+# generated script are real (tests/fixtures/post_processing/).
+
+_PP_FIXTURES = Path(__file__).parent / "fixtures" / "post_processing"
+_PP_NINE = [f"wbm_{v}_{s}.nc" for v in ("discharge", "runoff", "streamAge") for s in ("dc", "mc", "yc")]
+_PP_DONE = "\nDataCube aggregation started for 3 WBM output variables (4 forks):\n\nAll Done!\n\n"
+
+
+class _Faked:
+    """What the faked WBM and the faked post-processing container saw."""
+
+    def __init__(self, tmp_path: Path):
+        self.work = tmp_path / "out" / "sim1"
+        self.out = self.work / "wbm_output" / "sim1"
+        self.init = self.work / "wbm_init" / "wbm_test.init"
+        self.dump = self.out / "init_files" / "wbm_test.init"
+        self.run_during_wbm = None
+        self.pp_calls = []
+
+    def sidecar(self) -> dict:
+        return json.loads((self.work / "simulation.json").read_text())
+
+    def run_values(self):
+        from openghm.post_processing import requested_run_value
+        return [requested_run_value(f.read_text()) for f in (self.init, self.dump) if f.exists()]
+
+
+def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, pp_code=0, pp_files=_PP_NINE, pp_log=_PP_DONE):
+    from openghm import post_processing
+    from openghm.cli import main as cli_main
+    from openghm.post_processing import requested_run_value
+    from openghm.types import RunResult
+
+    fake = _Faked(tmp_path)
+
+    def wbm(built, **kw):
+        if kw.get("dry_run"):
+            return RunResult(dry_run=True, argv=built.argv, display=built.display)
+        stage_files(built)
+        staged = fake.init.read_text()
+        fake.run_during_wbm = requested_run_value(staged)
+        fake.dump.parent.mkdir(parents=True)
+        fake.dump.write_text(staged)                       # WBM's dump of the init it read
+        (fake.out / "PostProcessing.pl").write_text((_PP_FIXTURES / "PostProcessing.pl").read_text())
+        return RunResult(dry_run=False, argv=built.argv, display=built.display, exit_code=wbm_code)
+
+    def container(argv, log_path):
+        fake.pp_calls.append(argv)
+        Path(log_path).write_text(pp_log)
+        (fake.out / "climatology").mkdir(exist_ok=True)
+        for n in pp_files:
+            (fake.out / "climatology" / n).write_bytes(b"x")
+        return pp_code
+
+    monkeypatch.setattr(cli_main, "run_command", wbm)
+    monkeypatch.setattr(post_processing, "_run_logged", container)
+    snap = _make_snapshot(tmp_path)
+    (snap / "wbm_init" / "wbm_test.init").write_text((_PP_FIXTURES / init).read_text(), encoding="utf-8")
+    return fake, snap
+
+
+def _invoke(tmp_path, snap, *args):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    return CliRunner().invoke(
+        cli, ["sim", "run", str(snap), "--id", "sim1", "--spool", "fresh", "--config", str(_cli_config(tmp_path)), *args])
+
+
+def test_sim_run_runs_post_processing_after_wbm_and_puts_the_init_back(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert fake.run_during_wbm == "0"                       # WBM saw Run => 0
+    assert fake.run_values() == ["1", "1"]                  # both copies say what was asked for
+    assert len(fake.pp_calls) == 1
+    assert fake.pp_calls[0][-3:] == ["perl", "-w", "/wbm/wbm_output/sim1/PostProcessing.pl"]
+    side = fake.sidecar()
+    pp = side["post_processing"]
+    assert side["exit_code"] == 0 and pp["ok"] is True and pp["exit_code"] == 0
+    assert pp["expected"] == {"climatology": 9, "spatial_agg": False}
+    assert pp["found"] == {"climatology": 9, "spatial_agg": 0}
+    assert pp["log"] == "wbm_output/sim1/PostProcessing.log"
+    assert "post-processing finished" in out.output
+
+
+def test_sim_run_fails_when_post_processing_fails_though_wbm_exited_0(tmp_path, monkeypatch):
+    """The script exits 0 and prints 'All Done!' with nothing in climatology/ (Anvil job 21163850)."""
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", pp_files=[])
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 1, out.output
+    pp = fake.sidecar()["post_processing"]
+    assert pp["ok"] is False and pp["exit_code"] == 0 and pp["all_done"] is True
+    assert pp["found"]["climatology"] == 0
+    assert "openghm: post-processing failed: climatology/ holds 0 of the 9" in out.output
+    assert fake.sidecar()["exit_code"] == 0                  # WBM's own result is still recorded as it was
+    assert fake.run_values() == ["1", "1"]                  # restored on this path too
+
+
+def test_sim_run_fails_when_the_post_processing_script_exits_non_zero(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", pp_code=2, pp_log="boom\n")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 1
+    pp = fake.sidecar()["post_processing"]
+    assert pp["ok"] is False and pp["exit_code"] == 2 and pp["tail"] == ["boom"]
+
+
+def test_sim_run_after_a_failed_wbm_skips_post_processing_but_restores_the_init(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_code=3)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 3, out.output                   # WBM's own code
+    assert fake.pp_calls == []
+    pp = fake.sidecar()["post_processing"]
+    assert pp["ok"] is None and pp["exit_code"] is None and pp["requested"] is True
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_sim_run_with_an_init_that_does_not_ask_changes_nothing(tmp_path, monkeypatch):
+    from openghm.sim import SubmitOptions, build_persim_init
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_test.init")      # Run => 0
+    template = (snap / "wbm_init" / "wbm_test.init").read_text()
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert fake.pp_calls == []
+    assert "post_processing" not in fake.sidecar()
+    assert fake.init.read_text() == build_persim_init(template, "sim1", SubmitOptions())
+    assert fake.run_values() == ["0", "0"]
+    assert "post-processing" not in out.output
+
+
+def test_sim_run_without_a_post_processing_block_changes_nothing(tmp_path, monkeypatch):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+    monkeypatch.setattr(cli_main, "run_command", lambda built, **kw: (stage_files(built), RunResult(
+        dry_run=False, argv=built.argv, display=built.display, exit_code=0))[1])
+    out = _run_cli(tmp_path, "--spool", "fresh")             # the module's _INIT_TEMPLATE has no block
+    assert out.exit_code == 0, out.output
+    side = json.loads((tmp_path / "out" / "sim1" / "simulation.json").read_text())
+    assert "post_processing" not in side and side["exit_code"] == 0
+
+
+def test_sim_run_fails_when_the_post_processing_record_cannot_be_made(tmp_path, monkeypatch):
+    """A step nobody could record is a failed step when WBM exited 0."""
+    from openghm import post_processing
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+
+    def broken(*a, **kw):
+        raise OSError("disk full")
+    monkeypatch.setattr(post_processing, "finish", broken)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 1 and "post-processing could not be completed: disk full" in out.output
+
+
+def test_sim_run_dry_run_shows_the_held_init_and_runs_nothing(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap, "--dry-run", "--json")
+    assert out.exit_code == 0, out.output
+    files = {Path(f["hostPath"]).name: f["content"] for f in json.loads(out.stdout)["generatedFiles"]}
+    assert json.loads(files["simulation.json"])["post_processing"]["run_value"] == "1"
+    from openghm.post_processing import requested_run_value
+    assert requested_run_value(files["wbm_test.init"]) == "0"
+    assert fake.pp_calls == [] and not fake.work.exists()
+
+
+# ── sim post-process (the sbatch job's step) ───────────────────────────────────
+
+
+def _staged_submit(tmp_path, monkeypatch, init="fc66a2cd_wbm_SHORT.init", **kw):
+    """A submitted run as the compute node finds it: staged, WBM done."""
+    fake, snap = _fake_run(tmp_path, monkeypatch, init, **kw)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    stage_files(built)
+    fake.dump.parent.mkdir(parents=True)
+    fake.dump.write_text(fake.init.read_text())
+    (fake.out / "PostProcessing.pl").write_text((_PP_FIXTURES / "PostProcessing.pl").read_text())
+    return fake
+
+
+def _post_process(fake, *args):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    return CliRunner().invoke(cli, ["sim", "post-process", str(fake.work), *args])
+
+
+def test_sim_post_process_after_a_good_wbm_runs_checks_and_restores(tmp_path, monkeypatch):
+    fake = _staged_submit(tmp_path, monkeypatch)
+    out = _post_process(fake, "--wbm-exit-code", "0")
+    assert out.exit_code == 0, out.output
+    assert len(fake.pp_calls) == 1 and fake.sidecar()["post_processing"]["ok"] is True
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_sim_post_process_exits_1_when_the_step_fails(tmp_path, monkeypatch):
+    fake = _staged_submit(tmp_path, monkeypatch, pp_files=_PP_NINE[:5])
+    out = _post_process(fake)                                   # --wbm-exit-code defaults to 0
+    assert out.exit_code == 1, out.output
+    assert fake.sidecar()["post_processing"]["found"]["climatology"] == 5
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_sim_post_process_after_a_failed_wbm_exits_with_wbms_code_and_restores(tmp_path, monkeypatch):
+    fake = _staged_submit(tmp_path, monkeypatch)
+    out = _post_process(fake, "--wbm-exit-code", "137")
+    assert out.exit_code == 137, out.output
+    assert fake.pp_calls == [] and fake.sidecar()["post_processing"]["ok"] is None
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_sim_post_process_on_a_run_that_did_not_ask_does_nothing(tmp_path, monkeypatch):
+    fake = _staged_submit(tmp_path, monkeypatch, init="fc66a2cd_wbm_test.init")
+    assert _post_process(fake).exit_code == 0
+    assert _post_process(fake, "--wbm-exit-code", "5").exit_code == 5
+    assert fake.pp_calls == [] and "post_processing" not in fake.sidecar()
+
+
+def test_sim_post_process_without_a_sidecar_keeps_wbms_code(tmp_path):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    for code, want in (("0", 2), ("9", 9)):
+        out = CliRunner().invoke(cli, ["sim", "post-process", str(tmp_path), "--wbm-exit-code", code])
+        assert out.exit_code == want and "post-processing could not be completed" in out.output

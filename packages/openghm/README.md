@@ -477,6 +477,30 @@ They differ only in **where** the model runs:
   management commands (`status`/`logs`/`cancel`, which call `sacct`/`scancel`) on a
   SLURM login node. `list` just reads the local sidecars.
 
+**Post-processing.** An init whose `PostProcessing` block has `Run => 1` asks WBM for
+climatology, multi-year means and spatial aggregates (`PostProcessing.pl`). WBM starts that
+script detached, and a container does not outlive `wbm.pl`: the image is unmounted under the
+script, every call fails, and the run would still look successful (Anvil job 21163850: an empty
+`climatology/`). So both commands stage such a run with `Run => 0` (only the value in that block;
+`Run_Start` and `Run_End` are never touched), and after WBM exits 0 they run
+`PostProcessing.pl` themselves, in the foreground and in the same container and mounts as WBM,
+its output in `wbm_output/<id>/PostProcessing.log`. The step passes when the script exits 0,
+prints "All Done!", has no `Can't exec` line in its log, and left the files it was asked for
+(the script ignores the exit status of its own `system()` calls, so "All Done!" alone proves
+nothing): per variable in its `@param` list, the `_dc`, `_mc` and `_yc` files in `climatology/`
+that its `$climatology`, `$monthly` and `$TA_depth` call for, and a `spatial_agg/` that is not
+empty when `$spatial_agg` is 1. Whatever happened, even after a failed WBM, the requested `Run`
+value is put back in `wbm_init/<init>` and in WBM's own dump `wbm_output/<id>/init_files/<init>`,
+so what is published and what a rerun reads say what was asked. The result is the
+`post_processing` key of `simulation.json` (`requested`, `run_value`, `argv`, then `exit_code`,
+`seconds`, `log`, `tail` (the last 40 lines), `all_done`, `expected`, `found`, `cant_exec`,
+`problems`, `ok`; `exit_code` and `ok` are `null` when WBM failed and the step did not run).
+A failed step makes `sim run` exit 1 and fails the `sim submit` job. In the job script the step
+is `openghm sim post-process <sim dir> --wbm-exit-code "$rc"`, which exits with WBM's own code
+when that is not 0. A run that is killed by its walltime never gets there, so its init keeps
+`Run => 0`, which is what ran. Polygon aggregation calls `nc_aggr_read.pl`, which is not in any
+snapshot's `utilities/`, so a run that asks for it fails the check.
+
 **WBM threads.** Both pass `wbm.pl` `-t N` (`wbm_threads` in `sim.py`): one thread
 per core the run holds, at most 8, which is all `wbm.pl` accepts. `submit` knows the
 cores because it writes `--cpus-per-task` itself (`--cores`, else
@@ -509,6 +533,7 @@ openghm sim list                            # every run under output_base
 openghm sim status run-001                  # sacct → State / ExitCode / Elapsed
 openghm sim logs run-001 --follow           # tail slurm-<job>.out
 openghm sim cancel run-001                  # scancel (prompts unless -y)
+openghm sim post-process <output_base>/run-001 --wbm-exit-code 0   # what the job script runs after WBM, when the init asks for post-processing
 ```
 
 ## Develop / test

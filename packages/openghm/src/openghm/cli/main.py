@@ -16,6 +16,7 @@ from typing import Callable, List, Optional
 
 import click
 
+from .. import post_processing
 from ..config import load_config
 from ..errors import OpenghmError
 from ..mounts import DataMountSpec
@@ -23,7 +24,7 @@ from ..network import build_network
 from ..run import run_command
 from ..runtime import RuntimeContext
 from ..sim import (
-    SubmitOptions, build_submit, build_run, record_exit_code,
+    SIDECAR_NAME, SubmitOptions, build_submit, build_run, post_processing_requested, record_exit_code, sidecar_path,
     parse_slurm_job_id, record_slurm_job_id,
     list_simulations, find_simulation, resolve_job_id,
     build_sacct_argv, parse_sacct, sacct_primary,
@@ -401,15 +402,76 @@ def sim_run_cmd(**p) -> None:
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
         raise SystemExit(2)
+    post = None
     if not result.dry_run:
         # The run is over: a bookkeeping failure must not make it look refused.
         try:
             record_exit_code(built, result.exit_code or 0)
         except Exception as e:  # noqa: BLE001
             click.echo(f"openghm: warning: could not record the exit code in simulation.json: {e}", err=True)
+        post = _post_process(built, result.exit_code or 0)
     present("sim run", ctx, built, result, as_json=p["as_json"])
     if not result.dry_run and result.exit_code:
         raise SystemExit(result.exit_code)
+    if post is not None and post.get("ok") is False:
+        raise SystemExit(1)
+
+
+def _say_post_processing(record: dict) -> None:
+    """One report of a post-processing record on stderr: what it wrote, or what is wrong."""
+    if record.get("ok"):
+        click.echo(
+            f"openghm: post-processing finished in {record['seconds']} s, "
+            f"{record['found']['climatology']} climatology file(s), log {record['log']}", err=True)
+    elif record.get("ok") is False:
+        for problem in record.get("problems") or []:
+            click.echo(f"openghm: post-processing failed: {problem}", err=True)
+        click.echo(f"openghm: post-processing log: {record['log']}", err=True)
+
+
+def _post_process(built: BuiltCommand, wbm_exit_code: int) -> Optional[dict]:
+    """After WBM in `sim run`: run and check post-processing and put the init's Run value back
+    (`post_processing.finish`). ``None`` when the run does not ask for it; otherwise its record.
+
+    A step that could not be recorded is a failed one when WBM exited 0, since nobody knows what it
+    wrote; after a failed WBM the run is failed already, and this only warns.
+    """
+    if not post_processing_requested(built):
+        return None
+    try:
+        record = post_processing.finish(sidecar_path(built), wbm_exit_code, log=lambda m: click.echo(m, err=True))
+    except Exception as e:  # noqa: BLE001
+        click.echo(f"openghm: post-processing could not be completed: {e}", err=True)
+        return {"ok": False if wbm_exit_code == 0 else None}
+    if record is not None:
+        _say_post_processing(record)
+    return record
+
+
+@sim_group.command("post-process")
+@click.argument("sim_dir", metavar="SIM_DIR")
+@click.option("--wbm-exit-code", "wbm_exit_code", type=int, default=0, show_default=True,
+              help="the exit code WBM ended with: the step runs only when it is 0")
+def sim_post_process_cmd(sim_dir: str, wbm_exit_code: int) -> None:
+    """run a simulation's PostProcessing.pl after WBM, check it, and put the init's Run value back
+
+    SIM_DIR is the simulation's work directory (<output_base>/<id>). `sim submit` puts this in
+    its job script for an init that asks for post-processing (`PostProcessing => { Run => 1 }`),
+    where `sim run` does it itself. It exits with --wbm-exit-code when that is not 0, with 1 when
+    post-processing failed, and with 2 when it could not be done.
+    """
+    try:
+        record = post_processing.finish(
+            os.path.join(sim_dir, SIDECAR_NAME), wbm_exit_code, log=lambda m: click.echo(m, err=True))
+    except Exception as e:  # noqa: BLE001
+        click.echo(f"openghm: post-processing could not be completed: {e}", err=True)
+        raise SystemExit(wbm_exit_code or 2)
+    if record is not None:
+        _say_post_processing(record)
+    if wbm_exit_code:
+        raise SystemExit(wbm_exit_code)
+    if record is not None and record.get("ok") is False:
+        raise SystemExit(1)
 
 
 @sim_group.command("list")

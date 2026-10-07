@@ -1,0 +1,39 @@
+{
+ID		=> 'test',
+Comment		=> 'a simple WBM installation test',
+Project		=> 'WBM test',
+MT_Code_Name	=>  {
+          MT_ID		=> 'WMB_test',
+          Output_dir	=> '/wbm/wbm_output/WBM_test',
+	  Run_Start 	=> '2000-01-01',
+          Run_End	=> '2000-12-31'
+        },
+Spinup		=>  {
+          Loops		=> 1,
+          Start		=> '2000-01-01',
+          End		=> '2000-12-31',
+          State_ID	=> '',
+          Force_ID_Date	=> ''
+        },
+Output_vars	=> 'runoff discharge',
+MT_Precip	=>  {
+          Primary	=> '/wbm/data_init/climate/merra2_prectotcorr_d.init'
+	},
+precipFraction	=> '',
+MT_airT		=>  {
+          Primary	=> '/wbm/data_init/climate/merra2_t2m_d.init'
+	},
+Network		=> '/wbm/data/network/Merrimack_stn210_Subset.tif',
+Projection	=> 'epsg:4326',
+Routing		=> 'LRR',
+wbmParam	=> { scrPrintScale => 0.001 },
+soilAWCapacity	=> '/wbm/data_init/soil/harmonized_AWC_5min_mer.init',
+rootingDepth	=> '/wbm/data_init/soil/Effective_Rooting_Depth_mod.init',
+PET		=> 'Hamon',
+PostProcessing	=>  {
+          Run		=> 0,
+          Forks		=> 4,
+          Polygon_Aggregation	=> '',
+          Temporal_Aggregation	=> 1
+        },
+}
