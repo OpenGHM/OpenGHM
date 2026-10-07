@@ -271,11 +271,12 @@ property the write path has to actively preserve, not one it gets for free.
 client and no credentials by design (§5), so it cannot discover what has
 been published, nor verify that the bytes behind a document are really in
 the bucket. Registration is always "someone tells the gateway", never "the
-gateway finds out", and the catalogue and the bucket can drift. Nothing
-today produces what gets registered either: no code mints an artifact id,
-and `openghm model-input publish` does not exist — only `validate`. The
-write paths are the receiving end of a chain whose earlier links are still
-to be built.
+gateway finds out", and the catalogue and the bucket can drift. For a
+snapshot published from a draft the gateway is told by its own publish job:
+publishing (§5) mints the id, writes `metadata.json`, uploads, verifies the
+upload anonymously, and only then registers. `POST /repository/datasets`, the
+manual write path, needs the repository-manage permission. Nothing produces a
+model input's yet: `openghm model-input publish` does not exist.
 
 MongoDB runs as a StatefulSet with a PersistentVolumeClaim
 (`ops/k8s/base/mongo.yml`). That is the one place cluster state exists, and
@@ -693,10 +694,96 @@ meanwhile) the answer is 409 `job_changed`, with no `job_deleted` event. The gat
 Anvil purges scratch files untouched for 30 days, and a daily check sets
 `files: purged` on a job whose work directory is gone.
 
-Nothing uploads output, by decision
+A run uploads nothing, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
-writes to Anvil scratch, and the output stays there. Publishing a snapshot draft
-as a snapshot is the step that uploads it, and that step is not written yet.
+writes to Anvil scratch, and the output stays there until the draft is
+published.
+
+### Publishing — a second job, under an id minted first
+
+Publishing a snapshot draft as a snapshot is the one step that uploads a run
+([ADR 0031](../decisions/0031-a-snapshot-draft-is-published-by-a-job.md)).
+It has its own record on the job, `publish`, beside the run's. `status` stays
+`COMPLETED`, so nothing that reads it changes.
+
+**Who and when.** `POST /jobs/{id}/publish` takes the `about` a person
+writes: name, description, creators, license, keywords and tags. The
+draft's owner or an admin may call it.
+
+- **Publishable** means:
+  - status `COMPLETED`, with no `failure`;
+  - not a draft a published snapshot answered;
+  - `publish` absent or `failed`;
+  - run files not purged.
+- **Otherwise** it answers 409 `not_publishable`, whose `reason` is
+  `not_completed`, `run_failed`, `answered_by_published`, `publishing` or
+  `already_published`, or 409 `run_files_missing`.
+
+**What it does** (`web-gateway/backend/app/services/publish.py`):
+
+- **Claim.** A conditional update sets `publish.state: publishing`.
+- **Mint the id**, 256 random bits, on the first attempt only.
+- **Compose `metadata.json`.** It starts from the base snapshot's catalogue
+  document:
+  - `id` is the new id, and `slug` is made from the name;
+  - `about` is the person's, plus `datePublished`, `url`
+    (`PUBLIC_SITE_URL/snapshots/<id>`, which the frontend redirects to
+    `/repository/<id>`) and `isBasedOn` (the base);
+  - `simulation` takes the draft's period and output variables;
+  - `runtime.execution` comes from the run's SLURM record.
+
+  A document the generated model refuses is a 422 `invalid_about`. Nothing
+  is stored then, and no id is spent.
+- **Submit.** It writes the document over SFTP and sbatches a publish job:
+  `publish-<id>`, 1 task, 2 cores, `PUBLISH_WALLTIME`. The job runs `openghm
+  snapshot publish <work_dir> --metadata … --id <id> --s3cfg
+  <ANVIL_S3CFG>`, the run's toolkit at `ANVIL_OPENGHM_HOME`. An `EXIT` trap
+  writes `publish-outcome.json`, holding the exit code and the stderr tail,
+  into the publish job's own directory.
+- **A refusal after the claim** (sbatch rejected, SSH down, a bug) leaves
+  `publish.state: failed`, with that cause and a retry.
+
+**The verdict** (`slurm.sync_publishes`, every sweep tick). A publish whose
+SLURM job has ended is classified from its outcome file:
+
+| Outcome | cause | retry |
+|---|---|---|
+| exit 0 | registered, then `published` | |
+| 2 bad input | `publish_bad_input` | `edit`: recompose under the same id (the toolkit checks before it writes) |
+| 3 output incomplete | `publish_output_incomplete` | `none` |
+| 4 a key holds other bytes | `publish_conflict` | `none` |
+| 5 no credentials | `publish_setup` | `none` |
+| 6 upload failed, 7 verify failed | `publish_upload_failed`, `publish_verify_failed` | `same` |
+| no outcome, or TIMEOUT, CANCELLED, NODE_FAIL | `publish_job_failed` | `same` |
+
+- **A `same` retry** sends the stored document byte for byte, under the same
+  id, so the toolkit skips what already landed. Two publish jobs for one id
+  are harmless for the same reason. That is why an interrupted publish
+  submit is simply `publish_submit_interrupted`, with nothing cancelled.
+- **Registration** inserts the stored document into `datasets`, owned by the
+  draft's owner, public. That happens before the record says `published`, so
+  a draft that reads as published is already listed.
+- **`DELETE`** of a draft while it publishes is 409 `publish_in_progress`.
+  Deleting a published draft leaves the snapshot, which is its own artifact.
+
+The job page (`publish-card.tsx`, `publish-sheet.tsx`) shows:
+
+- **the form**, warning that the snapshot is public and cannot be changed;
+- **while publishing**, the SLURM job, polled by the same live hook, which
+  keeps polling while `publish.state` is `publishing`;
+- **published**, the id and a link to the repository;
+- **failed**, the message and the action `retry` allows.
+
+The list marks a published draft *Published*.
+
+Verified live on 2026-10-07 from draft `8b8e9490…`:
+
+- **A publish** ran SLURM 21154131. `fetch` and `validate` passed on the
+  result, and `runtime.execution` matched `sacct`.
+- **A missing `~/.s3cfg`** gave `publish_setup`, with no retry offered.
+- **A publish job cancelled on Anvil** gave `publish_job_failed`. "Try
+  again" then published under the same id, on attempt 3.
+- **Cleanup.** The test snapshots were deleted afterwards.
 
 ## 6. What is absent, and not by oversight
 
