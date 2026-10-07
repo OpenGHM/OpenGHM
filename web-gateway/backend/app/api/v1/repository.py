@@ -28,12 +28,14 @@ from app.models.repository import (
     RepositoryListResponse,
     SnapshotCatalogueItem,
     SnapshotLinks,
+    TreeListing,
+    TreePreview,
     build_envelope,
     model_input_links,
     snapshot_links,
 )
 from app.models.user import TokenPayload
-from app.services import published_answer, run_start
+from app.services import published_answer, run_start, tree_browse
 from app.services.catalogue import (
     CatalogueQuery,
     InvalidBoundingBox,
@@ -43,6 +45,58 @@ from app.services.catalogue import (
 )
 
 router = APIRouter(prefix="/repository", tags=["repository"])
+
+
+async def _browse_folder(
+    kind: tree_browse.Kind, artifact_id: str, path: str, cursor: str | None
+) -> TreeListing:
+    """The folder at ``path`` of an artifact already known to the catalogue:
+    422 ``invalid_path``, 404 ``path_not_found``, 503 ``listing_unavailable``."""
+    try:
+        folder = tree_browse.validate_path(path)
+        return await tree_browse.list_folder(kind, artifact_id, folder, cursor)
+    except tree_browse.InvalidPath as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_path", "message": str(exc)}
+        ) from exc
+    except tree_browse.PathNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "path_not_found", "message": f"Nothing is published at '{path}'."},
+        ) from exc
+    except tree_browse.ListingUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "listing_unavailable",
+                "message": "The files could not be listed right now. Try again in a few minutes.",
+            },
+        ) from exc
+
+
+async def _browse_preview(kind: tree_browse.Kind, artifact_id: str, path: str) -> TreePreview:
+    """The first bytes of the file at ``path``: 422 ``invalid_path``, 404
+    ``path_not_found``, 503 ``preview_unavailable``."""
+    try:
+        file = tree_browse.validate_path(path, file=True)
+        return await tree_browse.preview(kind, artifact_id, file)
+    except tree_browse.InvalidPath as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_path", "message": str(exc)}
+        ) from exc
+    except tree_browse.PathNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "path_not_found", "message": f"Nothing is published at '{path}'."},
+        ) from exc
+    except tree_browse.PreviewUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "preview_unavailable",
+                "message": "The file could not be read right now. Try again in a few minutes.",
+            },
+        ) from exc
 
 
 async def _load_all_datasets() -> list[DatasetResponse]:
@@ -243,6 +297,32 @@ async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
     return snapshot_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
 
 
+@router.get("/datasets/{dataset_id}/files")
+async def get_dataset_files(
+    dataset_id: str,
+    path: str = Query(default="", description="Folder, relative to the snapshot's root"),
+    cursor: str | None = Query(default=None, description="``nextCursor`` of the previous page"),
+) -> TreeListing:
+    """One page of one folder of a published snapshot's tree, listed from the
+    public bucket (``tree_browse``). Open, like ``get_dataset``."""
+    db = get_db()
+    if await db["datasets"].find_one({"_id": dataset_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    return await _browse_folder("snapshots", dataset_id, path, cursor)
+
+
+@router.get("/datasets/{dataset_id}/files/preview")
+async def get_dataset_file_preview(
+    dataset_id: str,
+    path: str = Query(description="File, relative to the snapshot's root"),
+) -> TreePreview:
+    """The first 256 KiB of one file of a published snapshot. Open."""
+    db = get_db()
+    if await db["datasets"].find_one({"_id": dataset_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    return await _browse_preview("snapshots", dataset_id, path)
+
+
 @router.post("/datasets/{dataset_id}/published-answer")
 async def get_published_answer(
     dataset_id: str,
@@ -404,6 +484,31 @@ async def get_model_input_links(model_input_id: str) -> ModelInputLinks:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
     return model_input_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
+
+
+@router.get("/model-inputs/{model_input_id}/files")
+async def get_model_input_files(
+    model_input_id: str,
+    path: str = Query(default="", description="Folder, relative to the model input's root"),
+    cursor: str | None = Query(default=None, description="``nextCursor`` of the previous page"),
+) -> TreeListing:
+    """The model-input sibling of ``get_dataset_files``."""
+    db = get_db()
+    if await db["model_inputs"].find_one({"_id": model_input_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return await _browse_folder("model-inputs", model_input_id, path, cursor)
+
+
+@router.get("/model-inputs/{model_input_id}/files/preview")
+async def get_model_input_file_preview(
+    model_input_id: str,
+    path: str = Query(description="File, relative to the model input's root"),
+) -> TreePreview:
+    """The model-input sibling of ``get_dataset_file_preview``."""
+    db = get_db()
+    if await db["model_inputs"].find_one({"_id": model_input_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return await _browse_preview("model-inputs", model_input_id, path)
 
 
 @router.post(

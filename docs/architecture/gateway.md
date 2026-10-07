@@ -387,14 +387,22 @@ each item's `visibility` and `registeredAt`. No paging, no facets.
 
 ### Data — links, not bytes
 
-The backend holds no S3 credentials and makes no S3 API calls. It concatenates
-`S3_PUBLIC_BASE_URL`, a bucket and a key into a public HTTPS string and returns
-that; the browser downloads from Anvil S3 directly, bypassing the API. The
-config file states this in a comment, and there is no S3 client in
-`requirements.txt` to contradict it. The one object it reads itself is a
-snapshot's init, with a plain `httpx` GET of the public URL
-(`web-gateway/backend/app/services/run_start.py`), to learn what the init asks of
-a simulation's dates.
+The backend holds no S3 credentials, and there is no S3 client in
+`requirements.txt`. It concatenates `S3_PUBLIC_BASE_URL`, a bucket and a key
+into a public HTTPS string and returns that; the browser downloads from Anvil
+S3 directly, bypassing the API. What the backend reads itself, it reads
+anonymously with plain `httpx`, and only in small pieces:
+
+- a snapshot's init (`web-gateway/backend/app/services/run_start.py`), to
+  learn what it asks of a simulation's dates;
+- a snapshot's `wbm_output/` listing (`published_answer.py`), to tell
+  whether its published output answers a draft
+  ([simulation-reuse.md](simulation-reuse.md) §3);
+- one folder of a published tree, or the first 256 KiB of one file, for the
+  files page (`tree_browse.py`, below).
+
+The bucket sends no CORS headers (checked 2026-10-07: a preflight is `403`),
+so the browser cannot list or read it from script; it can only follow a link.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
@@ -407,6 +415,35 @@ response is the prefix (`snapshots/<id>/`, `model-inputs/<id>/`) plus its
 stored document and the two settings on each request, so nothing is stored and
 nothing checks that the objects exist. The detail pages render them in a
 Download card.
+
+The card's **Browse files** opens `/repository/<id>/files` (or
+`/repository/model-inputs/<id>/files`), which walks the tree a folder at a
+time, with `?path=` naming the folder and `?file=` the file open in a
+preview. It reads two open routes per kind, under `datasets/{id}` and
+`model-inputs/{id}`:
+
+- **`GET …/files?path=<folder>&cursor=<token>`** is one `ListObjectsV2`
+  page of one folder (a `/` delimiter, `max-keys=1000`):
+  `{ id, path, folders: [{name, path}], files: [{name, path, size,
+  lastModified, url, previewable}], nextCursor }`. `nextCursor` is the
+  bucket's continuation token, passed through rather than followed, and the
+  page offers **Load more** while it is set. No published folder holds more
+  than 366 entries yet (checked 2026-10-07), so paging has run only against
+  a token taken mid-folder. `previewable` is false for a name with a binary
+  extension (`.nc`, `.tif`, `.dat` and the like). A published tree is
+  immutable, so a non-empty page is kept in the process by prefix and
+  cursor, 512 at most.
+- **`GET …/files/preview?path=<file>`** is one `GET` of the first 256 KiB:
+  `{ path, size, kind: "text" | "binary", text, truncated }`. The bytes are
+  text when they hold no NUL and decode as UTF-8, a character cut at the end
+  of the range aside. It is not kept.
+
+An unknown id is `404`. A path that is absolute, has an empty, `.` or `..`
+segment, a backslash or a control character, or is over 900 characters is
+`422 invalid_path`. Nothing under a folder, or no such file, is
+`404 path_not_found`. A bucket that cannot be read is `503
+listing_unavailable` or `preview_unavailable`. A file's checksum, a folder's
+total size and a look inside a NetCDF file are not shown.
 
 The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
 has, with every artifact under a prefix

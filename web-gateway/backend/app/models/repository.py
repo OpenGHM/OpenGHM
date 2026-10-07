@@ -392,6 +392,60 @@ def model_input_links(document: dict[str, Any], *, base_url: str, bucket: str) -
     )
 
 
+# ---- browsing a published tree (mission 2026-10-07-a-published-tree-can-be-browsed) ----
+#
+# One folder of a snapshot's or model input's tree, listed anonymously from the
+# public bucket by `app.services.tree_browse`; paths are relative to the
+# artifact's root (`snapshots/<id>/` or `model-inputs/<id>/`).
+
+
+class TreeFolder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    #: ends with ``/``.
+    path: str
+
+
+class TreeFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    path: str
+    size: int
+    #: as the bucket lists it, e.g. ``2026-09-28T18:00:17.851Z``.
+    lastModified: str
+    #: the object's public HTTPS URL.
+    url: str
+    #: false for a known binary extension; the preview still decides by content.
+    previewable: bool
+
+
+class TreeListing(BaseModel):
+    """One page of one folder, each list sorted by name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    path: str
+    folders: list[TreeFolder]
+    files: list[TreeFile]
+    #: pass back as ``cursor`` for the next page; ``null`` on the last.
+    nextCursor: str | None
+
+
+class TreePreview(BaseModel):
+    """A file's first bytes. ``size`` is the whole object's."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    size: int
+    kind: Literal["text", "binary"]
+    text: str | None
+    truncated: bool
+
+
 # ---- published answer (mission 2026-10-05-a-published-draft-is-not-run) ----
 
 

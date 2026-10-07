@@ -260,6 +260,7 @@ export default async function DatasetDetailPage({
                 <div id="download" className="scroll-mt-24">
                   <DownloadCard
                     command={links.fetchCommand}
+                    browseHref={`/repository/${id}/files`}
                     items={[
                       { label: "Model snapshot tree", url: links.treeUrl, isFile: false },
                       { label: "metadata.json", url: links.metadataUrl, isFile: true },

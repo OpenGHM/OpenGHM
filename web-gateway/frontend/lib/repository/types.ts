@@ -189,3 +189,64 @@ export interface ModelInputLinks {
   metadataUrl: string;
   sha256sumsUrl: string;
 }
+
+// ─── Browsing a published tree ────────────────────────────────────────────────
+
+/** Which published tree a listing or a preview reads: `snapshots/<id>/` or `model-inputs/<id>/`. */
+export type TreeKind = "snapshot" | "model_input";
+
+export interface TreeFolder {
+  name: string;
+  /** Relative to the tree's root, ending with `/`. */
+  path: string;
+}
+
+export interface TreeFile {
+  name: string;
+  /** Relative to the tree's root. */
+  path: string;
+  size: number;
+  lastModified: string;
+  /** The object's public HTTPS URL; the browser follows it directly. */
+  url: string;
+  /** False for a known binary extension: the backend does not read it for a preview. */
+  previewable: boolean;
+}
+
+/**
+ * `GET /repository/{datasets|model-inputs}/{id}/files` — one folder, one S3
+ * page of it (`TreeListing` in the backend's `app/models/repository.py`).
+ * Hand-written: not part of the snapshot spec.
+ */
+export interface TreeListing {
+  id: string;
+  path: string;
+  folders: TreeFolder[];
+  files: TreeFile[];
+  /** The token for the folder's next page; null on the last. */
+  nextCursor: string | null;
+}
+
+/** `GET .../files/preview` — a file's first bytes (`TreePreview` in the backend). */
+export interface TreePreview {
+  path: string;
+  /** The object's whole size, not the preview's. */
+  size: number;
+  kind: "text" | "binary";
+  text: string | null;
+  truncated: boolean;
+}
+
+/**
+ * Why a listing or a preview did not come: the backend's `detail.code`, or
+ * `not_found` for an id the catalogue does not hold (a plain 404).
+ */
+export type TreeErrorCode =
+  | "invalid_path"
+  | "path_not_found"
+  | "listing_unavailable"
+  | "preview_unavailable"
+  | "not_found";
+
+/** A server action's answer: the data, or the code the UI shows a state for. */
+export type TreeResult<T> = { ok: true; data: T } | { ok: false; code: TreeErrorCode };

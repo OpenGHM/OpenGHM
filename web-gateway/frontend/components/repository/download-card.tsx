@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Check } from "lucide-react";
+import { Download, Copy, Check, FolderTree } from "lucide-react";
 
 export interface DownloadItem {
   label: string;
@@ -49,14 +50,16 @@ function CopyButton({ text, label }: { text: string; label: string }) {
  * The "Download" section of a snapshot or model-input detail page. The
  * links are plain public HTTPS strings from the backend's `/links` routes;
  * the browser downloads from Anvil S3 directly. `command`, when given, is the
- * CLI fetch.
+ * CLI fetch. `browseHref`, when given, is the files page that walks the tree.
  */
 export function DownloadCard({
   items,
   command,
+  browseHref,
 }: {
   items: DownloadItem[];
   command?: string;
+  browseHref?: string;
 }) {
   return (
     <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
@@ -74,6 +77,14 @@ export function DownloadCard({
             ? "The tree is many files, not one archive. The CLI fetches it and verifies every file against SHA256SUMS."
             : "The tree is many files, not one archive. Verify a downloaded copy with sha256sum -c SHA256SUMS."}
         </p>
+        {browseHref && (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={browseHref}>
+              <FolderTree className="size-4" />
+              Browse files
+            </Link>
+          </Button>
+        )}
         {command && (
           <div className="space-y-1.5">
             <div className="text-xs font-medium uppercase tracking-wider text-slate-400">CLI</div>

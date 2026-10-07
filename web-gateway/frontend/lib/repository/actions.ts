@@ -18,7 +18,12 @@ import {
   ModelInputListResponse,
   ModelInputLinks,
   SnapshotLinks,
+  TreeKind,
+  TreeListing,
+  TreePreview,
+  TreeResult,
 } from "@/lib/repository/types";
+import { treeFailureCode, treeRoute } from "@/lib/repository/tree-browse";
 
 /**
  * Fetch one page of the catalogue — snapshots and model inputs together, with
@@ -224,5 +229,48 @@ export async function fetchModelInputLinks(id: string): Promise<ModelInputLinks 
       return null;
     }
     throw error;
+  }
+}
+
+/**
+ * One folder of a published tree (`GET .../{id}/files`), one S3 page of it:
+ * `cursor` is the previous page's `nextCursor`. The backend's coded refusals
+ * come back as data (`TreeResult`) for the files page to show a state for each;
+ * only a failure of this call itself would throw. Used by `TreeBrowser`.
+ */
+export async function fetchTreeListing(
+  kind: TreeKind,
+  id: string,
+  path: string,
+  cursor?: string | null
+): Promise<TreeResult<TreeListing>> {
+  try {
+    const client = await getApiClient({ allowAnonymous: true });
+    const params: Record<string, string> = { path };
+    if (cursor) params.cursor = cursor;
+    const response = await client.get<TreeListing>(`${treeRoute(kind, id)}/files`, { params });
+    return { ok: true, data: response.data };
+  } catch (error: unknown) {
+    return { ok: false, code: treeFailureCode(error, "listing_unavailable") };
+  }
+}
+
+/**
+ * The first 256 KiB of one file of a published tree
+ * (`GET .../{id}/files/preview`). Answers as `fetchTreeListing` does.
+ */
+export async function fetchTreePreview(
+  kind: TreeKind,
+  id: string,
+  path: string
+): Promise<TreeResult<TreePreview>> {
+  try {
+    const client = await getApiClient({ allowAnonymous: true });
+    const response = await client.get<TreePreview>(`${treeRoute(kind, id)}/files/preview`, {
+      params: { path },
+    });
+    return { ok: true, data: response.data };
+  } catch (error: unknown) {
+    return { ok: false, code: treeFailureCode(error, "preview_unavailable") };
   }
 }

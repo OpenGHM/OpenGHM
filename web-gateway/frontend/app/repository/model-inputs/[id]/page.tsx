@@ -247,6 +247,7 @@ export default async function ModelInputDetailPage({
               {links && (
                 <div id="download" className="scroll-mt-24">
                   <DownloadCard
+                    browseHref={`/repository/model-inputs/${id}/files`}
                     items={[
                       { label: "Model input tree", url: links.treeUrl, isFile: false },
                       { label: "metadata.json", url: links.metadataUrl, isFile: true },
