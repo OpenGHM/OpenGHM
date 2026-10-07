@@ -62,6 +62,12 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
     nextStep: "new_draft",
     tone: "danger",
   },
+  post_processing_failed: {
+    title: "WBM finished, but its post-processing failed",
+    body: "WBM's run finished and its daily, monthly and yearly output is complete. The post-processing the init asks for (climatology and other aggregations) failed or wrote incomplete output. Submitting again retries it.",
+    nextStep: "resubmit",
+    tone: "danger",
+  },
   wbm_silent_failure: {
     title: "WBM stopped without finishing",
     body: "WBM exited normally but did not report that it finished, or it wrote no output, so there is no usable result.",

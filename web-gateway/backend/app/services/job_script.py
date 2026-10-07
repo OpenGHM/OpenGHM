@@ -36,6 +36,7 @@ it (the frontend gets `JobResponse.failure` and `.output`)::
       "output": {"nc_count": 16, "total_bytes": 123, "file_count": 17,
                  "files": [{"path": "wbm_output/<sim_id>/daily/x.nc", "bytes": 1}],
                  "truncated": false},
+      "post_processing": null | {"ok": false, "tail": ["last 40 lines", "..."], ...},
       "ok": true
     }
 
@@ -54,7 +55,11 @@ tells `sim run` refusing before staging from WBM failing after it. `markers`
 are the failure lines WBM exits 0 after (`WBM_MARKERS`) that the log holds;
 `Failed to warp` is printed to WBM's stderr, which this record does not read,
 so `classify` looks for the markers in the stderr tail too. `all_done` is its
-success line. `output.files` is capped at 5000 and its paths
+success line. `post_processing` is the toolkit's own record of the post-processing
+the run's init asked for (`simulation.json`'s `post_processing`, copied whole):
+null when the init did not ask or the file holds none. `classify` reads its
+`ok` and `tail`, and a record whose `post_processing.ok` is false is not `ok`
+itself, whatever the steps' exit codes. `output.files` is capped at 5000 and its paths
 are relative to the work directory, under `wbm_output/<sim_id>/` only. `ok` is
 the script's own judgement and only sets its exit code, so SLURM agrees.
 """
@@ -188,12 +193,14 @@ output = {
 signal = E.get("OG_SIGNAL") or None
 restart = E.get("SLURM_RESTART_COUNT") or ""
 restart_count = int(restart) if re.fullmatch(r"\d+", restart) else 0
+post = sim.get("post_processing") if isinstance(sim.get("post_processing"), dict) else None
 ok = (
     "fetch" in steps and "run" in steps
     and all(s["exit_code"] == 0 for s in steps.values())
     and signal is None
     and restart_count == 0
     and wbm["all_done"] and not wbm["markers"] and nc_count > 0
+    and not (post is not None and post.get("ok") is False)
 )
 record = {
     "schema": 1,
@@ -211,6 +218,7 @@ record = {
     "staged": staged,
     "wbm": wbm,
     "output": output,
+    "post_processing": post,
     "ok": ok,
 }
 dest = E.get("SLURM_SUBMIT_DIR") or os.getcwd()

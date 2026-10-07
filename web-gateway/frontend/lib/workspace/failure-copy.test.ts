@@ -22,6 +22,7 @@ const ALL_CAUSES: Record<FailureCause, true> = {
   gateway_setup: true,
   run_refused: true,
   wbm_error: true,
+  post_processing_failed: true,
   wbm_silent_failure: true,
   timeout: true,
   out_of_memory: true,
@@ -91,6 +92,16 @@ describe("FAILURE_COPY", () => {
     expect(NEXT_STEP_COPY.admin_fixes_setup).not.toMatch(/new draft/);
     expect(offersNewDraft(copy.nextStep)).toBe(true);
     expect(summaryOffersCopy("FAILED", { cause: "gateway_setup", phase: "fetch", message: "m", excerpt: null })).toBe(true);
+  });
+
+  it("says post_processing_failed finished WBM's run and names the post-processing, not the run, as what failed", () => {
+    const copy = FAILURE_COPY.post_processing_failed;
+    expect(copy.title).toMatch(/post-processing/i);
+    expect(copy.body).toMatch(/daily, monthly and yearly output is complete/);
+    expect(copy.body).toMatch(/climatology/);
+    expect(copy.body).toMatch(/Submitting again/);
+    expect(copy.nextStep).toBe("resubmit");
+    expect(copy.tone).toBe("danger");
   });
 
   it("offers a new draft for every step except none", () => {

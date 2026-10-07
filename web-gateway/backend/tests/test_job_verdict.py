@@ -113,6 +113,150 @@ def test_the_same_exit_code_after_staging_is_a_wbm_error():
     )
 
 
+def _post_processing_record(post, *, run_code=1, staged=True, **changes):
+    return record(
+        phase="run",
+        steps={"fetch": {"exit_code": 0}, "run": {"exit_code": run_code}},
+        staged=staged,
+        post_processing=post,
+        **changes,
+    )
+
+
+FAILED_POST = {
+    "requested": True,
+    "run_value": "1",
+    "exit_code": 0,
+    "all_done": True,
+    "expected": {"climatology": 9, "spatial_agg": False},
+    "found": {"climatology": 0, "spatial_agg": 0},
+    "cant_exec": 0,
+    "ok": False,
+    "tail": ["Can't exec temporal_aggregation.pl", "All Done!"],
+}
+
+
+@pytest.mark.parametrize("state", ["COMPLETED", "FAILED"])
+def test_a_failed_post_processing_after_a_finished_run_is_post_processing_failed(state):
+    v = verdict(state, outcome=_post_processing_record(FAILED_POST), err=stderr("openghm: post-processing failed"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "post_processing_failed"
+    assert v.failure.phase == "run"
+    assert v.failure.excerpt == "Can't exec temporal_aggregation.pl\nAll Done!"
+    msg = v.failure.message
+    assert "daily, monthly and yearly output is complete" in msg
+    assert "0 of 9 climatology files were written" in msg
+    assert "Submitting again runs it again" in msg
+
+
+def test_post_processing_failed_names_missing_spatial_aggregates():
+    post = {**FAILED_POST, "expected": {"climatology": 0, "spatial_agg": True}, "found": {"climatology": 0, "spatial_agg": 0}}
+    v = verdict("FAILED", outcome=_post_processing_record(post))
+    assert v.failure.cause == "post_processing_failed"
+    assert "no spatial aggregates were written" in v.failure.message
+    assert "climatology files" not in v.failure.message
+
+
+def test_post_processing_failed_without_a_named_gap_stays_general():
+    v = verdict("FAILED", outcome=_post_processing_record({"ok": False, "tail": ["x"]}))
+    assert v.failure.cause == "post_processing_failed"
+    assert v.failure.message.count(":") == 0
+    assert v.failure.excerpt == "x"
+
+
+def test_post_processing_failed_without_a_tail_shows_stderr():
+    v = verdict("FAILED", outcome=_post_processing_record({"ok": False, "tail": []}), err=stderr("openghm: post-processing failed"))
+    assert v.failure.excerpt == "openghm: post-processing failed"
+
+
+def test_the_post_processing_tail_is_bounded_like_the_other_excerpts():
+    post = {"ok": False, "tail": [f"line {i} " + "x" * 200 for i in range(500)]}
+    v = verdict("FAILED", outcome=_post_processing_record(post))
+    assert len(v.failure.excerpt.encode()) <= 8 * 1024
+    assert len(v.failure.excerpt.splitlines()) <= 60
+    assert v.failure.excerpt.splitlines()[-1].startswith("line 499 ")
+
+
+def test_post_processing_that_passed_leaves_a_successful_record_completed():
+    rec = copy.deepcopy(SUCCESS)
+    rec["post_processing"] = {**FAILED_POST, "ok": True, "found": {"climatology": 9, "spatial_agg": 0}}
+    assert verdict(outcome=rec).status == "COMPLETED"
+
+
+@pytest.mark.parametrize("state", ["COMPLETED", "FAILED"])
+def test_a_run_that_exited_0_over_a_failed_post_processing_is_post_processing_failed(state):
+    rec = copy.deepcopy(SUCCESS)
+    rec["post_processing"] = copy.deepcopy(FAILED_POST)
+    rec["ok"] = False
+    v = verdict(state, outcome=rec)
+    assert v.status == "FAILED"
+    assert v.failure.cause == "post_processing_failed"
+    assert v.failure.phase == "run"
+    assert v.failure.excerpt == "Can't exec temporal_aggregation.pl\nAll Done!"
+    assert "0 of 9 climatology files were written" in v.failure.message
+
+
+def test_a_wbm_silent_failure_outranks_a_failed_post_processing_on_an_exit_0_run():
+    rec = copy.deepcopy(SUCCESS)
+    rec["post_processing"] = copy.deepcopy(FAILED_POST)
+    rec["wbm"]["all_done"] = False
+    assert verdict("FAILED", outcome=rec).failure.cause == "wbm_silent_failure"
+
+
+@pytest.mark.parametrize("post", ["failed", {"ok": "false"}, {"ok": None}, {"ok": True}, {}])
+def test_a_malformed_or_passing_post_processing_leaves_an_exit_0_run_completed(post):
+    rec = copy.deepcopy(SUCCESS)
+    rec["post_processing"] = post
+    assert verdict(outcome=rec).status == "COMPLETED"
+
+
+def test_a_failed_wbm_with_post_processing_skipped_is_still_a_wbm_error():
+    # The step did not run: its `ok` and `exit_code` are null.
+    post = {"requested": True, "exit_code": None, "ok": None, "tail": []}
+    v = verdict("FAILED", outcome=_post_processing_record(post, run_code=1))
+    assert v.failure.cause == "wbm_error"
+
+
+def test_a_record_without_post_processing_classifies_as_before():
+    v = verdict("FAILED", outcome=_post_processing_record(None))
+    assert v.failure.cause == "wbm_error"
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 1}}, staged=True)
+    assert "post_processing" not in rec
+    assert verdict("FAILED", outcome=rec).failure.cause == "wbm_error"
+
+
+@pytest.mark.parametrize(
+    "post",
+    ["failed", ["ok", False], 7, {"ok": "false"}, {"ok": 0}, {"ok": None}, {"ok": True}, {}],
+)
+def test_a_malformed_post_processing_is_no_post_processing_cause(post):
+    v = verdict("FAILED", outcome=_post_processing_record(post))
+    assert v.failure.cause == "wbm_error"
+
+
+@pytest.mark.parametrize("tail", ["a string", 5, {"a": 1}, [None, 3]])
+def test_a_malformed_tail_does_not_make_classify_raise(tail):
+    v = verdict("FAILED", outcome=_post_processing_record({"ok": False, "tail": tail}, ), err=stderr("e"))
+    assert v.failure.cause == "post_processing_failed"
+
+
+def test_malformed_expected_and_found_do_not_make_classify_raise():
+    post = {"ok": False, "tail": ["t"], "expected": [1], "found": "x", "cant_exec": "many", "all_done": "no"}
+    v = verdict("FAILED", outcome=_post_processing_record(post))
+    assert v.failure.cause == "post_processing_failed"
+
+
+def test_an_unstaged_run_is_run_refused_whatever_post_processing_says():
+    v = verdict("FAILED", outcome=_post_processing_record(FAILED_POST, staged=False))
+    assert v.failure.cause == "run_refused"
+
+
+def test_a_fetch_failure_outranks_post_processing():
+    rec = _post_processing_record(FAILED_POST)
+    rec["steps"]["fetch"] = {"exit_code": 1}
+    assert verdict("FAILED", outcome=rec).failure.cause == "fetch_failed"
+
+
 def test_a_wbm_error_without_a_log_falls_back_to_stderr():
     rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 125}},
                  staged=True, wbm={"log": None, "all_done": False, "markers": [], "tail": []})

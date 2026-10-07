@@ -12,7 +12,16 @@ Mongo. The first rule that matches wins:
 3. SLURM says the script exited (`COMPLETED`, `FAILED`, `SPECIAL_EXIT`): the
    record decides, first failing fact first. A record with a `restart_count`
    above 0 is a run SLURM requeued after a node failure, which the body
-   refuses to repeat (`job_script._REQUEUE_GUARD`): `node_failure`.
+   refuses to repeat (`job_script._REQUEUE_GUARD`): `node_failure`. Then the
+   fetch step (`gateway_setup`, `fetch_failed`), then the run step: a run
+   that was not staged is `run_refused`; one that was staged and whose
+   `post_processing.ok` is false (WBM finished, the post-processing its init
+   asks for did not) is `post_processing_failed`; any other staged run that
+   did not exit 0 is `wbm_error`. Then the silent failures of a run that
+   exited 0 (`wbm_silent_failure`). Last, a run that exited 0 whose
+   `post_processing.ok` is false is `post_processing_failed` too: the record
+   is the truth even if the toolkit's exit code disagrees. Only after all of
+   these does a record that says success, with SLURM agreeing, complete.
 4. SLURM has no record of the job (`missing=True`): judged from the record as
    rule 3 would; no record is `lost`.
 
@@ -55,6 +64,7 @@ _PHASE: dict[str, str] = {
     "gateway_setup": "fetch",
     "run_refused": "run",
     "wbm_error": "run",
+    "post_processing_failed": "run",
     "wbm_silent_failure": "check",
 }
 
@@ -270,6 +280,14 @@ def _from_record(
         code = run["exit_code"]
         if not record.get("staged"):
             return _fail("run_refused", excerpt=excerpt, detail=_openghm_message(excerpt), code=code)
+        post = _failed_post_processing(record)
+        if post is not None:
+            return _fail(
+                "post_processing_failed",
+                excerpt=_post_processing_excerpt(post, excerpt),
+                detail=_post_processing_missing(post),
+                code=code,
+            )
         return _fail(
             "wbm_error",
             excerpt=_wbm_excerpt(excerpt, wbm_tail),
@@ -292,6 +310,16 @@ def _from_record(
         return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail="no_all_done")
     if not output.get("nc_count"):
         return _fail("wbm_silent_failure", excerpt=_wbm_excerpt(excerpt, wbm_tail), detail="no_nc")
+
+    # Both steps exited 0, but the record says the post-processing failed: the
+    # record is the truth, even if the toolkit's exit code ever disagrees.
+    post = _failed_post_processing(record)
+    if post is not None:
+        return _fail(
+            "post_processing_failed",
+            excerpt=_post_processing_excerpt(post, excerpt),
+            detail=_post_processing_missing(post),
+        )
 
     # The record says success. SLURM has to agree, or the two disagree and
     # neither is to be trusted with the word "completed".
@@ -371,6 +399,18 @@ def _message(
             f"WBM stopped with an error (exit code {code}). The last lines of its "
             "log show what it was doing."
         )
+    if cause == "post_processing_failed":
+        head = (
+            "WBM's run finished and its daily, monthly and yearly output is complete, but the "
+            "post-processing this simulation's init asks for (climatology and other "
+            "aggregations) failed or wrote incomplete output"
+        )
+        if detail:
+            head += f": {detail}"
+        return (
+            f"{head}. The log below shows what the post-processing printed. Submitting again "
+            "runs it again."
+        )
     if cause == "wbm_silent_failure":
         if detail and detail.startswith("marker:"):
             return (
@@ -442,6 +482,53 @@ def _stderr_excerpt(stderr_tail: str) -> str | None:
     if len(text.encode("utf-8")) > _EXCERPT_BYTES:
         text = text.encode("utf-8")[-_EXCERPT_BYTES:].decode("utf-8", errors="ignore")
     return text or None
+
+
+def _failed_post_processing(record: dict) -> dict | None:
+    """The record's `post_processing` when it says the step failed: an object
+    whose `ok` is the boolean False. Anything else (absent, null, not an
+    object, `ok` null because WBM failed first, or not a boolean) is no such
+    record."""
+    post = record.get("post_processing")
+    if isinstance(post, dict) and post.get("ok") is False:
+        return post
+    return None
+
+
+def _count(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _post_processing_missing(post: dict) -> str | None:
+    """What the toolkit's record says is missing, in a phrase, from the facts
+    it holds: the climatology files expected against found, the spatial
+    aggregates, programs that could not be started. None when the record names
+    nothing, so the message stays general rather than guess."""
+    expected = post.get("expected") if isinstance(post.get("expected"), dict) else {}
+    found = post.get("found") if isinstance(post.get("found"), dict) else {}
+    parts: list[str] = []
+    want, have = _count(expected.get("climatology")), _count(found.get("climatology"))
+    if want and (have or 0) < want:
+        parts.append(f"{have or 0} of {want} climatology files were written")
+    if expected.get("spatial_agg") is True and not found.get("spatial_agg"):
+        parts.append("no spatial aggregates were written")
+    cant_exec = _count(post.get("cant_exec"))
+    if cant_exec:
+        parts.append(f"{cant_exec} program(s) could not be started")
+    if not parts and post.get("all_done") is False:
+        parts.append("the script did not reach \"All Done!\"")
+    return "; ".join(parts) or None
+
+
+def _post_processing_excerpt(post: dict, excerpt: str | None) -> str | None:
+    """The tail of PostProcessing.log the toolkit recorded, bounded like the
+    other excerpts; stderr's when the record holds none."""
+    tail = post.get("tail")
+    lines = [str(x) for x in tail] if isinstance(tail, list) else []
+    text = "\n".join(lines[-_EXCERPT_LINES:]).strip()
+    if not text:
+        return excerpt
+    return _last_bytes(text, _EXCERPT_BYTES)
 
 
 def _wbm_excerpt(excerpt: str | None, tail: list[str]) -> str | None:

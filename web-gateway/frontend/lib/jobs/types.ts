@@ -28,6 +28,7 @@ export type FailureCause =
   | "gateway_setup"
   | "run_refused"
   | "wbm_error"
+  | "post_processing_failed"
   | "wbm_silent_failure"
   | "timeout"
   | "out_of_memory"

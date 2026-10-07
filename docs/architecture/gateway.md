@@ -504,7 +504,9 @@ into slurmly's job directory with the toolkit venv's Python
 ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)). The record
 holds the phase reached, each step's exit code, whether the simulation was staged,
 the WBM markers its log holds (`All Done!`, `Failed to warp`, `Nothing to do`) and
-log tail, and the output manifest. The script exits non-zero when those facts
+log tail, the output manifest, and `post_processing`: the toolkit's own record
+(`simulation.json`) of the post-processing the run's init asks for, copied whole,
+or null when the init does not ask or the file holds none. The script exits non-zero when those facts
 are not a success, so SLURM's state agrees. The body's schema is the docstring
 of `job_script.py`. WBM prints `Failed to warp` to its **stderr**, not to its
 log, and exits 0, so the record cannot hold it: `classify` also looks for the
@@ -723,7 +725,21 @@ the gateway's Anvil setup is at fault, not the snapshot. The message says to tel
 an administrator, and the page says the same under the title "Anvil isn't set up
 correctly for OpenGHM", with "Try again with these settings" kept for after they
 have fixed it. A toolkit that cannot run at all before any step is not told
-apart: it leaves no step exit code, so it is `outcome_missing`. A `sim run` that stopped before staging with no
+apart: it leaves no step exit code, so it is `outcome_missing`. A run whose init asks for post-processing
+(`PostProcessing => { Run => 1 }`) has the toolkit run WBM's `PostProcessing.pl`
+itself after WBM exits 0, and fail `sim run` when it fails or leaves its output
+incomplete. The record then holds `post_processing.ok: false` beside a staged run
+step that did not exit 0 (or one that did: the record is the truth), the
+record's own `ok` is false, and `classify` names `post_processing_failed` (phase
+`run`) instead of `wbm_error`, checked first: WBM's run finished and its daily,
+monthly and yearly output is complete, and only the aggregations are missing. The
+message names what the record says is missing (climatology files found against
+expected, spatial aggregates, programs that could not be started) and says
+submitting again runs the step again; the excerpt is `post_processing.tail`, the
+last lines of `PostProcessing.log`, bounded like the other excerpts. A
+`post_processing` that is not an object, or whose `ok` is not the boolean `false`
+(`null` when WBM failed first and the step never ran), is read as absent, and the
+run is judged as before. A `sim run` that stopped before staging with no
 `openghm:` line gets a neutral message, not "check the snapshot's settings". A
 `wbm_error`'s reason is the last paragraph of stderr with the toolkit's own
 `spool:` lines and warnings left out, cut from its start so its end shows. The

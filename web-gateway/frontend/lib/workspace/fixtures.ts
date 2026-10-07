@@ -173,6 +173,20 @@ const FAILURE_FIXTURES: Record<
       ].join("\n"),
     },
   },
+  post_processing_failed: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "1:0",
+    failure: {
+      phase: "run",
+      message:
+        "WBM's run finished and its daily, monthly and yearly output is complete, but the post-processing this simulation's init asks for (climatology and other aggregations) failed or wrote incomplete output: 0 of 9 climatology files were written; 3 program(s) could not be started. The log below shows what the post-processing printed. Submitting again runs it again.",
+      excerpt: [
+        "Can't exec \"/wbm/utilities/temporal_aggregation.pl\": No such file or directory",
+        "Can't exec \"/wbm/utilities/temporal_aggregation.pl\": No such file or directory",
+        "All Done!",
+      ].join("\n"),
+    },
+  },
   wbm_silent_failure: {
     slurm_state: "COMPLETED",
     slurm_exit_code: "0:0",

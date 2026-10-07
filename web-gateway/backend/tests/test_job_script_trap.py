@@ -63,7 +63,14 @@ if [ "$1 $2" = "sim run" ]; then
   while [ "$i" -lt "${STUB_NC:-2}" ]; do
     printf 'xxxx' > "$W/wbm_output/$sim/daily/wbm_$i.nc"; i=$((i + 1))
   done
-  printf '{"init": "wbm_test.init", "exit_code": %s}' "$rc" > "$W/simulation.json"
+  # The toolkit's own record of post-processing, when the init asked for it.
+  case "${STUB_PP:-none}" in
+    pass) pp=', "post_processing": {"requested": true, "ok": true, "tail": ["All Done!"]}' ;;
+    fail) pp=', "post_processing": {"requested": true, "ok": false, "tail": ["Can'"'"'t exec temporal_aggregation.pl"]}' ;;
+    garbage) pp=', "post_processing": "not an object"' ;;
+    *) pp="" ;;
+  esac
+  printf '{"init": "wbm_test.init", "exit_code": %s%s}' "$rc" "$pp" > "$W/simulation.json"
   exit "$rc"
 fi
 echo "stub: unexpected arguments: $*" >&2
@@ -372,6 +379,60 @@ def test_exit_0_with_no_nc_files_is_a_failed_check(job):
     assert r["ok"] is False
     assert r["wbm"]["all_done"] is True
     assert r["output"]["nc_count"] == 0
+
+
+def test_the_record_carries_the_post_processing_record_of_the_run(job):
+    done = job.run(STUB_PP="pass")
+    assert done.returncode == 0, done.stderr
+    assert job.record["post_processing"] == {"requested": True, "ok": True, "tail": ["All Done!"]}
+
+
+def test_a_failed_post_processing_step_is_carried_and_the_verdict_names_it(job):
+    done = job.run(STUB_PP="fail", STUB_RUN_RC=1)
+    assert done.returncode == 1
+    r = job.record
+    assert r["ok"] is False and r["staged"] is True
+    assert r["post_processing"]["ok"] is False
+    from app.services.job_verdict import classify
+
+    verdict = classify(
+        slurm_state="FAILED", cancel_requested=False, outcome=r, stderr_tail="", missing=False
+    )
+    assert verdict.failure.cause == "post_processing_failed"
+    assert "temporal_aggregation.pl" in verdict.failure.excerpt
+
+
+def test_a_failed_post_processing_makes_the_record_not_ok_even_if_the_run_exited_0(job):
+    done = job.run(STUB_PP="fail", STUB_RUN_RC=0)
+    assert done.returncode == 3, done.stderr  # the steps passed, the check did not
+    r = job.record
+    assert r["ok"] is False
+    assert r["steps"]["run"] == {"exit_code": 0}
+    from app.services.job_verdict import classify
+
+    verdict = classify(
+        slurm_state="FAILED", cancel_requested=False, outcome=r, stderr_tail="", missing=False
+    )
+    assert verdict.failure.cause == "post_processing_failed"
+
+
+def test_a_passing_or_malformed_post_processing_does_not_change_ok(job):
+    for mode in ("pass", "garbage"):
+        (job.submit_dir / "outcome.json").unlink(missing_ok=True)
+        done = job.run(STUB_PP=mode)
+        assert done.returncode == 0, done.stderr
+        assert job.record["ok"] is True
+
+
+def test_a_run_without_post_processing_records_null(job):
+    job.run()
+    assert job.record["post_processing"] is None
+
+
+def test_a_post_processing_that_is_not_an_object_is_recorded_as_null(job):
+    done = job.run(STUB_PP="garbage")
+    assert done.returncode == 0, done.stderr
+    assert job.record["post_processing"] is None
 
 
 def test_a_log_line_that_breaks_naive_json_still_makes_a_record(job):

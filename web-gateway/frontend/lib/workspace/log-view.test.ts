@@ -38,6 +38,7 @@ describe("stoppedMessage", () => {
     "gateway_setup",
     "run_refused",
     "wbm_error",
+    "post_processing_failed",
     "wbm_silent_failure",
     "node_failure",
     "lost",
