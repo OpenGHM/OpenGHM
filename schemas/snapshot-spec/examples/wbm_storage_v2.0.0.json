@@ -60,6 +60,11 @@
       "oras": "oras://registry.openghm.org/openghm/wbm-v2-lite@sha256:a9fc0281ed4010fcb89c788edcd53639cfc4fe76e5bc6b245d8c407d7cc76f43",
       "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif"
     },
+    "modelCode": {
+      "name": "wbm",
+      "version": "23.9.0",
+      "treeHash": "664c291d7a5b98d5587d63b20f0e288fffa7f175d1e389068bfae2f445515190"
+    },
     "modelInput": {
       "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d"
     }

@@ -161,6 +161,20 @@ def test_everything_else_of_the_simulation_and_the_uses_are_the_bases():
     assert doc["uses"] == BASE["uses"]
 
 
+def test_the_code_pin_is_carried_from_the_base_untouched():
+    # ADR 0032: the new snapshot ships the base's code, so it pins the base's tree hash
+    pin = BASE["uses"]["modelCode"]
+    assert pin["name"] == "wbm" and len(pin["treeHash"]) == 64
+    doc = compose()
+    assert doc["uses"]["modelCode"] == pin
+    # and the composed document is held to it: a base that pins nothing cannot be published from
+    unpinned = copy.deepcopy(BASE)
+    del unpinned["uses"]["modelCode"]
+    with pytest.raises(publish.ComposeError) as error:
+        compose(base=unpinned)
+    assert any("modelCode" in str(e) for e in error.value.errors)
+
+
 def test_a_variable_the_base_does_not_describe_is_an_error_naming_it():
     changed = job(parameters={**job()["parameters"], "variables": ["runoff", "pet"]})
     with pytest.raises(publish.ComposeError) as exc:

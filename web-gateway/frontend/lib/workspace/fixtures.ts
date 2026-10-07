@@ -588,6 +588,7 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
     },
     uses: {
       container: { image: "wbm", version: "2.0.0", digest: "sha256:fake", oras: "", https: "" },
+      modelCode: { name: "wbm", version: "23.9.0", treeHash: "664c291d7a5b98d5587d63b20f0e288fffa7f175d1e389068bfae2f445515190" },
       modelInput: { id: "fake-model-input-id" },
     },
     runtime: {

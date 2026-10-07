@@ -14,6 +14,7 @@ import json
 import pytest
 
 from openghm import spec
+from openghm.code import tree_hash
 from openghm.errors import OpenghmError
 
 SNAPSHOT_EXAMPLE = json.loads(
@@ -32,7 +33,12 @@ MODEL_INPUT_LAYOUT_DIRS = ["data_init"]
 def _make_snapshot_folder(tmp_path):
     for d in SNAPSHOT_LAYOUT_DIRS:
         (tmp_path / d).mkdir()
-    (tmp_path / "metadata.json").write_text(json.dumps(SNAPSHOT_EXAMPLE))
+    # real code to hash, and a metadata.json that pins exactly it (ADR 0032)
+    (tmp_path / "model" / "wbm.pl").write_text("print 1;\n")
+    (tmp_path / "utilities" / "tool.pl").write_text("print 2;\n")
+    doc = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    doc["uses"]["modelCode"]["treeHash"] = tree_hash(tmp_path)
+    (tmp_path / "metadata.json").write_text(json.dumps(doc))
     return tmp_path
 
 
@@ -173,6 +179,45 @@ def test_is_based_on_is_accepted_by_the_model_input_spec_too():
     assert not spec.validate_document(doc, spec="model-input-spec").ok
 
 
+# ---- uses.modelCode (ADR 0032) ------------------------------------------------
+
+
+def _model_code(mutate):
+    doc = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    mutate(doc["uses"]["modelCode"])
+    return spec.validate_document(doc, spec="snapshot-spec")
+
+
+def test_the_examples_pin_their_code():
+    for f in sorted((spec.schemas_root() / "snapshot-spec" / "examples").glob("*.json")):
+        pin = json.loads(f.read_text())["uses"]["modelCode"]
+        assert pin["name"] == "wbm" and pin["version"] and len(pin["treeHash"]) == 64, f.name
+
+
+def test_a_missing_model_code_is_rejected():
+    doc = copy.deepcopy(SNAPSHOT_EXAMPLE)
+    del doc["uses"]["modelCode"]
+    result = spec.validate_document(doc, spec="snapshot-spec")
+    assert not result.ok and any("modelCode" in e for e in result.errors)
+
+
+@pytest.mark.parametrize("mutate, why", [
+    (lambda c: c.pop("version"), "no version"),
+    (lambda c: c.pop("treeHash"), "no treeHash"),
+    (lambda c: c.pop("name"), "no name"),
+    (lambda c: c.__setitem__("name", "other"), "name outside the list"),
+    (lambda c: c.__setitem__("version", ""), "empty version"),
+    (lambda c: c.__setitem__("treeHash", "ab" * 31), "treeHash too short"),
+    (lambda c: c.__setitem__("treeHash", "AB" * 32), "treeHash in upper case"),
+    (lambda c: c.__setitem__("treeHash", "sha256:" + "ab" * 32), "treeHash with a prefix"),
+    (lambda c: c.__setitem__("sha256", "ab" * 32), "extra property"),
+])
+def test_a_malformed_model_code_is_rejected(mutate, why):
+    result = _model_code(mutate)
+    assert not result.ok, why
+    assert any("modelCode" in e for e in result.errors), result.errors
+
+
 # ---- validate_document — negative: uniqueness the schema can't express -------
 
 
@@ -260,6 +305,48 @@ def test_validate_folder_reports_both_halves_independently(tmp_path):
     assert any("license" in e for e in result.document.errors)
 
 
+def test_validate_folder_compares_the_code_with_the_pin(tmp_path):
+    folder = _make_snapshot_folder(tmp_path)
+    result = spec.validate_folder(folder, spec="snapshot-spec")
+    assert result.code is not None and result.code.ok
+    assert result.code.tree_hash == result.code.pinned == tree_hash(folder)
+
+
+def test_validate_folder_fails_on_code_that_is_not_the_pinned_code(tmp_path):
+    folder = _make_snapshot_folder(tmp_path)
+    pinned = tree_hash(folder)
+    (folder / "model" / "wbm.pl").write_text("print 'changed';\n")
+    result = spec.validate_folder(folder, spec="snapshot-spec")
+    assert not result.ok
+    # the other halves are fine: it is the code that fails
+    assert result.document.ok and result.layout.ok and not result.code.ok
+    assert result.code.pinned == pinned and result.code.tree_hash == tree_hash(folder) != pinned
+    assert pinned in result.code.message and result.code.tree_hash in result.code.message
+
+
+def test_validate_folder_leaves_inline_out_of_the_code(tmp_path):
+    folder = _make_snapshot_folder(tmp_path)
+    (folder / "model" / "_Inline" / "lib").mkdir(parents=True)
+    (folder / "model" / "_Inline" / "lib" / "x.so").write_bytes(b"compiled at run time")
+    assert spec.validate_folder(folder, spec="snapshot-spec").ok
+
+
+def test_validate_folder_has_no_code_check_without_the_code_or_a_valid_document(tmp_path):
+    folder = _make_snapshot_folder(tmp_path)
+    (folder / "model" / "wbm.pl").unlink()
+    (folder / "model").rmdir()
+    result = spec.validate_folder(folder, spec="snapshot-spec")
+    assert result.code is None and not result.ok and "model/" in result.layout.missing_required
+    (tmp_path / "second").mkdir()
+    folder = _make_snapshot_folder(tmp_path / "second")
+    bad = json.loads((folder / "metadata.json").read_text())
+    del bad["uses"]["modelCode"]
+    (folder / "metadata.json").write_text(json.dumps(bad))
+    result = spec.validate_folder(folder, spec="snapshot-spec")
+    assert not result.document.ok and result.code is None
+    assert any("modelCode" in e for e in result.document.errors)
+
+
 def test_validate_folder_missing_metadata_json(tmp_path):
     folder = _make_snapshot_folder(tmp_path)
     (folder / "metadata.json").unlink()
@@ -285,6 +372,7 @@ def test_validate_folder_invalid_json(tmp_path):
 def test_model_input_folder_validates(tmp_path):
     folder = _make_model_input_folder(tmp_path)
     result = spec.validate_folder(folder, spec="model-input-spec")
+    assert result.code is None
     assert result.ok, (result.document.errors, result.layout.missing_required if result.layout else None)
 
 

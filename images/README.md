@@ -13,11 +13,19 @@ this repository.
 
 | Dir | Image | Base | Scope | Deployed SIF (Anvil) |
 |-----|-------|------|-------|----------------------|
-| `wbm-v1-lite/` | **v1-lite** | `ubuntu:20.04` | full model `wbm.pl` + utilities, WBM **1.0.0** — **bit-identical** to prod-1.0.0 | `…/apps/wbm/v1-lite/wbm_v1_lite.sif` |
-| `wbm-v2-lite/` | **v2-lite** | `ubuntu:20.04` | full model `wbm.pl` + utilities, WBM **2.0.0** — **bit-identical** to prod-2.0.0 | `…/apps/wbm/v2-lite/wbm_v2_lite.sif` |
-| `wbm-tools-lite/` | **tools-lite** | `debian:bookworm-slim` | the 3 utility scripts only (no model) | `…/apps/wbm/lite/wbm_tools_lite.sif` |
+| `wbm-v1-lite/` | **v1-lite** | `ubuntu:20.04` | runtime only, **no model code** (bound from the snapshot, which pins it in `uses.modelCode`); WBM **1.0.0** environment, **bit-identical** to prod-1.0.0 | `…/apps/wbm/v1-lite/wbm_v1_lite.sif` |
+| `wbm-v2-lite/` | **v2-lite** | `ubuntu:20.04` | runtime only, **no model code** (bound from the snapshot, which pins it in `uses.modelCode`); WBM **2.0.0** environment, **bit-identical** to prod-2.0.0 | `…/apps/wbm/v2-lite/wbm_v2_lite.sif` |
+| `wbm-tools-lite/` | **tools-lite** | `debian:bookworm-slim` | the 3 utility scripts, with the WBM source embedded (`wbm/`, 23.9.0, the same tree hash as the v2 tutorial's code) | `…/apps/wbm/lite/wbm_tools_lite.sif` |
 | `wbm-v1-lite-s3/` | **v1-lite-s3** | `wbm_v1_lite` | v1 reading NetCDF forcing directly from S3 over GDAL `/vsicurl` | `…/apps/wbm/v1-lite-s3/wbm_v1_lite_s3.sif` |
 | `wbm-v2-lite-s3/` | **v2-lite-s3** | `wbm_v2_lite` | the same for v2; slim build, with a full-conda-GDAL variant beside it | `…/apps/wbm/v2-lite-s3/wbm_v2_lite_s3.sif` |
+
+**Which WBM code a run used is not an image question.** `wbm-v1-lite/` and
+`wbm-v2-lite/` hold the runtime and no code (their Dockerfiles say "NO embedded
+code"), so the same image runs whatever `model/` the snapshot binds, and
+`uses.container.version` says nothing about the WBM version. A snapshot pins its
+code by tree hash in `uses.modelCode`
+([ADR 0032](../docs/decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md)).
+Only `wbm-tools-lite/` embeds code, from its `wbm/` directory.
 
 `wbm-v1-lite/` is pinned to `ubuntu:20.04` on purpose: it ships GDAL 3.0.4 /
 PROJ 6.3.1 / perl 5.30 — the exact stack the v1 production SIF used — so

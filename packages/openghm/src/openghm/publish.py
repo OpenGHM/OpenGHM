@@ -20,8 +20,10 @@ from. The new tree at ``snapshots/<id>/`` is (ADR 0031):
 Three phases. **Plan** reads the run and, anonymously over HTTPS, the base's
 ``metadata.json``, ``SHA256SUMS`` and listing, and turns them into one
 :class:`Action` per key. **Check** has no side effects: ``metadata.json`` passes the
-metadata spec (once its ``id`` is set) and agrees with the run, the output holds what
-the init asked for, and the staged tree passes the layout spec. **Apply** goes
+metadata spec (once its ``id`` is set) and agrees with the run, its ``uses.modelCode.treeHash``
+is the tree hash of the code the publish would copy (ADR 0032; computed from the base's
+``SHA256SUMS``, which is how the copied bytes are known), the output holds what the init asked
+for, and the staged tree passes the layout spec. **Apply** goes
 through :class:`S3Client`, whose real backend runs ``s3cmd``. It reads each key first:
 absent, it writes it; present with the same bytes, it skips it; present with other
 bytes, it stops. A retry with the same id therefore continues where the last attempt
@@ -38,7 +40,8 @@ Exit codes (``openghm snapshot publish``; one per kind of failure):
 ====  ===========================================================================
 0     done (or, with ``--dry-run``, a plan that would go through)
 2     bad input: an unreadable run, base or ``metadata.json``; ``metadata.json``
-      fails the spec or disagrees with the run; a bad ``--id``
+      fails the spec or disagrees with the run, including a ``uses.modelCode.treeHash``
+      that is not the tree hash of the code to be copied; a bad ``--id``
 3     output incomplete: the run did not succeed, the output lacks a year or a
       variable the init asked for or holds an empty file, or the tree fails the layout
 4     a key already holds other bytes (nothing is replaced)
@@ -74,6 +77,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from . import assets, fetch, sim, spec
+from . import code as wbm_code
 from .errors import OpenghmError
 
 # ── exit codes ────────────────────────────────────────────────────────────────
@@ -439,6 +443,21 @@ def check_agreement(meta: dict, run: Run, base: Base) -> None:
         raise PublishError(f"the given {METADATA_NAME} does not agree with the run:\n{_problems(problems)}")
 
 
+def check_code(meta: dict, base: Base) -> None:
+    """``meta`` pins the WBM code this publish would write: the base's ``model/`` and ``utilities/``,
+    copied as they are (ADR 0032); else :class:`PublishError` (exit 2, with the other disagreements
+    between ``metadata.json`` and what is published).
+
+    The copied bytes are the ones the base's ``SHA256SUMS`` lists, so the tree hash is computed from
+    those lines and nothing is downloaded.
+    """
+    pinned = (((meta.get("uses") or {}).get("modelCode")) or {}).get("treeHash")
+    actual = wbm_code.tree_hash_of_sums(base.sums)
+    if pinned != actual:
+        raise PublishError(wbm_code.mismatch_message("the code this publish copies from the base snapshot "
+                                                     f"{base.id}", actual, str(pinned)))
+
+
 def _walk_files(root: str) -> List[str]:
     """Every file under ``root`` as a ``/``-relative path, sorted. A symlinked directory is refused:
     a tree is published as it is, not as what it points to."""
@@ -635,6 +654,7 @@ def prepare(run_dir: str, metadata_path: str, snapshot_id: str, base_url: str, w
     check_spec(meta)
     base = read_base(Anon(base_url), run.base_id)
     check_agreement(meta, run, base)
+    check_code(meta, base)
     problems, notes = check_output(run)
     if problems:
         raise PublishError(f"the run's output is incomplete:\n{_problems(problems)}", EXIT_OUTPUT_INCOMPLETE)

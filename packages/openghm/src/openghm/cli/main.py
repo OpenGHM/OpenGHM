@@ -694,6 +694,8 @@ def _validate_cmd(spec: str):
                 "document": {"ok": result.document.ok, "errors": result.document.errors},
                 "layout": None if result.layout is None else
                     {"ok": result.layout.ok, "missing_required": result.layout.missing_required},
+                "code": None if result.code is None else
+                    {"ok": result.code.ok, "tree_hash": result.code.tree_hash, "pinned": result.code.pinned},
             }, indent=2))
         else:
             click.echo(f"{spec} {result.version} — {folder}")
@@ -710,10 +712,39 @@ def _validate_cmd(spec: str):
                     click.echo("  layout: FAILED")
                     for p in result.layout.missing_required:
                         click.echo(f"    missing required path: {p}")
+            if result.code is not None:
+                if result.code.ok:
+                    click.echo(f"  code: ok (tree hash {result.code.tree_hash[:16]}…)")
+                else:
+                    click.echo("  code: FAILED")
+                    click.echo(f"    {result.code.message}")
         if not result.ok:
             raise SystemExit(1)
 
     return cmd
+
+
+@cli.group("code")
+def code_group() -> None:
+    """the WBM code a snapshot pins (ADR 0032): print the tree hash of a folder."""
+
+
+@code_group.command("hash")
+@click.argument("path", default=".", metavar="[DIR]")
+def code_hash_cmd(path: str) -> None:
+    """print the tree hash of the WBM code in DIR (the folder holding model/ and utilities/)
+
+    The value `uses.modelCode.treeHash` pins: the sha256 of the sorted
+    `<sha256>  <path>` lines of every file under model/ and utilities/, skipping
+    any _Inline directory (ADR 0032). Prints only the 64 hex digits.
+    """
+    from ..code import tree_hash
+
+    try:
+        click.echo(tree_hash(path))
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
 
 
 @cli.group("snapshot")
@@ -748,6 +779,17 @@ def snapshot_fetch_cmd(snapshot_id: str, dest: Optional[str], no_image: bool,
     image into sif_dir, each checked like the snapshot. Re-running resumes:
     files already valid are skipped, so a model input shared by several
     snapshots downloads once.
+
+    The WBM code (model/ and utilities/) must hash to uses.modelCode.treeHash
+    (ADR 0032; `openghm code hash` prints it). If it does not, that is a failure
+    and the model input and the image are not downloaded.
+
+    \b
+    Exit codes:
+      0  done
+      1  a file failed its check, or the code is not the pinned code
+      2  cannot start or go on: unknown id, unreadable metadata.json, or one that
+         pins no code (uses.modelCode)
     """
     from rich.console import Console
 
@@ -816,7 +858,8 @@ def snapshot_publish_cmd(run_dir: str, metadata_path: str, snapshot_id: Optional
     Exit codes:
       0  done
       2  bad input: unreadable run, base or metadata.json; metadata.json fails the
-         spec or disagrees with the run; a bad --id
+         spec or disagrees with the run (uses.modelCode.treeHash included: it must be
+         the tree hash of the base's code that is copied); a bad --id
       3  output incomplete: the run failed, or lacks a year or variable the init
          asked for, or holds an empty file; the tree fails the layout
       4  a key already holds other bytes

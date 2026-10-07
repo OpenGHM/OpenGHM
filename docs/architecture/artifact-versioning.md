@@ -81,16 +81,19 @@ Three kinds of identifier appear above, and they behave differently:
 |---|---|---|
 | **Contract** — semver | MAJOR bump on a breaking change | axis 1 |
 | **Minted** — random id | assigned once at publish, never reused, never reassigned | axes 2, 3 |
-| **Content** — digest | the hash *is* the identity; different bytes are a different version | axis 4 |
+| **Content** — digest | the hash *is* the identity; different bytes are a different version | axes 4, 5 |
 
 Tags and slugs are mutable aliases for humans. **Pins always cite a minted id or
 a digest.**
 
-> **Open** — what axis 5 cites. `modelCode.sha256` is a checksum of ours, and
-> [ADR 0014](../decisions/0014-identity-is-a-minted-id.md) moved those out of
-> `metadata.json`, leaving `TREEHASH` inside the artifact as the integrity check.
-> Pinning the code by its curated `wbm-code/<name>/<version>` address is the
-> obvious replacement, but it has not been decided.
+Axis 5 is pinned by its tree hash in `uses.modelCode`
+([ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md)):
+`{ name, version, treeHash }`, where the hash (the recipe of
+[ADR 0008](../decisions/0008-exclude-inline-from-code-hash.md)) is the identity
+and the name and version say which `wbm-code/<name>/<version>/` directory holds
+the bytes. The container carries no code, so its version does not stand in for
+it. A snapshot ships its own copy of the code, and `validate`, `fetch` and
+`publish` refuse a tree that does not hash to the pin.
 
 ## 3. Storage
 
@@ -197,6 +200,7 @@ Every axis resolves from one object — the pin block in a snapshot's
   "uses": {
     "container": { "image": "wbm-v2-lite", "version": "2.0.0-r3",
                    "digest": "sha256:9f2c…", "oras": "…", "https": "…" },
+    "modelCode":  { "name": "wbm", "version": "23.9.0", "treeHash": "664c291d…" },
     "modelInput": { "id": "7d4e9a…" }
   }
 }

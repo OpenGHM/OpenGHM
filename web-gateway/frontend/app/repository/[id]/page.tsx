@@ -22,7 +22,6 @@ import {
   Zap,
   Layers,
   BookOpen,
-  Shield,
   Cpu,
   Server,
 } from "lucide-react";
@@ -32,6 +31,7 @@ import { OutputVariablesTable } from "@/components/repository/output-variables-t
 import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 import { DownloadCard } from "@/components/repository/download-card";
 import { TagChips } from "@/components/repository/tag-chips";
+import { ExecutionCard } from "@/components/repository/execution-card";
 
 export default async function DatasetDetailPage({
   params,
@@ -271,36 +271,8 @@ export default async function DatasetDetailPage({
                 </div>
               )}
 
-              {/* Container & Execution — uses/runtime, not shown by the legacy UI at all */}
-              <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-                <CardHeader className="border-b bg-gradient-to-r from-slate-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-slate-500/10">
-                      <Shield className="size-4 text-slate-600" />
-                    </div>
-                    Container &amp; Execution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-5 pb-6">
-                  <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-                    {[
-                      { label: "Container Image", value: `${uses.container.image}:${uses.container.version}` },
-                      { label: "Digest", value: uses.container.digest },
-                      { label: "Cluster", value: runtime.execution.cluster },
-                      { label: "Cores", value: String(runtime.execution.cores) },
-                      { label: "Elapsed Walltime", value: runtime.execution.elapsedWalltime },
-                      { label: "SLURM Job ID", value: runtime.execution.slurmJobId },
-                    ].map((item) => (
-                      <div key={item.label} className="rounded-lg bg-slate-50 p-3">
-                        <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                          {item.label}
-                        </dt>
-                        <dd className="mt-1 break-all font-mono text-xs font-medium text-foreground">{item.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
+              {/* Code, Container & Execution — uses/runtime, not shown by the legacy UI at all */}
+              <ExecutionCard uses={uses} runtime={runtime} />
             </div>
 
             {/* Right Column (Sidebar) */}
@@ -317,8 +289,9 @@ export default async function DatasetDetailPage({
                   <dl className="space-y-3">
                     <InfoRow
                       icon={<Tag className="size-4" />}
-                      label="Software Version"
-                      value={uses.container.version}
+                      label="WBM Code"
+                      value={uses.modelCode.version}
+                      title={`Tree hash ${uses.modelCode.treeHash}`}
                       iconColor="text-[#006994]"
                     />
                     <InfoRow
@@ -457,6 +430,7 @@ function InfoRow({
   value,
   href,
   internalHref,
+  title,
   iconColor = "text-muted-foreground",
 }: {
   icon: React.ReactNode;
@@ -464,6 +438,8 @@ function InfoRow({
   value: string;
   href?: string;
   internalHref?: string;
+  /** A tooltip for the value, for what does not fit the row (a hash). */
+  title?: string;
   iconColor?: string;
 }) {
   return (
@@ -471,7 +447,7 @@ function InfoRow({
       <div className={`mt-0.5 ${iconColor}`}>{icon}</div>
       <div className="min-w-0">
         <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="text-sm font-medium text-foreground">
+        <dd className="text-sm font-medium text-foreground" title={title}>
           {href ? (
             <a
               href={href}

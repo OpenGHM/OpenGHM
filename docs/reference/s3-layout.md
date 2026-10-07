@@ -294,20 +294,50 @@ manifest shape.
 ## Publish a code version
 
 Named, versioned copies in Anvil S3 — the same pattern as containers and raw
-data, no git involved. This is a curated prefix, so the path is readable and
-the hash from [ADR 0008](../decisions/0008-exclude-inline-from-code-hash.md) is recorded rather than used as the key ([Anvil S3 bucket](#anvil-s3-bucket)).
+data, no git involved ([ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md)).
+This is a curated prefix, so the path is readable and the hash from
+[ADR 0008](../decisions/0008-exclude-inline-from-code-hash.md) is recorded
+rather than used as the key ([Anvil S3 bucket](#anvil-s3-bucket)).
 
 ```
 openghm/
-  wbm-code/wbm/2.0.0/model/…
-  wbm-code/wbm/2.0.0/utilities/…
-  wbm-code/wbm/2.0.0/TREEHASH      # the ADR 0008 hash of what is in this directory
+  wbm-code/wbm/<version>/model/…         # exactly as a snapshot ships it, _Inline included
+  wbm-code/wbm/<version>/utilities/…
+  wbm-code/wbm/<version>/TREEHASH        # one line: the tree hash of this directory's code
+  wbm-code/wbm/<version>/SHA256SUMS      # every file, so a copy is checked file by file
 ```
 
-Assembling a new snapshot: pull `model/` + `utilities/` from the version the
-snapshot targets, then verify the tree hash against `TREEHASH` before recording
-it in `metadata.json`. Publishing new code means a new version directory —
-never an edit to an existing one.
+- **`<version>`** is the `WBM_VERSION` constant in the tree's `model/wbm.pl`.
+  Different bytes that declare a version already published get the suffix
+  `-r<N>`.
+- **The tree hash** is the sha256 of the sorted `<sha256>  <path>` lines of
+  every file under `model/` and `utilities/`, skipping any `_Inline`
+  directory (recipe: [ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md);
+  `openghm code hash <dir>` prints it). `_Inline` stays in the published tree
+  because a read-only bind cannot compile it.
+- **Every key** is public-read and carries its file mode
+  ([ADR 0022](../decisions/0022-file-modes-are-object-metadata.md)).
+- **A snapshot pins its code** in `metadata.json` as `uses.modelCode`
+  (`name`, `version`, `treeHash`; [metadata-format.md](metadata-format.md)).
+  The pin is the hash, and the name and version say which directory holds the
+  bytes. `openghm snapshot validate` (on a folder), `fetch` and `publish`
+  refuse a tree whose code does not hash to it.
+- **A snapshot still ships its own copy** of `model/` and `utilities/`, and
+  `fetch` still downloads it from the snapshot. Fetching it once from
+  `wbm-code/` instead is not built.
+- **A new version is a new directory**, never an edit to an existing one.
+
+The first two versions are published by mission
+`2026-10-07-wbm-code-is-pinned`, copied server-side from the published
+snapshots whose code ran:
+
+| Version | Copied from | Tree hash |
+|---|---|---|
+| `22.1.1` | Wyoming `245430de…` (Global `4604e608…` carries the same bytes) | `f210a78bd43a870cfdde3c0b80c293134fb2a40dc45128688d23a9dfc2014eec` |
+| `23.9.0` | v2 tutorial `fc66a2cd…` | `664c291d7a5b98d5587d63b20f0e288fffa7f175d1e389068bfae2f445515190` |
+
+Both hashes were computed from the snapshots' `SHA256SUMS` (anonymous reads,
+2026-10-07). `23.9.0` is also the hash of `images/wbm-tools-lite/wbm/`.
 
 Because the key is a name rather than a hash, two versions holding byte-identical
 code are stored twice. At this size that is not worth solving; what matters is

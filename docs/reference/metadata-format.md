@@ -14,7 +14,7 @@ only division that stays stable as the system grows:
 |---|---|---|
 | `about` | a person, at publish | citation metadata — title, authors, licence, links |
 | `simulation` | derived from the selected `.init` | what the run is driven by and what it computes: extent, period, input and output variables, processes |
-| `uses` | the publisher, at publish | the two artifacts a run has to fetch from outside the snapshot |
+| `uses` | the publisher, at publish | what the run depends on: the container and the model input it fetches from outside the snapshot, and the WBM code it carries, pinned by hash |
 | `runtime` | the system | the document's own timestamp, and the record of a run that finished |
 
 `uses` and `runtime` are separate because they answer different questions at
@@ -92,6 +92,11 @@ maps to ids for browsing.
       "oras": "oras://registry.openghm.org/openghm/wbm-v1-lite@sha256:9ed5…",
       "https": "https://s3.anvil.rcac.purdue.edu/openghm/containers/wbm-v1-lite/1.0.0/wbm-v1-lite-1.0.0.sif"
     },
+    "modelCode": {
+      "name": "wbm",
+      "version": "22.1.1",
+      "treeHash": "f210a78bd43a870cfdde3c0b80c293134fb2a40dc45128688d23a9dfc2014eec"
+    },
     "modelInput": {
       "id": "ff0ba2e5d840027f9d6440c5cb922e01f730403b0227fdad4ced7e1dd3bc422d"
     }
@@ -127,6 +132,28 @@ precisely — that definition is missing today:
 `uses.modelInput.id` is a link, not a selector: it names a published model input,
 and the run binds that input's root at `/wbm/data` and its `data_init/` at
 `/wbm/data_init`. The snapshot records nothing else about it.
+
+### `uses.modelCode`
+
+The WBM code the snapshot runs, `model/` and `utilities/`
+([ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md)).
+Required, and all three fields are:
+
+| Field | Holds |
+|---|---|
+| `name` | `"wbm"`, the only code there is |
+| `version` | the `WBM_VERSION` constant in the tree's `model/wbm.pl`, such as `23.9.0`; bytes that declare a version already published get the suffix `-r<N>` |
+| `treeHash` | 64 lowercase hex: the sha256 of the sorted `<sha256>  <path>` lines of every file under `model/` and `utilities/`, skipping any `_Inline` directory ([ADR 0008](../decisions/0008-exclude-inline-from-code-hash.md)); `openghm code hash <dir>` prints it |
+
+The hash is the identity ([rule 2](../../AGENTS.md)); the name and version say
+which directory under `wbm-code/` holds the bytes
+([s3-layout.md](s3-layout.md#publish-a-code-version)). Unlike the container
+and the model input it is not fetched from outside: a snapshot ships its own
+`model/` and `utilities/`, and `uses.modelCode` is how a reader knows which
+code that is. `openghm snapshot validate` (on a folder), `snapshot fetch` and
+`snapshot publish` compare the tree they hold with `treeHash` and refuse a
+mismatch. The container carries the runtime and no code, so
+`uses.container.version` says nothing about the WBM version.
 
 Defining `init` as relative to `wbm_init/` rather than as a bare filename costs
 nothing now — every real value is a plain filename — and leaves room for
@@ -442,9 +469,9 @@ snapshot mirrored to a second gateway would carry the same
 | `activeProcesses` | `simulation.activeProcesses` | direct |
 | `outputVariables` | `simulation.outputVariables` | direct (was `variablesMeasured`, `unitText` → `unit`; `standardName` dropped — no CF-standard-name source exists anywhere in the toolkit's variable dictionary) |
 | `recommendedCompute` | `simulation.recommendedCompute` | direct (was a free-text list; now the spec's own `{cores, walltime}`) |
-| `uses` | `uses` | direct — the container's pinned digest/`oras`/`https` and the linked model input's id, not shown by the legacy UI at all |
+| `uses` | `uses` | direct — the container's pinned digest/`oras`/`https`, the WBM code's pin and the linked model input's id, not shown by the legacy UI at all |
 | `runtime` | `runtime` | direct — `generatedAt` and the real execution record (cluster, cores, walltime, SLURM job id), also newly shown |
-| `softwareVersion` (legacy name) | `uses.container.version` | not a separate field — `uses` is served whole, so a client reads `uses.container.version` directly rather than the catalogue duplicating it under a second name. (The WBM *code* version is a separate, still-unpinned question — [open item 11](open-items.md) — not this field.) |
+| `softwareVersion` (legacy name) | `uses.container.version` | not a separate field — `uses` is served whole, so a client reads `uses.container.version` directly rather than the catalogue duplicating it under a second name. (It is the *container's* version, not the WBM code's; that is `uses.modelCode.version`, [ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md).) |
 | `licenseUrl` | `about.license` | derived — a static SPDX-id → URL mapping, same rule as `spatialResolutionDegrees`: computed, never stored |
 | `generatedAt` (was `lastUpdated`, the default sort key) | `runtime.generatedAt` | direct, renamed to match the spec's own spelling rather than kept as an internal alias |
 

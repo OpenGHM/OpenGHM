@@ -13,7 +13,7 @@ for notebooks, batch scripts, and a future GUI.
 > `temporal` — plus `sim`, WBM model runs either **locally** (`run`, foreground) or
 > on **SLURM** (`submit` / `status` / `list` / `logs` / `cancel`), setup
 > commands (`init`, `sif`), `snapshot` (`fetch` a published snapshot,
-> `publish` a finished run as one, `validate` a folder), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
+> `publish` a finished run as one, `validate` a folder), `code` (`hash` the WBM code a snapshot pins), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
 > `metadata.json`), and `sim` runs the folder you point it at.
 
 **Status:** `sim submit` has run a real WBM job to completion on Anvil (Python 3.9.5)
@@ -149,7 +149,8 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm sif list` / `pull <image[:version]>` | — | list published images / download one into `sif_dir` |
 | `openghm snapshot fetch <id>` | anonymous HTTPS | download `snapshots/<id>/`, the model input it links and the image it pins, verified; `--dest`, `--no-model-input`, `--no-image`, `--jobs` |
 | `openghm snapshot publish <run dir> --metadata FILE` | `s3cmd`, anonymous HTTPS | publish a finished run's work directory as `snapshots/<id>/`; `--id`, `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`, `--jobs`; see below |
-| `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec |
+| `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec, and its WBM code against the tree hash `uses.modelCode.treeHash` pins (ADR 0032) |
+| `openghm code hash [DIR]` | — | print the tree hash of the WBM code in `DIR` (`model/` and `utilities/`, `_Inline` left out; ADR 0032), the value `uses.modelCode.treeHash` pins |
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
@@ -228,9 +229,16 @@ an old tree whose listing still has a `spool/` is fetched without it).
   finds every file valid and skips it. `--no-model-input` leaves it out.
 - The image is `uses.container.https` from `metadata.json`, cached under `sif_dir`
   and checked against `uses.container.digest`.
+- Once the tree is down, its WBM code (`model/` and `utilities/`) must hash to
+  `uses.modelCode.treeHash` (ADR 0032; `openghm code hash` prints it). A code tree that does
+  not is a failure listed as `WBM code`, naming both hashes, and the model input and the image
+  are then not downloaded. A `metadata.json` that pins no code stops the fetch with exit 2.
+  A `<file>.part` left by an interrupted run is removed before the check, so it cannot change the hash.
 - It resumes: a file already at its path with the right size and hash is skipped
   (re-run it after an interruption; the last line is `downloaded N, skipped M,
-  failed K`). Exit status is 1 if anything failed, with the paths listed.
+  failed K`). Exit status is 1 if anything failed (a file, the image, the code), with the paths
+  listed, and 2 when the fetch cannot go on (an unknown id, an unreadable `metadata.json`, no
+  `uses.modelCode`).
 - A transient error is tried again, three attempts with a growing pause: for a file,
   and for each page of the listing. Unreachable, a dropped connection and a 5xx are
   transient; a 403 or 404 is an answer and is not.
@@ -283,6 +291,10 @@ What it checks **before the first write** (a failure writes nothing):
   carried is replaced, so a copy of the base's document cannot publish onto the base), and
   agrees with the run: `simulation.init` is the run's init, `uses.modelInput.id` is the run's
   model input, `uses.container` is the base's, and `about.isBasedOn` names the base;
+- its `uses.modelCode.treeHash` is the tree hash of the code the publish copies from the base
+  (ADR 0032), computed from the base's `SHA256SUMS` lines, which is how the copied bytes are
+  known. A document that pins other code is bad input (exit 2), the same kind of failure as
+  `uses.container` not being the base's, with nothing written;
 - the run succeeded (`exit_code` is not non-zero), `wbm_output/<sim id>/` holds no empty file, a
   `daily/wbm_<year>.nc` for every year from the init's first year (`Run_Start`, else the spinup's
   `Start`) to its `Run_End`, and, when the init sets `Temporal_Aggregation => 1`, a
@@ -315,7 +327,7 @@ Exit codes:
 | Code | Meaning |
 |---|---|
 | 0 | done (with `--dry-run`: a plan that would go through) |
-| 2 | bad input: an unreadable run, base or `metadata.json`; `metadata.json` fails the spec or disagrees with the run; a bad `--id` |
+| 2 | bad input: an unreadable run, base or `metadata.json`; `metadata.json` fails the spec or disagrees with the run, including a `uses.modelCode.treeHash` that is not the tree hash of the code to be copied; a bad `--id` |
 | 3 | output incomplete: the run failed, or lacks a year or variable the init asked for, or holds an empty file; the tree fails the layout |
 | 4 | a key already holds other bytes (nothing is replaced) |
 | 5 | no credentials: `--s3cfg` missing or unreadable, or no `s3cmd` |

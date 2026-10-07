@@ -34,6 +34,14 @@ _MODE_EXE = 0o100755
 _MODE_REG = 0o100644
 
 
+def _recipe(files: dict) -> str:
+    """ADR 0032's tree hash of ``{path: bytes}``, written out here rather than imported."""
+    lines = "".join(f"{hashlib.sha256(files[p]).hexdigest()}  {p}\n"
+                    for p in sorted(files, key=lambda p: p.encode())
+                    if p.split("/")[0] in ("model", "utilities") and "_Inline" not in p.split("/")[1:-1])
+    return hashlib.sha256(lines.encode()).hexdigest()
+
+
 def _attrs(mode: int) -> str:
     return f"atime:1/ctime:2/gid:1000/gname:x/md5:00/mode:{mode}/mtime:3/uid:1000/uname:x"
 
@@ -138,8 +146,13 @@ class Bucket:
         self.put_mi("SHA256SUMS", sums.encode())
         return self
 
-    def publish(self, *, image_body=b"pretend sif"):
-        """Fill the bucket with a snapshot the way ``snapshot-layout.md`` lays it out."""
+    def publish(self, *, image_body=b"pretend sif", pin="tree", extra_code=None):
+        """Fill the bucket with a snapshot the way ``snapshot-layout.md`` lays it out.
+
+        ``pin`` is what ``uses.modelCode.treeHash`` says: the hash of the published code
+        (``"tree"``), another value, or ``None`` for a document that pins nothing.
+        ``extra_code`` adds files to the published tree without changing the pin.
+        """
         hashed = {
             "model/wbm.pl": (b"#!/usr/bin/perl\nprint 1;\n", _MODE_EXE),
             "model/lib/RIMS.pm": (b"1;\n", _MODE_REG),
@@ -159,6 +172,11 @@ class Bucket:
                 "https": f"{self.url}/{IMAGE_KEY}",
             }, "modelInput": {"id": MI_ID}},
         }
+        if pin is not None:
+            tree = _recipe({rel: body for rel, (body, _m) in hashed.items()})
+            meta["uses"]["modelCode"] = {"name": "wbm", "version": "1.2.3", "treeHash": tree if pin == "tree" else pin}
+        for rel, body in (extra_code or {}).items():
+            hashed[rel] = (body, _MODE_REG)
         hashed["metadata.json"] = (json.dumps(meta).encode(), _MODE_REG)
         for rel, (body, mode) in hashed.items():
             self.put(rel, body, mode=mode)
@@ -255,6 +273,84 @@ def test_data_and_data_init_are_not_fetched_even_if_published(bucket, tmp_path):
     # an unhashed stray under data/ is ignored too, not reported
     bucket.put("data/sub/stray.nc", b"stray")
     assert _run(bucket, tmp_path).ok
+
+
+# ── the pinned code (ADR 0032) ────────────────────────────────────────────────
+
+
+def test_the_fetched_code_hashes_to_the_pin(bucket, tmp_path):
+    from openghm.code import tree_hash
+    result = _run(bucket, tmp_path)
+    assert result.ok, result.failed
+    pinned = json.loads((tmp_path / "snap" / "metadata.json").read_text())["uses"]["modelCode"]["treeHash"]
+    assert tree_hash(tmp_path / "snap") == pinned
+
+
+def test_code_that_is_not_the_pinned_code_is_a_failure_of_its_own(bucket, tmp_path):
+    from openghm.code import tree_hash
+    bucket.publish(pin="ab" * 32)
+    result = _run(bucket, tmp_path)
+    assert [p for p, _ in result.failed] == [fetch.CODE_LABEL]
+    why = result.failed[0][1]
+    assert why.startswith("the fetched tree has WBM code with tree hash ")
+    assert tree_hash(tmp_path / "snap") in why         # what was fetched
+    assert "ab" * 32 in why                            # what metadata.json pins
+
+
+def test_a_code_mismatch_stops_before_the_model_input_and_the_image(bucket, tmp_path):
+    bucket.publish(pin="ab" * 32)
+    result = _run(bucket, tmp_path, model_input=True)
+    assert not result.ok
+    assert result.image_path is None and result.model_input_path is None
+    assert not any(k.startswith(MI_PREFIX) or k == IMAGE_KEY for k in bucket.gets)
+    assert not (tmp_path / "sif").exists() and not (tmp_path / "mi").exists()
+
+
+def test_a_published_file_the_pin_does_not_cover_is_a_mismatch(bucket, tmp_path):
+    # the bytes are all genuine (hashed in SHA256SUMS); the pin just does not include this file
+    bucket.publish(extra_code={"model/extra.pm": b"1;\n"})
+    result = _run(bucket, tmp_path)
+    assert [p for p, _ in result.failed] == [fetch.CODE_LABEL]
+
+
+def test_an_inline_directory_is_not_part_of_the_pin(bucket, tmp_path):
+    bucket.publish(extra_code={"model/_Inline/lib/auto/x.so": b"compiled"})
+    result = _run(bucket, tmp_path)
+    assert result.ok, result.failed
+    assert (tmp_path / "snap" / "model" / "_Inline" / "lib" / "auto" / "x.so").exists()
+
+
+def test_a_snapshot_that_pins_no_code_is_an_error(bucket, tmp_path):
+    bucket.publish(pin=None)
+    with pytest.raises(OpenghmError, match=r"uses\.modelCode\.treeHash is missing"):
+        _run(bucket, tmp_path)
+
+
+def test_a_malformed_pin_is_an_error(bucket, tmp_path):
+    bucket.publish(pin="NOT-A-HASH")
+    with pytest.raises(OpenghmError, match="not a sha256"):
+        _run(bucket, tmp_path)
+
+
+def test_a_code_file_that_failed_is_not_also_a_hash_mismatch(bucket, tmp_path):
+    bucket.objects[PREFIX + "model/lib/RIMS.pm"].body = b"tampered\n"
+    result = _run(bucket, tmp_path)
+    assert [p for p, _ in result.failed] == ["model/lib/RIMS.pm"]
+
+
+def test_cli_fetch_exits_1_and_names_both_hashes_on_a_code_mismatch(bucket, tmp_path, monkeypatch):
+    bucket.publish(pin="ab" * 32)
+    out = _invoke(bucket, tmp_path, monkeypatch)
+    assert out.exit_code == 1
+    assert "WBM code" in out.output and "ab" * 32 in out.output
+    assert "downloaded 7, skipped 0, failed 1" in out.output
+    assert "image:" not in out.output and "model input:" not in out.output
+
+
+def test_cli_fetch_exits_2_for_a_snapshot_that_pins_no_code(bucket, tmp_path, monkeypatch):
+    bucket.publish(pin=None)
+    out = _invoke(bucket, tmp_path, monkeypatch)
+    assert out.exit_code == 2 and "uses.modelCode.treeHash is missing" in out.output
 
 
 # ── integrity ──────────────────────────────────────────────────────────────────
@@ -376,6 +472,7 @@ def test_resume_refetches_only_what_is_not_valid(bucket, tmp_path):
     bucket.gets.clear()
     result = _run(bucket, tmp_path)
     assert result.ok and result.downloaded == 3
+    assert not (snap / "model" / "wbm.pl.part").exists()           # the leftover is cleared, not hashed
     assert sorted(bucket.gets) == sorted(PREFIX + r for r in
                                          ("gdal_test_files/a.nc", "utilities/tool", "model/lib/RIMS.pm"))
     assert (snap / "gdal_test_files" / "a.nc").read_bytes() == b"a" * 100

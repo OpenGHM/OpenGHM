@@ -25,6 +25,7 @@ import jsonschema
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
+from . import code as wbm_code
 from .errors import OpenghmError
 
 #: The two published specs, by the directory name under schemas/.
@@ -98,8 +99,24 @@ class LayoutResult:
 
 
 @dataclass
+class CodeResult:
+    """The outcome of comparing a snapshot folder's WBM code with the pin in its
+    ``metadata.json`` (``uses.modelCode.treeHash``, ADR 0032)."""
+
+    ok: bool
+    #: The tree hash of the folder's ``model/`` and ``utilities/``.
+    tree_hash: str
+    #: What ``metadata.json`` pins.
+    pinned: str
+
+    @property
+    def message(self) -> str:
+        return wbm_code.mismatch_message("the folder", self.tree_hash, self.pinned)
+
+
+@dataclass
 class ValidationResult:
-    """Both halves of one spec version's check, kept separate on purpose
+    """The halves of one spec version's check, kept separate on purpose
     (ADR 0006): a folder can have a perfectly valid ``metadata.json`` and a
     missing required directory, and collapsing that into one pass/fail message
     would lose which half actually failed."""
@@ -109,10 +126,15 @@ class ValidationResult:
     document: DocumentResult
     #: None when only the document was checked (no folder given).
     layout: Optional[LayoutResult]
+    #: A snapshot folder's code against its pin. None when there is nothing to compare: another
+    #: spec, a ``metadata.json`` that is not valid (there is no pin to read), or no ``model/`` or
+    #: ``utilities/`` (the layout half reports that).
+    code: Optional[CodeResult] = None
 
     @property
     def ok(self) -> bool:
-        return self.document.ok and (self.layout is None or self.layout.ok)
+        return (self.document.ok and (self.layout is None or self.layout.ok)
+                and (self.code is None or self.code.ok))
 
 
 def _duplicate_key_errors(data: dict, *, path: list, key: str) -> list:
@@ -196,15 +218,32 @@ def validate_layout(folder: Path, *, spec: str, version: Optional[str] = None) -
     return LayoutResult(ok=not missing, missing_required=missing)
 
 
+def check_code(folder: Path, data: dict) -> Optional[CodeResult]:
+    """Compare ``folder``'s WBM code with ``data``'s ``uses.modelCode.treeHash`` (ADR 0032).
+
+    ``None`` when ``folder`` has no ``model/`` or ``utilities/``, or when ``data`` pins
+    nothing (a spec version before ADR 0032).
+    """
+    if not all((folder / d).is_dir() for d in wbm_code.CODE_DIRS):
+        return None
+    pinned = (((data.get("uses") or {}).get("modelCode")) or {}).get("treeHash")
+    if not pinned:
+        return None
+    actual = wbm_code.tree_hash(folder)
+    return CodeResult(ok=actual == pinned, tree_hash=actual, pinned=pinned)
+
+
 def validate_folder(folder: Path, *, spec: str, version: Optional[str] = None) -> ValidationResult:
     """The full check a publish or a CI gate actually wants: ``metadata.json``
-    against the schema, and the folder against the layout, reported separately.
+    against the schema, the folder against the layout, and, for a snapshot, its
+    WBM code against the tree hash ``metadata.json`` pins (ADR 0032), reported separately.
 
     A missing ``metadata.json`` is a document failure (there is nothing to
     validate), not an exception — the same way an invalid one is.
     """
     version = version or current_version(spec)
     meta_path = folder / "metadata.json"
+    data = None
     if not meta_path.is_file():
         document = DocumentResult(ok=False, errors=[f"$: {meta_path} not found"])
     else:
@@ -215,4 +254,5 @@ def validate_folder(folder: Path, *, spec: str, version: Optional[str] = None) -
         else:
             document = validate_document(data, spec=spec, version=version)
     layout = validate_layout(folder, spec=spec, version=version)
-    return ValidationResult(spec=spec, version=version, document=document, layout=layout)
+    code = check_code(folder, data) if spec == "snapshot-spec" and document.ok else None
+    return ValidationResult(spec=spec, version=version, document=document, layout=layout, code=code)

@@ -31,9 +31,20 @@ NEW = "ce" * 32
 MI = "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d"
 EXE, REG = 0o100755, 0o100644
 
+# The base's code, and ADR 0032's tree hash of it written out here, not imported.
+CODE_FILES = {
+    "model/wbm.pl": (b"#!/usr/bin/perl\nprint 1;\n", EXE),
+    "model/lib/WBM.pm": (b"1;\n", REG),
+    "utilities/tool.pl": (b"#!/usr/bin/perl\n", EXE),
+}
+CODE_HASH = hashlib.sha256("".join(
+    f"{hashlib.sha256(CODE_FILES[p][0]).hexdigest()}  {p}\n" for p in sorted(CODE_FILES, key=lambda p: p.encode())
+).encode()).hexdigest()
+
 BASE_EXAMPLE = json.loads(
     (spec.schemas_root() / "snapshot-spec" / "examples" / "wbm_storage_v2.0.0.json").read_text()
 )
+BASE_EXAMPLE["uses"]["modelCode"] = {"name": "wbm", "version": "1.2.3", "treeHash": CODE_HASH}
 
 INIT = """{
   MT_Code_Name => {
@@ -169,9 +180,7 @@ def store():
     base_meta = copy.deepcopy(BASE_EXAMPLE)
     base_meta["id"] = BASE
     files = {
-        "model/wbm.pl": (b"#!/usr/bin/perl\nprint 1;\n", EXE),
-        "model/lib/WBM.pm": (b"1;\n", REG),
-        "utilities/tool.pl": (b"#!/usr/bin/perl\n", EXE),
+        **CODE_FILES,
         "gdal_test_files/probe.tif": (b"t" * 40, REG),
         "metadata.json": (json.dumps(base_meta).encode(), REG),
         # what the new tree does not carry over
@@ -332,12 +341,39 @@ def _drop(meta, *path):
     lambda m: m["about"].__setitem__("isBasedOn", [{"kind": "snapshot", "id": "0" * 64}]),
     lambda m: _drop(m, "about", "isBasedOn"),
     lambda m: m["about"].__setitem__("url", f"https://openghm.org/snapshots/{BASE}"),
+    lambda m: m["uses"]["modelCode"].__setitem__("treeHash", "ab" * 32),
+    lambda m: _drop(m, "uses", "modelCode"),
 ], ids=["spec", "malformed-isBasedOn", "init", "model-input", "container", "other-base", "no-isBasedOn",
-        "url-of-another-id"])
+        "url-of-another-id", "code-pin", "no-code-pin"])
 def test_a_metadata_that_fails_or_disagrees_is_bad_input(mutate, tmp_path, run, store):
     meta_path = make_metadata(tmp_path, mutate)
     assert code_of(run, meta_path, store) == pub.EXIT_BAD_INPUT
     assert store.writes == [] and new_keys(store) == []
+
+
+def test_a_publish_checks_the_code_it_copies_against_the_pin(tmp_path, run, store):
+    # a match goes through (every other publish test), and the tree hash is the base's, from its SHA256SUMS
+    assert BASE_EXAMPLE["uses"]["modelCode"]["treeHash"] == CODE_HASH
+    meta_path = make_metadata(tmp_path, lambda m: m["uses"]["modelCode"].__setitem__("treeHash", "ab" * 32))
+    with pytest.raises(pub.PublishError) as e:
+        go(run, meta_path, store)
+    assert e.value.code == pub.EXIT_BAD_INPUT == 2
+    assert CODE_HASH in str(e.value) and "ab" * 32 in str(e.value)       # both hashes
+    assert store.writes == [] and new_keys(store) == []
+
+
+def test_a_dry_run_refuses_a_code_mismatch_too(tmp_path, run, store):
+    meta_path = make_metadata(tmp_path, lambda m: m["uses"]["modelCode"].__setitem__("treeHash", "ab" * 32))
+    assert code_of(run, meta_path, store, dry_run=True) == pub.EXIT_BAD_INPUT
+
+
+def test_a_base_whose_code_changed_no_longer_matches_its_pin(run, meta_path, store):
+    # the base's SHA256SUMS line for a code file is what the copy would carry
+    key = f"snapshots/{BASE}/SHA256SUMS"
+    sums = store.objects[key].body.decode()
+    line = next(l for l in sums.splitlines() if l.endswith("./model/lib/WBM.pm"))
+    store.add(key, sums.replace(line, "0" * 64 + "  ./model/lib/WBM.pm").encode())
+    assert code_of(run, meta_path, store) == pub.EXIT_BAD_INPUT
 
 
 def _rm(run, rel):
@@ -760,6 +796,10 @@ def test_cli_exit_codes(run, meta_path, store, tmp_path, monkeypatch):
     # bad input
     out = _invoke(str(run), "--metadata", str(tmp_path / "nope.json"), "--base-url", store.url, "--dry-run")
     assert out.exit_code == pub.EXIT_BAD_INPUT
+    # a pin that is not the code to be copied is bad input, and names both hashes
+    wrong = make_metadata(tmp_path, lambda m: m["uses"]["modelCode"].__setitem__("treeHash", "ab" * 32))
+    out = _invoke(str(run), "--metadata", str(wrong), "--base-url", store.url, "--dry-run")
+    assert out.exit_code == pub.EXIT_BAD_INPUT and CODE_HASH in out.output and "ab" * 32 in out.output
 
 
 def test_the_readme_documents_every_exit_code():

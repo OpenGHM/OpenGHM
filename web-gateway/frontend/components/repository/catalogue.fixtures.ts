@@ -62,6 +62,7 @@ export function snapshotItem(overrides: Partial<CatalogueItem & { kind: "snapsho
     },
     uses: {
       container: { image: "wbm", version: "1.0.0", digest: "sha256:abc", oras: "", https: "" },
+      modelCode: { name: "wbm", version: "22.1.1", treeHash: "f210a78bd43a870cfdde3c0b80c293134fb2a40dc45128688d23a9dfc2014eec" },
       modelInput: { id: "mi-1" },
     },
   });

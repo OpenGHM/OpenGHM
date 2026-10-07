@@ -15,6 +15,10 @@ What a snapshot fetch downloads:
   0015, even where a published tree still carries a copy), and ``spool/`` (a spool
   belongs to the model input and runs share it through the spool cache; an old
   tree that still lists one is fetched without it);
+- a check, once the tree is down: the WBM code in ``model/`` and ``utilities/`` must hash to the
+  tree hash ``uses.modelCode.treeHash`` pins (ADR 0032). A mismatch is a failure, and the model
+  input and the image are then not downloaded; a ``metadata.json`` that pins no code stops the
+  fetch (exit 2, like a missing model input id);
 - the model input the document links (``uses.modelInput.id``), into the
   ``model_input_dir`` cache, unless ``model_input=False``;
 - the container image the document pins (``uses.container.https``), into the
@@ -54,7 +58,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
-from . import assets
+from . import assets, code as wbm_code
 from .errors import OpenghmError
 
 #: The bucket ``snapshots/<id>/`` lives in (no trailing slash). Tests point
@@ -409,6 +413,15 @@ def _fetch_tree(
             continue
         items.append(_Item(rel, size, etag, sha256))
 
+    # A killed run leaves ``<rel>.part``. It is the fetch's own scratch, and where the file is skipped
+    # as already valid nothing would replace it: a stray in model/ would then change the code's hash.
+    for rel in on_offer:
+        if select(rel, excluded) is None and rel + ".part" not in on_offer:
+            try:
+                os.remove(os.path.join(dest, *(rel + ".part").split("/")))
+            except OSError:
+                pass
+
     done = 0
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
         futures = {pool.submit(_fetch_item, base, prefix, dest, i): i for i in items}
@@ -448,6 +461,10 @@ def fetch_snapshot(
 
     meta = _fetch_tree(base, prefix, dest, result, kind="snapshot", excluded=EXCLUDED_DIRS,
                        jobs=opts.jobs, on_progress=on_progress)
+    pinned = _pinned_tree_hash(meta)
+    if not _code_matches(dest, pinned, result):
+        result.failed.sort()
+        return result     # not this snapshot's code: the model input and the image are not downloaded
     uses = meta.get("uses") or {}
     image_spec = assets.spec_from_container(uses.get("container") or {}) if opts.image else None
     model_input_id = _model_input_id(meta) if opts.model_input else None
@@ -489,6 +506,43 @@ def fetch_model_input(
         result.model_input_path = dest
     result.failed.sort()
     return result
+
+
+#: The label a failed code check is listed under (``format_failures``).
+CODE_LABEL = "WBM code"
+
+
+def _pinned_tree_hash(meta: dict) -> str:
+    """``uses.modelCode.treeHash`` of a snapshot's ``metadata.json`` (ADR 0032)."""
+    pinned = (((meta.get("uses") or {}).get("modelCode")) or {}).get("treeHash")
+    if not pinned:
+        raise OpenghmError(
+            "uses.modelCode.treeHash is missing in metadata.json: this snapshot does not pin its WBM "
+            "code, so what was downloaded cannot be checked (ADR 0032)"
+        )
+    if not isinstance(pinned, str) or not re.match(r"^[0-9a-f]{64}$", pinned):
+        raise OpenghmError(f"uses.modelCode.treeHash is not a sha256 (64 lowercase hex): {pinned!r}")
+    return pinned
+
+
+def _code_matches(dest: str, pinned: str, result: FetchResult) -> bool:
+    """Whether the downloaded ``model/`` and ``utilities/`` hash to ``pinned``; if not, a failure
+    is added to ``result``.
+
+    Not checked, and ``True``, when a code file already failed: that failure names it, and the
+    hash of a tree with a hole in it says nothing more.
+    """
+    if any(wbm_code.counts(path) for path, _why in result.failed):
+        return True
+    try:
+        actual = wbm_code.tree_hash(dest)
+    except OpenghmError as e:
+        result.failed.append((CODE_LABEL, str(e)))
+        return False
+    if actual != pinned:
+        result.failed.append((CODE_LABEL, wbm_code.mismatch_message("the fetched tree", actual, pinned)))
+        return False
+    return True
 
 
 def _model_input_id(meta: dict) -> str:

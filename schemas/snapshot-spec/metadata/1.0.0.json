@@ -132,7 +132,7 @@
     "uses": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["container", "modelInput"],
+      "required": ["container", "modelCode", "modelInput"],
       "properties": {
         "container": {
           "type": "object",
@@ -144,6 +144,28 @@
             "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
             "oras": { "type": "string", "pattern": "^oras://" },
             "https": { "type": "string", "format": "uri" }
+          }
+        },
+        "modelCode": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "treeHash"],
+          "description": "The WBM code this snapshot runs: model/ and utilities/, pinned by tree hash (ADR 0032). The hash is the identity; name and version say where the bytes are published, under wbm-code/<name>/<version>/. `openghm snapshot validate`, `fetch` and `publish` refuse a tree whose code does not hash to treeHash.",
+          "properties": {
+            "name": {
+              "const": "wbm",
+              "description": "Which code. Only the Water Balance Model today; another model is an additive MINOR bump."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The WBM_VERSION constant in the tree's model/wbm.pl, e.g. 23.9.0; bytes that declare an already published version get the suffix -r<N> (ADR 0032). A convenience for humans: the treeHash is what pins."
+            },
+            "treeHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "sha256 of the sorted '<sha256>  <path>' lines of every file under model/ and utilities/, skipping any _Inline directory (ADR 0008, ADR 0032). The exact recipe is in ADR 0032; `openghm code hash <dir>` prints it."
+            }
           }
         },
         "modelInput": {

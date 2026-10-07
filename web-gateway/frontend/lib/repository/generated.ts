@@ -232,6 +232,23 @@ export interface Uses {
     oras: string;
     https: string;
   };
+  /**
+   * The WBM code this snapshot runs: model/ and utilities/, pinned by tree hash (ADR 0032). The hash is the identity; name and version say where the bytes are published, under wbm-code/<name>/<version>/. `openghm snapshot validate`, `fetch` and `publish` refuse a tree whose code does not hash to treeHash.
+   */
+  modelCode: {
+    /**
+     * Which code. Only the Water Balance Model today; another model is an additive MINOR bump.
+     */
+    name: "wbm";
+    /**
+     * The WBM_VERSION constant in the tree's model/wbm.pl, e.g. 23.9.0; bytes that declare an already published version get the suffix -r<N> (ADR 0032). A convenience for humans: the treeHash is what pins.
+     */
+    version: string;
+    /**
+     * sha256 of the sorted '<sha256>  <path>' lines of every file under model/ and utilities/, skipping any _Inline directory (ADR 0008, ADR 0032). The exact recipe is in ADR 0032; `openghm code hash <dir>` prints it.
+     */
+    treeHash: string;
+  };
   modelInput: {
     /**
      * Minted at publish, same rule as the snapshot id (ADR 0014). Two snapshots built from the same input data share this value.
