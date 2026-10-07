@@ -798,7 +798,7 @@ describe("the draft run step: what the draft is based on", () => {
     expect(name.className).toContain("line-clamp-2");
     expect(screen.getByRole("img", { name: /^Coverage: north 10°/ })).toBeTruthy();
     expect(
-      screen.getByText((_, el) => el?.tagName === "P" && /^WBM 2\.0\.0 · 2001 · 0\.5° · Model input:/.test(el.textContent ?? ""))
+      screen.getByText((_, el) => el?.tagName === "P" && /^WBM 23\.9\.0 · 2001 · 0\.5° · Model input:/.test(el.textContent ?? ""))
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "WBM Inputs [CONUS]" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /View in repository/ }).getAttribute("href")).toBe("/repository/snap-1");

@@ -83,7 +83,7 @@ FACETS: dict[str, Callable[[Item], list[Option]]] = {
     "output": _snapshot_only(lambda i: [(v.name, v.fullName) for v in i.simulation.outputVariables]),
     "forcing": _snapshot_only(lambda i: [(v.role.value, v.role.value) for v in i.simulation.inputVariables]),
     "process": _snapshot_only(lambda i: [(p.root, p.root) for p in i.simulation.activeProcesses]),
-    "wbm": _snapshot_only(lambda i: [(i.uses.container.version, i.uses.container.version)]),
+    "wbm": _snapshot_only(lambda i: [(i.uses.modelCode.version, i.uses.modelCode.version)]),
 }
 
 

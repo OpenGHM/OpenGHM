@@ -7,7 +7,7 @@ function snapshot(over: { version?: string; start?: string; end?: string; name?:
   const base = fakeDataset();
   return fakeDataset({
     about: { ...base.about, name: over.name ?? base.about.name },
-    uses: { ...base.uses, container: { ...base.uses.container, version: over.version ?? "1.0.0" } },
+    uses: { ...base.uses, modelCode: { ...base.uses.modelCode, version: over.version ?? "22.1.1" } },
     simulation: {
       ...base.simulation,
       resolution: { value: 5, unit: "arc-minute" },
@@ -18,10 +18,10 @@ function snapshot(over: { version?: string; start?: string; end?: string; name?:
 }
 
 describe("a snapshot's facts", () => {
-  it("are the model and version, the years and the resolution, each its own phrase", () => {
-    expect(snapshotFacts(snapshot())).toEqual(["WBM 1.0.0", "2000–2009", "5 arc-min"]);
-    expect(snapshotFacts(snapshot({ version: "2.0.0", end: "2001-12-31" }))).toEqual([
-      "WBM 2.0.0",
+  it("are the model and its code version, the years and the resolution, each its own phrase", () => {
+    expect(snapshotFacts(snapshot())).toEqual(["WBM 22.1.1", "2000–2009", "5 arc-min"]);
+    expect(snapshotFacts(snapshot({ version: "23.9.0", end: "2001-12-31" }))).toEqual([
+      "WBM 23.9.0",
       "2000–2001",
       "5 arc-min",
     ]);

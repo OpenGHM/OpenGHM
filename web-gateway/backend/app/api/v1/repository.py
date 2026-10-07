@@ -145,7 +145,7 @@ async def list_catalogue(
     output: list[str] | None = Query(default=None, description="Output variable name (snapshots only)"),
     forcing: list[str] | None = Query(default=None, description="Input variable role (snapshots only)"),
     process: list[str] | None = Query(default=None, description="Active process (snapshots only)"),
-    wbm: list[str] | None = Query(default=None, description="WBM container version (snapshots only)"),
+    wbm: list[str] | None = Query(default=None, description="WBM code version, uses.modelCode.version (snapshots only)"),
     year_start: int | None = Query(default=None),
     year_end: int | None = Query(default=None),
     spatial_res_min: float | None = Query(default=None, description="Min spatial resolution in degrees"),

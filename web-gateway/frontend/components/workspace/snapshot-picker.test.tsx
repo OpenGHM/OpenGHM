@@ -46,13 +46,13 @@ const FILTERS = catalogueFilters();
 const LONG_TITLE =
   "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Global] [2000-2009]";
 
-/** A snapshot of model `version`, covering `start`–`end` (years). */
+/** A snapshot of WBM code `version`, covering `start`–`end` (years). */
 const named = (id: string, name: string, version: string, years: [string, string], tags: Dataset["about"]["tags"] = ["test"]) => {
   const base = fakeDataset();
   return fakeDataset({
     id,
     about: { ...base.about, name, tags },
-    uses: { ...base.uses, container: { ...base.uses.container, version } },
+    uses: { ...base.uses, modelCode: { ...base.uses.modelCode, version } },
     simulation: {
       ...base.simulation,
       temporalCoverage: { start: `${years[0]}-01-01`, end: `${years[1]}-12-31` },
@@ -60,8 +60,8 @@ const named = (id: string, name: string, version: string, years: [string, string
     },
   });
 };
-const GLOBAL = named("global", LONG_TITLE, "1.0.0", ["2000", "2009"]);
-const TUTORIAL = named("tutorial", "WBM v2.0.0 simulation as tutorial", "2.0.0", ["2000", "2001"], ["tutorial"]);
+const GLOBAL = named("global", LONG_TITLE, "22.1.1", ["2000", "2009"]);
+const TUTORIAL = named("tutorial", "WBM v2.0.0 simulation as tutorial", "23.9.0", ["2000", "2001"], ["tutorial"]);
 /** More snapshots than one short list: the first two are the ones above. */
 const BIG = [
   GLOBAL,
@@ -111,7 +111,7 @@ describe("the list", () => {
     const items = within(screen.getByRole("list", { name: "Model snapshots" })).getAllByRole("listitem");
     expect(items).toHaveLength(10);
     expect(within(items[0]).getByRole("heading", { level: 3 }).textContent).toBe(LONG_TITLE);
-    expect(items[0].textContent).toContain("WBM 1.0.0 · 2000–2009 · 5 arc-min");
+    expect(items[0].textContent).toContain("WBM 22.1.1 · 2000–2009 · 5 arc-min");
     expect(items[1].textContent).toContain("Tutorial");
     expect(screen.queryByRole("complementary")).toBeNull();
   });
@@ -165,7 +165,7 @@ describe("the snapshots the user has used", () => {
 
 describe("search and filters", () => {
   it("are always there, even for a short catalogue", () => {
-    renderPicker({}, page([GLOBAL, TUTORIAL, named("third", "Third", "1.0.0", ["2000", "2009"])]));
+    renderPicker({}, page([GLOBAL, TUTORIAL, named("third", "Third", "22.1.1", ["2000", "2009"])]));
     expect(screen.getByRole("searchbox", { name: "Search model snapshots" })).toBeTruthy();
     expect(filtersToggle()).toBeTruthy();
     // And the count, as the repository has it.

@@ -110,7 +110,7 @@ describe("DraftReviewStep: the summary", () => {
     expect(title.getAttribute("title")).toBe("Fake Snapshot");
     expect(title.className).toContain("line-clamp-2");
     // The facts are plain phrases beside it, never a name.
-    expect(within(based).getByText("WBM 2.0.0 · 2001 · 0.5°")).toBeTruthy();
+    expect(within(based).getByText("WBM 23.9.0 · 2001 · 0.5°")).toBeTruthy();
     expect(based.textContent).not.toMatch(/Regional|Global/);
     expect(within(based).getByRole("link", { name: /View.*Fake Snapshot.*in the repository/ }).getAttribute("href")).toBe(
       "/repository/snap-1"

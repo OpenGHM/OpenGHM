@@ -54,7 +54,7 @@ describe("CatalogueCard for a model snapshot", () => {
     const badge = screen.getByText("Model Snapshot");
     expect(badge.className).toContain("border-border");
     expect(badge.querySelector(".bg-primary")).not.toBeNull();
-    const line = screen.getByText("WBM 1.0.0 · GPL-3.0-only");
+    const line = screen.getByText("WBM 22.1.1 · GPL-3.0-only");
     expect(line.className).toContain("font-mono");
     expect(screen.getByText("Publication")).toBeTruthy();
     expect(screen.getByText("Climate forcing")).toBeTruthy();
@@ -355,7 +355,7 @@ describe("CatalogueCard layout", () => {
     renderCard(snapshotItem());
     const published = screen.getByText(/^Published/);
     expect(published.className).toContain("text-muted-foreground");
-    expect(published.parentElement).toBe(screen.getByText("WBM 1.0.0 · GPL-3.0-only").parentElement);
+    expect(published.parentElement).toBe(screen.getByText("WBM 22.1.1 · GPL-3.0-only").parentElement);
   });
 
   it("lets long text wrap instead of overflowing", () => {

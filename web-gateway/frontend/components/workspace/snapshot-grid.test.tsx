@@ -14,7 +14,7 @@ function snapshot(id: string, name: string, over: { version?: string; end?: stri
   return fakeDataset({
     id,
     about: { ...base.about, name, tags: over.tags ?? ["publication"] },
-    uses: { ...base.uses, container: { ...base.uses.container, version: over.version ?? "1.0.0" } },
+    uses: { ...base.uses, modelCode: { ...base.uses.modelCode, version: over.version ?? "22.1.1" } },
     simulation: {
       ...base.simulation,
       resolution: { value: 5, unit: "arc-minute" },
@@ -24,7 +24,7 @@ function snapshot(id: string, name: string, over: { version?: string; end?: stri
 }
 const GLOBAL = snapshot("global", LONG_TITLE);
 const TUTORIAL = snapshot("tutorial", "WBM v2.0.0 simulation as tutorial: [CONUS] [2000-2001]", {
-  version: "2.0.0",
+  version: "23.9.0",
   end: "2001-12-31",
   tags: ["tutorial"],
 });
@@ -69,8 +69,8 @@ describe("a card", () => {
     grid();
     const [first, second] = cards();
     const facts = (card: HTMLElement) => card.querySelector("p.font-mono") as HTMLElement;
-    expect(facts(first).firstChild?.textContent).toBe("WBM 1.0.0 · 2000–2009 · 5 arc-min");
-    expect(facts(second).firstChild?.textContent).toBe("WBM 2.0.0 · 2000–2001 · 5 arc-min");
+    expect(facts(first).firstChild?.textContent).toBe("WBM 22.1.1 · 2000–2009 · 5 arc-min");
+    expect(facts(second).firstChild?.textContent).toBe("WBM 23.9.0 · 2000–2001 · 5 arc-min");
     expect(facts(first).querySelector("span")?.textContent).toMatch(/^Published /);
     expect(first.textContent).toContain("Publication");
     expect(second.textContent).toContain("Tutorial");
@@ -88,7 +88,7 @@ describe("a card", () => {
     expect(select.className).toContain("after:absolute");
     expect(select.className).toContain("after:inset-0");
     const describedBy = select.getAttribute("aria-describedby") as string;
-    expect(document.getElementById(describedBy)?.textContent).toContain("WBM 2.0.0 · 2000–2001 · 5 arc-min");
+    expect(document.getElementById(describedBy)?.textContent).toContain("WBM 23.9.0 · 2000–2001 · 5 arc-min");
     fireEvent.click(select);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(TUTORIAL);

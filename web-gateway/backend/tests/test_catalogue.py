@@ -58,7 +58,7 @@ def _zeta_doc() -> dict:
         description="Peak flows.", keywords=["flooding"],
     )
     d["about"]["creator"] = [{"name": "Alex Doe"}]
-    d["uses"]["container"]["version"] = "3.0.0"
+    d["uses"]["modelCode"]["version"] = "24.1.0"
     d["simulation"]["temporalCoverage"] = {"start": "2010-01-01", "end": "2015-12-31"}
     d["simulation"]["resolution"] = {"value": 30, "unit": "arc-second"}
     d["simulation"]["outputVariables"] = [
@@ -198,19 +198,19 @@ def test_keyword_facet_options_sort_and_disjunctive_counts(items):
 
 def test_snapshot_only_facets_exclude_model_inputs(items):
     for facet, value in (("output", "discharge"), ("forcing", "precipitation"),
-                         ("process", "Reservoirs"), ("wbm", "2.0.0")):
+                         ("process", "Reservoirs"), ("wbm", "23.9.0")):
         got = _run(items, **{facet: [value]})
         assert got.items, facet
         assert all(i.kind == "snapshot" for i in got.items), facet
-    assert set(_ids(_run(items, wbm=["2.0.0"]))) == {V2_ID}
+    assert set(_ids(_run(items, wbm=["23.9.0"]))) == {V2_ID}
     assert set(_ids(_run(items, process=["Reservoirs"]))) == {GLOBAL_ID, WYOMING_ID, ZETA_ID}
     assert set(_ids(_run(items, forcing=["airTemperature"]))) == {GLOBAL_ID, WYOMING_ID, V2_ID}
     assert set(_ids(_run(items, output=["streamAge"]))) == {V2_ID}
 
 
 def test_or_within_a_facet_and_across_facets(items):
-    assert set(_ids(_run(items, wbm=["1.0.0", "2.0.0"]))) == {GLOBAL_ID, WYOMING_ID, V2_ID}
-    both = _run(items, wbm=["1.0.0", "2.0.0"], creator=["Casey Nolan"])
+    assert set(_ids(_run(items, wbm=["22.1.1", "23.9.0"]))) == {GLOBAL_ID, WYOMING_ID, V2_ID}
+    both = _run(items, wbm=["22.1.1", "23.9.0"], creator=["Casey Nolan"])
     assert set(_ids(both)) == {V2_ID}
     assert _run(items, tag=["test"], license=["GPL-3.0-only"]).items == []
 
@@ -359,14 +359,14 @@ def test_facet_sorting_and_labels(items):
     assert out["discharge"] == "Discharge"          # label is simulation.outputVariables[].fullName
     forcing = {o.value: o.label for o in resp.facets.forcing}
     assert forcing["airTemperature"] == "airTemperature"  # raw role; the frontend humanises it
-    assert _facet(resp, "wbm") == {"1.0.0": 2, "2.0.0": 1, "3.0.0": 1}
+    assert _facet(resp, "wbm") == {"22.1.1": 2, "23.9.0": 1, "24.1.0": 1}
     assert _facet(resp, "creator")["Alex Doe"] == 2
 
 
 def test_facets_are_disjunctive_concrete_case(items):
-    # Ticking wbm=1.0.0 keeps its siblings visible with their own counts ...
-    resp = _run(items, wbm=["1.0.0"])
-    assert _facet(resp, "wbm") == {"1.0.0": 2, "2.0.0": 1, "3.0.0": 1}
+    # Ticking wbm=22.1.1 keeps its siblings visible with their own counts ...
+    resp = _run(items, wbm=["22.1.1"])
+    assert _facet(resp, "wbm") == {"22.1.1": 2, "23.9.0": 1, "24.1.0": 1}
     # ... while every OTHER group is narrowed by it (model inputs fall away).
     assert _facet(resp, "tag") == {"publication": 2}
     assert _facet(resp, "type") == {"snapshot": 2, "model-input": 0}
@@ -432,7 +432,7 @@ def test_route_response_shape_and_defaults(http):
 
 
 def test_route_repeated_params_and_comma_values(http):
-    r = http.get("/api/v1/repository/catalogue", params=[("wbm", "1.0.0"), ("wbm", "2.0.0"), ("sort", "title-az")])
+    r = http.get("/api/v1/repository/catalogue", params=[("wbm", "22.1.1"), ("wbm", "23.9.0"), ("sort", "title-az")])
     assert {i["id"] for i in r.json()["items"]} == {GLOBAL_ID, WYOMING_ID, V2_ID}
     r = http.get("/api/v1/repository/catalogue", params=[("type", "model-input"), ("type", "snapshot")])
     assert r.json()["totalCount"] == 7

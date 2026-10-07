@@ -76,7 +76,7 @@ export function creatorLabel(item: CatalogueItem): { first: string; more: number
 }
 
 /**
- * The mono line under the badge: "WBM 1.0.0 · GPL-3.0-only" for a snapshot,
+ * The mono line under the badge: "WBM 22.1.1 · GPL-3.0-only" for a snapshot,
  * "3 datasets · 2 networks · CC-BY-4.0" for a model input.
  */
 export function contentsLine(item: CatalogueItem): string {
@@ -91,9 +91,9 @@ export function coverageLine(item: CatalogueItem): string {
   );
 }
 
-/** The version for a snapshot ("WBM 1.0.0"), the size for a model input. */
+/** The WBM code version for a snapshot ("WBM 22.1.1"), the size for a model input. */
 export function contentsLabel(item: CatalogueItem): string {
-  if (item.kind === "snapshot") return `WBM ${item.uses.container.version}`;
+  if (item.kind === "snapshot") return `WBM ${item.uses.modelCode.version}`;
   const datasets = item.datasets.length;
   const networks = item.networks?.length ?? 0;
   const d = `${datasets} dataset${datasets === 1 ? "" : "s"}`;

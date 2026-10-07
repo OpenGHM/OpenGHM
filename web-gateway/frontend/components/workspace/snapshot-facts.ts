@@ -15,11 +15,11 @@ export function snapshotBox(dataset: Dataset): CoverageBox {
   return { north: s.northlimit, south: s.southlimit, east: s.eastlimit, west: s.westlimit };
 }
 
-/** The model and its version, the years it covers, its resolution: "WBM 1.0.0",
+/** The model and its code version, the years it covers, its resolution: "WBM 22.1.1",
  *  "2000–2009", "5 arc-min", the way the repository's cards write them. */
 export function snapshotFacts(dataset: Dataset): string[] {
   return [
-    `WBM ${dataset.uses.container.version}`,
+    `WBM ${dataset.uses.modelCode.version}`,
     yearsLabel(dataset.simulation.temporalCoverage),
     resolutionText(dataset.simulation.resolution),
   ];

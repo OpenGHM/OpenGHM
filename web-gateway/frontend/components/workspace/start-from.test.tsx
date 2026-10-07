@@ -35,12 +35,12 @@ const snap = (id: string, name: string, version: string) => ({
   ...fakeDataset({
     id,
     about: { ...fakeDataset().about, name },
-    uses: { ...fakeDataset().uses, container: { ...fakeDataset().uses.container, version } },
+    uses: { ...fakeDataset().uses, modelCode: { ...fakeDataset().uses.modelCode, version } },
   }),
   kind: "snapshot" as const,
 });
-const USED = snap("snap-used", "Used Snapshot", "1.0.0");
-const LISTED = snap("snap-listed", "Listed Snapshot", "2.0.0");
+const USED = snap("snap-used", "Used Snapshot", "22.1.1");
+const LISTED = snap("snap-listed", "Listed Snapshot", "23.9.0");
 const SEED: PickerSeed = {
   filters: catalogueFilters(),
   data: response([LISTED, USED]),
@@ -147,7 +147,7 @@ describe("a model snapshot", () => {
   });
 
   it("encodes a snapshot id that is not a plain path segment", () => {
-    const odd = snap("a/b c", "Odd Snapshot", "1.0.0");
+    const odd = snap("a/b c", "Odd Snapshot", "22.1.1");
     start({ picker: { ...SEED, data: response([odd]) } });
     fireEvent.click(snapshotButton("Odd Snapshot"));
     expect(push).toHaveBeenCalledWith("/workspace/new/a%2Fb%20c?step=run");
