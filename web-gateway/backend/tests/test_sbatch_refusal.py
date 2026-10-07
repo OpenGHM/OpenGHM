@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.sbatch_refusal import explain, sentence
+from app.services.sbatch_refusal import _REASONS, explain, sentence
 
 # What a user was shown on 2026-10-02 for a 167:15:00 request.
 REAL = (
@@ -95,3 +95,38 @@ def test_a_long_text_is_cut():
 
 def test_nothing_to_quote_is_just_the_explanation():
     assert explain("", also="QOSMaxWallDurationPerJobLimit").endswith("shorter walltime.")
+
+
+# ---- without advice (a page that gives its own instruction) --------------------
+
+
+@pytest.mark.parametrize("codes, what, advice", _REASONS, ids=[codes[0] for codes, _, _ in _REASONS])
+def test_without_advice_a_known_refusal_says_what_was_refused_and_no_instruction(codes, what, advice):
+    detail = f"sbatch: error: Batch job submission failed: Job violates policy\n{codes[0]}"
+    message = explain(detail, advice=False)
+    assert message.startswith(what)
+    assert advice not in message
+    assert message == f"{what} SLURM said: sbatch: error: Batch job submission failed: Job violates policy {codes[0]}."
+    # the default still carries it, after what was refused
+    assert explain(detail).startswith(f"{what} {advice} SLURM said: ")
+
+
+def test_without_advice_no_known_refusal_names_a_thing_to_change():
+    for codes, _, _ in _REASONS:
+        message = explain(f"sbatch: error: {codes[0]}", advice=False)
+        for word in ("Shorten", "walltime", "Set fewer", "Wait for", "submit again", "Contact"):
+            assert word not in message, (codes[0], word)
+
+
+def test_without_advice_the_run_time_refusal_is_the_first_sentence_alone():
+    assert explain(REAL, advice=False) == (
+        "Anvil refused the requested run time: it is over the limit for one job (96 h). SLURM said: "
+        "QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: "
+        "Job violates accounting/QOS policy (job submit limit, user's size and/or time limits)."
+    )
+    assert explain("", also="QOSMaxWallDurationPerJobLimit", advice=False).endswith("(96 h).")
+
+
+def test_advice_does_not_change_an_unknown_refusal():
+    text = "sbatch: error: Batch job submission failed: Invalid account"
+    assert explain(text, advice=False) == explain(text) == f"SLURM refused the job: {text}."

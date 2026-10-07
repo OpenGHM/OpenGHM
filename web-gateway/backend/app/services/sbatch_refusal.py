@@ -4,7 +4,9 @@
 by a sentence about policy that does not say which request was too large. The
 gateway names the cause it knows, tells the person what to change, and keeps
 SLURM's own words after it, so that nothing is hidden and a cause not in the
-table below is still shown as SLURM wrote it.
+table below is still shown as SLURM wrote it. Each known cause is stored as
+what Anvil refused and the advice that goes with it; a caller whose page gives
+its own instruction (a failed publish) asks for the first part alone.
 
 Pure: text in, text out (tests/test_sbatch_refusal.py). The stored
 `last_submit_error.code` stays `sbatch_rejected` whatever the reason.
@@ -18,34 +20,34 @@ from app.models.job import MAX_WALLTIME_SECONDS
 
 # Reason codes are matched whole and without regard to case, anywhere in the
 # text: slurmly hands over stderr, and the code may sit on its own line or in
-# front of `sbatch: error: ...`.
-_REASONS: tuple[tuple[tuple[str, ...], str], ...] = (
+# front of `sbatch: error: ...`. Each entry is (codes, what was refused, advice).
+_REASONS: tuple[tuple[tuple[str, ...], str, str], ...] = (
     (
         ("QOSMaxWallDurationPerJobLimit",),
         "Anvil refused the requested run time: it is over the limit for one job "
-        f"({MAX_WALLTIME_SECONDS // 3600} h). Shorten the run period or set a "
-        "shorter walltime.",
+        f"({MAX_WALLTIME_SECONDS // 3600} h).",
+        "Shorten the run period or set a shorter walltime.",
     ),
     (
         ("QOSMaxCpuPerJobLimit", "QOSMaxCPUsPerUserLimit", "QOSMaxCpuPerUserLimit"),
-        "Anvil refused the requested number of cores: it is over the limit. "
+        "Anvil refused the requested number of cores: it is over the limit.",
         "Set fewer cores.",
     ),
     (
         ("QOSMaxSubmitJobPerUserLimit", "QOSMaxJobsPerUserLimit"),
-        "Anvil refused the job because too many jobs are already queued or "
-        "running. Wait for some to finish, then submit again.",
+        "Anvil refused the job because too many jobs are already queued or running.",
+        "Wait for some to finish, then submit again.",
     ),
     (
         ("AssocGrpCPUMinutesLimit", "AssocGrpBillingMinutes", "AssocGrpCPURunMinutesLimit"),
-        "The allocation's compute-time budget is used up, so Anvil will not "
-        "take another job. Contact an administrator.",
+        "The allocation's compute-time budget is used up, so Anvil will not take another job.",
+        "Contact an administrator.",
     ),
 )
 
 _PATTERNS = tuple(
-    (re.compile(r"(?<![A-Za-z0-9_])(?:%s)(?![A-Za-z0-9_])" % "|".join(codes), re.IGNORECASE), text)
-    for codes, text in _REASONS
+    (re.compile(r"(?<![A-Za-z0-9_])(?:%s)(?![A-Za-z0-9_])" % "|".join(codes), re.IGNORECASE), what, advice)
+    for codes, what, advice in _REASONS
 )
 
 # An absolute path: a `/` that starts a token (not the one in "and/or").
@@ -77,15 +79,17 @@ def sentence(text: str) -> str:
     return text if text.endswith((".", "!", "?", "…")) else text + "."
 
 
-def explain(detail: str, also: str = "") -> str:
+def explain(detail: str, also: str = "", *, advice: bool = True) -> str:
     """The message for a refused submit, ending in a full stop, without the
     closing "Your draft is unchanged.". `detail` is what SLURM said (stderr,
     else stdout); `also` is more text to look for a reason code in, not to
     show. A reason in the table is explained, with SLURM's own words after it;
-    anything else is SLURM's text as it is."""
+    anything else is SLURM's text as it is. `advice=False` leaves out what to
+    do about a known reason, for a caller whose page says that itself."""
     searched = f"{detail}\n{also}"
-    for pattern, explanation in _PATTERNS:
+    for pattern, what, advised in _PATTERNS:
         if pattern.search(searched):
+            explanation = f"{what} {advised}" if advice else what
             return f"{explanation} SLURM said: {_quote(detail)}" if detail.strip() else explanation
     shown = detail.strip()
     shown = shown[: _UNKNOWN_CHARS - 1].rstrip() + "…" if len(shown) > _UNKNOWN_CHARS else shown

@@ -691,12 +691,15 @@ _ANVIL_UNREACHABLE = (
 )
 
 
-def _sbatch_refusal_message(exc: Exception, unchanged: str = "Your draft is unchanged.") -> str:
+def _sbatch_refusal_message(
+    exc: Exception, unchanged: str = "Your draft is unchanged.", *, advice: bool = True
+) -> str:
     detail = also = ""
     if isinstance(exc, SbatchError):
         detail = (exc.stderr or exc.stdout or "").strip()
         also = f"{exc.stderr}\n{exc.stdout}"
-    return f"{sbatch_refusal.sentence(sbatch_refusal.explain(detail or str(exc), also))} {unchanged}"
+    explained = sbatch_refusal.explain(detail or str(exc), also, advice=advice)
+    return f"{sbatch_refusal.sentence(explained)} {unchanged}"
 
 
 async def _record_refusal(job_id: str, user_id: str, exc: HTTPException) -> None:
@@ -1100,7 +1103,9 @@ def _publish_submit_failure(exc: Exception, job_id: str) -> tuple[int, publish.P
         http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_not_configured", None
     elif isinstance(exc, (SbatchError, InvalidJobSpec)):
         http_status, cause = status.HTTP_502_BAD_GATEWAY, "sbatch_rejected"
-        message = _sbatch_refusal_message(exc, "Nothing was uploaded.")
+        # no advice: the failure card says what to do (a retry), and a publish job has no
+        # run period, walltime or core count to change
+        message = _sbatch_refusal_message(exc, "Nothing was uploaded.", advice=False)
     elif isinstance(exc, (SlurmlyError, OSError, asyncio.TimeoutError)):
         http_status, cause, message = status.HTTP_503_SERVICE_UNAVAILABLE, "anvil_unreachable", None
     else:

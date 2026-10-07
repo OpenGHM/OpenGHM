@@ -472,6 +472,24 @@ def test_an_sbatch_refusal_is_explained_in_slurms_words_and_says_nothing_was_upl
     assert "Your draft is unchanged" not in detail["message"]
 
 
+def test_a_refused_run_time_is_explained_without_advice_for_a_publish(client, db, monkeypatch):
+    completed(db)
+
+    def over_the_limit(*_a, **_k):
+        raise SbatchError(
+            command="sbatch",
+            exit_status=1,
+            stdout="",
+            stderr="sbatch: error: Batch job submission failed: Job violates accounting/QOS policy\nQOSMaxWallDurationPerJobLimit",
+        )
+
+    monkeypatch.setattr(slurm, "submit_publish", _raising(over_the_limit))
+    message = publish_it(client).json()["detail"]["message"]
+    assert message.startswith("Anvil refused the requested run time: it is over the limit for one job (96 h). SLURM said: ")
+    assert message.endswith("Nothing was uploaded.")
+    assert "Shorten" not in message and "walltime" not in message
+
+
 def _raising(fn):
     async def inner(*a, **k):
         fn(*a, **k)
