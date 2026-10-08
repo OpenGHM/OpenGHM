@@ -527,22 +527,69 @@ def with_headroom(walltime: str) -> str:
     return format_slurm_time(min(seconds, MAX_WALLTIME_SECONDS))
 
 
-def walltime_over_limit(slurm_config: SlurmConfig, snapshot: dict) -> int | None:
+def post_processing_walltime(snapshot: dict) -> str | None:
+    """The snapshot's `recommendedCompute.postProcessingWalltime`: how long the
+    post-processing step took on its reference period. None when it was not
+    measured (the field is absent) or is not a SLURM time."""
+    value = (snapshot.get("simulation", {}).get("recommendedCompute") or {}).get(
+        "postProcessingWalltime"
+    )
+    if not value:
+        return None
+    try:
+        parse_slurm_time(str(value))
+    except SubmitInputError:
+        return None
+    return str(value)
+
+
+def runs_climatology(parameters: JobParameters, own_post_processing: str | None) -> bool:
+    """Whether the run will post-process: the draft asks for `climatology`, or
+    asks nothing and the snapshot's own init does (`own_post_processing`,
+    `run_start.InitRules.post_processing`; None when the init could not be read,
+    which counts as not). The one rule the resolved walltime and the over-limit
+    check share, mirrored by `runsClimatology` in the frontend's
+    lib/jobs/compute.ts."""
+    return (parameters.post_processing or own_post_processing) == "climatology"
+
+
+def recommended_walltime(snapshot: dict, post_processing: bool = False) -> str | None:
+    """The snapshot's recommended walltime, in SLURM's format and without headroom.
+    When the run `post_processing` it is the walltime plus the measured
+    `postProcessingWalltime`, or the walltime alone when that was not measured.
+    None when the snapshot has no walltime. Raises `SubmitInputError` for one
+    that is not a SLURM time."""
+    walltime = (snapshot.get("simulation", {}).get("recommendedCompute") or {}).get("walltime")
+    if not walltime:
+        return None
+    seconds = parse_slurm_time(str(walltime))
+    extra = post_processing_walltime(snapshot) if post_processing else None
+    if extra is None:
+        return str(walltime)
+    return format_slurm_time(seconds + parse_slurm_time(extra))
+
+
+def walltime_over_limit(
+    slurm_config: SlurmConfig, snapshot: dict, post_processing: bool = False
+) -> int | None:
     """The snapshot's recommended walltime, in seconds, when a submit of this
     draft would have to ask for more than one job may use: the draft has no
     walltime of its own and the recommendation alone is over
-    `MAX_WALLTIME_SECONDS`. None otherwise, including when the snapshot says
-    nothing or something that is not a SLURM time (`resolve_compute` reports
-    that). A walltime the draft chose is never refused here; the PATCH
-    validator already holds it to the limit. Mirrored by `submitProblems` in
-    the frontend's lib/workspace/draft-state.ts."""
+    `MAX_WALLTIME_SECONDS`. When the run `post_processing` (`runs_climatology`)
+    the recommendation includes the post-processing time
+    (`recommended_walltime`), the sum `resolve_compute` gives headroom to. None
+    otherwise, including when the snapshot says nothing or something that is
+    not a SLURM time (`resolve_compute` reports that). A walltime the draft
+    chose is never refused here; the PATCH validator already holds it to the
+    limit. Mirrored by `submitProblems` in the frontend's
+    lib/workspace/draft-state.ts."""
     if slurm_config.walltime:
         return None
-    recommended = (snapshot.get("simulation", {}).get("recommendedCompute") or {}).get("walltime")
-    if not recommended:
-        return None
     try:
-        seconds = parse_slurm_time(str(recommended))
+        recommended = recommended_walltime(snapshot, post_processing)
+        if recommended is None:
+            return None
+        seconds = parse_slurm_time(recommended)
     except SubmitInputError:
         return None
     return seconds if seconds > MAX_WALLTIME_SECONDS else None

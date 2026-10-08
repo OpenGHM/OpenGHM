@@ -7,7 +7,7 @@ import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
 import { fetchJob } from "@/lib/jobs/actions";
-import { submitBlockedReason } from "@/lib/jobs/compute";
+import { runsClimatology, submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { Dataset } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
@@ -87,7 +87,13 @@ export default async function JobDetailPage({
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <JobDetail job={job} viewerEmail={viewerEmail} recommended={recommended} baseAbout={base?.about ?? null} />
+      <JobDetail
+        job={job}
+        viewerEmail={viewerEmail}
+        recommended={recommended}
+        postProcessing={runsClimatology(job.parameters.post_processing, base?.postProcessing)}
+        baseAbout={base?.about ?? null}
+      />
       <Footer />
     </div>
   );

@@ -26,6 +26,7 @@ export function JobDetail({
   job,
   viewerEmail,
   recommended = null,
+  postProcessing = false,
   baseAbout = null,
   preview = false,
   previewLogs,
@@ -37,6 +38,8 @@ export function JobDetail({
   /** The base snapshot's `recommendedCompute`, for the cores and walltime a
    *  job asked for by default; null when the snapshot could not be read. */
   recommended?: Recommended | null;
+  /** The job post-processed (climatology), which its default walltime allowed for. */
+  postProcessing?: boolean;
   /** The base snapshot's `about`, which the publish form fills what the draft
    *  stores none of from; null when the snapshot could not be read. */
   baseAbout?: PartialAbout | null;
@@ -80,7 +83,7 @@ export function JobDetail({
           <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
           <PublishCard job={job} baseAbout={baseAbout} preview={preview} />
           <LogViewer previewLogs={previewLogs} />
-          <JobDetails job={job} recommended={recommended} />
+          <JobDetails job={job} recommended={recommended} postProcessing={postProcessing} />
           <AboutSummaryCard about={job.about} />
         </div>
       </main>

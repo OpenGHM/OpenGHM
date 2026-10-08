@@ -37,10 +37,25 @@ from slurmly.slurm.parser import parse_sacct_json_all
 from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.job import SLURM_NO_VAL, TERMINAL_STATUSES, JobDB, SlurmConfig, real_time
+from app.models.job import (
+    SLURM_NO_VAL,
+    TERMINAL_STATUSES,
+    JobDB,
+    JobParameters,
+    SlurmConfig,
+    read_stored_parameters,
+    real_time,
+)
 from app.models.repository import build_envelope
-from app.services import job_live, publish
-from app.services.job_script import SubmitInputError, is_valid_id, parse_slurm_time, with_headroom
+from app.services import job_live, publish, run_start
+from app.services.job_script import (
+    SubmitInputError,
+    is_valid_id,
+    parse_slurm_time,
+    recommended_walltime,
+    runs_climatology,
+    with_headroom,
+)
 from app.services.job_verdict import classify, slurm_state_head
 
 logger = logging.getLogger(__name__)
@@ -191,7 +206,9 @@ def client_state() -> str:
 # ---------------------------------------------------------------------------
 
 
-def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str]:
+def resolve_compute(
+    slurm_config: SlurmConfig, snapshot: dict, post_processing: bool = False
+) -> tuple[int, str]:
     """`(cores, walltime)` a job asks SLURM for: the draft's own choice, else
     the snapshot's `simulation.recommendedCompute` (the spec requires both
     there, so a real snapshot always answers).
@@ -199,13 +216,17 @@ def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str
     Cores are the recommendation as it is. A walltime the draft chose is sent
     as written; the snapshot's is sent with 50% headroom (`with_headroom`),
     because the recommendation is what a simulation took, not what it is safe to ask
-    for. Both are SLURM `--time` syntax: `15:00` is fifteen minutes.
+    for. When the run will post-process (`job_script.runs_climatology`) that
+    recommendation is the walltime plus the snapshot's measured
+    `postProcessingWalltime` (`job_script.recommended_walltime`). Both are SLURM
+    `--time` syntax: `15:00` is fifteen minutes.
     """
     recommended = snapshot.get("simulation", {}).get("recommendedCompute") or {}
     cores = slurm_config.cores or recommended.get("cores")
-    walltime = slurm_config.walltime or (
-        with_headroom(str(recommended["walltime"])) if recommended.get("walltime") else None
-    )
+    walltime = slurm_config.walltime
+    if not walltime:
+        base = recommended_walltime(snapshot, post_processing)
+        walltime = with_headroom(base) if base else None
     if not cores or not walltime:
         raise SubmitInputError(
             "The snapshot does not say how many cores and how much time it needs, "
@@ -214,11 +235,15 @@ def resolve_compute(slurm_config: SlurmConfig, snapshot: dict) -> tuple[int, str
     return int(cores), str(walltime)
 
 
-def build_job_spec(job: JobDB, snapshot: dict, body: str) -> JobSpec:
+def build_job_spec(
+    job: JobDB, snapshot: dict, body: str, post_processing: bool = False
+) -> JobSpec:
     """The slurmly spec for a gateway job. `--cpus-per-task`, not
     `--nodes`/`--ntasks`: the toolkit runs one container, and that is how it
-    asks for cores itself. The account and partition are the gateway's."""
-    cores, walltime = resolve_compute(job.slurm_config, snapshot)
+    asks for cores itself. The account and partition are the gateway's.
+    `post_processing` is whether the run will post-process, which the walltime
+    allows for (`resolve_compute`)."""
+    cores, walltime = resolve_compute(job.slurm_config, snapshot, post_processing)
     return JobSpec(
         name=job.slurm_job_name or job.sim_id or job.id,
         command_template=body,
@@ -237,7 +262,9 @@ def build_job_spec(job: JobDB, snapshot: dict, body: str) -> JobSpec:
 # ---------------------------------------------------------------------------
 
 
-async def submit_job(job: JobDB, snapshot: dict, body: str) -> SubmittedJob:
+async def submit_job(
+    job: JobDB, snapshot: dict, body: str, post_processing: bool = False
+) -> SubmittedJob:
     """Submit `job` to SLURM as a batch job whose body is `body`.
 
     Transport only: nothing is written to MongoDB here. The caller (the submit
@@ -245,8 +272,9 @@ async def submit_job(job: JobDB, snapshot: dict, body: str) -> SubmittedJob:
     draft, and decides from the exception what to tell the user. Raises
     `SubmitInputError` for a request that cannot be built, `AnvilNotConfigured`,
     and whatever slurmly raises (`SSHTransportError`, `SbatchError`, ...).
+    `post_processing` is whether the run will post-process (`resolve_compute`).
     """
-    spec = build_job_spec(job, snapshot, body)
+    spec = build_job_spec(job, snapshot, body, post_processing)
     client = await get_slurm_client()
     submitted: SubmittedJob = await client.submit(spec)
     logger.info(
@@ -474,13 +502,18 @@ async def _move(
 async def _walltime_seconds(doc: dict) -> int | None:
     """The walltime the job asked SLURM for, in seconds, worked out the way the
     submit worked it out: the draft's own, else the snapshot's recommendation
-    with headroom. The job stores neither. None when it cannot be told (the
-    snapshot is gone, say): a message then says less, not something false."""
+    (plus its post-processing time when the run post-processed) with headroom.
+    The job stores neither. None when it cannot be told (the snapshot is gone,
+    say): a message then says less, not something false."""
     try:
         config = SlurmConfig(**(doc.get("slurm_config") or {}))
-        envelope = await get_db().datasets.find_one({"_id": doc.get("dataset_id")})
+        parameters = JobParameters(**(read_stored_parameters(doc.get("parameters")) or {}))
+        dataset_id = doc.get("dataset_id")
+        envelope = await get_db().datasets.find_one({"_id": dataset_id})
         snapshot = (envelope or {}).get("document") or {}
-        return parse_slurm_time(resolve_compute(config, snapshot)[1])
+        rules = await run_start.read_init_rules(snapshot, dataset_id)
+        post_processing = runs_climatology(parameters, rules.post_processing if rules else None)
+        return parse_slurm_time(resolve_compute(config, snapshot, post_processing)[1])
     except Exception as exc:
         logger.info("Job %s: could not work out its walltime: %s", doc.get("_id"), exc)
         return None

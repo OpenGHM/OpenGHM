@@ -47,9 +47,9 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
    *  `standard` daily, monthly and yearly output, `climatology` that and
    *  the climatologies; `null` the init could not be read. Absent on a list row. */
   postProcessing?: "none" | "standard" | "climatology" | null;
-  /** Whether a draft may ask for climatology (the backend's `CLIMATOLOGY_ENABLED`,
-   *  off while post-processing can outlast one Anvil job). Single snapshot route
-   *  only; absent counts as false. */
+  /** Whether a draft may ask for climatology: the init has a post-processing run
+   *  to turn on and the snapshot has a measured `postProcessingWalltime` to size
+   *  the walltime by. Single snapshot route only; absent counts as false. */
   climatologyAvailable?: boolean;
 }
 

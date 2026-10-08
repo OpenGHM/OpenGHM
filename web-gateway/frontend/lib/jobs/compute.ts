@@ -7,7 +7,13 @@
  * backend passes it to SLURM as written, so this file reads it the way SLURM
  * does. A draft's own walltime is always `HH:MM:SS` (app/models/job.py).
  */
-import { MAX_CORES, MAX_WALLTIME, MAX_WALLTIME_SECONDS, type SlurmConfig } from "@/lib/jobs/types";
+import {
+  MAX_CORES,
+  MAX_WALLTIME,
+  MAX_WALLTIME_SECONDS,
+  type PostProcessingChoice,
+  type SlurmConfig,
+} from "@/lib/jobs/types";
 
 const HMS = /^(\d{1,3}):([0-5]\d):([0-5]\d)$/;
 
@@ -61,6 +67,36 @@ export function withHeadroom(value: string): string | null {
   return formatSlurmTime(Math.min(Math.ceil(seconds * 1.5), MAX_WALLTIME_SECONDS));
 }
 
+/** Whether a run will post-process: the draft asks for `climatology`, or asks
+ *  nothing (`choice` null) and the snapshot's own init does (`own`, the
+ *  dataset's `postProcessing`; null, absent or `none` count as not). The one
+ *  rule the walltime a draft is shown and the over-limit check share, as
+ *  `runs_climatology` in app/services/job_script.py is for the backend's. */
+export function runsClimatology(
+  choice: PostProcessingChoice | null | undefined,
+  own: string | null | undefined
+): boolean {
+  return (choice ?? own) === "climatology";
+}
+
+/** The snapshot's measured post-processing time in seconds, or null when it
+ *  has none (`postProcessingWalltime` absent, or not a SLURM time). */
+export function postProcessingSeconds(recommended: Recommended | null): number | null {
+  return recommended?.postProcessingWalltime ? parseSlurmTime(recommended.postProcessingWalltime) : null;
+}
+
+/** The snapshot's recommended walltime, in seconds and without headroom: when
+ *  the run `postProcessing` it is the walltime plus the measured post-processing
+ *  time (the walltime alone when that was not measured), as
+ *  `recommended_walltime` in app/services/job_script.py. Null when there is no
+ *  recommendation or it is not a SLURM time. */
+export function recommendedSeconds(recommended: Recommended | null, postProcessing = false): number | null {
+  if (!recommended) return null;
+  const run = parseSlurmTime(recommended.walltime);
+  if (run === null) return null;
+  return run + (postProcessing ? (postProcessingSeconds(recommended) ?? 0) : 0);
+}
+
 /** "15 min", "22 min 30 s", "2 h 30 min", "4 d 15 h" — for a person, not for
  *  SLURM. Seconds are shown when there are any and the value is under an hour. */
 export function describeDuration(total: number): string {
@@ -93,49 +129,74 @@ export function describeSlurmTime(value: string): string {
 export interface Recommended {
   cores: number;
   walltime: string;
+  /** How long the post-processing took on the reference period, measured like
+   *  `walltime`; absent means it was not measured. */
+  postProcessingWalltime?: string;
 }
 
 /** The snapshot's recommended walltime in seconds, when a submit of a draft
  *  with this `walltime` would have to ask for more than one job may use: the
  *  draft has none of its own and the recommendation alone is over the limit.
- *  Null otherwise, and when the snapshot is unknown or its value is not a time
- *  (the backend decides). The same rule as `walltime_over_limit` in
- *  app/services/job_script.py, which refuses the submit. */
+ *  When the run `postProcessing` the recommendation includes the measured
+ *  post-processing time (`recommendedSeconds`). Null otherwise, and when the
+ *  snapshot is unknown or its value is not a time (the backend decides). The
+ *  same rule as `walltime_over_limit` in app/services/job_script.py, which
+ *  refuses the submit. */
 export function walltimeOverLimit(
   config: SlurmConfig,
-  recommended: Recommended | null
+  recommended: Recommended | null,
+  postProcessing = false
 ): number | null {
-  if (config.walltime !== null || !recommended) return null;
-  const seconds = parseSlurmTime(recommended.walltime);
+  if (config.walltime !== null) return null;
+  const seconds = recommendedSeconds(recommended, postProcessing);
   return seconds !== null && seconds > MAX_WALLTIME_SECONDS ? seconds : null;
 }
 
-/** What to tell a person when `walltimeOverLimit` applies: why, and what to do. */
-export function describeWalltimeOverLimit(seconds: number): string {
-  return `This model snapshot's reference simulation took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out).`;
+/** The post-processing part of `walltimeOverLimit`'s seconds, to say so: 0 when
+ *  the run does not post-process or its time was not measured. */
+export function postProcessingShare(recommended: Recommended | null, postProcessing: boolean): number {
+  return postProcessing ? (postProcessingSeconds(recommended) ?? 0) : 0;
+}
+
+/** What to tell a person when `walltimeOverLimit` applies: why, and what to do.
+ *  `postProcessing` is the part of `seconds` the post-processing takes
+ *  (`postProcessingShare`), which the sentence names when there is one. */
+export function describeWalltimeOverLimit(seconds: number, postProcessing = 0): string {
+  const limit = MAX_WALLTIME_SECONDS / 3600;
+  if (postProcessing > 0) {
+    return `This model snapshot's reference simulation took about ${describeHours(seconds - postProcessing)}, and its post-processing about ${describeHours(postProcessing)} more: more than the ${limit} h one job may use. Shorten the run period, choose the daily, monthly and yearly output instead of climatology, or set a walltime yourself (the simulation may be stopped when time runs out).`;
+  }
+  return `This model snapshot's reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out).`;
 }
 
 /** `describeWalltimeOverLimit` in one line, for under the field: the facts, and
  *  the way out. The reason it matters ("the simulation may be stopped") is the long
  *  form's, offered beside it. */
-export function describeWalltimeOverLimitShort(seconds: number): string {
-  return `The reference simulation took about ${describeHours(seconds)}, more than the ${MAX_WALLTIME_SECONDS / 3600} h one job may use. Shorten the run period or set a walltime.`;
+export function describeWalltimeOverLimitShort(seconds: number, postProcessing = 0): string {
+  const limit = MAX_WALLTIME_SECONDS / 3600;
+  if (postProcessing > 0) {
+    return `The reference simulation and its post-processing took about ${describeHours(seconds)} together, more than the ${limit} h one job may use. Shorten the run period, choose the standard output or set a walltime.`;
+  }
+  return `The reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period or set a walltime.`;
 }
 
 /** A softer hint for a walltime the draft chose that is shorter than the
- *  reference simulation took, or null. It does not block anything: a shorter run
+ *  reference simulation took (with its post-processing, when the run
+ *  `postProcessing`s), or null. It does not block anything: a shorter run
  *  period needs less time. */
 export function describeWalltimeBelowReference(
   config: SlurmConfig,
-  recommended: Recommended | null
+  recommended: Recommended | null,
+  postProcessing = false
 ): string | null {
   if (config.walltime === null || !recommended) return null;
   const chosen = HMS.exec(config.walltime);
-  const reference = parseSlurmTime(recommended.walltime);
+  const reference = recommendedSeconds(recommended, postProcessing);
   if (!chosen || reference === null) return null;
   const seconds = Number(chosen[1]) * 3600 + Number(chosen[2]) * 60 + Number(chosen[3]);
   if (seconds <= 0 || seconds >= reference) return null;
-  return `The model snapshot's reference simulation took about ${describeHours(reference)}. If this simulation needs longer than your walltime, it may be stopped when time runs out.`;
+  const took = postProcessingShare(recommended, postProcessing) > 0 ? "reference simulation and its post-processing took" : "reference simulation took";
+  return `The model snapshot's ${took} about ${describeHours(reference)}. If this simulation needs longer than your walltime, it may be stopped when time runs out.`;
 }
 
 /** Memory SLURM gives one core on Anvil's `shared` partition, in MB. Verified
@@ -196,36 +257,44 @@ export function describeCoresBelowRecommendedShort(
 }
 
 /** What the automatic walltime is, in a few words after the value: the
- *  recommendation plus 50%, or the limit for one job when that is more.
- *  `placeholder` is the short form for an input's placeholder. */
+ *  recommendation (plus the post-processing time when the run has it,
+ *  `includesPostProcessing`) plus 50%, or the limit for one job when that is
+ *  more. `placeholder` is the short form for an input's placeholder. */
 export function automaticWalltimeLabel(
   capped: boolean,
-  form: "placeholder" | "summary" = "summary"
+  form: "placeholder" | "summary" = "summary",
+  includesPostProcessing = false
 ): string {
   if (capped) return "the limit for one job";
-  return form === "placeholder" ? "recommended + 50%" : "model snapshot's recommendation + 50%";
+  const base = form === "placeholder" ? "recommended" : "model snapshot's recommendation";
+  return includesPostProcessing ? `${base} + post-processing + 50%` : `${base} + 50%`;
 }
 
 /** The cores and walltime a submit will ask for, the same as the backend's
  *  `resolve_compute`: the draft's own, else the snapshot's recommendation.
  *  Cores are the recommendation as it is; the walltime is the recommendation
- *  plus 50% (`withHeadroom`, at most the limit for one job), and a walltime the
- *  draft chose is used as given. `recommended` is null when the snapshot could
- *  not be loaded. `*Source` says which one answered ("snapshot" means the
- *  recommendation, with headroom for the walltime); `walltimeCapped` says the
- *  automatic walltime was cut to the limit. */
+ *  (plus the measured post-processing time when the run `postProcessing`s,
+ *  `recommendedSeconds`) plus 50% (`withHeadroom`, at most the limit for one
+ *  job), and a walltime the draft chose is used as given. `recommended` is null
+ *  when the snapshot could not be loaded. `*Source` says which one answered
+ *  ("snapshot" means the recommendation, with headroom for the walltime);
+ *  `walltimeCapped` says the automatic walltime was cut to the limit;
+ *  `includesPostProcessing` says the automatic walltime has the post-processing
+ *  time in it. */
 export function effectiveCompute(
   config: SlurmConfig,
-  recommended: Recommended | null
+  recommended: Recommended | null,
+  postProcessing = false
 ): {
   cores: number | null;
   coresSource: "draft" | "snapshot";
   walltime: string | null;
   walltimeSource: "draft" | "snapshot";
   walltimeCapped: boolean;
+  includesPostProcessing: boolean;
 } {
-  const automatic = recommended ? withHeadroom(recommended.walltime) : null;
-  const reference = recommended ? parseSlurmTime(recommended.walltime) : null;
+  const reference = recommendedSeconds(recommended, postProcessing);
+  const automatic = reference !== null ? withHeadroom(formatSlurmTime(reference)) : null;
   return {
     cores: config.cores ?? recommended?.cores ?? null,
     coresSource: config.cores !== null ? "draft" : "snapshot",
@@ -233,6 +302,8 @@ export function effectiveCompute(
     walltimeSource: config.walltime !== null ? "draft" : "snapshot",
     walltimeCapped:
       config.walltime === null && reference !== null && Math.ceil(reference * 1.5) > MAX_WALLTIME_SECONDS,
+    includesPostProcessing:
+      config.walltime === null && postProcessing && postProcessingSeconds(recommended) !== null,
   };
 }
 
@@ -245,14 +316,17 @@ export function effectiveCompute(
  */
 export function describeComputeSummary(
   config: SlurmConfig,
-  recommended: Recommended | null
+  recommended: Recommended | null,
+  postProcessing = false
 ): { custom: boolean; text: string } {
-  const effective = effectiveCompute(config, recommended);
+  const effective = effectiveCompute(config, recommended, postProcessing);
   const custom = config.cores !== null || config.walltime !== null;
   const cores =
     effective.cores === null ? null : `${effective.cores} ${effective.cores === 1 ? "core" : "cores"}`;
   const walltime = effective.walltime === null ? null : describeSlurmTime(effective.walltime);
-  const automaticWalltime = effective.walltimeCapped ? "limit for one job" : "recommended + 50%";
+  const automaticWalltime = effective.walltimeCapped
+    ? "limit for one job"
+    : automaticWalltimeLabel(false, "placeholder", effective.includesPostProcessing);
 
   if (!custom) {
     if (cores === null || walltime === null) return { custom, text: "Recommended: set by the model snapshot" };

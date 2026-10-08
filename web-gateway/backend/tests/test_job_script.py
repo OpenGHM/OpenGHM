@@ -312,6 +312,63 @@ def test_a_recommendation_over_the_limit_is_found_only_when_the_draft_sets_none(
     assert job_script.walltime_over_limit(SlurmConfig(walltime="02:00:00"), snapshot) is None
 
 
+def _recommending(walltime, step=None):
+    compute = {"cores": 16, "walltime": walltime}
+    if step is not None:
+        compute["postProcessingWalltime"] = step
+    return {"simulation": {"recommendedCompute": compute}}
+
+
+# The same numbers as `lib/jobs/compute.test.ts`: the two sides must agree.
+@pytest.mark.parametrize(
+    "walltime, step, post_processing, over",
+    [
+        ("80:00:00", "20:00:00", True, 100 * 3600),   # the run fits, the sum does not
+        ("80:00:00", "20:00:00", False, None),        # not post-processing: the run alone
+        ("80:00:00", "16:00:00", True, None),         # exactly the limit still fits
+        ("80:00:00", "16:00:01", True, 96 * 3600 + 1),
+        ("80:00:00", None, True, None),               # not measured: the run alone
+        ("111:30:00", "1:00:00", True, 112 * 3600 + 30 * 60),
+        ("15:00", "1:00:00", True, None),
+    ],
+)
+def test_the_limit_applies_to_the_run_and_its_post_processing_together(walltime, step, post_processing, over):
+    snapshot = _recommending(walltime, step)
+    assert job_script.walltime_over_limit(SlurmConfig(), snapshot, post_processing) == over
+    assert job_script.walltime_over_limit(SlurmConfig(walltime="02:00:00"), snapshot, post_processing) is None
+
+
+def test_the_recommended_walltime_adds_the_post_processing_time_only_when_the_run_has_it():
+    snapshot = _recommending("15:00", "1:30:00")
+    assert job_script.recommended_walltime(snapshot) == "15:00"
+    assert job_script.recommended_walltime(snapshot, True) == "1:45:00"
+    assert job_script.recommended_walltime(_recommending("15:00"), True) == "15:00"
+    assert job_script.recommended_walltime({"simulation": {}}, True) is None
+    assert job_script.post_processing_walltime(snapshot) == "1:30:00"
+    assert job_script.post_processing_walltime(_recommending("15:00")) is None
+    assert job_script.post_processing_walltime(_recommending("15:00", "soon")) is None
+
+
+@pytest.mark.parametrize(
+    "draft, own, expected",
+    [
+        ("climatology", "standard", True),
+        ("climatology", None, True),
+        (None, "climatology", True),
+        ("climatology", "climatology", True),
+        ("standard", "climatology", False),
+        (None, "standard", False),
+        (None, "none", False),
+        (None, None, False),
+    ],
+)
+def test_a_run_post_processes_when_the_draft_asks_or_asks_nothing_and_the_snapshot_does(draft, own, expected):
+    parameters = JobParameters(
+        temporal_range_start="2000-01-01", temporal_range_end="2000-12-31", post_processing=draft
+    )
+    assert job_script.runs_climatology(parameters, own) is expected
+
+
 def test_a_snapshot_without_a_recommendation_is_not_over_the_limit():
     assert job_script.walltime_over_limit(SlurmConfig(), {"simulation": {}}) is None
 

@@ -555,6 +555,52 @@ describe("submitProblems", () => {
     });
   });
 
+  describe("a climatology run and its post-processing together are longer than one job may be", () => {
+    // The run alone is 80 h and fits; with 20 h of post-processing it is 100 h.
+    const ctx: DraftContext = {
+      snapshotState: "found",
+      dataset: {
+        ...dataset,
+        simulation: {
+          ...dataset.simulation,
+          recommendedCompute: { cores: 16, walltime: "80:00:00", postProcessingWalltime: "20:00:00" },
+        },
+      },
+    };
+
+    it("is a problem on the walltime field once the draft asks for climatology", () => {
+      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), ctx)).toEqual([
+        {
+          field: "walltime",
+          step: "run",
+          message:
+            "The reference simulation and its post-processing took about 100 h together, more than the 96 h one job may use. Shorten the run period, choose the standard output or set a walltime.",
+        },
+      ]);
+    });
+
+    it("is one for a snapshot whose own init asks for climatology and a draft that asks nothing", () => {
+      const own: DraftContext = { ...ctx, dataset: { ...ctx.dataset!, postProcessing: "climatology" } };
+      expect(problems(fromJob(ok), own)).toHaveLength(1);
+      expect(problems(edited(ok, { params: { post_processing: "standard" } }), own)).toEqual([]);
+    });
+
+    it("is not one for the standard output, a walltime of the draft's own, or no measurement", () => {
+      expect(problems(edited(ok, { params: { post_processing: "standard" } }), ctx)).toEqual([]);
+      expect(problems(fromJob(ok), ctx)).toEqual([]);
+      const asked = { params: { post_processing: "climatology" as const } };
+      expect(problems(edited(ok, { ...asked, slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
+      const unmeasured: DraftContext = {
+        ...ctx,
+        dataset: {
+          ...ctx.dataset!,
+          simulation: { ...ctx.dataset!.simulation, recommendedCompute: { cores: 16, walltime: "80:00:00" } },
+        },
+      };
+      expect(problems(edited(ok, asked), unmeasured)).toEqual([]);
+    });
+  });
+
   it("lists nothing without the snapshot, for the cases that need it: the backend decides", () => {
     expect(problems(fromJob(ok), UNAVAILABLE)).toEqual([]);
   });

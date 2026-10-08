@@ -254,9 +254,9 @@ not be read. The backend reads the block brace-balanced with a reader of its own
 `"standard"`, `"climatology"` or `null`, the snapshot's own, which a new draft starts at and a
 draft stored before the field has. Run settings shows it as an "Output" choice
 between "Daily, monthly and yearly" and "Also climatology", defaulting to the snapshot's own. The note on the
-climatology option gives what was measured on the CONUS tutorial snapshot: about 22% more run time, and
-2.2 GB of climatology beside 1.5 GB of output; it is a measurement of that
-snapshot, not an estimate for another. The 51-variable Global snapshot would hold 153 climatology files.
+climatology option says how many files it writes (variables × 3) and gives the snapshot's own
+measured post-processing time, `recommendedCompute.postProcessingWalltime`
+([metadata-format.md](../reference/metadata-format.md#where-simulation-comes-from)).
 A snapshot whose choice is `none` shows the control disabled. `PATCH /jobs/{id}` stores the value with
 the rest of `parameters`, and the submit passes `--post-processing <value>` to `sim run` only when the
 value is set and differs from the snapshot's own (a snapshot whose init could not be read gets the flag
@@ -266,18 +266,20 @@ nothing. A stored value that is neither choice reads as `null`, so an old draft 
 toolkit applies the flag to the staged init, and its post-processing step runs, checks and records the
 result ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
 
-The choice exists, but climatology is switched off: the backend setting `CLIMATOLOGY_ENABLED` defaults to
-false. Measured on Anvil, WBM's post-processing of one simulated year of the Global snapshot took 4 h 13 min
-on 52 cores (149.5 core-hours, 59.5 GB), about 13 h per year with 8 forks, against about 11 h per year for the
-Global run itself, and the wizard adds only 50% to the snapshot's recommended walltime, so a climatology draft
-would time out. While the setting is off, `PATCH /jobs/{id}` and the submit refuse
-`parameters.post_processing == "climatology"` with `422 climatology_unavailable` (on the submit it is kept as
-`last_submit_error`; `standard` and `null` are unaffected, and `post_processing_unavailable` keeps its
-precedence on a snapshot whose own choice is `none`), the dataset detail carries `climatologyAvailable: false`,
-and the wizard disables "Also climatology" with a line saying why, showing a stored climatology draft as it
-is with the 422 on the field. The gate only stops a draft from asking for it: a snapshot whose own init says
-`Run => 1` still post-processes when it is run with its defaults (none is published today). A per-snapshot
-measured cost is to come; the setting goes on once it sizes the walltime.
+**Climatology is available per snapshot, by measurement.** One flat percentage cannot cover both a
+tutorial snapshot (about two minutes of post-processing) and the Global one (hours), so the
+walltime of a climatology draft is sized by the snapshot's own measured `postProcessingWalltime`, and a
+snapshot without one cannot be asked for climatology. The dataset detail carries
+`climatologyAvailable`: true when the init has a `PostProcessing` block with a `Run`
+(`postProcessing` is `standard` or `climatology`) and `postProcessingWalltime` is a SLURM time; false
+otherwise, including when the init could not be read. `PATCH /jobs/{id}` and the submit refuse
+`parameters.post_processing == "climatology"` of a snapshot with no `postProcessingWalltime` with
+`422 climatology_unavailable` (on the submit it is kept as `last_submit_error`; `standard` and `null` are
+unaffected, and `post_processing_unavailable` keeps its precedence on a snapshot whose own choice is
+`none`). The wizard disables "Also climatology" with a line saying the post-processing time has not
+been measured when `climatologyAvailable` is not true, showing a stored climatology draft as it is with the
+422 on the field. The gate only stops a draft from asking for it: a snapshot whose own init says
+`Run => 1` still post-processes when it is run with its defaults.
 
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
@@ -558,8 +560,18 @@ SLURM is asked for `--cpus-per-task` and `--time`:
 - walltime comes from the draft's `slurm_config` (a PATCH holds it to at most
   96:00:00, `MAX_WALLTIME_SECONDS`), or else the snapshot's recommended
   walltime × 1.5, **never more than 96:00:00** (`with_headroom`; SLURM rounds a
-  value with seconds up to the minute). `slurm.resolve_compute` resolves it
-  once, and the same string is `sbatch --time` and `sim run --walltime`;
+  value with seconds up to the minute). When the run will post-process (the
+  draft asks for `climatology`, or asks nothing and the snapshot's own init
+  does: `job_script.runs_climatology`) the walltime that gets the headroom is
+  `recommendedCompute.walltime` plus `postProcessingWalltime`
+  (`job_script.recommended_walltime`). `slurm.resolve_compute` resolves it
+  once, and the same string is `sbatch --time` and `sim run --walltime`. A
+  walltime the draft chose is used as written, post-processing or not, and it
+  is not scaled by the run period or the cores either;
+- a submit refuses a draft with none of its own when that recommendation (the
+  sum, for a run that post-processes) is over 96 h: `422 walltime_over_limit`,
+  whose message names the post-processing when it contributes
+  (`walltime_over_limit`, which shares the rule with `resolve_compute`);
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
@@ -733,7 +745,8 @@ Anvil may delete them) sit in it, a failed job's cause and log excerpt, and
 the times are short (`Submitted 3:33 AM · Waited 3 min · Ran 14 min`, the full
 date and zone on hover). Details shows the cores and walltime the job asked
 for: its own choice, else the base snapshot's `recommendedCompute` worked out
-as the submit does it (`effectiveCompute`, marked as recommended), and while
+as the submit does it (`effectiveCompute`, marked as recommended, with the
+post-processing time in the walltime when the job asked for climatology), and while
 SLURM has the job the limit it enforces. The job document stores no resolved
 cores or walltime, so the page reads the snapshot for them; with no snapshot it
 shows a dash. The page is as wide as the Workspace list and the draft wizard.

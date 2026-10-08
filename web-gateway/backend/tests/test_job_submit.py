@@ -55,16 +55,16 @@ def sent(monkeypatch) -> list:
     calls: list = []
     real = slurm.submit_job
 
-    async def recording(job, snapshot, body):
+    async def recording(job, snapshot, body, post_processing=False):
         calls.append((job, snapshot, body))
-        return await real(job, snapshot, body)
+        return await real(job, snapshot, body, post_processing)
 
     monkeypatch.setattr(slurm, "submit_job", recording)
     return calls
 
 
 def _fail_with(monkeypatch, exc: Exception):
-    async def submit_job(job, snapshot, body):
+    async def submit_job(job, snapshot, body, post_processing=False):
         raise exc
 
     monkeypatch.setattr(slurm, "submit_job", submit_job)
@@ -737,6 +737,17 @@ def test_the_snapshots_walltime_gets_headroom_and_its_cores_do_not(v2_spec_input
     assert slurm.resolve_compute(job.slurm_config, snapshot) == (2, "6:45:00")
 
 
+def test_a_run_that_post_processes_gets_headroom_on_its_walltime_and_post_processing_time(v2_spec_inputs):
+    job, snapshot = v2_spec_inputs
+    snapshot["simulation"]["recommendedCompute"] = {
+        "cores": 8, "walltime": "4:00:00", "postProcessingWalltime": "0:30:00"}
+    assert slurm.resolve_compute(job.slurm_config, snapshot) == (8, "6:00:00")
+    assert slurm.resolve_compute(job.slurm_config, snapshot, True) == (8, "6:45:00")
+    assert slurm.build_job_spec(job, snapshot, "x", True).time_limit == "6:45:00"
+    job.slurm_config.walltime = "01:00:00"  # the draft's own is as written
+    assert slurm.resolve_compute(job.slurm_config, snapshot, True) == (8, "01:00:00")
+
+
 def test_the_job_body_locks_the_fetch_on_home(client, db, draft, sent):
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     script = sent[0][2]
@@ -824,7 +835,7 @@ def test_a_cancel_that_won_the_job_while_the_answer_was_lost_still_records_the_n
     """`_return_to_draft` filtered on SUBMITTED, so an orphan from a submit the
     user cancelled in flight was dropped with the filter."""
 
-    async def submit_job(job, snapshot, body):
+    async def submit_job(job, snapshot, body, post_processing=False):
         db.jobs.docs["job-1"].update(status="CANCELLED", cancel_requested_by=OWNER)
         raise SSHTransportError("connection reset")
 

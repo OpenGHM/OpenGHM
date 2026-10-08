@@ -13,6 +13,8 @@
  */
 import {
   describeWalltimeOverLimitShort,
+  postProcessingShare,
+  runsClimatology,
   validateSlurmConfig,
   walltimeOverLimit,
 } from "@/lib/jobs/compute";
@@ -509,8 +511,11 @@ export function submitProblems(
 
   // The snapshot's reference simulation is longer than one job may be: a submit
   // refuses it (`walltime_over_limit`) unless the draft sets a walltime.
-  const over = walltimeOverLimit(local.slurm, ctx.dataset?.simulation.recommendedCompute ?? null);
-  if (over !== null) add("walltime", describeWalltimeOverLimitShort(over));
+  // With the post-processing time added when the run asks for climatology.
+  const recommended = ctx.dataset?.simulation.recommendedCompute ?? null;
+  const postProcessing = runsClimatology(local.parameters.post_processing, ctx.dataset?.postProcessing);
+  const over = walltimeOverLimit(local.slurm, recommended, postProcessing);
+  if (over !== null) add("walltime", describeWalltimeOverLimitShort(over, postProcessingShare(recommended, postProcessing)));
 
   // Not saved: a submit would run the saved value, not this one.
   for (const field of save.withheld) {

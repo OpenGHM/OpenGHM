@@ -228,7 +228,7 @@ def _cancel_lands_during_the_submit(db, monkeypatch):
     """Replace the submit with one during which the user's cancel is answered:
     the job is CANCELLED, with no SLURM id, before sbatch's answer arrives."""
 
-    async def submit_job(job, snapshot, body):
+    async def submit_job(job, snapshot, body, post_processing=False):
         db.jobs.docs["job-1"].update(
             status="CANCELLED", cancel_requested_by=OWNER, cancel_requested_at=job.updated_at
         )

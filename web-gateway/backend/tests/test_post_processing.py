@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from app.api.v1 import repository as repository_router
-from app.core.config import Settings, settings
+from app.core.config import Settings
 from app.models.job import JobDB, JobParameters, read_stored_parameters
 from app.services import job_script, published_answer, run_start, slurm
 from app.services.job_script import SubmitInputError, render_job_body
@@ -32,16 +32,20 @@ FIXTURES = Path(__file__).parent / "fixtures" / "post_processing"
 V2 = Path(__file__).parents[3] / "schemas/snapshot-spec/examples/wbm_storage_v2.0.0.json"
 
 
+MEASURED = "1:00:00"
+
+
 @pytest.fixture(autouse=True)
-def climatology_on(db, monkeypatch):
-    """The choice is tested as it behaves when `CLIMATOLOGY_ENABLED` is on; the
-    tests of the switch itself (`climatology_off`) turn it off again."""
-    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", True)
+def measured(db):
+    """The choice is tested as it behaves for a snapshot with a measured post-processing
+    time (ds-1, 15:00 for the run and an hour for the step); the tests of a snapshot
+    without one (`unmeasured`) take the field away again."""
+    db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["postProcessingWalltime"] = MEASURED
 
 
 @pytest.fixture
-def climatology_off(db, monkeypatch):
-    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", False)
+def unmeasured(db):
+    del db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["postProcessingWalltime"]
 
 
 def fixture(name: str) -> str:
@@ -122,10 +126,14 @@ def test_the_v1_init_without_a_block_is_none():
 # ---- GET /repository/datasets/{id} --------------------------------------------------
 
 
-def _envelope() -> dict:
+def _envelope(measured: str | None = None) -> dict:
+    """The v2 snapshot's envelope, with `measured` as its post-processing time."""
     from app.models.repository import build_envelope
 
-    return build_envelope(json.loads(V2.read_text()))
+    document = json.loads(V2.read_text())
+    if measured is not None:
+        document["simulation"]["recommendedCompute"]["postProcessingWalltime"] = measured
+    return build_envelope(document)
 
 
 def _serve(monkeypatch, text: str) -> None:
@@ -166,22 +174,38 @@ def test_the_snapshot_response_says_null_when_the_init_cannot_be_read(db, monkey
     assert answer.model_dump(by_alias=True, mode="json")["postProcessing"] is None
 
 
-def test_the_snapshot_response_says_climatology_is_available_only_when_the_setting_is_on(db, monkeypatch):
-    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
-    envelope = _envelope()
+@pytest.mark.parametrize(
+    "init, time, expected",
+    [
+        ("fc66a2cd_wbm_test.init", "0:05:00", True),
+        ("fc66a2cd_wbm_SHORT.init", "0:05:00", True),
+        ("fc66a2cd_wbm_test.init", None, False),         # not measured
+    ],
+)
+def test_climatology_is_available_when_the_init_has_a_run_and_the_time_is_measured(
+    db, monkeypatch, init, time, expected
+):
+    _serve(monkeypatch, fixture(init))
+    envelope = _envelope(time)
     db.datasets.docs[envelope["_id"]] = envelope
     monkeypatch.setattr(repository_router, "get_db", lambda: db)
     answer = asyncio.run(repository_router.get_dataset(envelope["_id"]))
-    assert answer.climatologyAvailable is True
-    assert answer.model_dump(by_alias=True, mode="json")["climatologyAvailable"] is True
-    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", False)
-    answer = asyncio.run(repository_router.get_dataset(envelope["_id"]))
-    assert answer.climatologyAvailable is False
-    assert answer.model_dump(by_alias=True, mode="json")["climatologyAvailable"] is False
+    assert answer.climatologyAvailable is expected
+    assert answer.model_dump(by_alias=True, mode="json")["climatologyAvailable"] is expected
 
 
-def test_climatology_is_off_unless_the_setting_says_otherwise():
-    assert Settings.model_fields["CLIMATOLOGY_ENABLED"].default is False
+@pytest.mark.parametrize("text", [with_block(""), None])
+def test_climatology_is_not_available_without_a_run_to_turn_on_or_a_readable_init(db, monkeypatch, text):
+    if text is not None:
+        _serve(monkeypatch, text)
+    envelope = _envelope("0:05:00")
+    db.datasets.docs[envelope["_id"]] = envelope
+    monkeypatch.setattr(repository_router, "get_db", lambda: db)
+    assert asyncio.run(repository_router.get_dataset(envelope["_id"])).climatologyAvailable is False
+
+
+def test_climatology_has_no_setting_to_switch_it():
+    assert "CLIMATOLOGY_ENABLED" not in Settings.model_fields
 
 
 # ---- the parameter, stored and read ---------------------------------------------------
@@ -233,9 +257,9 @@ def sent(monkeypatch) -> list:
     calls: list = []
     real = slurm.submit_job
 
-    async def recording(job, snapshot, body):
+    async def recording(job, snapshot, body, post_processing=False):
         calls.append(body)
-        return await real(job, snapshot, body)
+        return await real(job, snapshot, body, post_processing)
 
     monkeypatch.setattr(slurm, "submit_job", recording)
     return calls
@@ -291,24 +315,24 @@ def test_a_choice_for_a_snapshot_without_a_block_is_refused_on_submit(client, db
     assert sent == []
 
 
-def test_climatology_is_refused_on_patch_while_the_setting_is_off(client, db, draft, monkeypatch, climatology_off):
+def test_climatology_is_refused_on_patch_for_a_snapshot_without_a_measurement(client, db, draft, monkeypatch, unmeasured):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing="climatology")}, headers=HEADERS)
     assert r.status_code == 422
     detail = r.json()["detail"]
     assert detail["code"] == "climatology_unavailable"
-    assert "not available yet" in detail["message"]
+    assert "not been measured" in detail["message"]
     assert "post_processing" not in db.jobs.docs["job-1"]["parameters"]
 
 
 @pytest.mark.parametrize("value", [None, "standard"])
-def test_standard_and_no_choice_are_unaffected_while_the_setting_is_off(client, db, draft, monkeypatch, climatology_off, value):
+def test_standard_and_no_choice_are_unaffected_without_a_measurement(client, db, draft, monkeypatch, unmeasured, value):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing=value)}, headers=HEADERS)
     assert r.status_code == 200, r.text
 
 
-def test_climatology_is_refused_on_submit_and_kept_while_the_setting_is_off(client, db, draft, monkeypatch, sent, climatology_off):
+def test_climatology_is_refused_on_submit_and_kept_without_a_measurement(client, db, draft, monkeypatch, sent, unmeasured):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
     r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
@@ -320,13 +344,13 @@ def test_climatology_is_refused_on_submit_and_kept_while_the_setting_is_off(clie
 
 
 @pytest.mark.parametrize("value", [None, "standard"])
-def test_standard_and_no_choice_still_submit_while_the_setting_is_off(client, db, draft, monkeypatch, sent, climatology_off, value):
+def test_standard_and_no_choice_still_submit_without_a_measurement(client, db, draft, monkeypatch, sent, unmeasured, value):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
 
 
-def test_post_processing_unavailable_keeps_its_precedence_while_the_setting_is_off(client, db, draft, monkeypatch, climatology_off):
+def test_post_processing_unavailable_keeps_its_precedence_without_a_measurement(client, db, draft, monkeypatch, unmeasured):
     _serve(monkeypatch, with_block(""))
     r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing="climatology")}, headers=HEADERS)
     assert r.status_code == 422
@@ -385,6 +409,113 @@ def test_a_stored_unknown_value_does_not_break_reading_or_submitting(client, db,
     assert r.json()["parameters"]["post_processing"] is None
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
     assert "--post-processing" not in sent[0]
+
+
+# ---- the walltime of a run that post-processes ---------------------------------------------
+
+
+def _walltime_in(body: str) -> str:
+    return body.split(" --walltime ")[1].split()[0]
+
+
+def _recommend(db, walltime: str, step: str | None = MEASURED):
+    compute = db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]
+    compute["walltime"] = walltime
+    if step is None:
+        compute.pop("postProcessingWalltime", None)
+    else:
+        compute["postProcessingWalltime"] = step
+
+
+@pytest.mark.parametrize(
+    "init, value, asked",
+    [
+        ("fc66a2cd_wbm_test.init", "climatology", "1:52:30"),   # 15:00 + 1:00:00, and half as much again
+        ("fc66a2cd_wbm_SHORT.init", None, "1:52:30"),           # the snapshot's own climatology
+        ("fc66a2cd_wbm_SHORT.init", "climatology", "1:52:30"),
+        ("fc66a2cd_wbm_test.init", None, "22:30"),              # a standard run: as before
+        ("fc66a2cd_wbm_test.init", "standard", "22:30"),
+        ("fc66a2cd_wbm_SHORT.init", "standard", "22:30"),       # turned off over the snapshot's own
+    ],
+)
+def test_a_climatology_run_asks_for_its_walltime_and_its_post_processing_time(
+    client, db, draft, monkeypatch, sent, init, value, asked
+):
+    _serve(monkeypatch, fixture(init))
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    assert _walltime_in(sent[0]) == asked
+
+
+@pytest.mark.parametrize("value, asked", [("climatology", "1:52:30"), ("standard", "22:30")])
+def test_the_walltime_slurm_is_asked_for_is_the_one_the_toolkit_is_told(
+    client, db, draft, monkeypatch, value, asked
+):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
+    calls: list = []
+    stand_in = slurm.submit_job
+
+    async def recording(job, snapshot, body, post_processing=False):
+        calls.append((job, snapshot, body, post_processing))
+        return await stand_in(job, snapshot, body, post_processing)
+
+    monkeypatch.setattr(slurm, "submit_job", recording)
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    ((job, snapshot, body, post_processing),) = calls
+    assert post_processing is (value == "climatology")
+    assert slurm.build_job_spec(job, snapshot, body, post_processing).time_limit == asked == _walltime_in(body)
+
+
+def test_a_walltime_of_the_drafts_own_is_used_as_written_with_climatology(client, db, draft, monkeypatch, sent):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
+    db.jobs.docs["job-1"]["slurm_config"] = {"cores": 4, "walltime": "03:00:00"}
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    assert _walltime_in(sent[0]) == "03:00:00"
+
+
+def test_a_snapshot_whose_own_climatology_has_no_measurement_asks_for_its_walltime_alone(
+    client, db, draft, monkeypatch, sent, unmeasured
+):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_SHORT.init"))
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    assert _walltime_in(sent[0]) == "22:30"
+
+
+def test_a_climatology_draft_over_the_limit_with_its_post_processing_is_refused(client, db, draft, monkeypatch, sent):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    _recommend(db, "80:00:00", "20:00:00")  # the run alone fits, the sum is 100 h
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
+    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "walltime_over_limit"
+    assert "80 h" in detail["message"] and "post-processing about 20 h" in detail["message"]
+    assert "96 h" in detail["message"]
+    assert detail["recommended_seconds"] == 100 * 3600
+    assert detail["post_processing_seconds"] == 20 * 3600
+    assert db.jobs.docs["job-1"]["status"] == "DRAFT"
+    assert sent == []
+
+
+@pytest.mark.parametrize("value", [None, "standard"])
+def test_the_same_snapshot_without_climatology_is_not_over_the_limit(client, db, draft, monkeypatch, sent, value):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    _recommend(db, "80:00:00", "20:00:00")
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    assert _walltime_in(sent[0]) == "96:00:00"
+
+
+def test_a_run_over_the_limit_without_post_processing_keeps_its_message(client, db, draft, monkeypatch, sent):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    _recommend(db, "111:30:00")
+    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
+    detail = r.json()["detail"]
+    assert detail["code"] == "walltime_over_limit"
+    assert "post-processing" not in detail["message"]
+    assert detail["post_processing_seconds"] == 0
 
 
 # ---- run_overrides and the job body --------------------------------------------------------

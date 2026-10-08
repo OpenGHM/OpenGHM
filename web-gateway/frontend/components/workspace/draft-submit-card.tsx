@@ -16,7 +16,12 @@ import { Button } from "@/components/ui/button";
 import { DraftSection } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
-import { describeCoresBelowRecommended, effectiveCompute, type Recommended } from "@/lib/jobs/compute";
+import {
+  describeCoresBelowRecommended,
+  effectiveCompute,
+  runsClimatology,
+  type Recommended,
+} from "@/lib/jobs/compute";
 import type { ActionResult, Job, PostProcessingChoice, SubmitError } from "@/lib/jobs/types";
 import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
@@ -213,7 +218,13 @@ export function DraftSubmitCard({
     onSubmitFailed?.();
   };
 
-  const compute = saved ? effectiveCompute(saved.slurm_config, recommended) : null;
+  const compute = saved
+    ? effectiveCompute(
+        saved.slurm_config,
+        recommended,
+        runsClimatology(saved.parameters.post_processing, snapshotOutput)
+      )
+    : null;
 
   const done = stage === "done";
 
@@ -368,6 +379,7 @@ export function DraftSubmitCard({
               walltime={compute.walltime}
               walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
               walltimeCapped={compute.walltimeCapped}
+              walltimeIncludesPostProcessing={compute.includesPostProcessing}
               coresWarning={describeCoresBelowRecommended(saved.slurm_config, recommended)}
             />
           )}

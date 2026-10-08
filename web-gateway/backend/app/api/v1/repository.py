@@ -35,7 +35,7 @@ from app.models.repository import (
     snapshot_links,
 )
 from app.models.user import TokenPayload
-from app.services import published_answer, run_start, tree_browse
+from app.services import job_script, published_answer, run_start, tree_browse
 from app.services.catalogue import (
     CatalogueQuery,
     InvalidBoundingBox,
@@ -275,13 +275,18 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     detail = DatasetDetailResponse.from_metadata_json(doc)
-    detail.climatologyAvailable = settings.CLIMATOLOGY_ENABLED
     # Read once per snapshot (immutable by id) and kept; None if it cannot be read.
     rules = await run_start.read_init_rules(doc["document"], dataset_id)
     if rules is not None:
         detail.runStartAlignment = rules.alignment
         detail.aggregationStartYear = rules.aggregation_start_year
         detail.postProcessing = rules.post_processing
+        # Both: the init has a post-processing run to turn on, and the snapshot
+        # says how long that takes (what its walltime is sized by).
+        detail.climatologyAvailable = (
+            rules.post_processing != "none"
+            and job_script.post_processing_walltime(doc["document"]) is not None
+        )
     return detail
 
 

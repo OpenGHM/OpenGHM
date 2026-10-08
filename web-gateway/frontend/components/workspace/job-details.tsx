@@ -4,7 +4,13 @@ import { useId, useState } from "react";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { TimeStamp } from "@/components/common/time-stamp";
-import { describeHours, effectiveCompute, parseSlurmTime, type Recommended } from "@/lib/jobs/compute";
+import {
+  automaticWalltimeLabel,
+  describeHours,
+  effectiveCompute,
+  parseSlurmTime,
+  type Recommended,
+} from "@/lib/jobs/compute";
 import type { Job } from "@/lib/jobs/types";
 
 /** Variables drawn before "Show all". */
@@ -56,11 +62,21 @@ function Variables({ variables }: { variables: string[] }) {
  * (`effectiveCompute`, the backend's `resolve_compute`), marked as such. While
  * SLURM has the job, the limit it enforces is shown instead. A value that
  * cannot be known (no recommendation to read) is a dash, not a guess.
+ * `postProcessing` says the run post-processed (`runsClimatology`), which the
+ * recommendation includes the snapshot's post-processing time for.
  */
-export function JobDetails({ job, recommended }: { job: Job; recommended: Recommended | null }) {
+export function JobDetails({
+  job,
+  recommended,
+  postProcessing = false,
+}: {
+  job: Job;
+  recommended: Recommended | null;
+  postProcessing?: boolean;
+}) {
   const { view, live, submittedAt, startedAt, completedAt } = useLiveJobContext();
   const { parameters, slurm_config: config } = job;
-  const compute = effectiveCompute(config, recommended);
+  const compute = effectiveCompute(config, recommended, postProcessing);
 
   const limit = live?.time_limit_seconds ?? null;
   const walltimeSeconds = compute.walltime ? parseSlurmTime(compute.walltime) : null;
@@ -74,7 +90,7 @@ export function JobDetails({ job, recommended }: { job: Job; recommended: Recomm
     limit === null && walltime !== null && compute.walltimeSource === "snapshot"
       ? compute.walltimeCapped
         ? "(the limit for one job)"
-        : "(recommended + 50%)"
+        : `(${automaticWalltimeLabel(false, "placeholder", compute.includesPostProcessing)})`
       : null;
   const coresNote = compute.cores !== null && compute.coresSource === "snapshot" ? "(recommended)" : null;
   const domain = parameters.spatial_domain;

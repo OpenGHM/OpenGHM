@@ -60,7 +60,9 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
  * allocation it is. `cores` and `walltime` are what SLURM will be asked for
  * (`effectiveCompute`); `*FromSnapshot` says the draft left them unset, which
  * means the snapshot's recommendation for cores and the recommendation plus 50%
- * (at most the limit for one job: `walltimeCapped`) for walltime.
+ * (at most the limit for one job: `walltimeCapped`) for walltime, with the
+ * snapshot's post-processing time added to it when the run asks for climatology
+ * (`walltimeIncludesPostProcessing`).
  */
 export function SubmitSummary({
   snapshotTitle,
@@ -73,6 +75,7 @@ export function SubmitSummary({
   walltime,
   walltimeFromSnapshot,
   walltimeCapped = false,
+  walltimeIncludesPostProcessing = false,
   coresWarning = null,
 }: {
   snapshotTitle: string;
@@ -87,6 +90,8 @@ export function SubmitSummary({
   walltimeFromSnapshot: boolean;
   /** The automatic walltime was cut to the limit for one job. */
   walltimeCapped?: boolean;
+  /** The automatic walltime has the snapshot's post-processing time in it. */
+  walltimeIncludesPostProcessing?: boolean;
   /** `describeCoresBelowRecommended`: shown under Cores, because the dialog is
    *  the last place to notice it. A hint; Submit stays on. */
   coresWarning?: string | null;
@@ -114,7 +119,7 @@ export function SubmitSummary({
         <SummaryRow label="Walltime">
           {walltime ? describeSlurmTime(walltime) : "Not known"}
           <Recommendation show={walltime !== null && walltimeFromSnapshot}>
-            {automaticWalltimeLabel(walltimeCapped)}
+            {automaticWalltimeLabel(walltimeCapped, "summary", walltimeIncludesPostProcessing)}
           </Recommendation>
         </SummaryRow>
       </dl>

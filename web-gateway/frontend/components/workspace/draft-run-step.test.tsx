@@ -19,6 +19,8 @@ const dataset = fakeDataset({
       { name: "runoff", fullName: "Runoff", unit: "mm" },
       { name: "streamAge", fullName: "Stream age", unit: "d" },
     ],
+    // 15 min for the run, 45 min for the post-processing a climatology choice adds.
+    recommendedCompute: { cores: 16, walltime: "15:00", postProcessingWalltime: "0:45:00" },
   },
 });
 /** A snapshot with more variables than a flat list holds: runoff, runoff_ps, ... */
@@ -891,7 +893,10 @@ describe("the draft run step: the Output choice", () => {
   it("notes, under Also climatology, the file count (variables chosen x 3) and the measurement", () => {
     const { unmount } = step();
     expect(screen.getByText(/9 files for this snapshot/)).toBeTruthy();
-    expect(screen.getByText(/about a fifth more run time, and 2\.2 GB of climatology on 1\.5 GB of output/)).toBeTruthy();
+    expect(
+      screen.getByText(/Measured on this snapshot's reference period at 16 cores: about 45 min on top of the run time/)
+    ).toBeTruthy();
+    expect(screen.queryByText(/CONUS/)).toBeNull();
     unmount();
     step({ parameters: { ...PARAMETERS, variables: ["runoff"] } });
     expect(screen.getByText(/3 files for this snapshot/)).toBeTruthy();
@@ -920,11 +925,11 @@ describe("the draft run step: the Output choice", () => {
     expect(radio(STANDARD).checked).toBe(true);
     expect(
       screen.getByText(
-        /Not available yet: WBM's post-processing can take longer than one Anvil job may run \(about 4 hours per simulated year on the Global snapshot, even on 52 cores\)\./
+        "Not available yet: this snapshot has no measured post-processing time, so there is no walltime to ask for."
       )
     ).toBeTruthy();
     expect(screen.queryByText(/files for this snapshot/)).toBeNull();
-    expect(screen.queryByText(/about a fifth more run time/)).toBeNull();
+    expect(screen.queryByText(/Measured on this snapshot/)).toBeNull();
     const note = screen.getByText(/Not available yet/);
     expect(screen.getByRole("radiogroup", { name: "Output" }).getAttribute("aria-describedby")).toContain(note.id);
   });
@@ -961,5 +966,54 @@ describe("the draft run step: the Output choice", () => {
     unmount();
     step({ disabled: true });
     expect(radio(STANDARD).matches(":disabled")).toBe(true);
+  });
+});
+
+describe("the draft run step: the walltime of a climatology choice", () => {
+  const climatology = { ...PARAMETERS, post_processing: "climatology" as const };
+
+  it("adds the post-processing time to the automatic walltime, and says so", () => {
+    // 15 min + 45 min, and half as much again.
+    step({ parameters: climatology });
+    expect(screen.getByText("Recommended: 16 cores · 1 h 30 min")).toBeTruthy();
+    openCompute();
+    expect(screen.getByText("Empty = recommended: 16 cores, 1 h 30 min, with the post-processing.")).toBeTruthy();
+    expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("01:30:00");
+  });
+
+  it("leaves the automatic walltime alone for the standard output", () => {
+    step({ parameters: { ...PARAMETERS, post_processing: "standard" } });
+    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
+    openCompute();
+    expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
+  });
+
+  it("follows the snapshot's own choice when the draft has none", () => {
+    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "climatology" }), snapshotState: "found" } });
+    expect(screen.getByText("Recommended: 16 cores · 1 h 30 min")).toBeTruthy();
+  });
+
+  it("names the post-processing in a custom line", () => {
+    step({ parameters: climatology, slurm: { cores: 4, walltime: null } });
+    expect(screen.getByText("Custom: 4 cores · 1 h 30 min (recommended + post-processing + 50%)")).toBeTruthy();
+  });
+
+  it("leaves a snapshot without a measurement at its walltime alone", () => {
+    const unmeasured = { cores: 16, walltime: "15:00" };
+    step({ parameters: climatology, recommended: unmeasured });
+    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
+  });
+
+  it("warns that the run and its post-processing together do not fit in one job", () => {
+    const big = { cores: 16, walltime: "80:00:00", postProcessingWalltime: "20:00:00" };
+    const { unmount } = step({ parameters: climatology, recommended: big });
+    expect(
+      screen.getByText(/The reference simulation and its post-processing took about 100 h together, more than the 96 h/)
+    ).toBeTruthy();
+    expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
+    unmount();
+    // The run alone fits.
+    step({ parameters: { ...PARAMETERS, post_processing: "standard" }, recommended: big });
+    expect(screen.queryByText(/more than the 96 h/)).toBeNull();
   });
 });

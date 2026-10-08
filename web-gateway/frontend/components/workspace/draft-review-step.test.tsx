@@ -214,6 +214,20 @@ describe("DraftReviewStep: the summary", () => {
     expect(row("Walltime").textContent).toContain("4 d · the limit for one job");
   });
 
+  it("adds the post-processing time to the automatic walltime of a climatology choice, and says so", () => {
+    const recommended = { cores: 16, walltime: "15:00", postProcessingWalltime: "1:00:00" };
+    const local = (post_processing: "standard" | "climatology") => ({
+      ...LOCAL,
+      parameters: { ...LOCAL.parameters, post_processing },
+      slurm: { cores: null, walltime: null },
+    });
+    review({ local: local("climatology"), recommended });
+    expect(row("Walltime").textContent).toContain("1 h 52 min · model snapshot's recommendation + post-processing + 50%");
+    cleanup();
+    review({ local: local("standard"), recommended });
+    expect(row("Walltime").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+  });
+
   it("still summarises a draft whose snapshot is gone, with no link to it", () => {
     review({ ctx: { dataset: null, snapshotState: "gone" }, recommended: null });
     expect(within(row("Based on")).getByText("Stored title")).toBeTruthy();

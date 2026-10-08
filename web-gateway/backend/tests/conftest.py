@@ -91,7 +91,7 @@ def db(monkeypatch) -> FakeDB:
     # No SSH: stand-ins for the four slurm service calls the job routes make.
     # The submit route does its own bookkeeping, so the fake only answers with
     # what slurmly would (tests/test_job_submit.py swaps it to make it fail).
-    async def submit_job(job, snapshot, body):
+    async def submit_job(job, snapshot, body, post_processing=False):
         return SubmittedJob(
             internal_job_id="slurmly-1a2b3c4d",
             slurm_job_id="12345",
@@ -163,8 +163,6 @@ def db(monkeypatch) -> FakeDB:
     # wants it says so, every other one runs as production.
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
     monkeypatch.setattr(settings, "ALLOW_MOCK_AUTH", False)
-    # Off is the default; a test of the choice itself turns it on.
-    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", False)
     return fake
 
 

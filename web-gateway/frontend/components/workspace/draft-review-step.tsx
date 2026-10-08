@@ -16,6 +16,7 @@ import {
   describeCoresBelowRecommendedShort,
   describeSlurmTime,
   effectiveCompute,
+  runsClimatology,
   type Recommended,
 } from "@/lib/jobs/compute";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
@@ -162,7 +163,11 @@ export function DraftReviewStep({
   disabled?: boolean;
 }) {
   const { parameters, slurm } = local;
-  const compute = effectiveCompute(slurm, recommended);
+  const compute = effectiveCompute(
+    slurm,
+    recommended,
+    runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing)
+  );
   const coresWarning = describeCoresBelowRecommendedShort(slurm, recommended);
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
@@ -254,7 +259,10 @@ export function DraftReviewStep({
             >
               {compute.walltime ? describeSlurmTime(compute.walltime) : "Not known"}
               {compute.walltimeSource === "snapshot" && compute.walltime !== null && (
-                <span className="text-muted-foreground"> · {automaticWalltimeLabel(compute.walltimeCapped)}</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {automaticWalltimeLabel(compute.walltimeCapped, "summary", compute.includesPostProcessing)}
+                </span>
               )}
             </Row>
             {spatial && (

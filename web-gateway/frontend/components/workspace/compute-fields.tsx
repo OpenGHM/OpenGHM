@@ -16,6 +16,7 @@ import {
   describeWalltimeOverLimitShort,
   effectiveCompute,
   parseSlurmTime,
+  postProcessingShare,
   secondsToHms,
   validateSlurmConfig,
   walltimeOverLimit,
@@ -65,16 +66,23 @@ function Warning({ id, short, why }: { id?: string; short: string; why: string }
  * walltime shorter than the reference simulation, as a quiet note. A value that is
  * refused (here or by the server) keeps the fields open, with its message
  * under the field.
+ *
+ * `postProcessing` says the run will post-process (a climatology choice,
+ * `runsClimatology`): the automatic walltime then includes the snapshot's
+ * measured post-processing time, and the line under the fields says so.
  */
 export function ComputeSection({
   config,
   recommended,
+  postProcessing = false,
   serverErrors = {},
   onChange,
 }: {
   config: SlurmConfig;
   /** The snapshot's own `recommendedCompute`; null when it could not be loaded. */
   recommended: Recommended | null;
+  /** The run will post-process: a climatology choice. */
+  postProcessing?: boolean;
   /** What the server said about a value it did not take. */
   serverErrors?: { cores?: string; walltime?: string };
   onChange: (config: SlurmConfig) => void;
@@ -83,22 +91,24 @@ export function ComputeSection({
   const errors = validateSlurmConfig(config);
   const coresError = errors.cores ?? serverErrors.cores;
   const walltimeError = errors.walltime ?? serverErrors.walltime;
-  // What an empty field means: the recommended cores, and its walltime plus
-  // 50%, at most the limit for one job.
-  const automatic = effectiveCompute({ cores: null, walltime: null }, recommended);
+  // What an empty field means: the recommended cores, and its walltime (plus
+  // the post-processing time of a climatology run) plus 50%, at most the limit
+  // for one job.
+  const automatic = effectiveCompute({ cores: null, walltime: null }, recommended, postProcessing);
   const automaticSeconds = automatic.walltime ? parseSlurmTime(automatic.walltime) : null;
-  const overLimit = walltimeOverLimit(config, recommended);
-  const belowReference = describeWalltimeBelowReference(config, recommended);
+  const overLimit = walltimeOverLimit(config, recommended, postProcessing);
+  const overLimitShare = postProcessingShare(recommended, postProcessing);
+  const belowReference = describeWalltimeBelowReference(config, recommended, postProcessing);
   const coresWarning = describeCoresBelowRecommendedShort(config, recommended);
   const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
   const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
-  const summary = describeComputeSummary(config, recommended);
+  const summary = describeComputeSummary(config, recommended, postProcessing);
 
   const emptyMeans =
     recommended && automaticSeconds !== null
       ? `Empty = recommended: ${recommended.cores} ${recommended.cores === 1 ? "core" : "cores"}, ${describeDuration(automaticSeconds)}${
           automatic.walltimeCapped ? " (the limit for one job)" : ""
-        }.`
+        }${automatic.includesPostProcessing ? ", with the post-processing" : ""}.`
       : "Empty = the model snapshot's recommendation.";
 
   return (
@@ -120,8 +130,8 @@ export function ComputeSection({
           {overLimit !== null && (
             <Warning
               id={walltimeNoteId}
-              short={describeWalltimeOverLimitShort(overLimit)}
-              why={describeWalltimeOverLimit(overLimit)}
+              short={describeWalltimeOverLimitShort(overLimit, overLimitShare)}
+              why={describeWalltimeOverLimit(overLimit, overLimitShare)}
             />
           )}
           {belowReference && (

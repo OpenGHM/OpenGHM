@@ -15,7 +15,7 @@ import {
   OutputVariablesSection,
   type VariableOption,
 } from "@/components/workspace/output-variables-field";
-import type { Recommended } from "@/lib/jobs/compute";
+import { runsClimatology, type Recommended } from "@/lib/jobs/compute";
 import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { describeRunPeriodLimits } from "@/lib/jobs/run-period";
 import { checkRunStartFor, isRealDate, type RunStartProblem } from "@/lib/jobs/run-start";
@@ -382,6 +382,7 @@ export function DraftRunStep({
         <ComputeSection
           config={slurm}
           recommended={recommended}
+          postProcessing={runsClimatology(parameters.post_processing, dataset?.postProcessing)}
           serverErrors={{ cores: serverErrors.cores, walltime: serverErrors.walltime }}
           onChange={onSlurmChange}
         />

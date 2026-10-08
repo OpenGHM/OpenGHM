@@ -660,11 +660,12 @@ async def _refuse_unavailable_post_processing(
     choice (`standard` or `climatology`) of a snapshot whose init has no
     `PostProcessing` block with a `Run` to set, where the toolkit refuses the flag
     after a queue wait. `climatology_unavailable`: the draft asks for `climatology`
-    while `CLIMATOLOGY_ENABLED` is off. That gate only stops a draft from asking
-    for it: a snapshot whose own init already says `Run => 1` still post-processes
-    when it is run with its defaults (none is published today). A choice the draft
-    leaves unset (`None`, the snapshot's own) is never refused, and an init that
-    cannot be read blocks nothing."""
+    of a snapshot with no measured post-processing time
+    (`recommendedCompute.postProcessingWalltime`), so there is no walltime to ask
+    SLURM for. That gate only stops a draft from asking for it: a snapshot whose
+    own init already says `Run => 1` still post-processes when it is run with its
+    defaults. A choice the draft leaves unset (`None`, the snapshot's own) is never
+    refused, and an init that cannot be read blocks nothing."""
     if value is None:
         return
     rules = await run_start.read_init_rules(snapshot, dataset_id)
@@ -675,12 +676,13 @@ async def _refuse_unavailable_post_processing(
             "This snapshot's init has no post-processing setting to change, so its "
             "output choice cannot be set. Leave it as the snapshot's own.",
         )
-    if value == "climatology" and not settings.CLIMATOLOGY_ENABLED:
+    if value == "climatology" and job_script.post_processing_walltime(snapshot) is None:
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "climatology_unavailable",
-            "Climatology is not available yet: WBM's post-processing can take longer "
-            "than one Anvil job may run. Choose the daily, monthly and yearly output.",
+            "Climatology is not available for this snapshot yet: its post-processing "
+            "time has not been measured, so there is no walltime to ask for. Choose "
+            "the daily, monthly and yearly output.",
         )
 
 
@@ -865,17 +867,34 @@ async def submit_simulation(
             job.dataset_id, snapshot, job.parameters.post_processing
         )
 
-        over = job_script.walltime_over_limit(job.slurm_config, snapshot)
+        rules = await run_start.read_init_rules(snapshot, job.dataset_id)
+        post_processing = job_script.runs_climatology(
+            job.parameters, rules.post_processing if rules else None
+        )
+        over = job_script.walltime_over_limit(job.slurm_config, snapshot, post_processing)
         if over is not None:
+            extra = (
+                job_script.parse_slurm_time(job_script.post_processing_walltime(snapshot) or "0")
+                if post_processing
+                else 0
+            )
+            took = (
+                f"{job_script.describe_hours(over - extra)}, and its post-processing about "
+                f"{job_script.describe_hours(extra)} more"
+                if extra
+                else job_script.describe_hours(over)
+            )
             raise _error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "walltime_over_limit",
                 "This model snapshot's reference simulation took about "
-                f"{job_script.describe_hours(over)}, and one job may use at most "
-                f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, or set a "
-                "walltime yourself (a simulation that needs longer may be stopped when time "
-                "runs out).",
+                f"{took}, and one job may use at most "
+                f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, "
+                + ("choose the daily, monthly and yearly output instead of climatology, " if extra else "")
+                + "or set a walltime yourself (a simulation that needs longer may be "
+                "stopped when time runs out).",
                 recommended_seconds=over,
+                post_processing_seconds=extra,
                 limit_seconds=MAX_WALLTIME_SECONDS,
             )
 
@@ -894,13 +913,12 @@ async def submit_simulation(
         home = settings.ANVIL_OPENGHM_HOME.rstrip("/")
         work_dir = posixpath.join(settings.ANVIL_OUTPUT_BASE, sim_id)
         try:
-            rules = await run_start.read_init_rules(snapshot, job.dataset_id)
             overrides = job_script.run_overrides(
                 job.parameters, snapshot, rules.post_processing if rules else None
             )
             # What sbatch is asked for (`--time`), told to the toolkit too so the
             # spool lease lasts as long as the job can.
-            _, walltime = slurm.resolve_compute(job.slurm_config, snapshot)
+            _, walltime = slurm.resolve_compute(job.slurm_config, snapshot, post_processing)
             body = job_script.render_job_body(
                 snapshot_id=job.dataset_id,
                 sim_id=sim_id,
@@ -944,7 +962,7 @@ async def submit_simulation(
     job = JobDB(**(await db.jobs.find_one({"_id": job_id})))
 
     try:
-        submitted = await slurm.submit_job(job, snapshot, body)
+        submitted = await slurm.submit_job(job, snapshot, body, post_processing)
     except Exception as exc:
         maybe_sent = False
         if isinstance(exc, slurm.AnvilNotConfigured):

@@ -1080,6 +1080,22 @@ def test_the_walltime_of_a_draft_with_none_of_its_own_is_the_snapshots_with_head
     assert "already the 96 h maximum" in db.jobs.docs["job-1"]["failure"]["message"]
 
 
+@pytest.mark.parametrize(
+    "choice, maximum",
+    [("climatology", True), ("standard", False), (None, False)],
+)
+def test_the_walltime_of_a_climatology_draft_includes_its_post_processing_time(db, anvil, job, choice, maximum):
+    """50 h recommended is 75 h with headroom; with 30 h of post-processing it is 80 h, 120 h with
+    headroom, which the submit capped at 96 h."""
+    snapshot_recommending(db, "50:00:00")
+    db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["postProcessingWalltime"] = "30:00:00"
+    job["parameters"]["post_processing"] = choice
+    anvil.found["12345"] = info("TIMEOUT", "timeout")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert ("already the 96 h maximum" in message) is maximum
+
+
 def test_a_timeout_whose_snapshot_is_gone_still_gets_a_verdict(db, anvil, job):
     del db.datasets.docs["ds-1"]
     anvil.found["12345"] = info("TIMEOUT", "timeout")

@@ -8,10 +8,14 @@ import {
   describeSlurmTime,
   describeWalltimeBelowReference,
   describeWalltimeOverLimit,
+  describeWalltimeOverLimitShort,
   effectiveCompute,
   formatSlurmTime,
   withHeadroom,
   parseSlurmTime,
+  postProcessingShare,
+  recommendedSeconds,
+  runsClimatology,
   secondsToHms,
   sharedMemoryGb,
   submitBlockedReason,
@@ -309,5 +313,109 @@ describe("describeComputeSummary", () => {
       "Recommended: set by the model snapshot"
     );
     expect(describeComputeSummary({ cores: 8, walltime: null }, null).text).toBe("Custom: 8 cores");
+  });
+});
+
+describe("a run that post-processes", () => {
+  const unset = { cores: null, walltime: null };
+  const snapshot = (walltime: string, postProcessingWalltime?: string) => ({
+    cores: 16,
+    walltime,
+    ...(postProcessingWalltime ? { postProcessingWalltime } : {}),
+  });
+
+  // The same cases as tests/test_job_script.py: the two sides must agree.
+  it.each([
+    ["80:00:00", "20:00:00", true, 100 * 3600],
+    ["80:00:00", "20:00:00", false, null],
+    ["80:00:00", "16:00:00", true, null],
+    ["80:00:00", "16:00:01", true, 96 * 3600 + 1],
+    ["80:00:00", undefined, true, null],
+    ["111:30:00", "1:00:00", true, 112 * 3600 + 30 * 60],
+    ["15:00", "1:00:00", true, null],
+  ])("%s + %s, post-processing %s", (walltime, step, postProcessing, over) => {
+    expect(walltimeOverLimit(unset, snapshot(walltime, step), postProcessing)).toBe(over);
+    // A walltime the draft chose is not refused.
+    expect(walltimeOverLimit({ cores: null, walltime: "02:00:00" }, snapshot(walltime, step), postProcessing)).toBeNull();
+  });
+
+  it("adds the post-processing time only when the run has it and it was measured", () => {
+    const recommended = snapshot("15:00", "1:30:00");
+    expect(recommendedSeconds(recommended)).toBe(15 * 60);
+    expect(recommendedSeconds(recommended, true)).toBe(15 * 60 + 90 * 60);
+    expect(recommendedSeconds(snapshot("15:00"), true)).toBe(15 * 60);
+    expect(recommendedSeconds(snapshot("not a time", "1:00:00"), true)).toBeNull();
+    expect(recommendedSeconds(null, true)).toBeNull();
+    expect(postProcessingShare(recommended, true)).toBe(90 * 60);
+    expect(postProcessingShare(recommended, false)).toBe(0);
+    expect(postProcessingShare(snapshot("15:00"), true)).toBe(0);
+  });
+
+  it("asks for the headroom of the sum, as the backend does", () => {
+    // 15:00 + 1:00:00 = 1:15:00, and half as much again.
+    expect(effectiveCompute(unset, snapshot("15:00", "1:00:00"), true)).toMatchObject({
+      walltime: "1:52:30",
+      walltimeSource: "snapshot",
+      walltimeCapped: false,
+      includesPostProcessing: true,
+    });
+    expect(effectiveCompute(unset, snapshot("15:00", "1:00:00"))).toMatchObject({
+      walltime: "22:30",
+      includesPostProcessing: false,
+    });
+    expect(effectiveCompute(unset, snapshot("15:00"), true)).toMatchObject({
+      walltime: "22:30",
+      includesPostProcessing: false,
+    });
+    expect(effectiveCompute({ cores: null, walltime: "03:00:00" }, snapshot("15:00", "1:00:00"), true)).toMatchObject({
+      walltime: "03:00:00",
+      walltimeSource: "draft",
+      includesPostProcessing: false,
+    });
+    expect(effectiveCompute(unset, snapshot("80:00:00", "10:00:00"), true)).toMatchObject({
+      walltime: "96:00:00",
+      walltimeCapped: true,
+    });
+  });
+
+  it("names the post-processing in the labels and the over-limit sentences", () => {
+    expect(automaticWalltimeLabel(false, "summary", true)).toBe(
+      "model snapshot's recommendation + post-processing + 50%"
+    );
+    expect(automaticWalltimeLabel(false, "placeholder", true)).toBe("recommended + post-processing + 50%");
+    expect(automaticWalltimeLabel(true, "summary", true)).toBe("the limit for one job");
+    expect(describeWalltimeOverLimit(100 * 3600, 20 * 3600)).toContain(
+      "reference simulation took about 80 h, and its post-processing about 20 h more"
+    );
+    expect(describeWalltimeOverLimitShort(100 * 3600, 20 * 3600)).toContain(
+      "post-processing took about 100 h together"
+    );
+    expect(describeWalltimeOverLimitShort(111 * 3600)).not.toContain("post-processing");
+  });
+
+  it("says Custom with the post-processing in the automatic walltime", () => {
+    expect(describeComputeSummary({ cores: 4, walltime: null }, snapshot("15:00", "1:00:00"), true).text).toBe(
+      "Custom: 4 cores · 1 h 52 min (recommended + post-processing + 50%)"
+    );
+  });
+
+  it("mentions the post-processing when a walltime of the draft's own is below the reference", () => {
+    const below = { cores: null, walltime: "00:30:00" };
+    expect(describeWalltimeBelowReference(below, snapshot("15:00", "1:00:00"), true)).toContain(
+      "reference simulation and its post-processing took about 1 h 15 min"
+    );
+    expect(describeWalltimeBelowReference(below, snapshot("15:00", "1:00:00"))).toBeNull();
+  });
+
+  it("is a climatology run when the draft asks, or asks nothing and the snapshot does", () => {
+    expect(runsClimatology("climatology", "standard")).toBe(true);
+    expect(runsClimatology("climatology", null)).toBe(true);
+    expect(runsClimatology(null, "climatology")).toBe(true);
+    expect(runsClimatology(undefined, "climatology")).toBe(true);
+    expect(runsClimatology("standard", "climatology")).toBe(false);
+    expect(runsClimatology(null, "standard")).toBe(false);
+    expect(runsClimatology(null, "none")).toBe(false);
+    expect(runsClimatology(null, null)).toBe(false);
+    expect(runsClimatology(null, undefined)).toBe(false);
   });
 });
