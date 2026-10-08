@@ -12,7 +12,7 @@ services:
   backend:
     environment:
       ANVIL_ACCOUNT: ees260008
-      ANVIL_OPENGHM_HOME: /home/x-openghm/apps/openghm/d5abba5
+      ANVIL_OPENGHM_HOME: /home/x-openghm/apps/openghm/81d8a41
       ANVIL_CACHE_DIR: /anvil/scratch/x-openghm/cache
       ANVIL_FETCH_LOCK: /home/x-openghm/apps/openghm/locks/fetch.lock
       ANVIL_OUTPUT_BASE: /anvil/scratch/x-openghm/simulations
