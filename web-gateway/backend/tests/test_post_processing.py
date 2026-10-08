@@ -127,12 +127,15 @@ def test_the_v1_init_without_a_block_is_none():
 
 
 def _envelope(measured: str | None = None) -> dict:
-    """The v2 snapshot's envelope, with `measured` as its post-processing time."""
+    """The v2 snapshot's envelope, with `measured` as its post-processing time
+    (None: not measured, whatever the example says)."""
     from app.models.repository import build_envelope
 
     document = json.loads(V2.read_text())
+    compute = document["simulation"]["recommendedCompute"]
+    compute.pop("postProcessingWalltime", None)
     if measured is not None:
-        document["simulation"]["recommendedCompute"]["postProcessingWalltime"] = measured
+        compute["postProcessingWalltime"] = measured
     return build_envelope(document)
 
 

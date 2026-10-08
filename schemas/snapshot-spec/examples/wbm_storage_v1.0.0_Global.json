@@ -100,7 +100,7 @@
       { "name": "grndWater_irr", "fullName": "Irrigation return fraction in grd water", "unit": "fraction" },
       { "name": "grndWater_rlt", "fullName": "Relict water fraction in grd water", "unit": "fraction" }
     ],
-    "recommendedCompute": { "cores": 26, "walltime": "111:30:00" }
+    "recommendedCompute": { "cores": 26, "walltime": "111:30:00", "postProcessingWalltime": "60:00:00" }
   },
 
   "uses": {

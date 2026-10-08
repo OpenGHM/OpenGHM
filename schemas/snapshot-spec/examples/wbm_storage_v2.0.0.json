@@ -49,7 +49,7 @@
       { "name": "discharge", "fullName": "Discharge", "unit": "m3/sec" },
       { "name": "streamAge", "fullName": "Stream Age (water residence time)", "unit": "days" }
     ],
-    "recommendedCompute": { "cores": 1, "walltime": "15:00" }
+    "recommendedCompute": { "cores": 1, "walltime": "15:00", "postProcessingWalltime": "5:00" }
   },
 
   "uses": {
