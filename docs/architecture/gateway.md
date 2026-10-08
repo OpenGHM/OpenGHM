@@ -266,6 +266,19 @@ nothing. A stored value that is neither choice reads as `null`, so an old draft 
 toolkit applies the flag to the staged init, and its post-processing step runs, checks and records the
 result ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
 
+The choice exists, but climatology is switched off: the backend setting `CLIMATOLOGY_ENABLED` defaults to
+false. Measured on Anvil, WBM's post-processing of one simulated year of the Global snapshot took 4 h 13 min
+on 52 cores (149.5 core-hours, 59.5 GB), about 13 h per year with 8 forks, against about 11 h per year for the
+Global run itself, and the wizard adds only 50% to the snapshot's recommended walltime, so a climatology draft
+would time out. While the setting is off, `PATCH /jobs/{id}` and the submit refuse
+`parameters.post_processing == "climatology"` with `422 climatology_unavailable` (on the submit it is kept as
+`last_submit_error`; `standard` and `null` are unaffected, and `post_processing_unavailable` keeps its
+precedence on a snapshot whose own choice is `none`), the dataset detail carries `climatologyAvailable: false`,
+and the wizard disables "Also climatology" with a line saying why, showing a stored climatology draft as it
+is with the 422 on the field. The gate only stops a draft from asking for it: a snapshot whose own init says
+`Run => 1` still post-processes when it is run with its defaults (none is published today). A per-snapshot
+measured cost is to come; the setting goes on once it sizes the walltime.
+
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
 overrides that. `_resolve_effective_model_input()` in

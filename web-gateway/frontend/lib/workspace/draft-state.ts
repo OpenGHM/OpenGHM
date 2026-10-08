@@ -395,7 +395,7 @@ export function refuseGroups(
   const named =
     failure.code === "invalid_about"
       ? [...GROUP_FIELDS.about]
-      : failure.code === "post_processing_unavailable"
+      : failure.code === "post_processing_unavailable" || failure.code === "climatology_unavailable"
         ? (["postProcessing"] as DraftField[])
         : fieldsForPaths(failure.paths ?? []);
   const hit = sent.filter((g) => GROUP_FIELDS[g].some((f) => named.includes(f)));

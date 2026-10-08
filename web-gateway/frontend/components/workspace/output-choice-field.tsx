@@ -73,6 +73,10 @@ function Choice({
  * value, even when it is the snapshot's own, and the backend passes the flag
  * only when it differs. A snapshot whose init has no post-processing settings
  * (`postProcessing === "none"`) shows the group disabled, with a line saying so.
+ * While the backend has climatology switched off (`climatologyAvailable` is not
+ * true, absent included) the climatology radio is disabled and its note says why;
+ * a stored draft that already asks for it shows it as it is, and the server's
+ * refusal (`climatology_unavailable`) lands on the field.
  */
 export function OutputChoiceSection({
   dataset,
@@ -92,6 +96,7 @@ export function OutputChoiceSection({
 }) {
   const id = useId();
   const unsupported = dataset?.postProcessing === "none";
+  const climatologyOff = !unsupported && dataset?.climatologyAvailable !== true;
   const shown = value ?? snapshotOutput(dataset);
   const files = variableCount * CLIMATOLOGY_FILES_PER_VARIABLE;
   const noteId = `${id}-note`;
@@ -102,7 +107,7 @@ export function OutputChoiceSection({
       <div
         role="radiogroup"
         aria-label="Output"
-        aria-describedby={[unsupported || shown === "climatology" ? noteId : null, error ? errorId : null]
+        aria-describedby={[unsupported || climatologyOff || shown === "climatology" ? noteId : null, error ? errorId : null]
           .filter(Boolean)
           .join(" ") || undefined}
         {...draftField("postProcessing")}
@@ -122,10 +127,16 @@ export function OutputChoiceSection({
           value="climatology"
           checked={shown === "climatology"}
           label="Also climatology"
-          disabled={unsupported}
+          disabled={unsupported || climatologyOff}
           onSelect={onChange}
         >
-          {!unsupported && (
+          {climatologyOff && (
+            <p id={noteId} className="ml-[1.625rem] text-xs text-muted-foreground">
+              Not available yet: WBM&apos;s post-processing can take longer than one Anvil job may run
+              (about 4 hours per simulated year on the Global snapshot, even on 52 cores).
+            </p>
+          )}
+          {!unsupported && !climatologyOff && (
             <div id={noteId} className="ml-[1.625rem] space-y-0.5 text-xs text-muted-foreground">
               <p>
                 WBM&apos;s post-processing runs after the simulation and writes daily, monthly and yearly

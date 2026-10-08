@@ -11,6 +11,7 @@ afterEach(cleanup);
 // 2001-01-01 .. 2001-12-31, one file per year, three variables.
 const dataset = fakeDataset({
   runStartAlignment: "year",
+  climatologyAvailable: true,
   simulation: {
     ...fakeDataset().simulation,
     outputVariables: [
@@ -907,6 +908,45 @@ describe("the draft run step: the Output choice", () => {
     expect(radio(CLIMATOLOGY).disabled).toBe(true);
     expect(screen.getByText("This snapshot's init has no post-processing settings.")).toBeTruthy();
     expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+  });
+
+  it.each([
+    ["false", false],
+    ["absent", undefined],
+  ])("disables Also climatology with one muted line while climatologyAvailable is %s", (_label, available) => {
+    step({ ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: available }), snapshotState: "found" } });
+    expect(radio(CLIMATOLOGY).disabled).toBe(true);
+    expect(radio(STANDARD).disabled).toBe(false);
+    expect(radio(STANDARD).checked).toBe(true);
+    expect(
+      screen.getByText(
+        /Not available yet: WBM's post-processing can take longer than one Anvil job may run \(about 4 hours per simulated year on the Global snapshot, even on 52 cores\)\./
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+    expect(screen.queryByText(/about a fifth more run time/)).toBeNull();
+    const note = screen.getByText(/Not available yet/);
+    expect(screen.getByRole("radiogroup", { name: "Output" }).getAttribute("aria-describedby")).toContain(note.id);
+  });
+
+  it("keeps the standard option selectable while climatology is off", () => {
+    const view = step({
+      ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: false }), snapshotState: "found" },
+      parameters: { ...PARAMETERS, post_processing: "climatology" },
+    });
+    fireEvent.click(radio(STANDARD));
+    expect(view.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "standard" });
+  });
+
+  it("shows a stored climatology as it is while it is off, with the server's refusal on the field", () => {
+    step({
+      ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: false }), snapshotState: "found" },
+      parameters: { ...PARAMETERS, post_processing: "climatology" },
+      serverErrors: { postProcessing: "Climatology is not available yet." },
+    });
+    expect(radio(CLIMATOLOGY).checked).toBe(true);
+    expect(radio(CLIMATOLOGY).disabled).toBe(true);
+    expect(screen.getByText("Climatology is not available yet.")).toBeTruthy();
   });
 
   it("shows what the server said about it, tied to the group", () => {

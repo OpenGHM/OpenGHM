@@ -158,6 +158,11 @@ class DatasetDetailResponse(DatasetResponse):
     #: ``"climatology"`` it also runs the climatologies (``Run`` true). ``null``
     #: when the init could not be read: nothing is known and nothing is blocked.
     postProcessing: Literal["none", "standard", "climatology"] | None = None
+    #: Whether a draft may ask for climatology: the ``CLIMATOLOGY_ENABLED`` setting
+    #: (off while post-processing can outlast one Anvil job). It does not say what
+    #: the snapshot's own init does: one with ``Run => 1`` still post-processes when
+    #: run with its defaults (none is published today).
+    climatologyAvailable: bool = False
 
 
 class RepositoryListResponse(BaseModel):

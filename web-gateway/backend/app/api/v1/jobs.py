@@ -654,11 +654,17 @@ async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -
 async def _refuse_unavailable_post_processing(
     dataset_id: str, snapshot: dict, value: str | None
 ) -> None:
-    """422 when the draft asks for a post-processing choice (`standard` or
-    `climatology`) of a snapshot whose init has no `PostProcessing` block with a
-    `Run` to set: the toolkit refuses the flag there, after a queue wait. A choice
-    the draft leaves unset (`None`, the snapshot's own) is never refused, and an init
-    that cannot be read blocks nothing."""
+    """422 when the draft asks for a post-processing choice that cannot be had.
+
+    Two refusals, in this order. `post_processing_unavailable`: the draft asks for a
+    choice (`standard` or `climatology`) of a snapshot whose init has no
+    `PostProcessing` block with a `Run` to set, where the toolkit refuses the flag
+    after a queue wait. `climatology_unavailable`: the draft asks for `climatology`
+    while `CLIMATOLOGY_ENABLED` is off. That gate only stops a draft from asking
+    for it: a snapshot whose own init already says `Run => 1` still post-processes
+    when it is run with its defaults (none is published today). A choice the draft
+    leaves unset (`None`, the snapshot's own) is never refused, and an init that
+    cannot be read blocks nothing."""
     if value is None:
         return
     rules = await run_start.read_init_rules(snapshot, dataset_id)
@@ -668,6 +674,13 @@ async def _refuse_unavailable_post_processing(
             "post_processing_unavailable",
             "This snapshot's init has no post-processing setting to change, so its "
             "output choice cannot be set. Leave it as the snapshot's own.",
+        )
+    if value == "climatology" and not settings.CLIMATOLOGY_ENABLED:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "climatology_unavailable",
+            "Climatology is not available yet: WBM's post-processing can take longer "
+            "than one Anvil job may run. Choose the daily, monthly and yearly output.",
         )
 
 

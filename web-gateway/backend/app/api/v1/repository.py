@@ -275,6 +275,7 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
     detail = DatasetDetailResponse.from_metadata_json(doc)
+    detail.climatologyAvailable = settings.CLIMATOLOGY_ENABLED
     # Read once per snapshot (immutable by id) and kept; None if it cannot be read.
     rules = await run_start.read_init_rules(doc["document"], dataset_id)
     if rules is not None:

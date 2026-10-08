@@ -163,6 +163,8 @@ def db(monkeypatch) -> FakeDB:
     # wants it says so, every other one runs as production.
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
     monkeypatch.setattr(settings, "ALLOW_MOCK_AUTH", False)
+    # Off is the default; a test of the choice itself turns it on.
+    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", False)
     return fake
 
 

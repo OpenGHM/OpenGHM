@@ -803,4 +803,19 @@ describe("post_processing: the Output choice", () => {
     const changed = edited(job, { params: { post_processing: "standard" } });
     expect(buildDraftPatch(changed, job, FOUND, refusals).patch).not.toBeNull();
   });
+
+  it("climatology_unavailable withholds the field, with the server's words, until it changes", () => {
+    const local = edited(job, { params: { post_processing: "climatology" } });
+    const sent = buildDraftPatch(local, job, FOUND).patch!;
+    const refusals = refuseGroups({}, sent, {
+      message: "Climatology is not available yet.",
+      code: "climatology_unavailable",
+    });
+    const out = buildDraftPatch(local, job, FOUND, refusals);
+    expect(out.patch).toBeNull();
+    expect(out.withheld).toEqual(["postProcessing"]);
+    expect(out.errors).toEqual({ postProcessing: "Climatology is not available yet." });
+    const changed = edited(job, { params: { post_processing: "standard" } });
+    expect(buildDraftPatch(changed, job, FOUND, refusals).patch).not.toBeNull();
+  });
 });

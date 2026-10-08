@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6479/0"
 
+    # Whether a snapshot draft may ask for WBM's climatology (`post_processing`
+    # "climatology"; 422 `climatology_unavailable` when off). Off because WBM's
+    # post-processing of one simulated year of the Global snapshot measured 4 h 13 min
+    # on 52 cores (about 13 h per year with 8 forks) against about 11 h per year for the
+    # run, and the wizard adds only 50% to the recommended walltime: such a job times out.
+    # Switch on once a per-snapshot measured cost sizes the walltime.
+    CLIMATOLOGY_ENABLED: bool = False
+
     # Object storage (Anvil/RCAC S3). The backend never talks to S3 directly —
     # Slurm job scripts upload outputs from Anvil compute nodes using their own
     # credentials, and datasets/outputs are served as plain public HTTPS links.
