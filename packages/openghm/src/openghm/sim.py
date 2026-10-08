@@ -573,6 +573,15 @@ def wbm_threads(cores: Optional[int]) -> Optional[int]:
     return min(cores, WBM_MAX_THREADS)
 
 
+def _positive_int(value) -> Optional[int]:
+    """``value`` if it is a positive int (or a string of digits that is one); else None."""
+    if isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        value = int(value)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        return None
+    return value
+
+
 def _slurm_cpus_per_task() -> Optional[int]:
     """``SLURM_CPUS_PER_TASK`` as a positive int; None if unset or not one."""
     raw = os.environ.get("SLURM_CPUS_PER_TASK", "").strip()
@@ -751,8 +760,16 @@ def _resolve_run(
     run_value = post_processing.requested_run_value(persim_init_content)
     if run_value is not None and post_processing.is_true(run_value):
         persim_init_content = post_processing.set_run_value(persim_init_content, "0")
+        # PostProcessing.pl is CPU-bound and forks once per variable, `Forks` at a time (WBM's
+        # default is 8): give it every core the run holds. Unknown cores leave the init's Forks.
+        forks_value = post_processing.block_value(persim_init_content, "Forks")
+        forks = _positive_int(cores if slurm_script else _slurm_cpus_per_task())
+        if forks is not None:
+            persim_init_content = post_processing.set_block_value(
+                persim_init_content, "Forks", str(forks), insert=True)
         pp = {
             "requested": True, "run_value": run_value,
+            "forks_value": forks_value, "forks": forks,
             "argv": _wbm_exec_argv(
                 ctx, mounts, ["perl", "-w", f"/wbm/wbm_output/{sim_id}/{post_processing.SCRIPT_NAME}"]),
         }

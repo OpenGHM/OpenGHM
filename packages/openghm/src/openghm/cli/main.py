@@ -461,7 +461,7 @@ def _post_process(built: BuiltCommand, wbm_exit_code: int) -> Optional[dict]:
 @click.option("--wbm-exit-code", "wbm_exit_code", type=int, default=0, show_default=True,
               help="the exit code WBM ended with: the step runs only when it is 0")
 def sim_post_process_cmd(sim_dir: str, wbm_exit_code: int) -> None:
-    """run a simulation's PostProcessing.pl after WBM, check it, and put the init's Run value back
+    """run a simulation's PostProcessing.pl after WBM, check it, and put the init's Run and Forks values back
 
     SIM_DIR is the simulation's work directory (<output_base>/<id>). `sim submit` puts this in
     its job script for an init that asks for post-processing (`PostProcessing => { Run => 1 }`),

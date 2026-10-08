@@ -18,8 +18,8 @@ import pytest
 
 from openghm import post_processing as pp
 from openghm.post_processing import (
-    check, expected_outputs, finish, is_true, requested_run_value, restore, run_post_processing,
-    set_run_value,
+    block_value, check, expected_outputs, finish, is_true, remove_block_key, requested_run_value, restore,
+    run_post_processing, set_block_value, set_run_value,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "post_processing"
@@ -174,6 +174,90 @@ def test_hold_and_restore_on_the_snapshot_init_and_on_wbms_dump():
 def test_crlf_and_tabs_survive_the_edit():
     text = "{\r\n  PostProcessing\t=> {\r\n\tRun\t\t=> 1,\r\n\tForks => 4\r\n  }\r\n}\r\n"
     assert set_run_value(text, "0") == text.replace("=> 1,", "=> 0,")
+
+
+# ── Forks (and any other key of the block) ─────────────────────────────────────
+
+_FORKS = {
+    "fc66a2cd_wbm_SHORT.init": "8", "fc66a2cd_wbm_SHORT_standard.init": "8", "fc66a2cd_wbm_test.init": "4",
+    "v1_Global_tracking.init": "8", "v1_test.init": "4", "init_files_wbm_test.init": "4",
+}
+
+
+@pytest.mark.parametrize("name,forks", _FORKS.items())
+def test_forks_on_the_real_inits_set_and_removed_round_trip(name, forks):
+    text = fixture(name)
+    assert block_value(text, "Forks") == forks
+    bigger = set_block_value(text, "Forks", "52")
+    assert block_value(bigger, "Forks") == "52" and requested_run_value(bigger) == requested_run_value(text)
+    assert set_block_value(bigger, "Forks", forks) == text                  # byte for byte
+    # a changed value is the only difference
+    assert [(a, b) for a, b in zip(text.splitlines(), bigger.splitlines()) if a != b] == [
+        (a, a.replace(forks, "52")) for a in text.splitlines() if re.match(r"\s*Forks\b", a)]
+    # without the entry, putting it in puts back what was there, as its own first line of the block
+    without = remove_block_key(text, "Forks")
+    assert block_value(without, "Forks") is None and "Forks" not in without
+    inserted = set_block_value(without, "Forks", "52", insert=True)
+    assert block_value(inserted, "Forks") == "52" and remove_block_key(inserted, "Forks") == without
+    assert len(inserted.splitlines()) == len(text.splitlines())
+    assert requested_run_value(inserted) == requested_run_value(text)
+
+
+def test_an_inserted_forks_takes_the_indentation_of_the_block_and_its_line_ending():
+    text = fixture("fc66a2cd_wbm_test.init")
+    without = remove_block_key(text, "Forks")
+    out = set_block_value(without, "Forks", "32", insert=True)
+    assert "PostProcessing\t=>  {\n          Forks => 32,\n          Polygon_Aggregation" in out
+    crlf = without.replace("\n", "\r\n")
+    out = set_block_value(crlf, "Forks", "32", insert=True)
+    assert "{\r\n          Forks => 32,\r\n          Polygon" in out and out.count("\r\n") == out.count("\n")
+    assert remove_block_key(out, "Forks") == crlf
+
+
+@pytest.mark.parametrize("text,inserted", [
+    ("{\n  PostProcessing => { Run => 1 }\n}\n", "{\n  PostProcessing => { Forks => 8, Run => 1 }\n}\n"),
+    ("{\n  PostProcessing => {Run => 1}\n}\n", "{\n  PostProcessing => {Forks => 8, Run => 1}\n}\n"),
+    ("{\n  PostProcessing => {\n  }\n}\n", "{\n  PostProcessing => {\n    Forks => 8,\n  }\n}\n"),
+    ("{\n  PostProcessing => {\n\tRun => 1\n  }\n}\n", "{\n  PostProcessing => {\n\tForks => 8,\n\tRun => 1\n  }\n}\n"),
+    ("{\n  PostProcessing => {  \n\tRun => 1\n  }\n}\n", "{\n  PostProcessing => {  \n\tForks => 8,\n\tRun => 1\n  }\n}\n"),
+])
+def test_forks_is_inserted_in_one_line_empty_and_tabbed_blocks_too(text, inserted):
+    assert set_block_value(text, "Forks", "8") == text                       # no insert asked: unchanged
+    out = set_block_value(text, "Forks", "8", insert=True)
+    assert out == inserted and block_value(out, "Forks") == "8"
+    assert remove_block_key(out, "Forks") == text
+
+
+def test_forks_outside_the_block_or_nested_or_longer_are_not_the_blocks():
+    text = """{
+  Forks => 99,
+  Other => { Forks => 77 },
+  PostProcessing => {
+    Forks_extra => 5,
+    Nested => { Forks => 6 },
+    # Forks => 7,
+    Run => 1,
+    ForksX => 3
+  },
+  Forks2 => 1,
+}
+"""
+    assert block_value(text, "Forks") is None
+    out = set_block_value(text, "Forks", "8", insert=True)
+    assert block_value(out, "Forks") == "8"
+    assert out.count("Forks => 99,") == 1 and "Forks => 77" in out and "Forks => 6" in out and "Forks => 7," in out
+    assert remove_block_key(text, "Forks") == text                          # nothing of the block's to remove
+    assert remove_block_key(out, "Forks") == text
+    assert set_block_value(set_block_value(text, "Forks", "4", insert=True), "Forks", "9").count("Forks => 9,") == 1
+    assert set_block_value("{\n  Forks => 99,\n}\n", "Forks", "8", insert=True) == "{\n  Forks => 99,\n}\n"   # no block
+
+
+def test_forks_with_an_empty_or_quoted_value_reads_and_restores_as_written():
+    text = "{\n  PostProcessing => {\n    Forks => '8',\n    Run => 1,\n  }\n}\n"
+    assert block_value(text, "Forks") == "'8'"
+    assert set_block_value(set_block_value(text, "Forks", "4"), "Forks", "'8'") == text
+    empty = text.replace("'8'", "")
+    assert block_value(empty, "Forks") == "" and set_block_value(set_block_value(empty, "Forks", "4"), "Forks", "") == empty
 
 
 # ── the generated script ───────────────────────────────────────────────────────
@@ -404,6 +488,66 @@ def test_restore_skips_a_copy_that_is_not_there(tmp_path):
     work = _sim_dir(tmp_path)
     (work / "wbm_output" / "sim1" / "init_files" / "wbm_test.init").unlink()
     assert restore(str(work), "sim1", "wbm_test.init", "1") == [str(work / "wbm_init" / "wbm_test.init")]
+
+
+def _forks_sim_dir(tmp_path: Path, *, forks_value, forks=52) -> Path:
+    """A run staged with ``Forks`` at ``forks`` where the init had ``forks_value`` (None: no key)."""
+    work = _sim_dir(tmp_path)
+    for rel in ("wbm_init/wbm_test.init", "wbm_output/sim1/init_files/wbm_test.init"):
+        f = work / rel
+        f.write_text(set_block_value(f.read_text(), "Forks", str(forks)))
+    side = json.loads((work / "simulation.json").read_text())
+    side["post_processing"].update(forks_value=forks_value, forks=forks)
+    (work / "simulation.json").write_text(json.dumps(side))
+    return work
+
+
+def test_restore_puts_forks_back_in_both_copies_and_leaves_it_alone_without_forks_value(tmp_path):
+    work = _forks_sim_dir(tmp_path, forks_value="4")
+    init, dump = work / "wbm_init" / "wbm_test.init", work / "wbm_output" / "sim1" / "init_files" / "wbm_test.init"
+    restore(str(work), "sim1", "wbm_test.init", "1")                        # no forks_value: Forks stays
+    assert block_value(init.read_text(), "Forks") == "52" and requested_run_value(init.read_text()) == "1"
+    restore(str(work), "sim1", "wbm_test.init", "1", forks_value="4")
+    assert init.read_text() == fixture("fc66a2cd_wbm_test.init").replace("Run\t\t=> 0", "Run\t\t=> 1")
+    assert dump.read_text() == fixture("init_files_wbm_test.init")           # WBM's dump shape, byte for byte
+
+
+def test_restore_removes_the_forks_entry_the_run_added(tmp_path):
+    work = _forks_sim_dir(tmp_path, forks_value=None)
+    init = work / "wbm_init" / "wbm_test.init"
+    restore(str(work), "sim1", "wbm_test.init", "1", forks_value=None)
+    assert "Forks" not in init.read_text() and "Forks" not in (
+        work / "wbm_output" / "sim1" / "init_files" / "wbm_test.init").read_text()
+    assert restore(str(work), "sim1", "wbm_test.init", "1", forks_value=None) == []   # again: nothing to do
+
+
+def test_finish_puts_forks_back_as_recorded_and_keeps_the_record_fields(tmp_path):
+    work = _forks_sim_dir(tmp_path, forks_value="4")
+    rec = finish(str(work / "simulation.json"), 0, runner=fake_runner())
+    assert rec["forks"] == 52 and rec["forks_value"] == "4" and rec["ok"] is True
+    assert json.loads((work / "simulation.json").read_text())["post_processing"] == rec
+    assert block_value((work / "wbm_init" / "wbm_test.init").read_text(), "Forks") == "4"
+    assert block_value((work / "wbm_output" / "sim1" / "init_files" / "wbm_test.init").read_text(), "Forks") == "4"
+
+
+def test_finish_after_a_failed_wbm_or_a_failed_step_restores_forks_too(tmp_path):
+    for code, runner in ((3, fake_runner()), (0, fake_runner(files=[], log="oops\n", code=1))):
+        work = _forks_sim_dir(tmp_path / str(code), forks_value=None)
+        finish(str(work / "simulation.json"), code, runner=runner)
+        assert "Forks" not in (work / "wbm_init" / "wbm_test.init").read_text()
+        assert requested_run_value((work / "wbm_init" / "wbm_test.init").read_text()) == "1"
+
+
+def test_finish_does_not_touch_forks_when_the_run_did_not_change_it(tmp_path):
+    work = _sim_dir(tmp_path)                                               # the old record: no forks fields
+    finish(str(work / "simulation.json"), 0, runner=fake_runner())
+    assert block_value((work / "wbm_init" / "wbm_test.init").read_text(), "Forks") == "4"
+    work = _forks_sim_dir(tmp_path / "unknown", forks_value="4", forks=52)  # forks None: cores were unknown
+    side = json.loads((work / "simulation.json").read_text())
+    side["post_processing"]["forks"] = None
+    (work / "simulation.json").write_text(json.dumps(side))
+    finish(str(work / "simulation.json"), 0, runner=fake_runner())
+    assert block_value((work / "wbm_init" / "wbm_test.init").read_text(), "Forks") == "52"
 
 
 # ── finish: the step from the sidecar ──────────────────────────────────────────

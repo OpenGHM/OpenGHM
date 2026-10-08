@@ -939,23 +939,25 @@ def _pp_snapshot(tmp_path: Path, init: str) -> Path:
 
 
 def test_a_post_processing_init_is_staged_with_run_held_at_0(tmp_path):
-    from openghm.post_processing import requested_run_value, set_run_value
+    from openghm.post_processing import block_value, requested_run_value, set_block_value, set_run_value
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     template = (snap / "wbm_init" / "wbm_test.init").read_text()
     opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1")
     _ctx, built = build_submit(opts, _config(tmp_path))
     staged = _gen(built, "wbm_init/wbm_test.init").content
     assert requested_run_value(staged) == "0"
-    # nothing but that value differs from what the run would have had
-    assert set_run_value(staged, "1") == build_persim_init(template, "sim1", opts)
+    # nothing but that value and Forks (the 16 cores of the job) differs from what the run would have had
+    assert block_value(staged, "Forks") == "16"
+    assert set_block_value(set_run_value(staged, "1"), "Forks", "8") == build_persim_init(template, "sim1", opts)
 
 
 def test_the_sidecar_of_a_post_processing_run_holds_what_the_step_needs(tmp_path):
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
     pp = json.loads(_gen(built, "simulation.json").content)["post_processing"]
-    assert set(pp) == {"requested", "run_value", "argv"}
+    assert set(pp) == {"requested", "run_value", "forks_value", "forks", "argv"}
     assert pp["requested"] is True and pp["run_value"] == "1"
+    assert pp["forks_value"] == "8" and pp["forks"] == 16          # the init's own, and the job's cores
     # the same container and mounts as WBM, running the script WBM wrote into the output directory
     exec_argv = [a for a in pp["argv"][:-3]]
     assert pp["argv"][-3:] == ["perl", "-w", "/wbm/wbm_output/sim1/PostProcessing.pl"]
@@ -963,6 +965,60 @@ def test_the_sidecar_of_a_post_processing_run_holds_what_the_step_needs(tmp_path
     binds = [exec_argv[i + 1] for i, a in enumerate(exec_argv) if a == "-B"]
     assert binds == [f"{m.host}:{m.container}:ro" if m.readonly else f"{m.host}:{m.container}" for m in built.mounts]
     assert exec_argv[-1].endswith("wbm-v2-lite-2.0.0.sif")
+
+
+def _staged_init(tmp_path, init, monkeypatch=None, **kw):
+    snap = _pp_snapshot(tmp_path, init)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", **kw), _config(tmp_path))
+    return built, _gen(built, "wbm_init/wbm_test.init").content, json.loads(_gen(built, "simulation.json").content)
+
+
+@pytest.mark.parametrize("init,original", [
+    ("fc66a2cd_wbm_SHORT.init", "8"), ("fc66a2cd_wbm_test.init", "4"), ("v1_Global_tracking.init", "8"),
+])
+def test_a_post_processing_run_forks_as_many_as_the_job_has_cores(tmp_path, init, original):
+    """The cores `sim submit` writes into the sbatch (16 here, or --cores) become the block's Forks."""
+    from openghm.post_processing import block_value
+    template = (_PP_FIXTURES / init).read_text()
+    for kw, cores in (({}, 16), ({"cores": 52}, 52)):
+        built, staged, side = _staged_init(
+            tmp_path, init, **kw, **({"post_processing": "climatology"} if init != "fc66a2cd_wbm_SHORT.init" else {}))
+        assert block_value(staged, "Forks") == str(cores)
+        assert f"#SBATCH --cpus-per-task={cores}" in _gen(built, ".sbatch").content
+        assert side["post_processing"]["forks"] == cores and side["post_processing"]["forks_value"] == original
+        assert block_value(template, "Forks") == original
+
+
+def test_a_run_without_post_processing_keeps_its_forks_byte_for_byte(tmp_path):
+    from openghm.post_processing import block_value
+    for init in ("fc66a2cd_wbm_test.init", "v1_Global_tracking.init"):      # Run => 0
+        snap = _pp_snapshot(tmp_path, init)
+        opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1")
+        _ctx, built = build_submit(opts, _config(tmp_path))
+        staged = _gen(built, "wbm_init/wbm_test.init").content
+        assert staged == build_persim_init((_PP_FIXTURES / init).read_text(), "sim1", opts)
+        assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
+    # asked off on an init that asks for it: Run => 0, Forks as the init has it
+    snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
+    _ctx, built = build_submit(
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard"), _config(tmp_path))
+    assert block_value(_gen(built, "wbm_init/wbm_test.init").content, "Forks") == "8"
+
+
+def test_a_post_processing_block_without_forks_gets_one_and_the_record_says_none(tmp_path):
+    from openghm.post_processing import block_value, remove_block_key, set_run_value
+    init = (_PP_FIXTURES / "fc66a2cd_wbm_SHORT.init").read_text()
+    no_forks = remove_block_key(init, "Forks")
+    assert block_value(no_forks, "Forks") is None
+    snap = _make_snapshot(tmp_path)
+    (snap / "wbm_init" / "wbm_test.init").write_text(no_forks)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    staged = _gen(built, "wbm_init/wbm_test.init").content
+    pp = json.loads(_gen(built, "simulation.json").content)["post_processing"]
+    assert block_value(staged, "Forks") == "16" and pp["forks_value"] is None and pp["forks"] == 16
+    # and nothing else changed: without that entry it is the init without Forks, Run held at 0
+    assert remove_block_key(staged, "Forks") == set_run_value(
+        build_persim_init(no_forks, "sim1", SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1")), "0")
 
 
 def test_the_sbatch_script_of_a_post_processing_run_runs_the_step_after_wbm(tmp_path):
@@ -1090,7 +1146,7 @@ def test_post_processing_climatology_asks_for_a_run_the_init_did_not(tmp_path):
 
 def test_post_processing_standard_turns_a_requested_run_off(tmp_path):
     """fc66a2cd's SHORT init says Run => 1: with standard it is staged 0 and nothing is recorded."""
-    from openghm.post_processing import requested_run_value, set_run_value
+    from openghm.post_processing import block_value, requested_run_value, set_block_value, set_run_value
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     template = (snap / "wbm_init" / "wbm_test.init").read_text()
     opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard")

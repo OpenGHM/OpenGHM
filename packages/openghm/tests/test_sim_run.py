@@ -308,10 +308,15 @@ class _Faked:
         self.init = self.work / "wbm_init" / "wbm_test.init"
         self.dump = self.out / "init_files" / "wbm_test.init"
         self.run_during_wbm = None
+        self.forks_during_wbm = None
         self.pp_calls = []
 
     def sidecar(self) -> dict:
         return json.loads((self.work / "simulation.json").read_text())
+
+    def forks_values(self):
+        from openghm.post_processing import block_value
+        return [block_value(f.read_text(), "Forks") for f in (self.init, self.dump) if f.exists()]
 
     def run_values(self):
         from openghm.post_processing import requested_run_value
@@ -321,7 +326,7 @@ class _Faked:
 def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, pp_code=0, pp_files=_PP_NINE, pp_log=_PP_DONE):
     from openghm import post_processing
     from openghm.cli import main as cli_main
-    from openghm.post_processing import requested_run_value
+    from openghm.post_processing import block_value, requested_run_value
     from openghm.types import RunResult
 
     fake = _Faked(tmp_path)
@@ -332,6 +337,7 @@ def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, pp_code=0, pp_files=_P
         stage_files(built)
         staged = fake.init.read_text()
         fake.run_during_wbm = requested_run_value(staged)
+        fake.forks_during_wbm = block_value(staged, "Forks")
         fake.dump.parent.mkdir(parents=True)
         fake.dump.write_text(staged)                       # WBM's dump of the init it read
         (fake.out / "PostProcessing.pl").write_text((_PP_FIXTURES / "PostProcessing.pl").read_text())
@@ -452,6 +458,73 @@ def test_sim_run_dry_run_shows_the_held_init_and_runs_nothing(tmp_path, monkeypa
     from openghm.post_processing import requested_run_value
     assert requested_run_value(files["wbm_test.init"]) == "0"
     assert fake.pp_calls == [] and not fake.work.exists()
+
+
+# ── PostProcessing Forks = the cores the run holds ─────────────────────────────
+
+
+def test_sim_run_forks_as_many_as_slurm_cpus_per_task_and_puts_the_init_back(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert fake.forks_during_wbm == "32"                    # the staged init, and so WBM's dump of it
+    assert fake.forks_values() == ["8", "8"]                # what the init had, in both copies, after the run
+    pp = fake.sidecar()["post_processing"]
+    assert pp["forks"] == 32 and pp["forks_value"] == "8" and pp["ok"] is True
+    assert fake.run_values() == ["1", "1"]
+
+
+def test_sim_run_without_slurm_cpus_leaves_forks_as_the_init_has_it(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_test.init")
+    out = _invoke(tmp_path, snap, "--post-processing", "climatology")
+    assert out.exit_code == 0, out.output
+    assert fake.forks_during_wbm == "4" and fake.forks_values() == ["4", "4"]
+    pp = fake.sidecar()["post_processing"]
+    assert pp["forks"] is None and pp["forks_value"] == "4" and pp["ok"] is True
+
+
+def test_sim_run_adds_forks_to_a_block_without_one_and_takes_it_out_again(tmp_path, monkeypatch):
+    from openghm.post_processing import remove_block_key
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "12")
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    init = snap / "wbm_init" / "wbm_test.init"
+    original = remove_block_key(init.read_text(), "Forks")
+    init.write_text(original)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert fake.forks_during_wbm == "12"
+    pp = fake.sidecar()["post_processing"]
+    assert pp["forks"] == 12 and pp["forks_value"] is None
+    assert fake.forks_values() == [None, None] and "Forks" not in fake.init.read_text()
+
+
+def test_sim_run_after_a_failed_wbm_still_puts_forks_back(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_code=3)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 3 and fake.pp_calls == []
+    assert fake.forks_values() == ["8", "8"] and fake.run_values() == ["1", "1"]
+
+
+def test_a_run_that_asks_for_no_post_processing_keeps_forks_untouched(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap, "--post-processing", "standard")
+    assert out.exit_code == 0, out.output
+    assert fake.forks_during_wbm == "8" and fake.forks_values() == ["8", "8"]
+    assert "post_processing" not in fake.sidecar()
+
+
+def test_sim_submit_then_post_process_puts_forks_back(tmp_path, monkeypatch):
+    """The sbatch path: staged with the job's 16 cores, `sim post-process` restores the init's 8."""
+    fake = _staged_submit(tmp_path, monkeypatch)
+    assert fake.forks_values() == ["16", "16"]
+    out = _post_process(fake, "--wbm-exit-code", "0")
+    assert out.exit_code == 0, out.output
+    assert fake.forks_values() == ["8", "8"] and fake.run_values() == ["1", "1"]
+    pp = fake.sidecar()["post_processing"]
+    assert pp["forks"] == 16 and pp["forks_value"] == "8"
 
 
 # ── sim post-process (the sbatch job's step) ───────────────────────────────────

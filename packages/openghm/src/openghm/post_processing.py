@@ -16,11 +16,14 @@ with "Transport endpoint is not connected", and nothing says so (Anvil job 21163
    asked to write must exist too;
 4. the requested ``Run`` value is put back in the run's ``wbm_init/<init>`` and in WBM's own
    dump ``wbm_output/<id>/init_files/<init>``, whatever happened, so that what is published
-   and what a rerun reads say what was asked for;
+   and what a rerun reads say what was asked for. So is ``Forks``: the script forks once per
+   variable, ``Forks`` at a time (``WBM.pm``, default 8), and it is CPU-bound, so a run that asks
+   for post-processing has ``Forks`` set to the cores it holds (see ``sim.py``); the init's own
+   value, or its absence, is recorded as ``forks_value`` and put back;
 5. the result is recorded as ``post_processing`` in ``simulation.json``.
 
-The init is edited as text, inside the ``PostProcessing`` block only: ``Run`` keys elsewhere
-(``Run_Start``, ``Run_End``) are never read or changed. This module is a leaf: it reads and
+The init is edited as text, inside the ``PostProcessing`` block only: ``Run`` and ``Forks`` keys
+elsewhere (``Run_Start``, ``Run_End``) are never read or changed. This module is a leaf: it reads and
 writes ``simulation.json`` itself, because :mod:`openghm.sim` imports it.
 """
 
@@ -49,7 +52,7 @@ Runner = Callable[[List[str], str], int]
 # ── reading and editing the init ───────────────────────────────────────────────
 
 _BLOCK_RE = re.compile(r"""(?<!\w)(?:(['"])PostProcessing\1|PostProcessing)\s*=>\s*\{""")
-_RUN_KEY_RE = re.compile(r"""(?:(['"])Run\1|(?<![\w$@%])Run(?!\w))\s*=>\s*""")
+_KEY_RES: Dict[str, "re.Pattern[str]"] = {}
 # A Perl scalar: quoted, or bare up to the next ``,``, ``}``, ``#`` or end of line (possibly empty,
 # as in ``Polygon_Aggregation => ,``).
 _VALUE_RE = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|[^,}\n#]*""")
@@ -103,32 +106,106 @@ def _post_processing_block(text: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def _run_value_span(text: str) -> Optional[Tuple[int, int]]:
-    """``(start, end)`` of the value of the block's own ``Run`` key (not one in a nested hash, and
-    not ``Run_Start``), or ``None``. An empty value (``Run => ,``) is an empty span."""
+def _key_re(key: str) -> "re.Pattern[str]":
+    """``key =>`` as the block writes it: bare or quoted, never the tail of a longer name
+    (``Run_Start``) or a variable (``$Run``)."""
+    pattern = _KEY_RES.get(key)
+    if pattern is None:
+        k = re.escape(key)
+        pattern = _KEY_RES[key] = re.compile(
+            rf"""(?:(['"]){k}\1|(?<![\w$@%]){k}(?!\w))\s*=>\s*""")
+    return pattern
+
+
+def _entry(text: str, key: str) -> Optional[Tuple[int, int, int]]:
+    """``(key_start, value_start, value_end)`` of the block's own ``key`` (not one in a nested
+    hash, and not a longer name such as ``Run_Start``), or ``None``. An empty value
+    (``Run => ,``) is an empty span."""
     block = _post_processing_block(text)
     if block is None:
         return None
     start, end = block
+    key_re = _key_re(key)
     for i, depth in _walk(text, start):
         if i >= end:
             break
         if depth != 0:
             continue
-        key = _RUN_KEY_RE.match(text, i)
-        if key is None:
+        m = key_re.match(text, i)
+        if m is None:
             continue
-        value = _VALUE_RE.match(text, key.end())
-        raw = value.group(0)
-        return key.end(), key.end() + len(raw.rstrip())
+        raw = _VALUE_RE.match(text, m.end()).group(0)
+        return i, m.end(), m.end() + len(raw.rstrip())
     return None
 
 
+def _run_value_span(text: str) -> Optional[Tuple[int, int]]:
+    """``(start, end)`` of the value of the block's own ``Run`` key, or ``None``."""
+    found = _entry(text, "Run")
+    return None if found is None else (found[1], found[2])
+
+
+def block_value(init_text: str, key: str) -> Optional[str]:
+    """The literal ``key`` has inside the init's ``PostProcessing`` block, as written
+    (``1``, ``'0'``, ``''``), or ``None`` when there is no block or the block has no such key.
+    Keys outside the block, in a nested hash in it, or that merely start with ``key`` are not read."""
+    found = _entry(init_text, key)
+    return None if found is None else init_text[found[1]:found[2]].strip()
+
+
 def requested_run_value(init_text: str) -> Optional[str]:
-    """The literal ``Run`` has inside the init's ``PostProcessing`` block, as written
-    (``1``, ``'0'``, ``''``), or ``None`` when there is no block or the block has no ``Run``."""
-    span = _run_value_span(init_text)
-    return None if span is None else init_text[span[0]:span[1]].strip()
+    """The literal ``Run`` has inside the init's ``PostProcessing`` block (see :func:`block_value`)."""
+    return block_value(init_text, "Run")
+
+
+def _insert_entry(text: str, key: str, literal: str) -> str:
+    """``text`` with ``key => literal,`` as the first entry of the ``PostProcessing`` block: on a
+    line of its own, indented like the entry that follows, when the block opens its own line;
+    else inline after the ``{``. First, so that no comma has to be added to an entry that was last."""
+    block = _post_processing_block(text)
+    if block is None:
+        return text
+    start, end = block
+    eol = text.find("\n", start)
+    if eol != -1 and eol < end and not text[start:eol].strip():
+        nl = "\r\n" if text[eol - 1] == "\r" else "\n"
+        line_start = eol + 1
+        first = re.search(r"^[ \t]*(?=\S)", text[line_start:end + 1], re.MULTILINE)
+        indent = first.group(0) if first else ""
+        if first and line_start + first.end() == end:           # an empty block: the } is next
+            indent += "  "
+        return text[:line_start] + f"{indent}{key} => {literal},{nl}" + text[line_start:]
+    at = start + len(text[start:end]) - len(text[start:end].lstrip())
+    return text[:at] + f"{key} => {literal}, " + text[at:]
+
+
+def set_block_value(init_text: str, key: str, literal: str, *, insert: bool = False) -> str:
+    """``init_text`` with the block's ``key`` value replaced by ``literal``; the key, its
+    whitespace, the comma and everything else stay as they were. When the block has no ``key``
+    it is left unchanged, or with ``insert`` given a ``key => literal,`` entry (see
+    :func:`_insert_entry`). Unchanged when the init has no ``PostProcessing`` block."""
+    found = _entry(init_text, key)
+    if found is None:
+        return _insert_entry(init_text, key, literal) if insert else init_text
+    return init_text[:found[1]] + literal + init_text[found[2]:]
+
+
+def remove_block_key(init_text: str, key: str) -> str:
+    """``init_text`` without the block's ``key`` entry: the whole line when it stands alone on one
+    (what :func:`set_block_value` with ``insert`` writes), else the entry and the space after it.
+    Unchanged when there is no such key."""
+    found = _entry(init_text, key)
+    if found is None:
+        return init_text
+    key_start, _, value_end = found
+    end = re.compile(r"[ \t]*,?").match(init_text, value_end).end()
+    line_start = init_text.rfind("\n", 0, key_start) + 1
+    eol = init_text.find("\n", end)
+    if eol != -1 and not init_text[line_start:key_start].strip() and not init_text[end:eol].strip():
+        return init_text[:line_start] + init_text[eol + 1:]
+    if init_text[end:end + 1] == " ":
+        end += 1
+    return init_text[:key_start] + init_text[end:]
 
 
 def is_true(literal: str) -> bool:
@@ -146,13 +223,9 @@ def is_true(literal: str) -> bool:
 
 
 def set_run_value(init_text: str, literal: str) -> str:
-    """``init_text`` with the block's ``Run`` value replaced by ``literal``; the key, its
-    whitespace, the comma and everything else stay as they were. Unchanged when the init has no
-    ``PostProcessing`` block or no ``Run`` in it."""
-    span = _run_value_span(init_text)
-    if span is None:
-        return init_text
-    return init_text[:span[0]] + literal + init_text[span[1]:]
+    """``init_text`` with the block's ``Run`` value replaced by ``literal`` (see :func:`set_block_value`);
+    unchanged when the init has no ``PostProcessing`` block or no ``Run`` in it."""
+    return set_block_value(init_text, "Run", literal)
 
 
 # ── reading the generated script ───────────────────────────────────────────────
@@ -322,10 +395,20 @@ def run_post_processing(argv: List[str], output_dir: str, *, runner: Optional[Ru
 # ── putting the init back ──────────────────────────────────────────────────────
 
 
-def restore(workdir: str, sim_id: str, init_filename: str, literal: str) -> List[str]:
+#: ``restore``'s ``forks_value`` when ``Forks`` was not changed and is not to be touched.
+KEEP = object()
+
+
+def restore(
+    workdir: str, sim_id: str, init_filename: str, literal: str, *, forks_value: object = KEEP,
+) -> List[str]:
     """Write ``literal`` back as the ``Run`` value of the run's init: ``<workdir>/wbm_init/<init>``
     and WBM's own dump ``<workdir>/wbm_output/<sim id>/init_files/<init>``. A file that does not
-    exist is skipped. Returns the paths it rewrote."""
+    exist is skipped. Returns the paths it rewrote.
+
+    ``forks_value`` puts the block's ``Forks`` back the same way: a string is the original literal,
+    ``None`` means the init had no ``Forks`` and the entry the run added is removed, and
+    :data:`KEEP` (the default) leaves ``Forks`` as it is."""
     rewritten: List[str] = []
     for path in (
         os.path.join(workdir, "wbm_init", init_filename),
@@ -336,6 +419,10 @@ def restore(workdir: str, sim_id: str, init_filename: str, literal: str) -> List
         with open(path, "r", encoding="utf-8", newline="") as fh:
             text = fh.read()
         new = set_run_value(text, literal)
+        if forks_value is None:
+            new = remove_block_key(new, "Forks")
+        elif forks_value is not KEEP:
+            new = set_block_value(new, "Forks", str(forks_value))
         if new != text:
             with open(path, "w", encoding="utf-8", newline="") as fh:
                 fh.write(new)
@@ -361,7 +448,7 @@ def finish(
     """After WBM: run and check post-processing, put the init back, record the result.
 
     ``sidecar`` is the run's ``simulation.json``; its ``post_processing`` (written when the run was
-    staged: ``requested``, ``run_value``, ``argv``) says whether there is anything to do, what to
+    staged: ``requested``, ``run_value``, ``forks_value``, ``forks``, ``argv``) says whether there is anything to do, what to
     run and what to restore. Returns ``None`` when the run did not ask for post-processing.
 
     The step runs only when ``wbm_exit_code`` is 0; otherwise the record has ``exit_code`` and ``ok``
@@ -387,7 +474,9 @@ def finish(
             }
     finally:
         try:
-            restore(workdir, sim_id, init, record["run_value"])
+            # `forks` is what the run set, `forks_value` what the init had (absent: no Forks key)
+            restore(workdir, sim_id, init, record["run_value"],
+                    forks_value=record.get("forks_value") if record.get("forks") is not None else KEEP)
         except OSError as e:
             say(f"openghm: warning: could not put the Run value back in the init: {e}")
     result["log"] = os.path.relpath(result["log"], workdir)

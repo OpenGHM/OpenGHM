@@ -484,7 +484,11 @@ script, every call fails, and the run would still look successful (Anvil job 211
 `climatology/`). So both commands stage such a run with `Run => 0` (only the value in that block;
 `Run_Start` and `Run_End` are never touched), and after WBM exits 0 they run
 `PostProcessing.pl` themselves, in the foreground and in the same container and mounts as WBM,
-its output in `wbm_output/<id>/PostProcessing.log`. The step passes when the script exits 0,
+its output in `wbm_output/<id>/PostProcessing.log`. The script is CPU-bound and forks once per
+variable, `Forks` at a time (WBM's default is 8: on Global's 51 variables that left a 32-core job
+mostly idle), so such a run also has the block's `Forks` set to the cores it holds (`sim submit`: the
+sbatch's `--cpus-per-task`; `sim run`: `SLURM_CPUS_PER_TASK`, and `Forks` stays as the init has it when
+that is unset), inserted when the block has none, and put back or removed again with `Run`. The step passes when the script exits 0,
 prints "All Done!", has no `Can't exec` line in its log, and left the files it was asked for
 (the script ignores the exit status of its own `system()` calls, so "All Done!" alone proves
 nothing): per variable in its `@param` list, the `_dc`, `_mc` and `_yc` files in `climatology/`
@@ -492,13 +496,14 @@ that its `$climatology`, `$monthly` and `$TA_depth` call for, and a `spatial_agg
 empty when `$spatial_agg` is 1. Whatever happened, even after a failed WBM, the requested `Run`
 value is put back in `wbm_init/<init>` and in WBM's own dump `wbm_output/<id>/init_files/<init>`,
 so what is published and what a rerun reads say what was asked. The result is the
-`post_processing` key of `simulation.json` (`requested`, `run_value`, `argv`, then `exit_code`,
+`post_processing` key of `simulation.json` (`requested`, `run_value`, `forks_value` (the init's own
+`Forks` literal, `null` when it had none), `forks` (the value used, `null` when unchanged), `argv`, then `exit_code`,
 `seconds`, `log`, `tail` (the last 40 lines), `all_done`, `expected`, `found`, `cant_exec`,
 `problems`, `ok`; `exit_code` and `ok` are `null` when WBM failed and the step did not run).
 A failed step makes `sim run` exit 1 and fails the `sim submit` job. In the job script the step
 is `openghm sim post-process <sim dir> --wbm-exit-code "$rc"`, which exits with WBM's own code
 when that is not 0. A run that is killed by its walltime never gets there, so its init keeps
-`Run => 0`, which is what ran. Polygon aggregation calls `nc_aggr_read.pl`, which is not in any
+`Run => 0` and the `Forks` it ran with, which is what ran. Polygon aggregation calls `nc_aggr_read.pl`, which is not in any
 snapshot's `utilities/`, so a run that asks for it fails the check.
 
 `--post-processing standard|climatology` (on `sim run` and `sim submit`) sets that `Run` to `0` or
