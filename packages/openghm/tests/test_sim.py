@@ -1144,6 +1144,62 @@ def test_post_processing_climatology_asks_for_a_run_the_init_did_not(tmp_path):
     assert "sim post-process" in body
 
 
+def _pp_snapshot_with_time(tmp_path: Path, step) -> Path:
+    """A snapshot whose init asks for climatology and whose recommendation is 15:00, with `step` as
+    its ``postProcessingWalltime`` (None leaves the field out)."""
+    meta = json.loads(json.dumps(_METADATA))
+    if step is not None:
+        meta["simulation"]["recommendedCompute"]["postProcessingWalltime"] = step
+    snap = _make_snapshot(tmp_path, metadata=meta)
+    (snap / "wbm_init" / "wbm_test.init").write_text(
+        (_PP_FIXTURES / "fc66a2cd_wbm_SHORT.init").read_text(encoding="utf-8"))
+    return snap
+
+
+def test_a_climatology_run_asks_for_its_walltime_and_its_post_processing_time(tmp_path, capsys):
+    snap = _pp_snapshot_with_time(tmp_path, "1:30:00")
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    body = _gen(built, ".sbatch").content
+    assert "#SBATCH --time=1:45:00" in body
+    assert json.loads(_gen(built, "simulation.json").content)["walltime"] == "1:45:00"
+    assert capsys.readouterr().err == ""
+
+
+def test_a_climatology_run_without_a_measured_time_warns_and_asks_for_the_walltime_alone(tmp_path, capsys):
+    snap = _pp_snapshot_with_time(tmp_path, None)
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+    assert "#SBATCH --time=15:00" in _gen(built, ".sbatch").content
+    err = capsys.readouterr().err
+    assert "warning" in err and "postProcessingWalltime" in err
+
+
+def test_a_walltime_given_is_used_as_written_with_post_processing(tmp_path, capsys):
+    snap = _pp_snapshot_with_time(tmp_path, "1:30:00")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", walltime="2:00:00")
+    _ctx, built = build_submit(opts, _config(tmp_path))
+    assert "#SBATCH --time=2:00:00" in _gen(built, ".sbatch").content
+    assert capsys.readouterr().err == ""
+
+
+def test_a_run_that_does_not_post_process_ignores_the_post_processing_time(tmp_path, capsys):
+    snap = _pp_snapshot_with_time(tmp_path, "1:30:00")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard")
+    _ctx, built = build_submit(opts, _config(tmp_path))
+    assert "#SBATCH --time=15:00" in _gen(built, ".sbatch").content
+    assert capsys.readouterr().err == ""
+
+
+def test_post_processing_climatology_adds_the_time_the_init_did_not_ask_for(tmp_path):
+    snap = _pp_snapshot_with_time(tmp_path, "2:00:00")
+    (snap / "wbm_init" / "wbm_test.init").write_text(
+        (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text(encoding="utf-8"))
+    plain = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))[1]
+    assert "#SBATCH --time=15:00" in _gen(plain, ".sbatch").content
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="climatology")
+    built = build_submit(opts, _config(tmp_path))[1]
+    assert "#SBATCH --time=2:15:00" in _gen(built, ".sbatch").content
+
+
 def test_post_processing_standard_turns_a_requested_run_off(tmp_path):
     """fc66a2cd's SHORT init says Run => 1: with standard it is staged 0 and nothing is recorded."""
     from openghm.post_processing import block_value, requested_run_value, set_block_value, set_run_value

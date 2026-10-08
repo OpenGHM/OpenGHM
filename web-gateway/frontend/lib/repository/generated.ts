@@ -205,6 +205,10 @@ export interface Simulation {
   recommendedCompute: {
     cores: number;
     walltime: SlurmTime;
+    /**
+     * SLURM --time syntax, not an ISO 8601 duration: minutes, minutes:seconds, hours:minutes:seconds, days-hours[:minutes[:seconds]]. Hours are not capped at 24 (observed: 111:30:00).
+     */
+    postProcessingWalltime?: string;
   };
 }
 /**

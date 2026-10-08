@@ -469,7 +469,8 @@ They differ only in **where** the model runs:
   exit 2). It is recorded as `walltime` in `simulation.json`, and the run's spool
   lease expires that long after it starts: pass the walltime the enclosing SLURM job
   asked for, or a prune can delete units the run has linked. Without it the
-  metadata's `recommendedCompute.walltime` is used. After the container exits, a
+  metadata's `recommendedCompute.walltime` is used (plus `postProcessingWalltime` when the run
+  post-processes, see below). After the container exits, a
   failed write to `simulation.json` (the exit code, the harvest result) is a warning
   on stderr and the command still exits with the container's exit code, so a
   finished run is never reported as refused.
@@ -505,6 +506,13 @@ is `openghm sim post-process <sim dir> --wbm-exit-code "$rc"`, which exits with 
 when that is not 0. A run that is killed by its walltime never gets there, so its init keeps
 `Run => 0` and the `Forks` it ran with, which is what ran. Polygon aggregation calls `nc_aggr_read.pl`, which is not in any
 snapshot's `utilities/`, so a run that asks for it fails the check.
+
+A run that post-processes asks for more time than WBM alone: the default walltime (`sim submit`'s
+`--time`; `sim run`'s recorded `walltime`, which sets the spool lease) is the metadata's
+`recommendedCompute.walltime` plus its `recommendedCompute.postProcessingWalltime`, the time the
+step took on the reference period (absent means it was not measured). When the run post-processes
+and the field is absent, the command warns on stderr and uses the walltime alone. A `--walltime` is
+used as written, with or without post-processing.
 
 `--post-processing standard|climatology` (on `sim run` and `sim submit`) sets that `Run` to `0` or
 `1` in the run's init, so a run can ask for the daily, monthly and yearly climatologies, or turn them

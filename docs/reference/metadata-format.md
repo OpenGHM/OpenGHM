@@ -187,6 +187,16 @@ peak of about 0.8 GiB in each of several runs) snapshots were set this way on
 lab's original submit script asked for, the tutorial 16.
 `walltime` is how long the reference run took.
 
+`postProcessingWalltime` is optional and measured the same way: how long the
+toolkit's post-processing step (`PostProcessing.pl` with `Run => 1`, one fork
+per core) took on the reference period at `cores` cores, in the same SLURM
+syntax. A run that asks for climatology needs `walltime` plus this. Absent means
+it was not measured, and then the gateway does not offer climatology for the
+snapshot and the toolkit warns when a run post-processes. It is not scaled by
+the run period or the cores of a draft. A value that is not a measurement of
+the whole reference period at `cores` cores (scaled from a shorter period, say)
+is an estimate, and is recorded here as one, with what it was scaled from.
+
 Two gaps in the variable dictionary a generator has to handle: `Units` is a list
 per aggregation depth (`['mm/day','mm/month','mm/year']`) so the native
 `Org_units[0]` is the one recorded, and a few variables appear on more than one
@@ -398,7 +408,8 @@ bump, same as a new forcing role.
 
 #### Walltime fields
 
-`recommendedCompute.walltime` and `runtime.execution.elapsedWalltime` are
+`recommendedCompute.walltime`, `recommendedCompute.postProcessingWalltime` and
+`runtime.execution.elapsedWalltime` are
 **SLURM `--time` syntax**, not ISO 8601 durations: `minutes:seconds`,
 `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, or
 `days-hours:minutes:seconds`, where the hours field is not capped at 24

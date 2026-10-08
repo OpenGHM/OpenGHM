@@ -315,7 +315,8 @@ def sim_group() -> None:
 @click.option("--id", "sim_id", required=True, metavar="SIM_ID",
               help="unique simulation ID (per-sim work/output paths)")
 @click.option("--cores", type=int, default=None, help="SLURM cpus-per-task (default: metadata)")
-@click.option("--walltime", default=None, metavar="HH:MM:SS", help="SLURM --time (default: metadata)")
+@click.option("--walltime", default=None, metavar="HH:MM:SS", help="SLURM --time (default: metadata, plus its post-processing time "
+                   "when the run post-processes)")
 @click.option("--account", default=None, help="SLURM account (default: config)")
 @click.option("--partition", default=None, help="SLURM partition (default: config)")
 @click.option("--output-base", "output_base", default=None, metavar="DIR",
@@ -377,7 +378,8 @@ def sim_submit_cmd(**p) -> None:
 @click.option("--walltime", default=None, metavar="TIME",
               help="how long this run may last, as SLURM writes it (MM:SS, HH:MM:SS, D-HH, D-HH:MM:SS); "
                    "recorded in simulation.json, where the spool lease takes its length "
-                   "(default: the metadata's recommendedCompute.walltime)")
+                   "(default: the metadata's recommendedCompute.walltime, plus its postProcessingWalltime "
+                   "when the run post-processes)")
 @click.option("--post-processing", "post_processing", type=click.Choice(["standard", "climatology"]),
               default=None,
               help="init override: PostProcessing.Run (standard = 0, climatology = 1: daily, monthly and "

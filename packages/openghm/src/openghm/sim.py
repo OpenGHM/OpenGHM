@@ -648,6 +648,14 @@ def slurm_walltime(text: object) -> Optional[timedelta]:
     return timedelta(days=int(days or 0), hours=hours, minutes=minutes, seconds=seconds)
 
 
+def format_walltime(delta: timedelta) -> str:
+    """``delta`` as a SLURM ``H:MM:SS`` time (hours are not capped)."""
+    total = int(delta.total_seconds())
+    hours, rest = divmod(total, 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+
 def check_walltime(text: str) -> str:
     """``text`` if it is a SLURM time longer than zero, else an :class:`OpenghmError` that names
     the accepted forms."""
@@ -658,6 +666,25 @@ def check_walltime(text: str) -> str:
             "longer than zero (for example 22:30:00 or 4-00:00:00)"
         )
     return text
+
+
+def _with_post_processing_time(walltime: str, post_processing_walltime: object, sim_id: str) -> str:
+    """The default walltime of a run that post-processes: the snapshot's ``walltime`` plus its
+    ``recommendedCompute.postProcessingWalltime``, the measured time of that step. A snapshot
+    without that value (or with one that is not a SLURM time) has no measurement of the step: a
+    warning on stderr, and ``walltime`` alone. Only a default goes through here: a ``--walltime``
+    is used as written."""
+    step = slurm_walltime(post_processing_walltime)
+    if step is None:
+        sys.stderr.write(
+            f"openghm: warning: simulation {sim_id!r} post-processes, but the snapshot's "
+            "recommendedCompute has no postProcessingWalltime (a SLURM time), so the walltime "
+            f"{walltime} does not include it and the job may run out of time; "
+            "pass --walltime to set it\n"
+        )
+        return walltime
+    run = slurm_walltime(walltime)
+    return format_walltime(run + step) if run is not None else walltime
 
 
 def _resolve_run(
@@ -773,6 +800,9 @@ def _resolve_run(
             "argv": _wbm_exec_argv(
                 ctx, mounts, ["perl", "-w", f"/wbm/wbm_output/{sim_id}/{post_processing.SCRIPT_NAME}"]),
         }
+
+    if pp is not None and not opts.walltime:
+        walltime = _with_post_processing_time(walltime, compute.get("postProcessingWalltime"), sim_id)
 
     spool_plan = None
     if cached:

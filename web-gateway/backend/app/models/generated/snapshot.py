@@ -296,6 +296,10 @@ class RecommendedCompute(BaseModel):
     )
     cores: conint(ge=1)
     walltime: SlurmTime
+    postProcessingWalltime: SlurmTime | None = Field(
+        None,
+        description="How long the toolkit's post-processing step (PostProcessing.pl with Run => 1, one fork per core) took on the reference period at `cores` cores, measured the way `walltime` is. It is the time a run that asks for climatology needs on top of `walltime`. Absent means it was not measured: a draft cannot then ask for climatology, and a toolkit run that post-processes warns and uses `walltime` alone.",
+    )
 
 
 class Simulation(BaseModel):
