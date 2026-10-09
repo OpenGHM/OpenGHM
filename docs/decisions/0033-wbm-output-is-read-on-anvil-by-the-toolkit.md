@@ -66,8 +66,8 @@ precomputes nothing.**
   optional extra, so the rest of the toolkit stays pure Python.
 - The backend runs the commands through slurmly's one persistent connection
   and reads a `nc` subset back over SFTP, streaming it to the person. A run's
-  scratch output is shown only to its owner and admins; a published
-  snapshot's to anyone.
+  scratch output is shown to whoever may see the job (its owner, staff and
+  admins, as for its logs); a published snapshot's to anyone.
 
 ## Consequences
 
