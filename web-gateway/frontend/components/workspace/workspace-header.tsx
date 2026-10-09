@@ -16,12 +16,15 @@ const COPY: Record<WorkspaceSection, { title: string; subtitle?: string }> = {
 /**
  * The header both Workspace sections share, in the Data Repository's light
  * style: eyebrow, title, the section's action or one muted line on the right,
- * and the section switch on the bottom edge.
+ * and the section switch on the bottom edge. Both sections are lists, so both
+ * use the wide column from `xl` (`WIDE_CONTAINER`), the header and the page
+ * under it alike.
  */
 export function WorkspaceHeader({ section }: { section: WorkspaceSection }) {
   const { title, subtitle } = COPY[section];
   return (
     <PageHeader
+      wide
       top={<Eyebrow>Workspace</Eyebrow>}
       title={title}
       aside={

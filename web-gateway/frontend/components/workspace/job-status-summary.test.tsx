@@ -151,9 +151,9 @@ describe("a queued job", () => {
     expect(container.textContent).not.toContain("SLURM:");
   });
 
-  it("counts how long it has waited", () => {
+  it("leaves the times to the Run details card, which counts the wait", () => {
     const { container } = render(summary(live("PENDING"), { live: QUEUED }));
-    expect(container.textContent).toContain("Waiting 4 min");
+    expect(container.textContent).not.toMatch(/Submitted|Waiting \d/);
   });
 
   it("opens the Cancel dialog, and puts focus back on the button when it is dismissed", async () => {

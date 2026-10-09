@@ -1,8 +1,9 @@
 import { JobHeader } from "@/components/workspace/job-header";
-import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { AsideLayout } from "@/components/workspace/aside-layout";
+import { WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
 import { PublishCard } from "@/components/workspace/publish-card";
-import { JobDetails } from "@/components/workspace/job-details";
+import { RunDetailsCard } from "@/components/workspace/run-details-card";
 import { LogViewer } from "@/components/workspace/log-viewer";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import { AboutSummaryCard } from "@/components/workspace/about-summary-card";
@@ -11,9 +12,13 @@ import type { Job, JobLive, LogStream, PartialAbout } from "@/lib/jobs/types";
 
 /**
  * The job detail page below the site header: the header (breadcrumb, the
- * snapshot draft's name and status, the title of the snapshot it is based on, the actions) and, in the order a person
+ * snapshot draft's name and status, the actions) and, in the order a person
  * reads it, the status summary (is it running, did it work, why not, where are
- * the results), the logs, and the details of the simulation. One view for two routes:
+ * the results, how long it took), the publish card, the logs, and the About card.
+ * The facts of the simulation (what it is based on, the run period, the cores,
+ * the Slurm job, the times) are the "Run details" card: from `xl` a sticky
+ * column beside all of that, below it right after the status summary
+ * (`AsideLayout`). One view for two routes:
  * the real page (`app/workspace/[id]`) renders it from the backend, and the
  * dev-only design preview (`app/dev/workspace/[state]`) from the fixtures,
  * with `preview` set. Fetching stays in the pages; nothing here reads a fixture.
@@ -79,13 +84,17 @@ export function JobDetail({
     >
       <main className={WORKSPACE_MAIN}>
         <JobHeader job={job} preview={preview} />
-        <div className={`${WORKSPACE_CONTAINER} flex-1 space-y-8 py-6 sm:py-8`}>
-          <JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />
+        <AsideLayout
+          label="Run details"
+          below="flow"
+          className="py-6 sm:py-8"
+          lead={<JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />}
+          aside={<RunDetailsCard job={job} recommended={recommended} postProcessing={postProcessing} />}
+        >
           <PublishCard job={job} baseAbout={baseAbout} preview={preview} />
           <LogViewer previewLogs={previewLogs} />
-          <JobDetails job={job} recommended={recommended} postProcessing={postProcessing} />
           <AboutSummaryCard about={job.about} />
-        </div>
+        </AsideLayout>
       </main>
     </LiveJobProvider>
   );

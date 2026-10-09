@@ -69,6 +69,11 @@ describe("the Workspace header", () => {
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshots & Inputs");
   });
 
+  it.each(["drafts", "data"] as const)("is in the wide column from xl, as the list under it is (%s)", (section) => {
+    const { container } = render(<WorkspaceHeader section={section} />);
+    expect(container.querySelector("header")?.className).toContain("xl:max-w-[1456px]");
+  });
+
   it("has no dark gradient", () => {
     const { container } = render(<WorkspaceHeader section="drafts" />);
     expect(container.innerHTML).not.toContain("gradient");

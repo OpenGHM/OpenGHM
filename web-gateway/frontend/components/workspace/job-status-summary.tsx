@@ -21,7 +21,6 @@ import { CompletedResults } from "@/components/workspace/completed-results";
 import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { FailedDetails } from "@/components/workspace/failed-details";
-import { JobTimeline } from "@/components/workspace/job-timeline";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { RunMetadata } from "@/components/workspace/run-metadata";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -407,8 +406,6 @@ export function JobStatusSummary({
           </Button>
         )}
       </div>
-
-      <JobTimeline className="mt-3" />
 
       {showReason && <p className="mt-3 break-words text-sm text-muted-foreground">{statusReason}</p>}
 

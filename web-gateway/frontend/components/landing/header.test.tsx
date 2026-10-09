@@ -154,6 +154,16 @@ describe("the header's current-page highlight", () => {
     }
   });
 
+  it("keeps every link on one line, so the row never breaks Data Repository in two", () => {
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    for (const name of ["Home", "Data Repository", "Workspace", "Community", "About"]) {
+      expect(nav.getByRole("link", { name }).className).toContain("whitespace-nowrap");
+    }
+    expect(nav.getByRole("button", { name: "Resources" }).className).toContain("whitespace-nowrap");
+  });
+
   it("marks the current item in the phone menu too, and only that one", () => {
     usePathname.mockReturnValue("/repository/abc");
     useSession.mockReturnValue({ data: null });

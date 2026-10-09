@@ -53,16 +53,21 @@ function isActive(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+// One line each, always: at `lg` the row is the tightest it gets (the links at 14 px with 8 px
+// of padding), and from `xl` it has the room for 15 px and 12 px.
 const NAV_LINK =
-  "rounded-md px-3 py-1.5 text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "rounded-md px-2 py-1.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:px-3 xl:text-[15px]";
 const NAV_LINK_IDLE = "font-medium text-slate-700 hover:bg-muted hover:text-foreground";
 // Same weight as idle: font-semibold is a few px wider and would shift the row.
 const NAV_LINK_ACTIVE = "bg-slate-100 font-medium text-foreground";
 
 /**
- * The site header. From `lg` up the links and the account menu sit in the row;
- * below it they fold into one menu button, because the row needs about 875 px
- * (estimated from the link widths, not measured) and a phone has 375.
+ * The site header. From `lg` (1024 px) up the links and the account menu sit in
+ * the row; below it they fold into one menu button, because the row needs about
+ * 905 px at its tightest (measured at 1024 px signed in: logo 189, links 525,
+ * account button 159, two 16 px gaps) and a phone has 375. The links are
+ * `whitespace-nowrap`: a row that is too tight overflows rather than breaking
+ * "Data Repository" onto two lines.
  */
 export function Header() {
   const [resourcesOpen, setResourcesOpen] = useState(false);
@@ -89,8 +94,8 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between bg-white px-4 py-3 sm:px-6 lg:px-10 lg:py-4 border-b border-black/5">
-      <Link href="/">
+    <header className="sticky top-0 z-50 flex items-center justify-between gap-4 bg-white px-4 py-3 sm:px-6 lg:px-10 lg:py-4 border-b border-black/5">
+      <Link href="/" className="shrink-0">
         <Image
           src="/images/logo_light4.webp"
           alt="OpenGHM Logo"
@@ -101,7 +106,7 @@ export function Header() {
         />
       </Link>
 
-      <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+      <nav aria-label="Main" className="hidden items-center gap-0.5 lg:flex xl:gap-1">
         {NAV_ITEMS_BEFORE.map((item) => (
           <Link
             key={item.label}
@@ -163,7 +168,7 @@ export function Header() {
         >
           <button className="flex items-center gap-2 rounded-md border border-black/10 pl-1.5 pr-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
             <UserAvatar name={session.user.name} email={session.user.email} />
-            <span className="max-w-[120px] truncate">{session.user.name ?? session.user.email}</span>
+            <span className="max-w-24 truncate xl:max-w-[120px]">{session.user.name ?? session.user.email}</span>
             <ChevronDown
               size={13}
               className={`transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}

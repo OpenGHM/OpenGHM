@@ -8,9 +8,11 @@ import { SessionExpiredBanner } from "@/components/workspace/session-expired-ban
 import { useCreateDraft } from "@/lib/jobs/use-create-draft";
 import { cn } from "@/lib/utils";
 
-type CreateError = NonNullable<ReturnType<typeof useCreateDraft>["error"]>;
+export type CreateError = NonNullable<ReturnType<typeof useCreateDraft>["error"]>;
 
-function errorMessage(error: CreateError): string {
+/** What a failed copy says, for the button's own line, its toast and the
+ *  page's actions menu (`JobActionsMenu`). */
+export function errorMessage(error: CreateError): string {
   if (error.kind === "session-expired") return "Your session has expired.";
   if (error.code === "snapshot_not_found") {
     return "This snapshot draft's model snapshot is no longer in the repository, so it can't be copied.";

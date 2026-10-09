@@ -365,7 +365,7 @@ describe("the draft run step: dates", () => {
       ctx: { dataset: fakeDataset({ runStartAlignment: null }), snapshotState: "found" },
       parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
     });
-    expect(screen.getByText(/Start date not checked here/)).toBeTruthy();
+    expect(screen.getByText(/Couldn.t read the model.s date rules just now/)).toBeTruthy();
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });
 
@@ -374,7 +374,7 @@ describe("the draft run step: dates", () => {
       ctx: { dataset: fakeDataset({ runStartAlignment: "none" }), snapshotState: "found" },
       parameters: { ...PARAMETERS, temporal_range_start: "2001-03-01" },
     });
-    expect(screen.queryByText(/not checked here/)).toBeNull();
+    expect(screen.queryByText(/Couldn.t read the model/)).toBeNull();
     expect(screen.queryByText(/Start on/)).toBeNull();
     expect(start().getAttribute("aria-invalid")).toBeNull();
   });

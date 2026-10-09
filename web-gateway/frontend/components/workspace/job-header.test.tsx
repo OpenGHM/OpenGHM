@@ -87,7 +87,6 @@ describe("the header", () => {
       expect(startLink("New from this model snapshot")).not.toBeNull();
       expect(button("Delete snapshot draft")).not.toBeNull();
       expect(screen.queryByRole("menu")).toBeNull();
-      expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
       expect(button("Cancel simulation")).toBeNull();
     }
   );
@@ -124,18 +123,14 @@ describe("the header", () => {
     expect(duplicateDraft).toHaveBeenCalledWith(previewDraftJob("completed").id);
   });
 
-  it("titles the page with the snapshot draft's name, with the status beside it and the snapshot under it", () => {
+  it("titles the page with the snapshot draft's name, with the status beside it", () => {
     renderHeader("running");
     const job = previewDraftJob("running");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
     expect(screen.getByText("Running")).toBeTruthy();
-    const link = screen.getByRole("link", { name: `Based on ${job.dataset_title}` });
-    expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
-    expect(link.getAttribute("title")).toBe(job.dataset_title);
-    expect(screen.queryByText(`Slurm #${job.slurm_job_id}`)).toBeTruthy();
   });
 
-  it("titles it with the name its owner gave it, and keeps the run id in the small line", () => {
+  it("leaves what the job is based on, its run id and its Slurm job to the Run details card", () => {
     const job = previewDraftJob("completed", { overrides: { about: { name: "My CONUS run" } } });
     render(
       <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
@@ -143,21 +138,19 @@ describe("the header", () => {
       </LiveJobProvider>
     );
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("My CONUS run");
-    expect(screen.getByText(new RegExp(job.sim_id))).toBeTruthy();
+    expect(screen.queryByText(new RegExp(job.sim_id))).toBeNull();
+    expect(screen.queryByText(/Slurm #/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Based on/ })).toBeNull();
+    // The one link besides the breadcrumb's and "New from this model snapshot".
+    expect(screen.getAllByRole("link").map((a) => a.textContent)).toEqual([
+      "My snapshot drafts",
+      "New from this model snapshot",
+    ]);
   });
 
-  it("says which snapshot it is based on by its title, cut to one line with the whole title on hover", () => {
-    const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
-    const job = previewDraftJob("completed", { overrides: { dataset_title: title } });
-    render(
-      <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
-        <JobHeader job={job} preview />
-      </LiveJobProvider>
-    );
-    const link = screen.getByRole("link", { name: `Based on ${title}` });
-    expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
-    expect(link.getAttribute("title")).toBe(title);
-    expect(link.className).toContain("truncate");
+  it("is in the wide column, like the page's body", () => {
+    const { container } = renderHeader("completed");
+    expect(container.querySelector("header")?.className).toContain("xl:max-w-[1456px]");
   });
 
   it("is a light header like the repository's: no dark gradient, nothing white, a normal Delete button", () => {
@@ -234,6 +227,74 @@ describe("the Delete button", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() => expect(screen.queryByText("Delete this snapshot draft?")).toBeNull());
 
+    expect(document.body.style.pointerEvents).not.toBe("none");
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+});
+
+describe("the actions on a phone", () => {
+  beforeAll(() => {
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.releasePointerCapture ??= () => {};
+    Element.prototype.scrollIntoView ??= () => {};
+  });
+
+  const openMenu = () => {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), { button: 0, ctrlKey: false });
+    return screen.getByRole("menu");
+  };
+
+  it("has one More actions button, for below sm, next to the buttons that are for sm and up", () => {
+    renderHeader("completed");
+    expect(screen.getByRole("button", { name: "More actions" }).closest("div")?.className).toContain("sm:hidden");
+    expect(button("Delete snapshot draft")?.closest("div")?.className).toContain("hidden");
+    expect(button("Delete snapshot draft")?.closest("div")?.className).toContain("sm:flex");
+  });
+
+  it.each(["pending", "running", "cancelling"])("has none while the job is %s", (key) => {
+    renderHeader(key);
+    expect(button("More actions")).toBeNull();
+  });
+
+  it("holds Duplicate, New from this model snapshot and Delete, with Delete in the destructive colour", () => {
+    renderHeader("completed");
+    const menu = openMenu();
+    const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    expect(items.map((i) => i.textContent)).toEqual(["Duplicate", "New from this model snapshot", "Delete snapshot draft"]);
+    expect(items[2].getAttribute("data-variant")).toBe("destructive");
+    expect(items[1].getAttribute("href")).toBe(
+      `/workspace/new/${previewDraftJob("completed").dataset_id}?step=run`
+    );
+  });
+
+  it("leaves Duplicate out where the status summary has the copy action", () => {
+    renderHeader("failed:timeout");
+    const menu = openMenu();
+    expect(Array.from(menu.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual([
+      "New from this model snapshot",
+      "Delete snapshot draft",
+    ]);
+  });
+
+  it("copies the snapshot draft, as the Duplicate button does", async () => {
+    duplicateDraft.mockResolvedValue({ ok: true, data: fakeDraft("DRAFT", { id: "copy-2" }) });
+    renderHeader("completed");
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/workspace/copy-2?step=run"));
+    expect(duplicateDraft).toHaveBeenCalledWith(previewDraftJob("completed").id);
+  });
+
+  it("opens the same delete confirmation, which keeps the page usable and returns focus to the menu button", async () => {
+    renderHeader("completed");
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    trigger.focus();
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete snapshot draft" }));
+    expect(await screen.findByText("Delete this snapshot draft?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByText("Delete this snapshot draft?")).toBeNull());
     expect(document.body.style.pointerEvents).not.toBe("none");
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });

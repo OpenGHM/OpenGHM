@@ -4,7 +4,7 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { MyDataSection } from "@/components/workspace/my-data-section";
 import { MyDataSkeleton } from "@/components/workspace/my-data-states";
-import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { WIDE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { cn } from "@/lib/utils";
 import { MY_DATA_PATH } from "@/lib/workspace/my-data";
@@ -20,7 +20,7 @@ export default async function MyDataPage() {
       <main className={WORKSPACE_MAIN}>
         <WorkspaceHeader section="data" />
 
-        <div className={cn(WORKSPACE_CONTAINER, "flex-1 py-6 sm:py-8")}>
+        <div className={cn(WIDE_CONTAINER, "flex-1 py-6 sm:py-8")}>
           <Suspense fallback={<MyDataSkeleton />}>
             <MyDataSection here={HERE} />
           </Suspense>

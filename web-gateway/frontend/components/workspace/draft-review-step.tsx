@@ -26,6 +26,11 @@ import type { DraftStep } from "@/lib/workspace/draft-wizard";
 /** How many output variables the summary names before "show all". */
 const PREVIEW_VARIABLES = 4;
 
+/** Under "Not named yet": a nudge, not a rule (`submitProblems` has none for the
+ *  name). Without one the draft is called by the name the header and the list
+ *  generate for it, which says nothing about what it is. */
+export const NAME_NUDGE = "Add a name so you can find this snapshot draft later.";
+
 /** One line of the summary: what it is, its value, and the way back to edit it. */
 function Row({
   label,
@@ -128,8 +133,9 @@ function AnswerSkeleton() {
  *
  * Nothing is edited here. The name and the description are entered on Run
  * settings, and show as rows whose Edit sends focus to them; an unnamed draft
- * reads "Not named yet" and still submits (it keeps the name the header and the
- * list give it). "Based on" has no Edit (a draft's starting point cannot
+ * reads "Not named yet", with a muted line under it that says why a name helps
+ * (`NAME_NUDGE`; its Edit is the way to give one), and still submits (it keeps
+ * the name the header and the list give it). "Based on" has no Edit (a draft's starting point cannot
  * change), only its repository link. `onEditStep` receives the field too so the
  * wizard can focus it.
  *
@@ -194,7 +200,10 @@ export function DraftReviewStep({
               {name ? (
                 <span className="font-medium">{name}</span>
               ) : (
-                <span className="text-muted-foreground">Not named yet</span>
+                <>
+                  <span className="text-muted-foreground">Not named yet</span>
+                  <span className="block text-[13px] text-muted-foreground">{NAME_NUDGE}</span>
+                </>
               )}
             </Row>
             {description && (

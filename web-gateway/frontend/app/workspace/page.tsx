@@ -7,7 +7,7 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { LinkPending } from "@/components/ui/link-pending";
-import { WORKSPACE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { WIDE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { DraftListSkeleton } from "@/components/workspace/draft-list-skeleton";
 import { DraftListTabs } from "@/components/workspace/draft-list-tabs";
 import { DraftSearchInput, DraftSearchProvider } from "@/components/workspace/draft-search";
@@ -38,7 +38,7 @@ export default async function WorkspacePage({
       <main className={WORKSPACE_MAIN}>
         <WorkspaceHeader section="drafts" />
 
-        <div className={cn(WORKSPACE_CONTAINER, "flex-1 py-6 sm:py-8")}>
+        <div className={cn(WIDE_CONTAINER, "flex-1 py-6 sm:py-8")}>
           {/* Not keyed by the URL: a click on a tab or a page link is a
               transition, so the list on screen stays until the next one is
               ready, and the link that was clicked shows a spinner if that

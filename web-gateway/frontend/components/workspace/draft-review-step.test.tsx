@@ -68,6 +68,22 @@ describe("DraftReviewStep: name and description", () => {
     expect(screen.queryByText("Description", { selector: "dt" })).toBeNull();
   });
 
+  it("nudges, muted and without blocking, to name a draft that has no name, beside the Edit that does it", () => {
+    const { onEditStep } = review({ local: { ...LOCAL, name: "  " } });
+    const nudge = within(row("Name")).getByText("Add a name so you can find this snapshot draft later.");
+    expect(nudge.className).toContain("text-muted-foreground");
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The submit area is still there and is the caller's: nothing here holds it back.
+    expect(screen.getByTestId("submit-area")).toBeTruthy();
+    fireEvent.click(within(row("Name")).getByRole("button", { name: "Edit name" }));
+    expect(onEditStep).toHaveBeenLastCalledWith("run", "name");
+  });
+
+  it("says nothing about naming a draft that has a name", () => {
+    review();
+    expect(screen.queryByText(/Add a name/)).toBeNull();
+  });
+
   it("sends Edit on each to its input on Run settings", () => {
     const { onEditStep } = review();
     fireEvent.click(screen.getByRole("button", { name: "Edit name" }));

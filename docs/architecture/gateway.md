@@ -749,25 +749,34 @@ from `climatologyAvailable`. A section declares its help with `DraftSection`'s `
 
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
-snapshot draft's own name with its status, the title of the snapshot it is based on
-in one line, and once the job has ended the buttons "Duplicate" (a completed
-job only), "New from this model snapshot" and "Delete snapshot draft"; a light
-header like the Data Repository's), one full-width status summary
-(`job-status-summary.tsx`) that changes with the live status, the Logs, and a
-compact Details section. The summary is the only place with a state's main
+snapshot draft's own name with its status, and once the job has ended the buttons
+"Duplicate" (a completed job only), "New from this model snapshot" and "Delete
+snapshot draft", which on a phone are one "More actions" menu; a light header
+like the Data Repository's), one status summary
+(`job-status-summary.tsx`) that changes with the live status, the publish card,
+and the Logs. The summary is the only place with a state's main
 action: Cancel simulation while it is queued or running, "Try again with these settings"
 after a failure or a cancel. That button and "Duplicate" are the one copy action
 (`POST /jobs/{id}/duplicate`), shown once: the header has it only where the
 summary does not. A completed job's results (scratch path, file counts, when
-Anvil may delete them) sit in it, a failed job's cause and log excerpt, and
-the times are short (`Submitted 3:33 AM · Waited 3 min · Ran 14 min`, the full
-date and zone on hover). Details shows the cores and walltime the job asked
-for: its own choice, else the base snapshot's `recommendedCompute` worked out
-as the submit does it (`effectiveCompute`, marked as recommended, with the
-post-processing time in the walltime when the job asked for climatology), and while
-SLURM has the job the limit it enforces. The job document stores no resolved
-cores or walltime, so the page reads the snapshot for them; with no snapshot it
-shows a dash. The page is as wide as the Workspace list and the draft wizard's content column.
+Anvil may delete them) sit in the summary, a failed job's cause and log excerpt.
+The facts of the simulation are one "Run details" card
+(`run-details-card.tsx`), styled as the Data Repository's "Dataset Info": the snapshot it is based on
+(a link), the run period, the output variables and output, the cores and
+walltime the job asked for (its own choice, else the base snapshot's
+`recommendedCompute` worked out as the submit does it, `effectiveCompute`,
+marked as recommended, with the post-processing time in the walltime when the
+job asked for climatology; while SLURM has the job, the limit it enforces), the
+Slurm job, the run id, and the times (submitted, started with how long it
+waited, ended with how long it ran, in the viewer's zone, the full date on
+hover). The job document stores no resolved cores or walltime, so the page
+reads the snapshot for them; with no snapshot it shows a dash. Each fact is on
+the page once: the card has the work directory only where the summary has no
+results path. The page is in the wide column (`WIDE_CONTAINER`, the
+header's too) and, from `xl` (1280 px), a grid like the wizard's
+(`aside-layout.tsx`): the card is a 20 rem `sticky` aside beside the
+status summary, the publish card and the Logs; below `xl` it follows the status
+summary in the page. The Workspace lists use the same wide column.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

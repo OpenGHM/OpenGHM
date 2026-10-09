@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/workspace/x",
 }));
 
-import { JobDetails } from "@/components/workspace/job-details";
+import { RunDetailsCard } from "@/components/workspace/run-details-card";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import type { Job, JobLive } from "@/lib/jobs/types";
 import { previewDraftJob } from "@/lib/workspace/fixtures";
@@ -20,22 +20,25 @@ function details(job: Job, recommended: { cores: number; walltime: string } | nu
       jobId={job.id}
       initialStatus={job.status}
       initialData={{
+        slurm_job_id: job.slurm_job_id,
         submitted_at: job.submitted_at,
         started_at: job.started_at,
         completed_at: job.completed_at,
         work_dir: job.work_dir,
+        files: job.files,
+        cancel_requested_at: job.cancel_requested_at,
         live,
       }}
       preview
     >
-      <JobDetails job={job} recommended={recommended} />
+      <RunDetailsCard job={job} recommended={recommended} />
     </LiveJobProvider>
   );
 }
 
 const VARIABLES = Array.from({ length: 51 }, (_, i) => `var${i + 1}`);
 
-describe("the details", () => {
+describe("the run details card", () => {
   it("shows the cores and walltime the draft chose, as they are", () => {
     const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 26, walltime: "10:00:00" } } });
     const { container } = details(job, { cores: 16, walltime: "15:00" });
@@ -114,5 +117,86 @@ describe("the details", () => {
   it("has no Output row when the draft left the output to the snapshot", () => {
     const { container } = details(previewDraftJob("completed"), null);
     expect(container.textContent).not.toContain("Daily, monthly and yearly");
+  });
+});
+
+/** The text of the card's line whose label is `label`: its value. */
+const value = (label: string) =>
+  (screen.getByText(label, { selector: "dt" }).parentElement as HTMLElement).querySelector("dd")?.textContent;
+
+describe("the run details card: what the page says once", () => {
+  it("is headed Run details and says which snapshot it is based on, as a link with the whole title on hover", () => {
+    const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
+    const job = previewDraftJob("completed", { overrides: { dataset_title: title } });
+    details(job, null);
+    expect(screen.getByRole("heading", { level: 2, name: "Run details" })).toBeTruthy();
+    const link = screen.getByRole("link", { name: title });
+    expect(link.getAttribute("href")).toBe(`/repository/${job.dataset_id}`);
+    expect(link.getAttribute("title")).toBe(title);
+    expect(screen.getByText("Based on", { selector: "dt" })).toBeTruthy();
+  });
+
+  it("has the run period, the Slurm job and the run id", () => {
+    const job = previewDraftJob("completed");
+    details(job, null);
+    expect(value("Run period")).toBe(`${job.parameters.temporal_range_start} → ${job.parameters.temporal_range_end}`);
+    expect(value("Slurm job")).toBe(`#${job.slurm_job_id}`);
+    expect(value("Run ID")).toBe(job.sim_id);
+  });
+
+  it("leaves out the Slurm job a draft has not got", () => {
+    const job = previewDraftJob("completed", { overrides: { slurm_job_id: null } });
+    details(job, null);
+    expect(screen.queryByText("Slurm job", { selector: "dt" })).toBeNull();
+  });
+
+  it("has the times of a completed run, each with how long it took", () => {
+    // Submitted 3 h ago, started 2 h ago, ended 1 h ago (the fixture's).
+    details(previewDraftJob("completed"), null);
+    expect(screen.getByText("Submitted", { selector: "dt" })).toBeTruthy();
+    expect(value("Started")).toMatch(/\(waited 1 h\)$/);
+    expect(value("Ended")).toMatch(/\(ran 1 h\)$/);
+    expect(screen.queryByText("Cancel requested", { selector: "dt" })).toBeNull();
+  });
+
+  it("has no Ended row while the run is going, and says how long a queued one has waited", () => {
+    details(previewDraftJob("running"), null);
+    expect(screen.getByText("Started", { selector: "dt" })).toBeTruthy();
+    expect(screen.queryByText("Ended", { selector: "dt" })).toBeNull();
+    cleanup();
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-30T12:04:12Z"));
+    try {
+      details(previewDraftJob("pending", { overrides: { submitted_at: "2026-09-30T12:00:00Z" } }), null);
+      expect(value("Submitted")).toMatch(/\(waiting 4 min\)$/);
+      expect(screen.queryByText("Started", { selector: "dt" })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows when a cancel was asked for on a job that has ended", () => {
+    details(previewDraftJob("cancelled:user"), null);
+    expect(screen.getByText("Cancel requested", { selector: "dt" })).toBeTruthy();
+  });
+
+  it("does not repeat the results path of a completed run: the status summary has it", () => {
+    const job = previewDraftJob("completed");
+    const { container } = details(job, null);
+    expect(container.textContent).not.toContain(job.work_dir!);
+    expect(screen.queryByText("Work directory", { selector: "dt" })).toBeNull();
+  });
+
+  it("shows the work directory, with a copy button, where the summary has no results", () => {
+    const job = previewDraftJob("failed:wbm_error");
+    details(job, null);
+    expect(value("Work directory")).toContain(job.work_dir!);
+    expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
+    cleanup();
+    // A completed run whose files were purged has no results block to point at.
+    const purged = previewDraftJob("completed:purged");
+    details(purged, null);
+    expect(value("Work directory")).toContain(purged.work_dir!);
   });
 });

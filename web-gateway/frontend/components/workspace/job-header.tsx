@@ -8,6 +8,7 @@ import { JobStatusBadge, STATUS_LABEL } from "@/components/jobs/job-status-badge
 import { ActionError } from "@/components/workspace/action-error";
 import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
 import { PageHeader, DraftBreadcrumb } from "@/components/workspace/page-header";
+import { JobActionsMenu } from "@/components/workspace/job-actions-menu";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -40,10 +41,11 @@ function StatusAnnouncer({ status }: { status: DisplayStatus }) {
 
 /**
  * The page's header, the same shape as the draft wizard's and the Data
- * Repository's: breadcrumb, the snapshot draft's own name with its status, one
- * muted line saying which snapshot it is based on (its title, cut to one line,
- * the whole title on hover; and the run id and SLURM job), and, once the job has
- * ended, "Duplicate", "New from this model snapshot" and Delete on the right.
+ * Repository's, in the wide column: breadcrumb, the snapshot draft's own name
+ * with its status and, once the job has ended, "Duplicate", "New from this model
+ * snapshot" and Delete on the right (from `sm`; on a phone one "More actions"
+ * menu holds the same, `JobActionsMenu`). What the job is based on, its run id
+ * and its Slurm job are in the "Run details" card, once.
  * Cancel and "Try again with these settings" live in the status summary, where
  * the job is: a failed or cancelled job has its copy action there, so the header
  * adds "Duplicate" only for the ended jobs whose summary has none (a completed
@@ -61,60 +63,62 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
   const ended = isTerminalStatus(status);
   const offersDuplicate = ended && !summaryOffersCopy(status, view.failure ?? job.failure);
   const name = displayName(job);
-  const meta = [name !== job.sim_id ? job.sim_id : null, job.slurm_job_id ? `Slurm #${job.slurm_job_id}` : null]
-    .filter(Boolean)
-    .join(" · ");
+  const clearDeleteFailure = () => {
+    setDeleteError(null);
+    setDeleteExpired(false);
+  };
 
   return (
     <PageHeader
+      wide
       top={<DraftBreadcrumb current={name} />}
       title={name}
       badge={<JobStatusBadge status={shown} />}
-      meta={
-        <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-muted-foreground">
-          <Link
-            href={`/repository/${job.dataset_id}`}
-            title={job.dataset_title}
-            className="max-w-full truncate rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            Based on {job.dataset_title}
-          </Link>
-          {meta && <span className="font-mono text-xs break-words">{meta}</span>}
-        </div>
-      }
       aside={
         ended ? (
-          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-            {offersDuplicate && (
-              <DuplicateDraftButton
+          <>
+            <div className="hidden flex-wrap items-center gap-3 sm:flex sm:justify-end">
+              {offersDuplicate && (
+                <DuplicateDraftButton
+                  jobId={job.id}
+                  label="Duplicate"
+                  variant="outline"
+                  Icon={Copy}
+                  className="shrink-0 font-medium"
+                />
+              )}
+              <Button asChild variant="outline" className="min-h-10 shrink-0 gap-2">
+                <Link href={newStepHref(job.dataset_id, "run")}>
+                  <FlaskConical aria-hidden="true" />
+                  New from this model snapshot
+                </Link>
+              </Button>
+              <JobDeleteButton
                 jobId={job.id}
-                label="Duplicate"
-                variant="outline"
-                Icon={Copy}
-                className="shrink-0 font-medium"
+                isDraft={false}
+                workDir={view.work_dir ?? job.work_dir}
+                remoteJobDir={job.remote_job_dir}
+                files={view.files ?? job.files}
+                preview={preview}
+                onOpen={clearDeleteFailure}
+                onError={setDeleteError}
+                onSessionExpired={() => setDeleteExpired(true)}
               />
-            )}
-            <Button asChild variant="outline" className="min-h-10 shrink-0 gap-2">
-              <Link href={newStepHref(job.dataset_id, "run")}>
-                <FlaskConical aria-hidden="true" />
-                New from this model snapshot
-              </Link>
-            </Button>
-            <JobDeleteButton
+            </div>
+            <JobActionsMenu
+              className="sm:hidden"
               jobId={job.id}
-              isDraft={false}
+              datasetId={job.dataset_id}
+              offersDuplicate={offersDuplicate}
               workDir={view.work_dir ?? job.work_dir}
               remoteJobDir={job.remote_job_dir}
               files={view.files ?? job.files}
               preview={preview}
-              onOpen={() => {
-                setDeleteError(null);
-                setDeleteExpired(false);
-              }}
-              onError={setDeleteError}
-              onSessionExpired={() => setDeleteExpired(true)}
+              onDeleteOpen={clearDeleteFailure}
+              onDeleteError={setDeleteError}
+              onDeleteSessionExpired={() => setDeleteExpired(true)}
             />
-          </div>
+          </>
         ) : undefined
       }
     >
