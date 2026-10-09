@@ -42,13 +42,16 @@ function rows() {
 }
 
 describe("the list", () => {
-  it("is one card of rows, not a table, with a small header for the columns", () => {
+  it("is a stack of row cards, not a table, under a mono header for the columns", () => {
     render(<MyDataTable items={[SNAP]} />);
     expect(screen.queryByRole("table")).toBeNull();
-    const card = screen.getByRole("list", { name: "Snapshots and inputs" }).parentElement!;
-    expect(card.className).toContain("rounded-card");
-    expect(card.className).toContain("bg-card");
-    expect(within(card).getByText("Visibility").parentElement?.getAttribute("aria-hidden")).toBe("true");
+    const list = screen.getByRole("list", { name: "Snapshots and inputs" });
+    expect(list.className).toContain("flex-col");
+    expect(rows()[0].className).toContain("rounded-[18px]");
+    expect(rows()[0].className).toContain("bg-card");
+    const header = within(list.parentElement!).getByText("Visibility").parentElement!;
+    expect(header.getAttribute("aria-hidden")).toBe("true");
+    expect(header.className).toContain("font-mono");
   });
 
   it("shows one row per item, in the order given, and no 'Sorted by' note", () => {
@@ -118,12 +121,11 @@ describe("the list", () => {
     expect(within(input).getByText("Nov 2, 2025")).toBeTruthy();
   });
 
-  it("is a grid that stacks below sm, with the same markup, and joins Published at md", () => {
+  it("is a grid that stacks below lg, with the same markup", () => {
     render(<MyDataTable items={[SNAP]} />);
     const row = rows()[0];
     expect(row.className).toContain("grid-cols-1");
-    expect(row.className).toContain("sm:grid-cols-[");
-    expect(row.className).toContain("md:grid-cols-[");
+    expect(row.className).toContain("lg:grid-cols-[");
   });
 
   it("has no row actions: no menu, no buttons", () => {
@@ -246,7 +248,7 @@ describe("the loading state", () => {
 
   it("is the list's shape: the toolbar, the header and five rows", () => {
     const { container } = render(<MyDataSkeleton />);
-    expect(container.querySelectorAll(".divide-y > div")).toHaveLength(5);
+    expect(container.querySelectorAll(".rounded-\\[18px\\]")).toHaveLength(5);
   });
 });
 

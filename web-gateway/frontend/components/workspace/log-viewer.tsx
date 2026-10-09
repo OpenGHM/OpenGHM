@@ -93,9 +93,9 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
   return (
     <section
       aria-labelledby="logs-heading"
-      className="space-y-4 rounded-card border border-border/70 bg-card p-6 shadow-card sm:p-7"
+      className="space-y-3.5 rounded-card border border-border/70 bg-card p-6 shadow-card"
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 px-1.5">
         <h2 id="logs-heading" className="text-xl font-[650] tracking-[-0.02em] text-foreground">
           Logs
         </h2>

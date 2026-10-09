@@ -44,7 +44,9 @@ neutral greys may stay as palette classes.
 | `hero-text`, `hero-subtle`, `hero-faint` | more text on the band and on the dark code blocks (log, citation, file preview), from read text to meta and breadcrumbs to line numbers and axis ticks; all AA on `hero` |
 | `hero-lit`, `hero-glow` | mint for a done or lit thing on the band (a copied check, a timeline's active ticks); the teal-blue glow of the band's corner and where a bar starts |
 | `hero-error` | an error written on the band or a dark block (`text-status-failed` is for light surfaces) |
+| `hero-attention`, `hero-attention-text` | amber on the band for what needs a look but is not an error: the dot on a wizard step with problems, the dashed "Not saved" pill (its edge and its text) |
 | `data-1` to `data-8` | categorical colours: an output variable's swatch, a process chip's dot (and its tint, `color-mix` at 12%). They tell items apart and mean nothing; never text |
+| `queued` | the queued stretch of a run's timeline on a light card (the status summary): amber, striped; waiting is not a status. Never text |
 | `map-water` | the sea of an OpenStreetMap tile, behind the bounding-box map |
 | `status-*` | one per job status (draft, pending, submitted, running, cancelling, completed, failed, cancelled), applied through [`lib/jobs/status-hue.ts`](lib/jobs/status-hue.ts) |
 | `success`, `warning`, `info` | found, caution, note; not a status |
@@ -88,8 +90,9 @@ A page is a navy band and, overlapping its bottom edge, the content
 - A Workspace page with a column beside its content (the draft wizard's help,
   the job page's Run details) puts both in
   [`AsideLayout`](components/workspace/aside-layout.tsx), inside `PageBody`: a
-  20 rem `sticky` aside from `xl`, and below `xl` either gone (`below="hidden"`)
-  or in the page after `lead` (`below="flow"`).
+  20 rem aside from `xl`. With `below="hidden"` it is `sticky` from `xl` and
+  gone below it; with `below="flow"` it scrolls with the page and, below `xl`,
+  sits in the page after `lead`.
 
 ### The card
 

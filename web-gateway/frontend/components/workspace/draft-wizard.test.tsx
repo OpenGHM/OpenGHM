@@ -430,12 +430,11 @@ describe("the step", () => {
     expect((screen.getByRole("button", { name: "Submit to Anvil" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("opens the closed part of Run settings that holds the field an Edit line names", async () => {
+  it("sends focus to the field an Edit line names, opening the closed part of Run settings that holds it", async () => {
     wizard({ step: "review" });
     fireEvent.click(button("Edit walltime")!);
-    // Compute is a line and a button until asked for; the Edit link asks.
+    // The compute fields are always on the page; the variables are a line and a button until asked for.
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Walltime/)));
-    expect(screen.getByRole("button", { name: "Done with compute" }).getAttribute("aria-expanded")).toBe("true");
     expect(variableBoxes()).toHaveLength(0);
 
     fireEvent.click(button("Next")!);

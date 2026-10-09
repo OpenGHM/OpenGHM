@@ -90,6 +90,7 @@ export default async function JobDetailPage({
         recommended={recommended}
         postProcessing={runsClimatology(job.parameters.post_processing, base?.postProcessing)}
         baseAbout={base?.about ?? null}
+        coverage={base?.simulation.temporalCoverage ?? null}
       />
       <Footer />
     </div>

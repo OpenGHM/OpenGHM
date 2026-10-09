@@ -11,15 +11,15 @@ export const WORKSPACE_SECTIONS: readonly { id: WorkspaceSection; label: string;
 ];
 
 /**
- * The switch between the Workspace's sections, drawn as the site header's pill
- * on the navy band: the current section is the white segment. Links, not tabs:
+ * The switch between the Workspace's sections, drawn on the navy band as a
+ * translucent track with rounded segments: the current section is the white one. Links, not tabs:
  * each section is its own page, and `aria-current` marks the one you are on.
  * Every target is 40 px tall, and the two labels fit a 375 px screen.
  */
 export function WorkspaceSections({ active }: { active: WorkspaceSection }) {
   return (
     <nav aria-label="Workspace sections" className="max-w-full">
-      <ul className="flex w-fit max-w-full gap-0.5 rounded-full border border-white/10 bg-white/6 p-[5px]">
+      <ul className="flex w-fit max-w-full gap-0.5 rounded-[14px] border border-white/12 bg-white/6 p-1">
         {WORKSPACE_SECTIONS.map((section) => {
           const selected = section.id === active;
           return (
@@ -27,9 +27,9 @@ export function WorkspaceSections({ active }: { active: WorkspaceSection }) {
               <Link
                 href={section.href}
                 aria-current={selected ? "page" : undefined}
-                className={`relative flex min-h-10 items-center rounded-full px-4 text-sm whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-hero-eyebrow focus-visible:outline-none sm:px-5 ${
+                className={`relative flex min-h-10 items-center rounded-[10px] px-4 text-sm whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-hero-eyebrow focus-visible:outline-none sm:px-5 ${
                   selected
-                    ? "bg-white font-[550] text-foreground"
+                    ? "bg-white font-semibold text-foreground"
                     : "text-hero-foreground-muted hover:bg-white/8 hover:text-white"
                 }`}
               >

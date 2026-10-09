@@ -84,13 +84,63 @@ function GroupToggle({
   );
 }
 
+/** The track (the group's variables) and the fill (the chosen ones) of a bar
+ *  segment, one hue per group in turn. Whole class names, so Tailwind sees them. */
+const SEGMENT_HUES = [
+  ["bg-data-1/20", "bg-data-1"],
+  ["bg-data-2/20", "bg-data-2"],
+  ["bg-data-3/20", "bg-data-3"],
+  ["bg-data-4/20", "bg-data-4"],
+  ["bg-data-5/20", "bg-data-5"],
+  ["bg-data-6/20", "bg-data-6"],
+  ["bg-data-7/20", "bg-data-7"],
+  ["bg-data-8/20", "bg-data-8"],
+] as const;
+
+/**
+ * The variables as one bar of segments, a segment per group (`groupVariables`)
+ * as wide as its variables are many, filled as far as they are chosen. It is a
+ * picture of the line under it and of the list, so it is hidden from assistive
+ * technology.
+ */
+function VariablesBar({
+  options,
+  selected,
+}: {
+  options: readonly VariableOption[];
+  selected: ReadonlySet<string>;
+}) {
+  if (options.length === 0) return null;
+  const groups = groupVariables(options);
+  return (
+    <div aria-hidden="true" data-testid="variables-bar" className="flex h-2 gap-0.5">
+      {groups.map((group, i) => {
+        const [track, fill] = SEGMENT_HUES[i % SEGMENT_HUES.length];
+        const chosen = group.items.filter((o) => selected.has(o.name)).length;
+        return (
+          <div
+            key={group.base ?? "other"}
+            className={`relative overflow-hidden rounded-full ${track}`}
+            style={{ flex: `${group.items.length} 1 0` }}
+          >
+            <div
+              className={`absolute inset-y-0 left-0 ${fill}`}
+              style={{ width: `${(chosen / group.items.length) * 100}%` }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How many names the summary gives before "and N more". */
 const SUMMARY_NAMES = 3;
 /** A list this short has its names in the summary even when all are chosen. */
 const SHORT_LIST = 6;
 
-/** What is chosen, in one line: "All 51 variables", or "12 of 51 variables"
- *  with the first few names. */
+/** What is chosen, in one line: "All 51 variables selected", or "12 of 51
+ *  variables selected" with the first few names. */
 function VariablesSummary({
   selected,
   total,
@@ -111,13 +161,14 @@ function VariablesSummary({
       : null;
   return (
     <>
-      <span className="font-medium">
+      <span className="font-[650]">
         {all
           ? `All ${total} ${noun}`
           : hasSnapshot
             ? `${selected.length} of ${total} ${noun}`
             : `${selected.length} ${noun}`}
       </span>
+      {" selected"}
       {names && <span className="text-muted-foreground"> · {names}</span>}
     </>
   );
@@ -186,7 +237,14 @@ export function OutputVariablesSection({
       fields={["variables"]}
       openLabel="Choose…"
       forceOpen={hasSnapshot && options.some((o) => !o.listed)}
-      summary={<VariablesSummary selected={selected} total={options.length} hasSnapshot={hasSnapshot} />}
+      summary={
+        <div className="space-y-2">
+          <VariablesBar options={options} selected={chosen} />
+          <p>
+            <VariablesSummary selected={selected} total={options.length} hasSnapshot={hasSnapshot} />
+          </p>
+        </div>
+      }
       notes={
         <>
           {selected.length === 0 && (

@@ -73,12 +73,13 @@ describe("the detail page", () => {
     expect(screen.queryByRole("heading", { name: "Details" })).toBeNull();
   });
 
-  it("puts the Run details in a sticky column from xl, beside the status, publish and logs", () => {
+  it("puts the Run details in a column from xl, beside the status, publish and logs", () => {
     const { container } = renderDetail("completed");
     const aside = screen.getByRole("complementary", { name: "Run details" });
-    for (const name of ["xl:sticky", "xl:top-5", "xl:overflow-y-auto", "xl:self-start", "xl:col-start-2"]) {
+    for (const name of ["xl:self-start", "xl:col-start-2"]) {
       expect(aside.classList.contains(name)).toBe(true);
     }
+    expect(aside.classList.contains("xl:sticky")).toBe(false);
     // Not hidden below xl: it is in the page's flow there.
     expect(aside.classList.contains("hidden")).toBe(false);
     expect(within(aside).getByRole("heading", { level: 2, name: "Run details" })).toBeTruthy();

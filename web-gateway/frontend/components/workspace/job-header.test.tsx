@@ -160,6 +160,32 @@ describe("the header", () => {
     expect(screen.getByRole("link", { name: "New from this model snapshot" }).getAttribute("data-variant")).toBe("on-dark");
   });
 
+  it("shows the title of the snapshot it is based on as a plain line under the name, with the status pill above the name", () => {
+    renderHeader("completed");
+    const job = previewDraftJob("completed");
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(screen.getByText(job.dataset_title).tagName).toBe("P");
+    expect(screen.getByText(job.dataset_title).getAttribute("href")).toBeNull();
+    // The pill comes before the name, a dot in its colour inside it.
+    const pill = screen.getByText("Completed");
+    expect(pill.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pill.querySelector(".bg-current")).not.toBeNull();
+    expect(pill.className).toContain("bg-status-completed/10");
+  });
+
+  it("sets an auto id in mono and a name its owner gave in the page's own face", () => {
+    renderHeader("completed");
+    expect(screen.getByRole("heading", { level: 1 }).firstElementChild?.className).toContain("font-mono");
+    cleanup();
+    const job = previewDraftJob("completed", { overrides: { about: { name: "My CONUS run" } } });
+    render(
+      <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
+        <JobHeader job={job} preview />
+      </LiveJobProvider>
+    );
+    expect(screen.getByRole("heading", { level: 1 }).firstElementChild?.className).not.toContain("font-mono");
+  });
+
   it("has the breadcrumb in the header", () => {
     renderHeader("completed");
     const nav = screen.getByRole("navigation", { name: "Breadcrumb" });

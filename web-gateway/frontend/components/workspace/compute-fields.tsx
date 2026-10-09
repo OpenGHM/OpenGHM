@@ -5,7 +5,12 @@ import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { draftField } from "@/components/workspace/draft-field";
-import { DraftCollapsible } from "@/components/workspace/draft-section";
+import {
+  DraftSection,
+  FIELD_HINT,
+  FIELD_INPUT,
+  FIELD_LABEL,
+} from "@/components/workspace/draft-section";
 import {
   describeComputeSummary,
   describeCoresBelowRecommended,
@@ -50,22 +55,21 @@ function Warning({ id, short, why }: { id?: string; short: string; why: string }
 
 /**
  * Cores and walltime for a draft: the two things a user may change about how
- * SLURM runs it, and a part of Run settings that most people leave alone. It
- * shows what the draft asks for in one line (`describeComputeSummary`:
- * "Recommended: 26 cores · 4 d (limit for one job)", or "Custom: 8 cores · 12
- * h") and a Change button that opens the two fields. Left empty, a field means
- * the snapshot's recommendation, which is its placeholder and is said once in
- * the line under the fields. The limits are the inputs' own (`max`) and are
+ * SLURM runs it, as two fields under "Compute", each with what is recommended
+ * under it ("Recommended 64", "Recommended 6:45:00"). The lines under the
+ * fields say what the draft asks for (`describeComputeSummary`: "Recommended:
+ * 26 cores · 4 d (limit for one job)", or "Custom: 8 cores · 12 h") and what an
+ * empty field means. Left empty, a field means the snapshot's recommendation,
+ * which is its placeholder. The limits are the inputs' own (`max`) and are
  * spoken of only when a value is over them. The account and partition are the
  * gateway's (one shared allocation, ADR 0024), so they are not fields.
  *
- * What is wrong stays in view whether the fields are open or not. Two
- * warnings, each one line with the long reason behind "Why": cores below what
- * the snapshot recommends (memory comes with cores), and a snapshot whose
- * reference simulation is longer than one job may be, with no walltime set; and a
- * walltime shorter than the reference simulation, as a quiet note. A value that is
- * refused (here or by the server) keeps the fields open, with its message
- * under the field.
+ * Two warnings stand above the fields, each one line with the long reason
+ * behind "Why": cores below what the snapshot recommends (memory comes with
+ * cores), and a snapshot whose reference simulation is longer than one job may
+ * be, with no walltime set; and a walltime shorter than the reference
+ * simulation, as a quiet note. A value that is refused (here or by the server)
+ * has its message under the field.
  *
  * `postProcessing` says the run will post-process (a climatology choice,
  * `runsClimatology`): the automatic walltime then includes the snapshot's
@@ -112,15 +116,9 @@ export function ComputeSection({
       : "Empty = the model snapshot's recommendation.";
 
   return (
-    <DraftCollapsible
-      title="Compute"
-      help="compute"
-      fields={["cores", "walltime"]}
-      openLabel="Change"
-      forceOpen={coresError !== undefined || walltimeError !== undefined}
-      summary={summary.text}
-      notes={
-        <>
+    <DraftSection title="Compute" help="compute">
+      {(coresWarning || overLimit !== null || belowReference) && (
+        <div className="space-y-3">
           {coresWarning && (
             <Warning
               id={coresWarningId}
@@ -140,12 +138,11 @@ export function ComputeSection({
               {belowReference}
             </p>
           )}
-        </>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${id}-cores`} className="text-xs text-muted-foreground">
+        </div>
+      )}
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <div className="space-y-[7px]">
+          <Label htmlFor={`${id}-cores`} className={FIELD_LABEL}>
             Cores
           </Label>
           <Input
@@ -156,12 +153,12 @@ export function ComputeSection({
             min={1}
             max={MAX_CORES}
             step={1}
-            className="h-10 font-mono md:h-9"
+            className={`${FIELD_INPUT} font-mono md:text-sm`}
             placeholder={recommended ? String(recommended.cores) : "Recommended"}
             value={config.cores ?? ""}
             aria-invalid={coresError !== undefined}
             aria-describedby={
-              [`${id}-compute-hint`, coresError ? `${id}-cores-error` : null, coresWarningId]
+              [`${id}-compute-hint`, recommended ? `${id}-cores-hint` : null, coresError ? `${id}-cores-error` : null, coresWarningId]
                 .filter(Boolean)
                 .join(" ")
             }
@@ -174,21 +171,26 @@ export function ComputeSection({
               {coresError}
             </p>
           )}
+          {recommended && (
+            <p id={`${id}-cores-hint`} className={FIELD_HINT}>
+              Recommended {recommended.cores}
+            </p>
+          )}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${id}-walltime`} className="text-xs text-muted-foreground">
-            Walltime <span className="text-muted-foreground/80">(hh:mm:ss)</span>
+        <div className="space-y-[7px]">
+          <Label htmlFor={`${id}-walltime`} className={FIELD_LABEL}>
+            Walltime <span className="font-normal text-muted-foreground">(hh:mm:ss)</span>
           </Label>
           <Input
             id={`${id}-walltime`}
             {...draftField("walltime")}
             inputMode="numeric"
-            className="h-10 font-mono md:h-9"
+            className={`${FIELD_INPUT} font-mono md:text-sm`}
             placeholder={automaticSeconds !== null ? secondsToHms(automaticSeconds) : "HH:MM:SS"}
             value={config.walltime ?? ""}
             aria-invalid={walltimeError !== undefined}
             aria-describedby={
-              [`${id}-compute-hint`, walltimeError ? `${id}-walltime-error` : null, walltimeNoteId]
+              [`${id}-compute-hint`, automaticSeconds !== null ? `${id}-walltime-hint` : null, walltimeError ? `${id}-walltime-error` : null, walltimeNoteId]
                 .filter(Boolean)
                 .join(" ")
             }
@@ -201,11 +203,21 @@ export function ComputeSection({
               {walltimeError}
             </p>
           )}
+          {automaticSeconds !== null && (
+            <p id={`${id}-walltime-hint`} className={FIELD_HINT}>
+              Recommended {secondsToHms(automaticSeconds)}
+            </p>
+          )}
         </div>
       </div>
-      <p id={`${id}-compute-hint`} className="text-xs text-muted-foreground">
-        {emptyMeans}
-      </p>
-    </DraftCollapsible>
+      <div className="space-y-1">
+        <p aria-live="polite" className="text-[13px] text-foreground">
+          {summary.text}
+        </p>
+        <p id={`${id}-compute-hint`} className={FIELD_HINT}>
+          {emptyMeans}
+        </p>
+      </div>
+    </DraftSection>
   );
 }

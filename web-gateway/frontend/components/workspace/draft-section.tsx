@@ -7,26 +7,31 @@ import { useSectionHelp } from "@/components/workspace/wizard-help-context";
 import type { DraftField } from "@/lib/workspace/draft-wizard";
 import type { HelpSection } from "@/lib/workspace/wizard-help";
 
+/** A white card of a draft step: 22 px corners, no border, the rest shadow. */
+export const STEP_CARD = "rounded-card bg-card text-card-foreground shadow-card";
+
+/** The label above a field of a step. */
+export const FIELD_LABEL = "text-[13px] leading-snug font-semibold text-foreground";
+
+/** What a field of a step adds to `Input`: 46 px tall, 12 px corners, a 1.5 px
+ *  edge, and a ring in the brand colour on focus. */
+export const FIELD_INPUT =
+  "h-[46px] rounded-lg border-[1.5px] px-3.5 md:text-[14.5px] focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/12";
+
+/** The small muted line under a field or a group of fields. */
+export const FIELD_HINT = "text-xs text-muted-foreground";
+
 /**
- * The one surface a draft step is written on: a single bordered card whose
- * parts are separated by rules, not by more cards. Parts are `DraftSection`s.
+ * What a draft step is written on: a stack of white cards, one per part
+ * (`DraftSection`), 16 px apart.
  */
 export function DraftPanel({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        "divide-y overflow-hidden rounded-card border border-border/70 bg-card text-card-foreground shadow-card",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
+  return <div className={cn("space-y-4", className)}>{children}</div>;
 }
 
 /**
- * A part of a step: a plain heading, an optional action at its end, and the
- * body. The heading is `h3` under the step's `h2`.
+ * A part of a step, as a white card: a plain heading, an optional action at its
+ * end, and the body. The heading is `h3` under the step's `h2`.
  *
  * `help` names the part for the wizard's help panel: focus inside the section,
  * or the pointer entering it, makes the panel show that section's help (see
@@ -47,10 +52,10 @@ export function DraftSection({
 }) {
   const helpProps = useSectionHelp(help);
   return (
-    <section {...helpProps} className={cn("space-y-4 px-6 py-6 sm:px-7", className)}>
+    <section {...helpProps} className={cn(STEP_CARD, "space-y-4 px-5 py-6 sm:px-[30px] sm:py-[26px]", className)}>
       {(title || action) && (
-        <div className="flex min-h-8 items-center justify-between gap-3">
-          {title && <h3 className="text-[17px] font-[650] tracking-[-0.02em] text-foreground">{title}</h3>}
+        <div className="flex min-h-9 items-center justify-between gap-3">
+          {title && <h3 className="text-[19px] font-[650] tracking-[-0.02em] text-foreground">{title}</h3>}
           {action && <div className="shrink-0">{action}</div>}
         </div>
       )}

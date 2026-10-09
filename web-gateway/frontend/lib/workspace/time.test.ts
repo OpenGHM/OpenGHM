@@ -8,6 +8,7 @@ import {
   formatRelative,
   formatUtcDate,
   formatUtcDateTime,
+  localZoneName,
 } from "@/lib/workspace/time";
 
 const NOW = Date.parse("2026-09-30T12:00:00Z");
@@ -125,5 +126,12 @@ describe("date-only values", () => {
   it("leaves a full timestamp in the local zone", () => {
     expect(formatLocalDate("2022-02-23T01:30:00Z")).toBe("Feb 22, 2022");
     expect(formatLongDate("2022-02-23T01:30:00Z")).toBe("February 22, 2022");
+  });
+});
+
+describe("localZoneName", () => {
+  it("names the viewer's zone in the browser's short form, and nothing for a value that is not a date", () => {
+    expect(localZoneName("2026-09-30T12:00:00Z")).not.toBe("");
+    expect(localZoneName("not a date")).toBe("");
   });
 });

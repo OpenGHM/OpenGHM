@@ -795,9 +795,9 @@ hover). The job document stores no resolved cores or walltime, so the page
 reads the snapshot for them; with no snapshot it shows a dash. Each fact is on
 the page once: the card has the work directory only where the summary has no
 results path. From `xl` (1280 px) the page is a grid like the wizard's
-(`aside-layout.tsx`, in the page's column, 1360 px at most): the card is a 20 rem `sticky` aside beside the
-status summary, the publish card and the Logs; below `xl` it follows the status
-summary in the page.
+(`aside-layout.tsx`, in the page's column, 1360 px at most): the card is a
+20 rem aside beside the status summary, the publish card and the Logs, which
+scrolls with the page; below `xl` it follows the status summary in the page.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

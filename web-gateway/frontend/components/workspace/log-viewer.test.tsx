@@ -105,7 +105,7 @@ describe("LogViewer with fixture text", () => {
     expect(log.getAttribute("aria-live")).toBe("off");
     const gutter = [...log.querySelectorAll("[data-line-number]")];
     expect(gutter.map((g) => g.textContent)).toEqual(["1", "2", "3"]);
-    expect(gutter.every((g) => g.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(gutter.every((g) => g.closest("[aria-hidden='true']") !== null)).toBe(true);
     expect(log.innerHTML).toContain("select-none");
     expect(fetchJobLog).not.toHaveBeenCalled();
   });
@@ -142,11 +142,12 @@ describe("LogViewer with fixture text", () => {
 
   it("marks an error line in red with a marker and a word for those who do not see colour", () => {
     render(viewer("FAILED", { previewLogs: { wbm: "all well\nValueError: Aggregation multi-year start is outside\nUserWarning: x" } }));
-    const rows = [...box().querySelectorAll("[data-line-number]")].map((n) => n.parentElement as HTMLElement);
+    // A line number sits in the gutter, which sits in the row.
+    const rows = [...box().querySelectorAll("[data-line-number]")].map((n) => n.parentElement!.parentElement as HTMLElement);
     const [plain, error, warning] = rows;
     expect(plain.getAttribute("data-severity")).toBeNull();
     expect(error.getAttribute("data-severity")).toBe("error");
-    expect(error.className).toContain("text-red-200");
+    expect(error.className).toContain("text-hero-error");
     expect(error.querySelector("[data-marker]")?.textContent).toBe("!");
     expect(error.querySelector(".sr-only")?.textContent).toBe("Error: ");
     expect(warning.getAttribute("data-severity")).toBe("warning");

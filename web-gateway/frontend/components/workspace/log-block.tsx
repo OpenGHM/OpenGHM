@@ -14,12 +14,13 @@ const BOTTOM_SLACK = 24;
 /**
  * The tints of a line that looks like trouble, on the dark log box. The status
  * hues are tuned for light surfaces (AA as text on a tint of themselves), so
- * here they only tint the background, and the text is a light step of the same
- * hue. Colour is never the only sign: the marker and the hidden word say it too.
+ * here they only tint the background, and the text is the light colour the band
+ * has for the same thing (`hero-error`, `hero-attention-text`). Colour is never
+ * the only sign: the marker and the hidden word say it too.
  */
 const SEVERITY: Record<LineSeverity, { row: string; mark: string; word: string }> = {
-  error: { row: "bg-status-failed/25 text-red-200", mark: "!", word: "Error: " },
-  warning: { row: "bg-warning/25 text-amber-200", mark: "▲", word: "Warning: " },
+  error: { row: "bg-status-failed/25 text-hero-error", mark: "!", word: "Error: " },
+  warning: { row: "bg-hero-attention/12 text-hero-attention-text", mark: "▲", word: "Warning: " },
 };
 
 interface RowProps {
@@ -36,11 +37,11 @@ interface RowProps {
 
 const LogRowView = memo(function LogRowView({ kind, number, text, severity, retry, onRetry, digits }: RowProps) {
   if (kind === "separator") {
-    return <div className="mt-3 mb-1 font-semibold text-hero-foreground-muted first:mt-0">{text}</div>;
+    return <div className="mt-3 mb-1 px-[18px] font-semibold text-hero-eyebrow first:mt-0">{text}</div>;
   }
   if (kind === "note") {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 text-hero-subtle italic">
+      <div className="flex flex-wrap items-center gap-x-3 px-[18px] text-hero-subtle italic">
         <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
         {retry && (
           <Button
@@ -59,20 +60,16 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, retr
   }
   const tone = severity ? SEVERITY[severity] : null;
   return (
-    <div
-      data-severity={severity ?? undefined}
-      className={`-mx-3.5 flex gap-3 px-3.5 ${tone?.row ?? ""}`}
-    >
-      <span aria-hidden="true" data-marker className="w-[1ch] shrink-0 text-center font-bold select-none">
-        {tone?.mark}
-      </span>
-      <span
-        aria-hidden="true"
-        data-line-number
-        className="shrink-0 select-none text-right text-hero-faint"
-        style={{ minWidth: `${digits}ch` }}
-      >
-        {number}
+    <div data-severity={severity ?? undefined} className={`flex gap-3.5 pr-[18px] ${tone?.row ?? ""}`}>
+      {/* The gutter: the marker of a line that looks like trouble, then its
+          number, right-aligned against the text. */}
+      <span aria-hidden="true" className="flex w-16 shrink-0 items-baseline justify-end gap-1.5 select-none">
+        <span data-marker className="w-[1ch] text-center font-bold">
+          {tone?.mark}
+        </span>
+        <span data-line-number className="text-right text-hero-faint" style={{ minWidth: `${digits}ch` }}>
+          {number}
+        </span>
       </span>
       <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
         {tone && <span className="sr-only">{tone.word}</span>}
@@ -132,7 +129,7 @@ export function LogBlock({
         aria-label={label}
         tabIndex={0}
         onScroll={onScroll}
-        className="relative max-h-[560px] min-h-24 overflow-auto rounded-[14px] bg-hero p-3.5 font-mono text-xs leading-relaxed text-hero-text outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="relative max-h-[440px] min-h-24 overflow-auto rounded-[14px] bg-hero py-4 font-mono text-[12.5px] leading-[1.75] text-hero-text outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         {rows.map((row, i) => (
           <LogRowView

@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { SEGMENTED_TRACK, segmentClass, segmentCountClass } from "@/components/workspace/segmented";
+import {
+  SEGMENTED_TRACK,
+  segmentClass,
+  segmentCountClass,
+  segmentDotClass,
+} from "@/components/workspace/segmented";
 import { KIND_TABS, kindHref, type KindFilter } from "@/lib/workspace/my-data";
 
 /**
@@ -19,6 +24,13 @@ export function pushOnPlainClick(href: string) {
     }
   };
 }
+
+/** The dot of each kind: the colour its rows' tiles use. */
+const KIND_DOT: Record<KindFilter, string> = {
+  all: "bg-hero",
+  snapshot: "bg-primary",
+  "model-input": "bg-compute",
+};
 
 /**
  * The list's kind filter: All, Model Snapshots, Model Inputs, each with its
@@ -41,7 +53,7 @@ export function MyDataKindTabs({
 }) {
   return (
     <nav aria-label="Filter by type" className={SEGMENTED_TRACK}>
-      <ul className="flex gap-0.5">
+      <ul className="flex gap-1">
         {KIND_TABS.map((tab) => {
           const selected = tab.value === active;
           const href = kindHref(tab.value);
@@ -54,8 +66,9 @@ export function MyDataKindTabs({
                 onClick={pushOnPlainClick(href)}
                 className={segmentClass(selected)}
               >
+                <span aria-hidden="true" className={segmentDotClass(selected, KIND_DOT[tab.value])} />
                 {tab.label}
-                <span className={segmentCountClass(selected)}>{counts[tab.value]}</span>
+                <span className={segmentCountClass()}>{counts[tab.value]}</span>
               </Link>
             </li>
           );

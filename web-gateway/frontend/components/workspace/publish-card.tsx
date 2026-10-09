@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { AlertOctagon, CheckCircle2, ExternalLink, Loader2, RefreshCw, UploadCloud, WifiOff } from "lucide-react";
+import { AlertOctagon, ArrowRight, CheckCircle2, ExternalLink, Loader2, RefreshCw, UploadCloud, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { ActionError } from "@/components/workspace/action-error";
@@ -13,6 +13,7 @@ import { SessionExpiredBanner } from "@/components/workspace/session-expired-ban
 import { publishDraft } from "@/lib/jobs/actions";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { Job, PartialAbout, PublishAbout, PublishRecord, PublishRetry } from "@/lib/jobs/types";
+import { cn } from "@/lib/utils";
 import { PUBLISH_RETRY_COPY, publishFailureCopyFor } from "@/lib/workspace/failure-copy";
 import {
   aboutFromRecord,
@@ -164,18 +165,23 @@ export function PublishCard({
   const Icon =
     state === "publishing" ? Loader2 : state === "published" ? CheckCircle2 : state === "failed" ? AlertOctagon : UploadCloud;
 
+  // The offer is the one card of the page drawn in the brand colour, with a
+  // white button; once a publish exists it is a white card like the others.
+  const offer = state === "none";
+
   const openForm = (
     <Button
       ref={opener}
       type="button"
-      className="min-h-10 shrink-0 gap-2 font-semibold"
+      size="xl"
+      className="relative shrink-0 bg-card text-[14.5px] font-[650] text-primary-hover hover:bg-secondary"
       onClick={() => {
         setProblem(null);
         setOpen(true);
       }}
     >
-      <UploadCloud aria-hidden="true" />
       Publish as snapshot
+      <ArrowRight aria-hidden="true" />
     </Button>
   );
 
@@ -184,23 +190,39 @@ export function PublishCard({
       ref={sectionRef}
       tabIndex={-1}
       aria-labelledby="publish-heading"
-      className="rounded-card border border-border/70 bg-card p-6 shadow-card outline-none sm:p-7"
+      className={cn(
+        "relative overflow-hidden rounded-card p-6 outline-none sm:p-7",
+        offer
+          ? "bg-primary text-primary-foreground"
+          : "border border-border/70 bg-card shadow-card",
+      )}
     >
+      {offer && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(color-mix(in_srgb,var(--primary-foreground)_8%,transparent)_1px,transparent_1px)] bg-[size:22px_22px]"
+        />
+      )}
       <PublishAnnouncer state={state} />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-7">
         <div className="min-w-0">
           <h2
             id="publish-heading"
-            className="flex items-center gap-3 text-[17px] font-[650] tracking-[-0.02em] text-foreground"
+            className={cn(
+              "flex items-center gap-3 font-[650] tracking-[-0.02em]",
+              offer ? "text-[19px] text-primary-foreground" : "text-[17px] text-foreground",
+            )}
           >
-            <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-[10px] ${hue.tile}`}>
-              <Icon className={`size-[18px] ${hue.icon} ${state === "publishing" ? "motion-safe:animate-spin" : ""}`} />
-            </span>
+            {!offer && (
+              <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-[10px] ${hue.tile}`}>
+                <Icon className={`size-[18px] ${hue.icon} ${state === "publishing" ? "motion-safe:animate-spin" : ""}`} />
+              </span>
+            )}
             <span className="min-w-0 break-words">{title}</span>
           </h2>
 
           {state === "none" && (
-            <p className="mt-1.5 max-w-prose text-sm text-muted-foreground">
+            <p className="mt-1.5 max-w-prose text-sm leading-[1.55] text-primary-foreground/85">
               Add this snapshot draft&apos;s results to the Data Repository as a snapshot. It will be
               public, and it cannot be changed after it is published.
             </p>
@@ -339,9 +361,9 @@ export function PublishCard({
         </div>
       )}
 
-      {expired && <SessionExpiredBanner className="mt-4" />}
+      {expired && <SessionExpiredBanner className="relative mt-4" />}
       {problem && (
-        <div className="mt-4">
+        <div className="relative mt-4">
           <ActionError>{problem}</ActionError>
         </div>
       )}

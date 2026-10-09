@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ActionError } from "@/components/workspace/action-error";
 import { focusDraftField } from "@/components/workspace/draft-field";
@@ -641,23 +640,22 @@ function WizardBody({
       <PageHeader
         breadcrumb={draftBreadcrumb(name)}
         title={name}
-        badge={
-          isNew ? (
-            <Badge variant="outline" className="px-2.5 font-semibold text-muted-foreground">
-              Not saved
-            </Badge>
-          ) : (
-            <JobStatusBadge status="DRAFT" />
-          )
-        }
+        badge={isNew ? undefined : <JobStatusBadge status="DRAFT" />}
         meta={
-          <Link
-            href={source.href}
-            title={source.title}
-            className={`${clampClass(1)} min-w-0 rounded text-[15px] underline-offset-2 outline-none transition-colors hover:text-white hover:underline focus-visible:ring-2 focus-visible:ring-hero-eyebrow`}
-          >
-            Based on {source.title}
-          </Link>
+          <>
+            {isNew && (
+              <span className="inline-flex shrink-0 rounded-full border border-dashed border-hero-attention/70 px-2.5 py-1 text-xs font-semibold text-hero-attention-text">
+                Not saved
+              </span>
+            )}
+            <Link
+              href={source.href}
+              title={source.title}
+              className={`${clampClass(1)} min-w-0 rounded text-sm underline-offset-2 outline-none transition-colors hover:text-white hover:underline focus-visible:ring-2 focus-visible:ring-hero-eyebrow`}
+            >
+              Based on {source.title}
+            </Link>
+          </>
         }
       >
         {newDraft.error?.reason === "session_expired" && <SessionExpiredBanner className="w-full sm:max-w-md" />}
@@ -668,13 +666,17 @@ function WizardBody({
         {deleteError && <ActionError>{deleteError}</ActionError>}
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <DraftProgress hrefFor={hrefFor} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {isNew ? (
               <>
                 <NewDraftStatus
                   state={newDraft.saving ? "saving" : newDraft.saved && !dirty ? "saved" : "unsaved"}
                 />
-                <Button asChild variant="on-dark" className="min-h-10 sm:min-h-9">
+                <Button
+                  asChild
+                  variant="on-dark"
+                  className="min-h-10 rounded-xl bg-transparent px-4 text-[13.5px] font-semibold hover:bg-white/10"
+                >
                   <Link href="/workspace">Cancel</Link>
                 </Button>
                 <SaveDraftButton variant="on-dark" saving={saving} disabled={saveDisabled} onClick={saveNow} />
@@ -719,6 +721,16 @@ function WizardBody({
                   onSessionExpired={() => setDeleteExpired(true)}
                 />
               </>
+            )}
+            {step === "run" && (
+              <Button
+                type="button"
+                onClick={() => goTo("review")}
+                className="min-h-10 rounded-xl px-[18px] text-[13.5px] font-semibold"
+              >
+                Next: Review
+                <ArrowRight aria-hidden="true" />
+              </Button>
             )}
           </div>
         </div>

@@ -1,21 +1,25 @@
 import Link from "next/link";
 import { AlertCircle, PackageOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HEADER_ROW, ListEmptyCard, ROW_CARD } from "@/components/workspace/list-card";
 import { ListToolbar } from "@/components/workspace/list-toolbar";
+import { cn } from "@/lib/utils";
 
 /** The caller has no snapshot or model input at all: says so, with no button. */
 export function MyDataEmpty() {
   return (
-    <div className="rounded-card border border-dashed bg-card px-4 py-16 text-center shadow-raised sm:py-20">
-      <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
-        <PackageOpen className="size-6 text-muted-foreground" aria-hidden="true" />
-      </div>
-      <p className="mb-1 text-sm font-medium text-foreground">Nothing published yet</p>
-      <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-        When a snapshot draft&apos;s simulation finishes, you will be able to publish it as a model snapshot from
-        its page.
-      </p>
-    </div>
+    <ListEmptyCard
+      dashed
+      className="shadow-raised"
+      icon={<PackageOpen />}
+      title="Nothing published yet"
+      hint={
+        <>
+          When a snapshot draft&apos;s simulation finishes, you will be able to publish it as a model snapshot from
+          its page.
+        </>
+      }
+    />
   );
 }
 
@@ -41,7 +45,7 @@ export function MyDataLoadError({ retryHref }: { retryHref: string }) {
 }
 
 /**
- * The list while it loads: the toolbar and five rows, in the shape of what
+ * The list while it loads: the toolbar and five row cards, in the shape of what
  * replaces them so nothing jumps. Announced once, as busy, not row by row.
  * Invisible for the first 300 ms, so a fast load never shows it.
  */
@@ -54,21 +58,25 @@ export function MyDataSkeleton() {
       className="reveal-delayed"
     >
       <ListToolbar>
-        <Skeleton className="h-[46px] w-full rounded-[11px] sm:w-[26rem]" />
-        <Skeleton className="hidden h-[46px] w-72 rounded-[11px] sm:block" />
+        <Skeleton className="h-10 w-full rounded-[11px] lg:w-[26rem]" />
+        <Skeleton className="hidden h-[42px] w-72 rounded-xl lg:block" />
       </ListToolbar>
-      <div className="mt-4 overflow-hidden rounded-card border border-border/70 bg-card shadow-card">
-        <div className="hidden h-10 border-b bg-muted/60 sm:block" />
-        <div className="divide-y">
+      <div className="mt-4 flex flex-col gap-3.5">
+        <div aria-hidden="true" className={cn(HEADER_ROW, "h-5")} />
+        <div className="flex flex-col gap-2">
           {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="flex items-center gap-4 px-4 py-4 sm:px-6">
+            <div
+              key={i}
+              className={cn(ROW_CARD, "flex items-center gap-3 px-4 py-3.5 hover:translate-y-0 hover:border-transparent hover:shadow-none sm:gap-4 sm:px-5 sm:py-4")}
+            >
+              <Skeleton className="size-10 shrink-0 rounded-[14px] sm:size-[46px]" />
               <div className="min-w-0 flex-1 space-y-2">
                 <Skeleton className="h-4 w-2/3 sm:w-1/2" />
                 <Skeleton className="h-3 w-1/2 sm:w-1/3" />
               </div>
-              <Skeleton className="hidden h-4 w-28 sm:block" />
-              <Skeleton className="hidden h-4 w-16 sm:block" />
-              <Skeleton className="hidden h-4 w-20 md:block" />
+              <Skeleton className="hidden h-4 w-28 lg:block" />
+              <Skeleton className="hidden h-4 w-16 lg:block" />
+              <Skeleton className="hidden h-4 w-20 lg:block" />
             </div>
           ))}
         </div>

@@ -8,9 +8,16 @@ import { Label } from "@/components/ui/label";
 import { ComputeSection } from "@/components/workspace/compute-fields";
 import { DraftBasis } from "@/components/workspace/draft-basis";
 import { draftField } from "@/components/workspace/draft-field";
-import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
+import {
+  DraftPanel,
+  DraftSection,
+  FIELD_INPUT,
+  FIELD_LABEL,
+} from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
+import { RunPeriodBar } from "@/components/workspace/run-period-bar";
 import { useWizardHelp } from "@/components/workspace/wizard-help-context";
+import { WizardHelpButton } from "@/components/workspace/wizard-help-panel";
 import { OutputChoiceSection } from "@/components/workspace/output-choice-field";
 import {
   OutputVariablesSection,
@@ -173,8 +180,8 @@ export function DraftRunStep({
   const customEntries = custom ? Object.entries(custom) : [];
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
-      <DraftStepHeading step="run">
+    <fieldset disabled={disabled} className="min-w-0 space-y-4 border-0 p-0">
+      <DraftStepHeading step="run" quiet>
         The run period, the output variables, and how much compute to ask Anvil for.
       </DraftStepHeading>
 
@@ -188,13 +195,14 @@ export function DraftRunStep({
           onRevert: onRevertModelInput,
           error: serverErrors.modelInput,
         }}
+        action={<WizardHelpButton />}
         disabled={disabled}
       />
 
       <DraftPanel>
         <DraftSection title="Name and description" help="about">
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-name`} className="text-xs text-muted-foreground">
+          <div className="space-y-[7px]">
+            <Label htmlFor={`${id}-name`} className={FIELD_LABEL}>
               Name
             </Label>
             <Input
@@ -204,7 +212,7 @@ export function DraftRunStep({
               placeholder="e.g. Global 2000–2009 baseline"
               autoComplete="off"
               {...draftField("name")}
-              className="h-10 md:h-9"
+              className={FIELD_INPUT}
               aria-describedby={serverErrors.name ? `${id}-name-error` : undefined}
               aria-invalid={serverErrors.name ? true : undefined}
               onChange={(e) => onNameChange(e.target.value)}
@@ -215,20 +223,20 @@ export function DraftRunStep({
               </p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${id}-description`} className="text-xs text-muted-foreground">
-              Description <span className="font-normal">(optional)</span>
+          <div className="space-y-[7px]">
+            <Label htmlFor={`${id}-description`} className={FIELD_LABEL}>
+              Description <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
             <textarea
               id={`${id}-description`}
               value={description}
-              rows={2}
+              rows={3}
               placeholder="What is this snapshot draft for?"
               {...draftField("description")}
               aria-describedby={serverErrors.description ? `${id}-description-error` : undefined}
               aria-invalid={serverErrors.description ? true : undefined}
               onChange={(e) => onDescriptionChange(e.target.value)}
-              className="w-full rounded-xl border border-input bg-card px-3.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm"
+              className="w-full resize-y rounded-lg border-[1.5px] border-input bg-card px-3.5 py-3 text-base outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/12 aria-invalid:border-destructive md:text-[14.5px]"
             />
             {serverErrors.description && (
               <p id={`${id}-description-error`} className="text-xs text-destructive">
@@ -239,16 +247,16 @@ export function DraftRunStep({
         </DraftSection>
 
         <DraftSection title="Run period" help="period">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={`${id}-start`} className="text-xs text-muted-foreground">
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="space-y-[7px]">
+              <Label htmlFor={`${id}-start`} className={FIELD_LABEL}>
                 Start
               </Label>
               <Input
                 id={`${id}-start`}
                 {...draftField("start")}
                 type="date"
-                className="h-10 font-mono md:h-9"
+                className={`${FIELD_INPUT} font-mono md:text-sm`}
                 min={coverage?.start}
                 max={coverage?.end}
                 value={start}
@@ -277,15 +285,15 @@ export function DraftRunStep({
                 )}
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`${id}-end`} className="text-xs text-muted-foreground">
+            <div className="space-y-[7px]">
+              <Label htmlFor={`${id}-end`} className={FIELD_LABEL}>
                 End
               </Label>
               <Input
                 id={`${id}-end`}
                 {...draftField("end")}
                 type="date"
-                className="h-10 font-mono md:h-9"
+                className={`${FIELD_INPUT} font-mono md:text-sm`}
                 min={coverage?.start}
                 max={coverage?.end}
                 value={end}
@@ -302,10 +310,13 @@ export function DraftRunStep({
               </div>
             </div>
           </div>
-          <p id={`${id}-limits`} className="text-xs text-muted-foreground">
-            {limits ??
-              "The period the model snapshot covers isn't available, so the dates aren't checked against it here."}
-          </p>
+          <div className="space-y-2">
+            <RunPeriodBar coverage={coverage} start={start} end={end} />
+            <p id={`${id}-limits`} className="text-[13px] text-muted-foreground">
+              {limits ??
+                "The period the model snapshot covers isn't available, so the dates aren't checked against it here."}
+            </p>
+          </div>
         </DraftSection>
 
         <OutputVariablesSection

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Boxes, FileInput, PackageOpen, Search } from "lucide-react";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { clampClass } from "@/components/common/clamped-name";
+import { GlyphTile, HEADER_ROW, ListEmptyCard, ROW_CARD } from "@/components/workspace/list-card";
 import { ListToolbar } from "@/components/workspace/list-toolbar";
 import { MyDataKindTabs, pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { SearchField, matchesQuery } from "@/components/workspace/search-field";
@@ -20,8 +22,8 @@ import {
   kindHref,
 } from "@/lib/workspace/my-data";
 
-/** The columns from `sm` up (Published joins at `md`). Written whole because Tailwind reads source text. */
-const COLUMNS = "sm:grid-cols-[minmax(0,1fr)_8.5rem_5.5rem] md:grid-cols-[minmax(0,1fr)_8.5rem_5.5rem_7rem]";
+/** The columns from `lg` up. Written whole because Tailwind reads source text. */
+const COLUMNS = "lg:grid-cols-[minmax(0,1fr)_9rem_6.5rem_7.5rem]";
 
 /** An id as a row shows it: enough to tell two apart, the rest one click away. */
 function shortId(id: string): string {
@@ -48,12 +50,13 @@ function KindLabel({ kind }: { kind: MineItem["kind"] }) {
 
 /**
  * The caller's snapshots and model inputs: the kind filter and a search box,
- * then one card of rows, each a link to the item's detail page (its title, in
- * one line cut with an ellipsis and whole on hover, then a mono line of its
- * short id and coverage; its type, who can find it, and when
- * it was published). From `sm` up the rows sit in columns under a small header;
- * on a phone each stacks, so nothing scrolls sideways. It is the snapshot draft
- * list's look, so the two Workspace pages read as one.
+ * then a stack of row cards, each a link to the item's detail page: a tile with
+ * the kind's icon, its title (one line cut with an ellipsis, whole on hover)
+ * over a mono line of its short id and coverage; its type, who can find it, and
+ * when it was published. From `lg` up the rows sit in columns under a mono
+ * header; below it each stacks in two lines, so nothing scrolls sideways. It is
+ * the snapshot draft list's look (`list-card.tsx`), so the two Workspace pages
+ * read as one.
  *
  * The selected kind is the URL's `?kind=` (`useSearchParams`); the tabs push
  * it, and the list is filtered here, with what the search box says, which is
@@ -76,15 +79,13 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
             value={query}
             onChange={setQuery}
             label="Search snapshots and inputs by name"
-            className="sm:w-72"
+            className="lg:w-72 xl:w-[26rem]"
           />
         )}
       </ListToolbar>
 
       {ofKind.length === 0 ? (
-        <div className="mt-4 rounded-card border border-dashed bg-card px-4 py-12 text-center shadow-card">
-          <p className="mb-1 text-sm font-medium text-foreground">{tab.empty}</p>
-          <p className="mx-auto mb-4 max-w-sm text-sm text-muted-foreground">Nothing of this type is in your list.</p>
+        <ListEmptyCard dashed className="mt-4 shadow-card" icon={<PackageOpen />} title={tab.empty} hint="Nothing of this type is in your list.">
           <Link
             href={kindHref("all")}
             onClick={pushOnPlainClick(kindHref("all"))}
@@ -92,61 +93,70 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
           >
             Show all
           </Link>
-        </div>
+        </ListEmptyCard>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-card border border-border/70 bg-card text-card-foreground shadow-card">
-          <div
-            aria-hidden="true"
-            className={`hidden gap-x-4 border-b bg-muted/60 px-6 py-3 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase sm:grid ${COLUMNS}`}
-          >
-            <span>Name</span>
-            <span>Type</span>
-            <span>Visibility</span>
-            <span className="hidden md:block">Published</span>
-          </div>
-
+        <div className="mt-4 flex flex-col gap-3.5">
           {rows.length === 0 ? (
-            <div className="px-4 py-12 text-center">
-              <p className="text-sm font-medium text-foreground">Nothing matches &ldquo;{query.trim()}&rdquo;</p>
+            <ListEmptyCard icon={<Search />} title={<>Nothing matches &ldquo;{query.trim()}&rdquo;</>}>
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="mt-3 inline-flex min-h-10 items-center rounded-md px-2 text-sm font-medium text-primary underline underline-offset-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="inline-flex min-h-10 items-center rounded-[11px] bg-hero px-4 text-[13.5px] font-semibold text-white outline-none transition-colors hover:bg-hero/90 focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 Clear search
               </button>
-            </div>
+            </ListEmptyCard>
           ) : (
-            <ul aria-label="Snapshots and inputs" className="divide-y">
-              {rows.map((item) => (
-                <li
-                  key={rowKey(item)}
-                  className={`relative grid grid-cols-1 items-center gap-x-4 gap-y-1.5 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-y-0 sm:px-6 sm:py-4 ${COLUMNS}`}
-                >
-                  <div className="min-w-0">
-                    <Link
-                      href={detailHref(item)}
-                      title={item.about.name}
-                      className={cn(clampClass(1), "text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']")}
+            <>
+              <div aria-hidden="true" className={cn(HEADER_ROW, COLUMNS)}>
+                <span className="lg:pl-[62px]">Name</span>
+                <span>Type</span>
+                <span>Visibility</span>
+                <span>Published</span>
+              </div>
+              <ul aria-label="Snapshots and inputs" className="flex flex-col gap-2">
+                {rows.map((item) => {
+                  const Icon = item.kind === "snapshot" ? Boxes : FileInput;
+                  return (
+                    <li
+                      key={rowKey(item)}
+                      className={cn(
+                        ROW_CARD,
+                        "grid grid-cols-1 items-center gap-x-4 gap-y-2.5 px-4 py-3.5 sm:px-5 sm:py-4",
+                        COLUMNS,
+                      )}
                     >
-                      {item.about.name}
-                    </Link>
-                    <p className="mt-0.5 font-mono text-xs break-words text-muted-foreground sm:truncate">
-                      {shortId(item.id)} · {coverageLine(item)}
-                    </p>
-                  </div>
+                      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                        <GlyphTile tone={item.kind === "snapshot" ? "bg-secondary text-primary" : "bg-compute/10 text-compute"}>
+                          <Icon className="size-5" />
+                        </GlyphTile>
+                        <div className="min-w-0">
+                          <Link
+                            href={detailHref(item)}
+                            title={item.about.name}
+                            className={cn(clampClass(1), "text-base font-[550] tracking-[-0.01em] text-foreground outline-none after:absolute after:inset-0 after:content-['']")}
+                          >
+                            {item.about.name}
+                          </Link>
+                          <p className="mt-1.5 font-mono text-xs break-words text-muted-foreground lg:truncate">
+                            {shortId(item.id)} · {coverageLine(item)}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:contents">
-                    <KindLabel kind={item.kind} />
-                    <VisibilityBadge visibility={item.visibility} />
-                    <span className="font-mono text-xs text-muted-foreground sm:hidden md:block">
-                      <span className="sr-only">Published </span>
-                      <TimeStamp value={item.about.datePublished} format="date" />
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-[52px] sm:pl-[62px] lg:contents">
+                        <KindLabel kind={item.kind} />
+                        <VisibilityBadge visibility={item.visibility} />
+                        <span className="font-mono text-xs text-muted-foreground">
+                          <span className="sr-only">Published </span>
+                          <TimeStamp value={item.about.datePublished} format="date" />
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
       )}

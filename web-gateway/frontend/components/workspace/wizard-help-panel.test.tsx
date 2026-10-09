@@ -370,7 +370,7 @@ describe("the sections of Run settings", () => {
     expect(shown()).toBe("Post-processing");
     expect(screen.getByText(/Post-processing is not available yet/)).toBeTruthy();
 
-    fireEvent.focus(screen.getByRole("button", { name: "Change compute" }));
+    fireEvent.focus(screen.getByLabelText("Cores"));
     expect(shown()).toBe("Compute");
   });
 

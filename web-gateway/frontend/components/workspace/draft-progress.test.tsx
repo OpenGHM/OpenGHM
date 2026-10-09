@@ -88,25 +88,28 @@ describe("DraftProgress", () => {
     strip("run", ["review"]);
     expect(screen.getByRole("link", { name: /Run settings/ }).textContent).not.toContain("needs attention");
     expect(screen.getByRole("link", { name: /Review & submit.*needs attention/ })).toBeTruthy();
-    expect(document.querySelectorAll(".bg-amber-500")).toHaveLength(1);
+    expect(document.querySelectorAll(".bg-hero-attention")).toHaveLength(1);
   });
 
   it("has no dot when nothing needs attention", () => {
     strip("run");
-    expect(document.querySelectorAll(".bg-amber-500")).toHaveLength(0);
+    expect(document.querySelectorAll(".bg-hero-attention")).toHaveLength(0);
     expect(screen.queryByText(/needs attention/)).toBeNull();
   });
 });
 
 describe("the strip's look", () => {
-  it("is the header's pill on the navy band: done steps are checked and the current one is the white segment", () => {
+  it("is a row on the navy band: done steps are a green check, the current one the white pill, the rest outlined", () => {
     const { container } = render(
       <DraftProgress jobId="job-1" current="run" problemSteps={[]} onSelectStep={vi.fn()} />
     );
     expect(container.querySelector("svg.lucide-check")).not.toBeNull();
     expect(screen.getByRole("link", { name: /Run settings/ }).classList.contains("bg-white")).toBe(true);
     expect(screen.getByRole("link", { name: /Review & submit/ }).classList.contains("bg-white")).toBe(false);
-    expect(container.querySelector("ol")?.className).toContain("rounded-full");
+    // The done step is a green disc with a check, and a green line leads to the next.
+    expect(container.querySelector("svg.lucide-check")?.parentElement?.classList.contains("bg-success")).toBe(true);
+    const lines = Array.from(container.querySelectorAll("ol > li[aria-hidden]"));
+    expect(lines.map((li) => li.classList.contains("bg-success"))).toEqual([true, false]);
   });
 });
 

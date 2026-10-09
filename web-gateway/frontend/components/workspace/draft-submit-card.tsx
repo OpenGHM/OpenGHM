@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { DraftSection } from "@/components/workspace/draft-section";
+import { DraftSection, STEP_CARD } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
 import {
@@ -419,7 +419,7 @@ export function DraftSubmitCard({
   // A rerun sits below the published results, outside the review panel: no
   // "Submit" section of its own.
   return rerun ? (
-    <div className="space-y-4 rounded-card border border-border/70 bg-card p-6 shadow-card sm:px-7">{body}</div>
+    <div className={`${STEP_CARD} space-y-4 px-5 py-6 sm:px-[30px]`}>{body}</div>
   ) : (
     <DraftSection title="Submit">{body}</DraftSection>
   );

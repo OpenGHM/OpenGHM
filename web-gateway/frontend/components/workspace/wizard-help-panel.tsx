@@ -19,14 +19,14 @@ import { helpIndex, helpTopic, type HelpTopic } from "@/lib/workspace/wizard-hel
 function TopicBody({ topic }: { topic: HelpTopic }) {
   return (
     <>
-      <h3 className="text-[17px] font-[650] tracking-[-0.02em] text-foreground">{topic.title}</h3>
+      <h3 className="text-[15.5px] font-[650] text-foreground">{topic.title}</h3>
       {topic.blocks.map((block, i) =>
         block.kind === "text" ? (
-          <p key={i} className="text-sm leading-relaxed text-foreground/85">
+          <p key={i} className="text-[13.5px] leading-[1.6] text-foreground/85">
             {block.text}
           </p>
         ) : (
-          <ul key={i} className="list-disc space-y-2 pl-4 text-sm leading-relaxed text-foreground/85 marker:text-muted-foreground">
+          <ul key={i} className="list-disc space-y-2 pl-4 text-[13.5px] leading-[1.6] text-foreground/85 marker:text-muted-foreground">
             {block.items.map((item, j) => (
               <li key={j}>{item}</li>
             ))}
@@ -58,7 +58,7 @@ export function WizardHelpPanel({ plain = false, className }: { plain?: boolean;
   const body = (
     <>
       {index.length > 0 && (
-        <nav aria-label="Help topics" className="border-b border-border pb-3">
+        <nav aria-label="Help topics">
           <ul className="space-y-0.5">
             {index.map((entry) => {
               const current = entry.section === help.section;
@@ -69,7 +69,7 @@ export function WizardHelpPanel({ plain = false, className }: { plain?: boolean;
                     aria-current={current ? "true" : undefined}
                     onClick={() => help.showSection(entry.section)}
                     className={cn(
-                      "flex min-h-10 w-full items-center rounded-lg px-3 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8",
+                      "flex min-h-10 w-full items-center rounded-[9px] px-3 text-left text-[13.5px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8",
                       current
                         ? "bg-secondary font-semibold text-secondary-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -83,23 +83,27 @@ export function WizardHelpPanel({ plain = false, className }: { plain?: boolean;
           </ul>
         </nav>
       )}
-      <div aria-live="polite" aria-atomic="true" className="space-y-3">
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className={cn("space-y-2.5", index.length > 0 && "border-t border-border/70 pt-4")}
+      >
         <TopicBody topic={topic} />
       </div>
     </>
   );
 
-  if (plain) return <div className={cn("space-y-3", className)}>{body}</div>;
+  if (plain) return <div className={cn("space-y-4", className)}>{body}</div>;
 
   return (
     <div
-      className={cn("overflow-hidden rounded-card bg-card text-card-foreground shadow-raised", className)}
+      className={cn(
+        "space-y-4 rounded-card bg-card px-6 py-[22px] text-card-foreground shadow-raised",
+        className
+      )}
     >
-      <div className="flex items-center gap-2 border-b px-6 pt-5 pb-3.5 font-mono text-xs tracking-[0.06em] text-primary uppercase">
-        <CircleHelp aria-hidden="true" className="size-4" />
-        Help
-      </div>
-      <div className="space-y-3 px-6 py-5">{body}</div>
+      <p className="font-mono text-xs tracking-[0.06em] text-primary uppercase">Help</p>
+      {body}
     </div>
   );
 }

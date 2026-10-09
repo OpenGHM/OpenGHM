@@ -9,14 +9,23 @@ import { LinkPending } from "@/components/ui/link-pending";
 import { PageBody } from "@/components/layout/page-hero";
 import { DraftListSkeleton } from "@/components/workspace/draft-list-skeleton";
 import { DraftListTabs } from "@/components/workspace/draft-list-tabs";
+import { DraftPager } from "@/components/workspace/draft-pager";
 import { DraftSearchInput, DraftSearchProvider } from "@/components/workspace/draft-search";
 import { DraftTable } from "@/components/workspace/draft-table";
+import { ListEmptyCard } from "@/components/workspace/list-card";
 import { ListToolbar } from "@/components/workspace/list-toolbar";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
 import { runNotes } from "@/lib/jobs/run-notes";
-import { listHref, tabForStatus } from "@/lib/jobs/filters";
-import { AlertCircle, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
+import {
+  PAGE_SIZES,
+  listHref,
+  parsePageSize,
+  parseSort,
+  tabForStatus,
+  type ListSort,
+} from "@/lib/jobs/filters";
+import { AlertCircle, ArrowUpDown, Play, Plus } from "lucide-react";
 
 export default async function WorkspacePage({
   searchParams,
@@ -30,6 +39,8 @@ export default async function WorkspacePage({
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const page = Math.max(1, Number(first(params.page)) || 1);
   const statusFilter = first(params.status) || undefined;
+  const pageSize = parsePageSize(first(params.size));
+  const sort = parseSort(first(params.sort));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -40,7 +51,7 @@ export default async function WorkspacePage({
             ready, and the link that was clicked shows a spinner if that
             takes a while. The skeleton is only for the first load. */}
         <Suspense fallback={<DraftListSkeleton />}>
-          <DraftList here={here} page={page} statusFilter={statusFilter} />
+          <DraftList here={here} page={page} statusFilter={statusFilter} pageSize={pageSize} sort={sort} />
         </Suspense>
       </PageBody>
       <Footer />
@@ -48,19 +59,26 @@ export default async function WorkspacePage({
   );
 }
 
+/** What the sort link calls each order. */
+const SORT_LABEL: Record<ListSort, string> = { updated: "Updated", created: "Created" };
+
 /** The tab bar and what it selects. Async, so the page around it (and the
  *  skeleton) is on screen while the backend answers. */
 async function DraftList({
   here,
   page,
   statusFilter,
+  pageSize,
+  sort,
 }: {
   here: string;
   page: number;
   statusFilter: string | undefined;
+  pageSize: number;
+  sort: ListSort;
 }) {
   const [data, stats] = await Promise.allSettled([
-    fetchJobs(page, statusFilter),
+    fetchJobs(page, statusFilter, undefined, { pageSize, sort }),
     fetchJobStats(),
   ]);
 
@@ -74,11 +92,14 @@ async function DraftList({
   // Without counts the tabs still navigate; zeros would be a false answer.
   const statsData = stats.status === "fulfilled" ? stats.value : null;
   const tab = tabForStatus(statusFilter);
+  // What a click on a tab or a page keeps: the page size and the order.
+  const view = { size: pageSize, sort };
+  const otherSort: ListSort = sort === "updated" ? "created" : "updated";
 
   // The last row of the last page was just deleted: the page is gone, the
   // list is not. Go to the new last page.
   if (jobData && jobData.items.length === 0 && page > jobData.total_pages) {
-    redirect(listHref(statusFilter, jobData.total_pages));
+    redirect(listHref(statusFilter, jobData.total_pages, view));
   }
 
   // Whether a simulation is shorter than its snapshot's coverage needs the snapshot,
@@ -89,8 +110,24 @@ async function DraftList({
   return (
     <DraftSearchProvider>
       <ListToolbar>
-        <DraftListTabs active={tab} stats={statsData} />
-        {hasRows && <DraftSearchInput className="sm:w-72" />}
+        <DraftListTabs active={tab} stats={statsData} view={view} />
+        {hasRows && (
+          <div className="flex min-w-0 items-center gap-2 lg:shrink-0">
+            <DraftSearchInput className="flex-1 lg:w-72 lg:flex-none xl:w-[26rem]" />
+            {/* The backend orders by when a draft last changed or when it was
+                made; the link switches between the two and keeps the filter. */}
+            <Link
+              href={listHref(statusFilter, 1, { size: pageSize, sort: otherSort })}
+              title={`Sorted by ${SORT_LABEL[sort].toLowerCase()}; sort by ${SORT_LABEL[otherSort].toLowerCase()} instead`}
+              className="relative flex h-[42px] shrink-0 items-center gap-2 rounded-xl bg-muted px-3.5 text-[13.5px] font-semibold text-foreground outline-none transition-colors hover:bg-secondary hover:text-secondary-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <ArrowUpDown className="size-3.5" aria-hidden="true" />
+              <span className="sr-only">Sort by: </span>
+              {SORT_LABEL[sort]}
+              <LinkPending className="top-0.5 right-0.5" />
+            </Link>
+          </div>
+        )}
       </ListToolbar>
 
       {!jobData ? (
@@ -110,87 +147,43 @@ async function DraftList({
           </div>
         </div>
       ) : !hasRows ? (
-        <div className="mt-4 rounded-card border border-dashed bg-card px-4 py-16 text-center shadow-card sm:py-20">
-          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
-            <Play className="size-6 text-muted-foreground" aria-hidden="true" />
-          </div>
-          <p className="mb-1 text-sm font-medium text-foreground">
-            {tab ? tab.empty.title : "No snapshot drafts found"}
-          </p>
-          <p className="mx-auto mb-6 max-w-sm text-sm text-muted-foreground">
-            {tab ? tab.empty.hint : "This filter matches nothing. Pick one of the tabs above."}
-          </p>
-          <div className="flex flex-col items-center justify-center gap-2 sm:flex-row">
-            <Button asChild size="sm" className="min-h-10 sm:min-h-8">
-              <Link href="/workspace/new">
-                <Plus className="mr-1.5 size-4" />
-                New snapshot
-              </Link>
+        <ListEmptyCard
+          dashed
+          className="mt-4 shadow-card"
+          icon={<Play />}
+          title={tab ? tab.empty.title : "No snapshot drafts found"}
+          hint={tab ? tab.empty.hint : "This filter matches nothing. Pick one of the tabs above."}
+        >
+          <Button asChild size="sm" className="min-h-10 sm:min-h-8">
+            <Link href="/workspace/new">
+              <Plus className="mr-1.5 size-4" />
+              New snapshot
+            </Link>
+          </Button>
+          {statusFilter && (
+            <Button asChild size="sm" variant="ghost" className="min-h-10 sm:min-h-8">
+              <Link href={listHref(undefined, 1, view)}>Show all snapshot drafts</Link>
             </Button>
-            {statusFilter && (
-              <Button asChild size="sm" variant="ghost" className="min-h-10 sm:min-h-8">
-                <Link href={listHref(undefined)}>Show all snapshot drafts</Link>
-              </Button>
-            )}
-          </div>
-        </div>
+          )}
+        </ListEmptyCard>
       ) : (
-        <div className="mt-4">
+        <div className="mt-4 flex flex-col gap-3.5">
           <DraftTable
             jobs={jobData.items}
             runNotes={notes}
             moreThanOnePage={jobData.total_pages > 1}
           />
 
-          {/* Pagination: an end of the list is a disabled button, not a gap. */}
-          {jobData.total_pages > 1 && (
-            <nav aria-label="Pages" className="flex items-center justify-center gap-4 pt-6">
-              {page > 1 ? (
-                <Button asChild variant="ghost" size="sm" className="relative min-h-10 sm:min-h-8">
-                  <Link href={listHref(statusFilter, page - 1)}>
-                    <ChevronLeft className="mr-1 size-4" />
-                    Previous
-                    <LinkPending className="top-0.5 right-0.5" />
-                  </Link>
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled
-                  aria-disabled="true"
-                  className="min-h-10 sm:min-h-8"
-                >
-                  <ChevronLeft className="mr-1 size-4" />
-                  Previous
-                </Button>
-              )}
-
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {jobData.total_pages}
-              </span>
-
-              {page < jobData.total_pages ? (
-                <Button asChild variant="ghost" size="sm" className="relative min-h-10 sm:min-h-8">
-                  <Link href={listHref(statusFilter, page + 1)}>
-                    Next
-                    <ChevronRight className="ml-1 size-4" />
-                    <LinkPending className="top-0.5 right-0.5" />
-                  </Link>
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled
-                  aria-disabled="true"
-                  className="min-h-10 sm:min-h-8"
-                >
-                  Next
-                  <ChevronRight className="ml-1 size-4" />
-                </Button>
-              )}
-            </nav>
+          {/* The pager is there whenever the rows per page could be changed. */}
+          {jobData.total_count > PAGE_SIZES[0] && (
+            <DraftPager
+              page={page}
+              totalPages={jobData.total_pages}
+              totalCount={jobData.total_count}
+              pageSize={pageSize}
+              status={statusFilter}
+              sort={sort}
+            />
           )}
         </div>
       )}

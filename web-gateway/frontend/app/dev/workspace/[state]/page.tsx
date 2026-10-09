@@ -43,6 +43,7 @@ export default async function DevWorkspacePreviewPage({
         job={job}
         viewerEmail={viewerEmail}
         recommended={recommendedComputeFor(fakeDataset())}
+        coverage={fakeDataset().simulation.temporalCoverage}
         preview
         previewLogs={fakeLogs(job.status)}
         previewLive={fakeLive(job)}

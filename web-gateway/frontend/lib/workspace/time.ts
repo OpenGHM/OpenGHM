@@ -158,3 +158,15 @@ export function formatUtcTime(iso: string, sameDayAs?: string): string {
   }
   return time;
 }
+
+/** The viewer's zone as the browser names it at that moment (`GMT+9`, `PDT`).
+ *  Only call in the browser, after hydration. Empty when the browser gives none. */
+export function localZoneName(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return (
+    new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+      .formatToParts(d)
+      .find((part) => part.type === "timeZoneName")?.value ?? ""
+  );
+}

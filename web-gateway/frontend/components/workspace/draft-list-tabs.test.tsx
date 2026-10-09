@@ -66,14 +66,19 @@ describe("the list's tab bar", () => {
     ]);
   });
 
-  it("is the quiet segmented control of the repository's List / Grid switch, with the selected segment filled navy", () => {
+  it("is a row of buttons with a dot, the label and a mono count, the selected one filled navy", () => {
     render(<DraftListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
     const nav = screen.getByRole("navigation", { name: "Filter snapshot drafts" });
-    expect(nav.className).toContain("bg-muted");
-    expect(nav.className).not.toContain("border");
+    // No track behind them: the buttons sit straight on the toolbar card.
+    expect(nav.className).not.toContain("bg-muted");
     const selected = links().find((a) => a.getAttribute("aria-current") === "page")!;
     expect(selected.className).toContain("bg-hero");
     expect(links().filter((a) => a !== selected).every((a) => !a.className.includes("bg-primary"))).toBe(true);
+    // A dot in the hue of the status, white on the selected button.
+    const dot = (a: HTMLElement) => a.firstElementChild as HTMLElement;
+    expect(dot(selected).className).toContain("bg-white");
+    expect(dot(links().find((a) => a.textContent === "Failed1")!).className).toContain("bg-status-failed");
+    expect(selected.querySelector(".font-mono")?.textContent).toBe("2");
   });
 
   it("scrolls inside itself on a narrow screen and keeps every target 40 px tall", () => {

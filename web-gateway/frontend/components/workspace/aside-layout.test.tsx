@@ -33,9 +33,12 @@ describe("AsideLayout, with the aside in the flow below xl", () => {
     expect(aside.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Visible below xl, a column from it.
     expect(aside.classList.contains("hidden")).toBe(false);
-    for (const name of ["xl:col-start-2", "xl:row-start-1", "xl:row-span-2", "xl:sticky", "xl:self-start"]) {
+    for (const name of ["xl:col-start-2", "xl:row-start-1", "xl:row-span-2", "xl:self-start"]) {
       expect(aside.classList.contains(name)).toBe(true);
     }
+    // It scrolls with the page: a sticky column taller than the viewport
+    // would clip its last card.
+    expect(aside.classList.contains("xl:sticky")).toBe(false);
     expect(lead.parentElement?.className).toContain("xl:col-start-1");
     expect(rest.parentElement?.className).toContain("xl:row-start-2");
   });

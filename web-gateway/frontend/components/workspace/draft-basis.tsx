@@ -22,10 +22,10 @@ export const snapshotHref = (datasetId: string) => `/repository/${encodeURICompo
 
 /**
  * What the draft is based on, read-only (a draft's starting point cannot
- * change), as a small card at the top of Run settings: the snapshot's map
- * thumbnail, its title (two lines at most, the whole title on hover), one
- * muted line of facts (model and version, years, resolution), and a link to
- * its repository page. Three states, as
+ * change), as a small card at the top of Run settings, the one that overlaps the
+ * band: the snapshot's map thumbnail, its title (two lines at most, the whole
+ * title on hover), one muted line of facts (model and version, years,
+ * resolution), and a button to its repository page. Three states, as
  * `DraftContext.snapshotState` says:
  * - `found`: the above.
  * - `gone`: it left the repository. The draft keeps the title it was made
@@ -44,6 +44,7 @@ export function DraftBasis({
   datasetId,
   fallbackTitle,
   modelInput,
+  action,
   disabled = false,
 }: {
   ctx: DraftContext;
@@ -61,6 +62,8 @@ export function DraftBasis({
     /** What the server said about a model input it refused. */
     error?: string;
   };
+  /** What goes after the repository link: Run settings puts its Help button here. */
+  action?: React.ReactNode;
   disabled?: boolean;
 }) {
   const href = snapshotHref(datasetId);
@@ -82,7 +85,7 @@ export function DraftBasis({
           <Link
             href={`/repository/model-inputs/${encodeURIComponent(shownId)}`}
             title={modelInput.resolved.about.name}
-            className="text-primary underline-offset-2 hover:underline"
+            className="font-medium text-primary underline-offset-2 hover:underline"
           >
             {modelInput.resolved.about.name}
           </Link>
@@ -95,48 +98,48 @@ export function DraftBasis({
   }
 
   return (
-    <div className="space-y-3 rounded-card border border-border/70 bg-card p-4 shadow-card sm:px-6 sm:py-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-        {/* On a phone the thumbnail sits above the text, so the title has the card's whole width. */}
-        <div className="flex min-w-0 flex-1 flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
-          {dataset && (
-            <div className="relative h-12 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted">
-              <CoverageThumbnail
-                box={snapshotBox(dataset)}
-                aspect="wide"
-                showLabel={false}
-                className="absolute inset-0 aspect-auto rounded-none border-0"
-              />
-            </div>
-          )}
-          <div className="min-w-0 max-w-full flex-1 space-y-0.5">
-            <p className="font-mono text-xs tracking-[0.06em] text-primary uppercase">Based on</p>
-            <ClampedName as="p" lines={2} className="text-base leading-snug font-semibold text-foreground">
-              {title}
-            </ClampedName>
-            {(facts.length > 0 || modelInputText) && (
-              <p className={cn(clampClass(2), "text-[13px] text-muted-foreground")}>
-                {facts.map((fact, i) => (
-                  <span key={fact}>
-                    {i > 0 && " · "}
-                    <span className="whitespace-nowrap">{fact}</span>
-                  </span>
-                ))}
-                {facts.length > 0 && modelInputText && " · "}
-                {modelInputText}
-              </p>
-            )}
+    <div className="space-y-3 rounded-card bg-card p-4 shadow-raised sm:px-6 sm:py-4">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3.5">
+        {dataset && (
+          <div className="relative aspect-[2/1] w-[120px] shrink-0 overflow-hidden rounded-[10px] border-[1.5px] border-data-1 bg-secondary">
+            <CoverageThumbnail
+              box={snapshotBox(dataset)}
+              aspect="wide"
+              showLabel={false}
+              className="absolute inset-0 aspect-auto rounded-none border-0"
+            />
           </div>
+        )}
+        <div className="min-w-[min(100%,17.5rem)] max-w-full flex-1 space-y-1">
+          <p className="font-mono text-[11.5px] tracking-[0.06em] text-primary uppercase">Based on</p>
+          <ClampedName as="p" lines={2} className="text-base leading-snug font-[650] tracking-[-0.01em] text-foreground">
+            {title}
+          </ClampedName>
+          {(facts.length > 0 || modelInputText) && (
+            <p className={cn(clampClass(2), "text-[13px] text-muted-foreground")}>
+              {facts.map((fact, i) => (
+                <span key={fact}>
+                  {i > 0 && " · "}
+                  <span className="whitespace-nowrap">{fact}</span>
+                </span>
+              ))}
+              {facts.length > 0 && modelInputText && " · "}
+              {modelInputText}
+            </p>
+          )}
         </div>
-        {dataset || ctx.snapshotState === "unavailable" ? (
-          <Link
-            href={href}
-            className="inline-flex min-h-10 shrink-0 items-center gap-1 self-start rounded text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8 sm:self-center"
-          >
-            View in repository
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          </Link>
-        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {dataset || ctx.snapshotState === "unavailable" ? (
+            <Link
+              href={href}
+              className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-[10px] bg-muted px-3.5 text-[13.5px] font-semibold text-foreground outline-none transition-colors hover:bg-secondary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              View in repository
+              <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </Link>
+          ) : null}
+          {action}
+        </div>
       </div>
 
       {ctx.snapshotState === "gone" && (

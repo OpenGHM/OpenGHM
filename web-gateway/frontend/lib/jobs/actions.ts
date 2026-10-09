@@ -152,12 +152,17 @@ export async function publishedAnswer(
 export async function fetchJobs(
   page: number = 1,
   status?: string,
-  userId?: string
+  userId?: string,
+  options: { pageSize?: number; sort?: "updated" | "created" } = {}
 ): Promise<JobListResponse> {
   const client = await getApiClient();
   // `sort=updated` is the backend's default; stated so the list does not
   // depend on it.
-  const params: Record<string, string | number> = { page, page_size: 10, sort: "updated" };
+  const params: Record<string, string | number> = {
+    page,
+    page_size: options.pageSize ?? 10,
+    sort: options.sort ?? "updated",
+  };
   if (status) params.status = status;
   if (userId) params.user_id = userId;
   const res = await client.get<JobListResponse>("/api/v1/jobs", { params });

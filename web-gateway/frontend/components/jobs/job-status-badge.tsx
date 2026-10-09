@@ -36,6 +36,26 @@ export function JobStatusBadge({ status }: { status: DisplayStatus }) {
 }
 
 /**
+ * The status as a tinted pill with a dot, borderless: the list rows and the
+ * snapshot draft page's band. Takes the status to *show*, like `JobStatusBadge`.
+ * A running or cancelling job's dot pulses (not under reduced motion).
+ */
+export function JobStatusPill({ status, className }: { status: DisplayStatus; className?: string }) {
+  const active = status === "RUNNING" || status === "CANCELLING";
+  return (
+    <span
+      className={`inline-flex items-center gap-[7px] rounded-full py-[5px] pr-[11px] pl-[9px] text-[12.5px] font-semibold whitespace-nowrap ${HUE[status].tile} ${HUE[status].icon} ${className ?? ""}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`size-[7px] shrink-0 rounded-full bg-current ${active ? "motion-safe:animate-pulse" : ""}`}
+      />
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/**
  * The status as a dot and a word in the status's colour, with no box around
  * it: for a list row, where a badge on every line is heavier than the status
  * deserves. Takes the status to *show*, like `JobStatusBadge`. A running or

@@ -29,14 +29,16 @@ export function OutputFileList({
   const shown = useMemo(() => limitRows(groups, MAX_ROWS), [groups]);
   const notShown = fileCount - shown.reduce((n, g) => n + g.rows.length, 0);
 
+  // Two siblings for the parent's flex row: the toggle in the row, the open
+  // list on a line of its own under it.
   return (
-    <div className="space-y-2">
+    <>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={regionId}
-        className="-ml-1 flex min-h-10 items-center gap-1.5 rounded-md px-1 text-sm font-medium text-foreground outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8"
+        className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-muted px-3.5 text-[13.5px] font-semibold text-foreground outline-none transition-colors hover:bg-secondary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-9"
       >
         {open ? (
           <ChevronDown className="size-4" aria-hidden="true" />
@@ -50,7 +52,7 @@ export function OutputFileList({
         <div
           id={regionId}
           tabIndex={0}
-          className="max-h-72 space-y-3 overflow-auto rounded-xl bg-muted p-3.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="max-h-72 w-full basis-full space-y-3 overflow-auto rounded-xl bg-muted p-3.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           {shown.map((g) => (
             <section key={g.folder || "."} aria-label={g.folder || "Top level"}>
@@ -77,6 +79,6 @@ export function OutputFileList({
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }

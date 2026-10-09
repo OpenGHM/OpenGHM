@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftSection } from "@/components/workspace/draft-section";
 import { describeSlurmTime } from "@/lib/jobs/compute";
@@ -58,26 +59,43 @@ export function describeProducts(
   return `Writes ${joined}.`;
 }
 
+/** A setting's value in its pill: green when the init switches it on, grey when not. */
+function ValuePill({ on = false, children }: { on?: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-block max-w-full rounded-2xl px-2.5 py-0.5 text-xs font-semibold break-words",
+        on ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 function SettingRow({
   label,
   initKey,
   note,
+  on = false,
   children,
 }: {
   label: string;
   initKey: string;
   note?: string | null;
+  /** The init switches it on: its pill is green. */
+  on?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="grid gap-0.5 px-2.5 py-1.5 sm:grid-cols-[11rem_1fr] sm:gap-3">
+    <div className="grid items-center gap-x-3 gap-y-1.5 border-t border-border/60 px-4 py-[11px] first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)]">
       <dt className="min-w-0">
-        <span className="text-foreground">{label}</span>
-        <code className="block break-words font-mono text-[0.6875rem] text-muted-foreground">{initKey}</code>
+        <span className="text-[13.5px] text-foreground">{label}</span>
+        <code className="block font-mono text-[11.5px] break-words text-muted-foreground">{initKey}</code>
       </dt>
-      <dd className="min-w-0 break-words text-foreground">
-        {children}
-        {note && <span className="block text-muted-foreground">{note}</span>}
+      <dd className="min-w-0 break-words">
+        <ValuePill on={on}>{children}</ValuePill>
+        {note && <span className="mt-1 block text-xs text-muted-foreground">{note}</span>}
       </dd>
     </div>
   );
@@ -92,28 +110,34 @@ function InitSettingsList({ settings }: { settings: PostProcessingSettings }) {
   const noTemporal = !settings.temporalAggregation;
   const noClimatology = settings.temporalAggregation && !settings.climatology;
   return (
-    <div className="ml-[1.625rem] rounded-xl border bg-muted/30 text-xs">
-      <p id={id} className="px-2.5 pt-2 pb-0.5 font-medium text-foreground">
+    <div className="overflow-hidden rounded-[14px] border border-border/70">
+      <p id={id} className="bg-muted/70 px-4 py-2.5 text-xs font-semibold text-muted-foreground">
         Set in this snapshot&apos;s init
       </p>
-      <dl aria-labelledby={id} className="divide-y">
-        <SettingRow label="Run after the simulation" initKey="Run">
+      <dl aria-labelledby={id}>
+        <SettingRow label="Run after the simulation" initKey="Run" on={settings.run}>
           {onOff(settings.run)}
         </SettingRow>
-        <SettingRow label="Temporal aggregation" initKey="Temporal_Aggregation">
+        <SettingRow
+          label="Temporal aggregation"
+          initKey="Temporal_Aggregation"
+          on={settings.temporalAggregation}
+        >
           {onOff(settings.temporalAggregation)}
         </SettingRow>
         <SettingRow
           label="Climatology"
           initKey="Climatology"
+          on={settings.climatology}
           note={settings.climatology && noTemporal ? "No effect: temporal aggregation is off." : null}
         >
           {onOff(settings.climatology)}
-          {settings.climatologyDefault && <span className="text-muted-foreground"> (default)</span>}
+          {settings.climatologyDefault && " (default)"}
         </SettingRow>
         <SettingRow
           label="Multi-year climatology"
           initKey="TA_multi_year_start, TA_multi_year_timestep"
+          on={settings.multiYear !== null}
           note={
             !settings.multiYear
               ? null
@@ -128,7 +152,11 @@ function InitSettingsList({ settings }: { settings: PostProcessingSettings }) {
             ? `Every ${settings.multiYear.step} ${settings.multiYear.step === 1 ? "year" : "years"} from ${settings.multiYear.start}`
             : "Not set"}
         </SettingRow>
-        <SettingRow label="Polygon aggregation" initKey="Polygon_Aggregation">
+        <SettingRow
+          label="Polygon aggregation"
+          initKey="Polygon_Aggregation"
+          on={settings.polygonAggregation}
+        >
           {settings.polygonAggregation ? "Set" : "Not set"}
         </SettingRow>
         <SettingRow
@@ -142,8 +170,6 @@ function InitSettingsList({ settings }: { settings: PostProcessingSettings }) {
     </div>
   );
 }
-
-const CHECKBOX = "mt-0.5 size-4 shrink-0 accent-primary";
 
 /**
  * The "Post-processing" part of Run settings: whether WBM's post-processing runs
@@ -194,45 +220,78 @@ export function OutputChoiceSection({
   const settings = unsupported ? null : (dataset?.postProcessingSettings ?? null);
   const noteId = `${id}-note`;
   const errorId = `${id}-error`;
-  const describedBy = [noteId, error ? errorId : null].join(" ");
+  const inputId = `${id}-run`;
+  const badgeId = `${id}-badge`;
+  const disabled = unsupported || (climatologyOff && !checked);
+  const describedBy = [noteId, climatologyOff ? badgeId : null, error ? errorId : null].filter(Boolean).join(" ");
 
   return (
     <DraftSection title="Post-processing" help="output">
-      <div className="space-y-1">
-        <label className="flex min-h-10 cursor-pointer items-start gap-2.5 py-2 sm:min-h-8 sm:py-1">
-          <input
-            type="checkbox"
-            checked={checked}
-            disabled={unsupported || (climatologyOff && !checked)}
-            onChange={(event) => onChange(event.target.checked ? "climatology" : "standard")}
-            aria-describedby={describedBy}
-            {...draftField("postProcessing")}
-            className={CHECKBOX}
-          />
-          <span className="min-w-0 text-sm font-medium text-foreground">Run post-processing after the simulation</span>
-        </label>
-        {!unsupported && (
-          <div id={noteId} className="ml-[1.625rem] space-y-0.5 text-xs text-muted-foreground">
-            <p>
-              {produces ??
-                "What it writes depends on the snapshot's init, which could not be read just now."}
-            </p>
-            {climatologyOff && (
-              <p>
-                Not available yet: WBM&apos;s post-processing time grows with a snapshot&apos;s size and
-                period, and the gateway does not plan for it yet.
-              </p>
-            )}
-            {!climatologyOff && compute?.postProcessingWalltime && (
-              <p>
-                Measured on this snapshot&apos;s reference period at {compute.cores}{" "}
-                {compute.cores === 1 ? "core" : "cores"}: about{" "}
-                {describeSlurmTime(compute.postProcessingWalltime)} on top of the run time, which the
-                walltime then includes.
-              </p>
+      <div className="space-y-3.5">
+        <div className={cn("flex items-start gap-3.5 rounded-[14px] bg-muted/70 px-4 py-3.5", disabled && "opacity-85")}>
+          {/* The switch is the checkbox itself, laid transparent over its own
+              track: it keeps its role, its focus, its disabled state and its
+              label, and the track (drawn from its state with `peer`) is only
+              the picture. */}
+          <span className="relative mt-px h-6 w-10 shrink-0">
+            <input
+              id={inputId}
+              type="checkbox"
+              checked={checked}
+              disabled={disabled}
+              onChange={(event) => onChange(event.target.checked ? "climatology" : "standard")}
+              aria-describedby={describedBy}
+              {...draftField("postProcessing")}
+              className="peer absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full bg-input transition-colors peer-checked:bg-primary peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50 peer-checked:[&>span]:translate-x-4"
+            >
+              <span className="absolute top-[3px] left-[3px] size-[18px] rounded-full bg-white shadow-xs transition-transform motion-reduce:transition-none" />
+            </span>
+          </span>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <label
+                htmlFor={inputId}
+                className={cn("text-[14.5px] font-semibold text-foreground", !disabled && "cursor-pointer")}
+              >
+                Run post-processing after the simulation
+              </label>
+              {climatologyOff && (
+                <span
+                  id={badgeId}
+                  className="rounded-full bg-warning/10 px-2 py-0.5 text-[11.5px] font-semibold text-warning"
+                >
+                  Not available yet
+                </span>
+              )}
+            </div>
+            {!unsupported && (
+              <div id={noteId} className="space-y-0.5 text-[13px] leading-normal text-muted-foreground">
+                <p>
+                  {produces ??
+                    "What it writes depends on the snapshot's init, which could not be read just now."}
+                </p>
+                {climatologyOff && (
+                  <p>
+                    WBM&apos;s post-processing time grows with a snapshot&apos;s size and period, and the
+                    gateway does not plan for it yet.
+                  </p>
+                )}
+                {!climatologyOff && compute?.postProcessingWalltime && (
+                  <p>
+                    Measured on this snapshot&apos;s reference period at {compute.cores}{" "}
+                    {compute.cores === 1 ? "core" : "cores"}: about{" "}
+                    {describeSlurmTime(compute.postProcessingWalltime)} on top of the run time, which the
+                    walltime then includes.
+                  </p>
+                )}
+              </div>
             )}
           </div>
-        )}
+        </div>
         {settings && <InitSettingsList settings={settings} />}
       </div>
       {unsupported && (

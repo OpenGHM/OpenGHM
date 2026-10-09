@@ -76,11 +76,40 @@ export function tabForStatus(status: string | undefined): StatusTab | undefined 
   return STATUS_TABS.find((tab) => tab.value?.toUpperCase() === wanted);
 }
 
-/** The list's URL for a tab and a page; a first page has no `page` param. */
-export function listHref(status: string | undefined, page = 1): string {
+/** The rows per page the list offers; the backend takes 1 to 100. */
+export const PAGE_SIZES = [10, 25, 50] as const;
+export const DEFAULT_PAGE_SIZE = 10;
+
+/** What `GET /jobs?sort=` orders by: when a draft last changed, or when it was made. */
+export type ListSort = "updated" | "created";
+export const DEFAULT_SORT: ListSort = "updated";
+
+/** How the list is laid out, apart from its filter and page. Both are in the
+ *  URL, so a page and its order can be linked to or reloaded. */
+export interface ListView {
+  size?: number;
+  sort?: ListSort;
+}
+
+/** The `?size=` value as a page size: one of `PAGE_SIZES`, else the default. */
+export function parsePageSize(value: string | undefined): number {
+  const wanted = Number(value);
+  return PAGE_SIZES.find((size) => size === wanted) ?? DEFAULT_PAGE_SIZE;
+}
+
+/** The `?sort=` value as an order: a known one, else the default. */
+export function parseSort(value: string | undefined): ListSort {
+  return value === "created" ? "created" : DEFAULT_SORT;
+}
+
+/** The list's URL for a tab, a page and a view; a first page, the default page
+ *  size and the default order leave no param. */
+export function listHref(status: string | undefined, page = 1, view: ListView = {}): string {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (page > 1) params.set("page", String(page));
+  if (view.size && view.size !== DEFAULT_PAGE_SIZE) params.set("size", String(view.size));
+  if (view.sort && view.sort !== DEFAULT_SORT) params.set("sort", view.sort);
   const query = params.toString();
   return query ? `/workspace?${query}` : "/workspace";
 }

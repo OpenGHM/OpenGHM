@@ -194,7 +194,7 @@ export function DraftReviewStep({
   const description = local.description.trim();
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
+    <fieldset disabled={disabled} className="min-w-0 space-y-4 border-0 p-0">
       <DraftStepHeading step="review">
         {publishedAnswer.status === "answered"
           ? "Check what you asked for, then download the published results."
@@ -314,7 +314,7 @@ export function DraftReviewStep({
         {publishedAnswer.status === "error" && (
           <p
             role="status"
-            className="flex items-start gap-2 px-5 py-3 text-xs text-muted-foreground sm:px-7"
+            className="flex items-start gap-2 px-1 text-xs text-muted-foreground"
           >
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             We couldn&apos;t check whether this is already published. You can still submit it.

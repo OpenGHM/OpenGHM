@@ -14,11 +14,15 @@ export function CopyButton({
   label,
   className,
   disabled = false,
+  tone = "muted",
 }: {
   text: string;
   label: string;
   className?: string;
   disabled?: boolean;
+  /** `muted`: a quiet grey button. `primary`: the filled brand button, for a
+   *  copy that is the point of its box (the results path). */
+  tone?: "muted" | "primary";
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -41,11 +45,15 @@ export function CopyButton({
       onClick={() => void copy()}
       disabled={disabled}
       aria-label={`Copy ${label}`}
-      className={`min-h-10 shrink-0 gap-1.5 rounded-[9px] border-0 bg-muted px-3 text-[12.5px] font-semibold text-foreground shadow-none hover:bg-secondary hover:text-primary sm:min-h-8 ${className ?? ""}`}
+      className={`min-h-10 shrink-0 gap-1.5 rounded-[9px] border-0 px-3 text-[12.5px] font-semibold shadow-none sm:min-h-8 ${
+        tone === "primary"
+          ? "bg-primary text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground"
+          : "bg-muted text-foreground hover:bg-secondary hover:text-primary"
+      } ${className ?? ""}`}
     >
       {copied ? (
         <>
-          <Check className="size-3.5 text-status-completed" aria-hidden="true" />
+          <Check className={`size-3.5 ${tone === "primary" ? "" : "text-status-completed"}`} aria-hidden="true" />
           Copied
         </>
       ) : (

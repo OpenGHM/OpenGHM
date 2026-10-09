@@ -90,6 +90,17 @@ describe("a publishable draft", () => {
     expect(screen.getByRole("button", { name: "Publish as snapshot" })).toBeTruthy();
   });
 
+  it("is the one card in the brand colour, with a white button, until a publish exists", () => {
+    const { container } = render(card(job("completed")));
+    const section = container.querySelector("section")!;
+    expect(section.className).toContain("bg-primary");
+    expect(screen.getByRole("button", { name: "Publish as snapshot" }).className).toContain("bg-card");
+    cleanup();
+    const published = render(card(job("publish:published")));
+    expect(published.container.querySelector("section")!.className).toContain("bg-card");
+    expect(published.container.querySelector("section")!.className).not.toContain("bg-primary");
+  });
+
   it("opens the form filled from the draft's about, saying again that it is public and cannot be changed", async () => {
     render(card(job("completed")));
     fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));

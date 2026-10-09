@@ -92,6 +92,47 @@ describe("the run details card", () => {
     expect(screen.getByRole("button", { name: "Show fewer" }).getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("gives each output variable a chip with a swatch from the categorical colours, in turn", () => {
+    details(previewDraftJob("completed"), null);
+    const chips = ["discharge", "runoff", "streamAge"].map((v) => screen.getByText(v));
+    chips.forEach((chip, i) => {
+      expect(chip.className).toContain("rounded-full");
+      expect(chip.firstElementChild?.className).toContain(`bg-data-${i + 1}`);
+    });
+  });
+
+  it("draws the run period against the base snapshot's coverage when it is known", () => {
+    const job = previewDraftJob("completed");
+    const base = { ...job.parameters, temporal_range_start: "2000-01-01", temporal_range_end: "2001-12-31" };
+    const { container } = render(
+      <LiveJobProvider jobId={job.id} initialStatus={job.status} initialData={{}} preview>
+        <RunDetailsCard
+          job={{ ...job, parameters: base }}
+          recommended={null}
+          coverage={{ start: "2000-01-01", end: "2009-12-31" }}
+        />
+      </LiveJobProvider>
+    );
+    const fill = container.querySelector<HTMLElement>("[data-testid=run-period-track]")!;
+    expect(fill.style.left).toBe("0%");
+    expect(parseFloat(fill.style.width)).toBeCloseTo(20, 0);
+    cleanup();
+    expect(details(job, null).container.querySelector("[data-testid=run-period-track]")).toBeNull();
+  });
+
+  it("shows the walltime a finished run used, against the limit, when both are known", () => {
+    // Ran 1 h of a 3 h walltime.
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 4, walltime: "03:00:00" } } });
+    const { container } = details(job, null);
+    const bar = screen.getByRole("progressbar", { name: "Walltime used" });
+    expect(bar.getAttribute("aria-valuenow")).toBe("33");
+    expect(container.textContent).toContain("1 h / 3 h");
+    cleanup();
+    // Nothing to compare against: no bar.
+    details(previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } }), null);
+    expect(screen.queryByRole("progressbar", { name: "Walltime used" })).toBeNull();
+  });
+
   it("has no toggle when every variable is already shown", () => {
     details(previewDraftJob("completed"), null);
     expect(screen.queryByRole("button", { name: /Show/ })).toBeNull();

@@ -52,7 +52,7 @@ export function DraftDeleteButton({
         variant="ghost"
         size="icon-lg"
         aria-label={`Delete snapshot draft ${name}`}
-        className="relative z-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive"
+        className="relative z-10 shrink-0 rounded-[10px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive"
         onClick={() => setOpen(true)}
       >
         <Trash2 aria-hidden="true" />

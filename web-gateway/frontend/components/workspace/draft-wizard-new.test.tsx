@@ -190,6 +190,18 @@ describe("a new snapshot draft: what the page says", () => {
     expect(saveButtons()).toHaveLength(1);
   });
 
+  it("draws Not saved as a dashed amber pill in the band, and offers Next: Review there on Run settings only", () => {
+    wizard();
+    const pill = screen.getByText("Not saved");
+    expect(pill.className).toContain("border-dashed");
+    expect(pill.className).toContain("border-hero-attention");
+    const next = screen.getByRole("button", { name: "Next: Review" });
+    expect(next.closest("nav")).toBeNull();
+    fireEvent.click(next);
+    expect(heading()).toBe("Review & submit");
+    expect(screen.queryByRole("button", { name: "Next: Review" })).toBeNull();
+  });
+
   it("addresses its steps under /workspace/new/<snapshot>, and changes step without leaving", () => {
     wizard();
     expect(screen.getByRole("link", { name: /Review & submit/ }).getAttribute("href")).toBe(`${BASE_PATH}?step=review`);

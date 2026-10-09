@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { clampClass } from "@/components/common/clamped-name";
 import { CopyButton } from "@/components/workspace/copy-button";
+import { periodBarLayout } from "@/components/workspace/run-period-bar";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import {
@@ -15,6 +16,7 @@ import {
   type Recommended,
 } from "@/lib/jobs/compute";
 import type { Job } from "@/lib/jobs/types";
+import { isTerminalStatus } from "@/lib/jobs/types";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import { useNow } from "@/lib/workspace/use-now";
 import { cn } from "@/lib/utils";
@@ -22,14 +24,45 @@ import { cn } from "@/lib/utils";
 /** Variables drawn before "Show all". */
 const VARIABLES_SHOWN = 6;
 
+/** The swatch and the 12% tint of an output variable's chip, from the
+ *  categorical `--data-*` tokens, in turn. Written whole because Tailwind reads
+ *  source text. They tell the chips apart and mean nothing. */
+const CHIP_COLOURS = [
+  { swatch: "bg-data-1", tint: "bg-[color-mix(in_srgb,var(--data-1)_12%,transparent)]" },
+  { swatch: "bg-data-2", tint: "bg-[color-mix(in_srgb,var(--data-2)_12%,transparent)]" },
+  { swatch: "bg-data-3", tint: "bg-[color-mix(in_srgb,var(--data-3)_12%,transparent)]" },
+  { swatch: "bg-data-4", tint: "bg-[color-mix(in_srgb,var(--data-4)_12%,transparent)]" },
+  { swatch: "bg-data-5", tint: "bg-[color-mix(in_srgb,var(--data-5)_12%,transparent)]" },
+  { swatch: "bg-data-6", tint: "bg-[color-mix(in_srgb,var(--data-6)_12%,transparent)]" },
+  { swatch: "bg-data-7", tint: "bg-[color-mix(in_srgb,var(--data-7)_12%,transparent)]" },
+  { swatch: "bg-data-8", tint: "bg-[color-mix(in_srgb,var(--data-8)_12%,transparent)]" },
+] as const;
+
 /** One fact of the card, drawn as the Data Repository's "Dataset Info" draws
  *  one: the label small and muted, the value under it, a hairline between rows.
- *  `mono` is for a value that is a date, a number or an id. */
-function InfoRow({ label, mono = false, children }: { label: string; mono?: boolean; children: ReactNode }) {
+ *  `mono` is for a value that is a date, a number or an id; `inline` puts a
+ *  short one (an id) on the label's line, at the right. */
+function InfoRow({
+  label,
+  mono = false,
+  inline = false,
+  children,
+}: {
+  label: string;
+  mono?: boolean;
+  inline?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 border-t py-3">
+    <div className={cn("flex min-w-0 gap-0.5 border-t py-3", inline ? "items-baseline justify-between gap-3" : "flex-col")}>
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={cn("min-w-0 text-sm font-medium break-words text-foreground", mono && "font-mono text-[13px]")}>
+      <dd
+        className={cn(
+          "min-w-0 text-sm font-medium break-words text-foreground",
+          mono && "font-mono text-[13px]",
+          inline && "text-right",
+        )}
+      >
         {children}
       </dd>
     </div>
@@ -58,11 +91,18 @@ function Variables({ variables }: { variables: string[] }) {
   return (
     <div id={regionId} className="flex flex-wrap items-center gap-1.5">
       <span className="mr-1 font-mono text-[13px] font-medium">{variables.length}</span>
-      {shown.map((v) => (
-        <span key={v} className="rounded-full border px-2.5 py-[3px] font-mono text-xs font-normal text-foreground/80">
-          {v}
-        </span>
-      ))}
+      {shown.map((v, i) => {
+        const colour = CHIP_COLOURS[i % CHIP_COLOURS.length];
+        return (
+          <span
+            key={v}
+            className={cn("flex items-center gap-1.5 rounded-full px-[9px] py-1 font-mono text-xs font-normal text-foreground", colour.tint)}
+          >
+            <span aria-hidden="true" className={cn("size-[7px] shrink-0 rounded-[2px]", colour.swatch)} />
+            {v}
+          </span>
+        );
+      })}
       {variables.length > VARIABLES_SHOWN && (
         <button
           type="button"
@@ -153,12 +193,16 @@ export function RunDetailsCard({
   job,
   recommended,
   postProcessing = false,
+  coverage = null,
 }: {
   job: Job;
   recommended: Recommended | null;
   postProcessing?: boolean;
+  /** The base snapshot's temporal coverage, which the run period is drawn
+   *  against as a small bar; null when the snapshot could not be read. */
+  coverage?: { start: string; end: string } | null;
 }) {
-  const { view, live, status } = useLiveJobContext();
+  const { view, live, status, startedAt, completedAt } = useLiveJobContext();
   const { parameters, slurm_config: config } = job;
   const compute = effectiveCompute(config, recommended, postProcessing);
 
@@ -183,6 +227,16 @@ export function RunDetailsCard({
   // A completed run's results (and their path) are the status summary's.
   const summaryHasPath = status === "COMPLETED" && files !== "purged";
   const slurmJobId = view.slurm_job_id ?? job.slurm_job_id;
+  // How much of the walltime a finished run used: the run (SLURM's own start
+  // and end when it has them) against the limit shown above. Nothing is drawn
+  // for a run still going (the status summary has its walltime bar) or when
+  // either side is unknown.
+  const ran = isTerminalStatus(status)
+    ? secondsBetween(view.slurm_start ?? startedAt, view.slurm_end ?? completedAt)
+    : null;
+  const limitSeconds = limit ?? walltimeSeconds;
+  const used = ran !== null && limitSeconds ? { ran, limit: limitSeconds, percent: Math.min(100, (ran / limitSeconds) * 100) } : null;
+  const periodFill = coverage ? periodBarLayout(coverage, parameters.temporal_range_start, parameters.temporal_range_end)?.fill : null;
 
   return (
     <div className="space-y-4">
@@ -201,6 +255,15 @@ export function RunDetailsCard({
           </InfoRow>
           <InfoRow mono label="Run period">
             {parameters.temporal_range_start} &rarr; {parameters.temporal_range_end}
+            {periodFill && (
+              <span aria-hidden="true" className="relative mt-2 block h-1.5 rounded-md bg-muted">
+                <span
+                  data-testid="run-period-track"
+                  className="absolute inset-y-0 min-w-1.5 rounded-md bg-primary"
+                  style={{ left: `${periodFill.from * 100}%`, width: `${(periodFill.to - periodFill.from) * 100}%` }}
+                />
+              </span>
+            )}
           </InfoRow>
           {domain && (
             <InfoRow label="Spatial domain">
@@ -219,12 +282,12 @@ export function RunDetailsCard({
             <InfoRow label="Post-processing">{describeOutput(parameters.post_processing)}</InfoRow>
           )}
           {job.sim_id && (
-            <InfoRow label="Run ID">
+            <InfoRow inline label="Run ID">
               <span className={MONO}>{job.sim_id}</span>
             </InfoRow>
           )}
           {job.toolkit?.commit && (
-            <InfoRow label="Toolkit commit">
+            <InfoRow inline label="Toolkit commit">
               <span className={MONO}>{job.toolkit.commit}</span>
             </InfoRow>
           )}
@@ -253,6 +316,29 @@ export function RunDetailsCard({
               {walltime ?? <span className="text-hero-foreground-muted">—</span>}
               {walltimeNote && <span className={TILE_NOTE}>{walltimeNote}</span>}
             </Tile>
+            {used && (
+              <div className="col-span-2 grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-1.5 rounded-xl bg-white/6 p-3">
+                <dt className="text-[11.5px] text-hero-eyebrow">Walltime used</dt>
+                <dd className="font-mono text-xs text-hero-foreground">
+                  {shortDuration(used.ran)} / {walltime}
+                </dd>
+                <dd className="col-span-2">
+                  <div
+                    role="progressbar"
+                    aria-label="Walltime used"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(used.percent)}
+                    className="h-1.5 rounded-md bg-white/10"
+                  >
+                    <div
+                      className={cn("h-full rounded-md", used.percent >= 100 ? "bg-hero-error" : "bg-hero-lit")}
+                      style={{ width: `${used.percent}%` }}
+                    />
+                  </div>
+                </dd>
+              </div>
+            )}
             {slurmJobId && (
               <Tile label="Slurm job" wide>
                 #{slurmJobId}

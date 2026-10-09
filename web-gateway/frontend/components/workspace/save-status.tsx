@@ -76,14 +76,14 @@ export function SaveStatus({
         <span className="inline-flex items-center gap-1.5">
           <Check className="size-3.5" aria-hidden="true" />
           Saved
-          {state.at && <TimeStamp value={state.at} format="relative" className="text-hero-foreground-muted/80" />}
+          {state.at && <TimeStamp value={state.at} format="relative" className="text-hero-faint" />}
         </span>
       );
       break;
     case "unsaved":
       visible = (
         <span className="inline-flex items-center gap-1.5 font-medium text-white">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-hero-attention" />
           Unsaved changes
         </span>
       );
@@ -109,7 +109,7 @@ export function SaveStatus({
   }
 
   return (
-    <div className="text-xs text-hero-foreground-muted">
+    <div className="text-[12.5px] text-hero-faint">
       <span>{visible}</span>
       <span role="status" className="sr-only">
         {announcement}

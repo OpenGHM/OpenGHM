@@ -23,6 +23,7 @@ import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { FailedDetails } from "@/components/workspace/failed-details";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { RunMetadata } from "@/components/workspace/run-metadata";
+import { RunDay, RunTimeline } from "@/components/workspace/run-timeline";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
 import { HUE, TONE_HUE } from "@/lib/jobs/status-hue";
@@ -338,7 +339,8 @@ export function JobStatusSummary({
   viewerEmail: string | null;
   preview?: boolean;
 }) {
-  const { jobId, status, view, apply, refresh, sessionExpired, gone, statusReason } = useLiveJobContext();
+  const { jobId, status, view, apply, refresh, sessionExpired, gone, statusReason, completedAt } =
+    useLiveJobContext();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelPending, setCancelPending] = useState(false);
   const [cancelExpired, setCancelExpired] = useState(false);
@@ -377,7 +379,7 @@ export function JobStatusSummary({
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-3 text-xl font-[650] tracking-[-0.02em] text-foreground">
+          <h2 className="flex items-center gap-3 text-[22px] font-[650] tracking-[-0.02em] text-foreground">
             <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-xl ${hue.tile}`}>
               <Icon className={`size-5 ${hue.icon} ${spinning ? "motion-safe:animate-spin" : ""}`} />
             </span>
@@ -387,6 +389,7 @@ export function JobStatusSummary({
             <p className="mt-2 min-w-0 break-words text-sm leading-relaxed text-muted-foreground">{headline.sub}</p>
           )}
         </div>
+        {shown === "COMPLETED" && completedAt && <RunDay iso={completedAt} />}
         {(cancellable || cancelPending) && !gone && (
           <Button
             ref={cancelRef}
@@ -409,6 +412,8 @@ export function JobStatusSummary({
       {showReason && <p className="mt-3 break-words text-sm text-muted-foreground">{statusReason}</p>}
 
       {(shown === "RUNNING" || shown === "COMPLETING") && <RunningBody />}
+
+      {shown === "COMPLETED" && <RunTimeline />}
 
       {shown === "COMPLETED" && (
         <CompletedResults

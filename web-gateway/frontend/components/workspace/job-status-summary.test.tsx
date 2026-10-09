@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import type { Job, JobLive, JobStatus } from "@/lib/jobs/types";
 
@@ -269,6 +269,45 @@ describe("a completed job", () => {
     expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Show file list/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
+  });
+
+  it("draws the run as a bar of the queued and the run time, in proportion, with the three times under it", () => {
+    // The fixture submitted 3 h ago, started 2 h ago and ended 1 h ago.
+    const { container } = render(summary(previewDraftJob("completed")));
+    const queued = container.querySelector<HTMLElement>("[data-testid=timeline-queued]")!;
+    const ran = container.querySelector<HTMLElement>("[data-testid=timeline-ran]")!;
+    expect(queued.style.flexGrow).toBe(ran.style.flexGrow);
+    expect(container.textContent).toContain("Submitted · queued 1 h");
+    expect(container.textContent).toContain("Started · ran 1 h");
+    expect(container.textContent).toContain("Ended");
+    // Three times: when it was submitted, started and ended.
+    expect(container.querySelectorAll("section[aria-label=Status] time[datetime]").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("says the day it ended, with the zone, on the right of the heading", () => {
+    const job = previewDraftJob("completed");
+    const { container } = render(summary(job));
+    const day = container.querySelector(`section[aria-label=Status] > div > time[datetime="${job.completed_at}"]`) as HTMLElement;
+    expect(day.className).toContain("font-mono");
+    expect(day.textContent).toMatch(/\d{4} · \S+$/);
+  });
+
+  it("draws no timeline for a job that is not completed", () => {
+    const { container } = render(summary(previewDraftJob("failed:timeout")));
+    expect(container.querySelector("[data-testid=timeline-ran]")).toBeNull();
+  });
+
+  it("lays the results out as a tinted box with the path and a filled Copy, then the figures, then the retention line", () => {
+    const job = previewDraftJob("completed");
+    render(summary(job));
+    const box = screen.getByText("Results on Anvil scratch").parentElement!;
+    expect(box.className).toContain("bg-secondary");
+    expect(within(box).getByText(job.work_dir!).tagName).toBe("CODE");
+    expect(within(box).getByRole("button", { name: "Copy path" }).className).toContain("bg-primary");
+    const files = screen.getByText("files");
+    expect(files.previousElementSibling?.className).toContain("font-mono");
+    expect(files.previousElementSibling?.textContent).toBe(String(job.output!.file_count));
+    expect(screen.getByText(/Anvil deletes these files around/).closest("p")?.className).toContain("bg-warning/10");
   });
 
   it("shows only the purge notice when the files are gone", () => {

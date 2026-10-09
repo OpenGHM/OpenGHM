@@ -59,7 +59,7 @@ export function JobDeleteButton({
           setOpen(true);
           onOpenChange?.(true);
         }}
-        className="min-h-10 shrink-0 gap-2 border-hero-error/40 bg-white/5 text-hero-error hover:border-hero-error/60 hover:bg-destructive/25 hover:text-white"
+        className="min-h-10 shrink-0 gap-2 rounded-xl border-hero-error/45 bg-transparent px-4 text-[13.5px] font-semibold text-hero-error hover:border-hero-error/60 hover:bg-hero-error/12 hover:text-hero-error"
       >
         <Trash2 aria-hidden="true" />
         Delete snapshot draft

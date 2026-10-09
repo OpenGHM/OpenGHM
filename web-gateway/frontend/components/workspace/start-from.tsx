@@ -43,7 +43,7 @@ export function StartFrom({ usedIds, picker }: { usedIds: readonly string[]; pic
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StepHeaderCard>
         <div className="flex items-center justify-between gap-3">
           <h2 className={STEP_TITLE}>Choose a model snapshot</h2>

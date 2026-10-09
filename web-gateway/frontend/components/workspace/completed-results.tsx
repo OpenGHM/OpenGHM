@@ -34,30 +34,28 @@ export function CompletedResults({
   const around = purgeAround(completedAt);
 
   return (
-    <div className="mt-5 space-y-3">
+    <div className="mt-5 space-y-5">
       {workDir && (
-        <div>
-          <div className="mb-1.5 text-xs font-medium text-muted-foreground">Results on Anvil scratch</div>
-          <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded-[10px] bg-muted px-3 py-2 font-mono text-xs text-foreground">
+        <div className="space-y-2 rounded-[14px] bg-secondary p-4">
+          <div className="text-xs font-semibold text-secondary-foreground">Results on Anvil scratch</div>
+          <div className="flex items-center gap-2.5">
+            <code className="min-w-0 flex-1 overflow-x-auto font-mono text-[13px] whitespace-nowrap text-hero [scrollbar-width:thin]">
               {workDir}
             </code>
-            <CopyButton text={workDir} label="path" />
+            <CopyButton text={workDir} label="path" tone="primary" />
           </div>
         </div>
       )}
 
       {output ? (
-        <>
-          <p className="text-sm text-foreground">
-            <span className="font-semibold">{output.file_count}</span> files
-            <span aria-hidden="true" className="mx-2 text-muted-foreground">·</span>
-            <span className="font-semibold">{output.nc_count}</span> .nc files
-            <span aria-hidden="true" className="mx-2 text-muted-foreground">·</span>
-            <span className="font-semibold">{formatBytes(output.total_bytes)}</span>
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-7 gap-y-2.5">
+          <div className="flex gap-7">
+            <Stat value={output.file_count} label="files" />
+            <Stat value={output.nc_count} label=".nc files" />
+            <Stat value={formatBytes(output.total_bytes)} label="total" />
+          </div>
           {output.files.length > 0 && <OutputFileList files={output.files} fileCount={output.file_count} />}
-        </>
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">
           This job finished before the gateway recorded what it wrote, so its file count and size are
@@ -65,17 +63,30 @@ export function CompletedResults({
         </p>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        {around ? (
-          <>
-            Anvil deletes these files around{" "}
-            <TimeStamp value={around} format="date" className="font-medium text-foreground" /> if unused
-          </>
-        ) : (
-          <>Anvil deletes files that are not used for {RETENTION_DAYS} days</>
-        )}{" "}
-        &mdash; copy what you need.
+      <p className="flex items-center gap-2.5 rounded-xl bg-warning/10 px-3.5 py-3 text-[13.5px] leading-normal text-warning">
+        <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-queued" />
+        <span>
+          {around ? (
+            <>
+              Anvil deletes these files around{" "}
+              <TimeStamp value={around} format="date" className="font-semibold" /> if unused
+            </>
+          ) : (
+            <>Anvil deletes files that are not used for {RETENTION_DAYS} days</>
+          )}{" "}
+          &mdash; copy what you need.
+        </span>
       </p>
+    </div>
+  );
+}
+
+/** A figure of the results: a mono value over a small label. */
+function Stat({ value, label }: { value: number | string; label: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-xl font-medium text-foreground">{value}</span>{" "}
+      <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }

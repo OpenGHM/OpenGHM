@@ -33,6 +33,7 @@ export function JobDetail({
   recommended = null,
   postProcessing = false,
   baseAbout = null,
+  coverage = null,
   preview = false,
   previewLogs,
   previewLive = null,
@@ -48,6 +49,9 @@ export function JobDetail({
   /** The base snapshot's `about`, which the publish form fills what the draft
    *  stores none of from; null when the snapshot could not be read. */
   baseAbout?: PartialAbout | null;
+  /** The base snapshot's temporal coverage, which the Run details card draws
+   *  the run period against; null when the snapshot could not be read. */
+  coverage?: { start: string; end: string } | null;
   /** Fixture data: nothing is polled and the dialogs send nothing. */
   preview?: boolean;
   /** The logs to show instead of fetching them. Preview only. */
@@ -88,7 +92,7 @@ export function JobDetail({
           label="Run details"
           below="flow"
           lead={<JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />}
-          aside={<RunDetailsCard job={job} recommended={recommended} postProcessing={postProcessing} />}
+          aside={<RunDetailsCard job={job} recommended={recommended} postProcessing={postProcessing} coverage={coverage} />}
         >
           <PublishCard job={job} baseAbout={baseAbout} preview={preview} />
           <LogViewer previewLogs={previewLogs} />

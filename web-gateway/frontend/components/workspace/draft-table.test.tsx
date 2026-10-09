@@ -42,15 +42,31 @@ const NOTES = { b: "Run 2000–2005" };
 const items = () => within(screen.getByRole("list", { name: "Snapshot drafts" })).getAllByRole("listitem");
 
 describe("the snapshot draft list", () => {
-  it("is one card of rows with a small header, not a table", () => {
+  it("is a stack of row cards under a mono header, not a table", () => {
     render(<DraftTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
     expect(screen.queryByRole("table")).toBeNull();
     expect(items()).toHaveLength(1);
-    const card = screen.getByRole("list", { name: "Snapshot drafts" }).parentElement!;
-    expect(card.className).toContain("rounded-card");
-    expect(card.className).toContain("bg-card");
+    const list = screen.getByRole("list", { name: "Snapshot drafts" });
+    expect(list.className).toContain("flex-col");
+    // Each row is a white rounded card of its own, not a line in one card.
+    expect(items()[0].className).toContain("rounded-[18px]");
+    expect(items()[0].className).toContain("bg-card");
     // The header is for the eye: every row names its own fields for a screen reader.
-    expect(within(card).getByText("Name").parentElement?.getAttribute("aria-hidden")).toBe("true");
+    const header = within(list.parentElement!).getByText("Name").parentElement!;
+    expect(header.getAttribute("aria-hidden")).toBe("true");
+    expect(header.className).toContain("font-mono");
+    expect([...header.children].map((c) => c.textContent)).toEqual(["Name", "Run period", "Status", "Updated", ""]);
+  });
+
+  it("puts a glyph tile in the status's hue at the start of each row", () => {
+    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED"), job("c", "DRAFT")]} />);
+    const tiles = items().map((li) => li.querySelector("svg")!.parentElement!);
+    expect(tiles.map((t) => t.className.match(/text-status-\w+/)?.[0])).toEqual([
+      "text-status-completed",
+      "text-status-failed",
+      "text-status-draft",
+    ]);
+    for (const t of tiles) expect(t.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("makes the whole row a link: the name's link is stretched over it", () => {
@@ -61,7 +77,7 @@ describe("the snapshot draft list", () => {
     expect(link.className).toContain("after:absolute");
     expect(link.className).toContain("after:inset-0");
     expect(row.className).toContain("relative");
-    expect(row.className).toContain("hover:bg-muted/50");
+    expect(row.className).toContain("hover:shadow-lift");
     // One link per row, and it is not the snapshot: the page says that.
     expect(within(row).getAllByRole("link")).toHaveLength(1);
   });
@@ -69,11 +85,20 @@ describe("the snapshot draft list", () => {
   it("puts the title of the snapshot under the name, in one line with the whole title on hover", () => {
     const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
     render(<DraftTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} runNotes={NOTES} />);
-    const line = within(items()[0]).getByText(title);
+    // The version is the chip's; the title keeps what is left of it, and hangs whole on hover.
+    const line = within(items()[0]).getByText(title.replace("v1.0.0 ", ""));
     expect(line.getAttribute("title")).toBe(title);
     expect(line.className).toContain("truncate");
     expect(line.className).not.toContain("line-clamp");
     expect(line.parentElement?.className).toContain("text-muted-foreground");
+  });
+
+  it("shows the snapshot's version as a small mono chip before its title, and none when the title has no version", () => {
+    render(<DraftTable jobs={[job("a", "COMPLETED", { dataset_title: "WBM v2.0.0 CONUS tutorial" }), job("b", "COMPLETED")]} />);
+    const chip = within(items()[0]).getByText("v2.0.0");
+    expect(chip.className).toContain("font-mono");
+    expect(chip.nextElementSibling?.textContent).toBe("WBM CONUS tutorial");
+    expect(within(items()[1]).queryByText(/^v\d/)).toBeNull();
   });
 
   it("keeps a long draft name to one line and puts the whole name on hover", () => {
@@ -90,11 +115,21 @@ describe("the snapshot draft list", () => {
     expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);
   });
 
-  it("adds the run period after the title only for a simulation shorter than the snapshot covers", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
+  it("says the run period in its own mono column: the run note when it ran less than the snapshot covers, else its dates", () => {
+    const parameters = { temporal_range_start: "2000-01-01", temporal_range_end: "2001-12-31" } as Job["parameters"];
+    render(<DraftTable jobs={[job("a", "COMPLETED", { parameters }), job("b", "FAILED", { parameters })]} runNotes={NOTES} />);
+    const whole = within(items()[0]).getByText("2000–2001");
+    expect(whole.className).toContain("font-mono");
     expect(within(items()[0]).queryByText(/Run 2000/)).toBeNull();
     const note = within(items()[1]).getByText(/Run 2000–2005/);
-    expect(note.className).toContain("shrink-0");
+    expect(note.className).toContain("font-mono");
+    // The note is not repeated after the snapshot's title.
+    expect(note.closest("p")).toBeNull();
+  });
+
+  it("shows a dash for a draft with no run period yet", () => {
+    render(<DraftTable jobs={[job("a", "DRAFT")]} />);
+    expect(within(items()[0]).getByText("—")).toBeTruthy();
   });
 
   it("does not print a Model Snapshot badge on every row", () => {
@@ -109,10 +144,12 @@ describe("the snapshot draft list", () => {
     expect(within(items()[0]).queryByText(/Run 2/)).toBeNull();
   });
 
-  it("shows the status as a dot and a word in its colour, not as a bordered badge", () => {
+  it("shows the status as a tinted pill with a dot, in its colour, not as a bordered badge", () => {
     render(<DraftTable jobs={[job("a", "FAILED")]} runNotes={NOTES} />);
     const word = within(items()[0]).getByText("Failed");
     expect(word.className).toContain("text-status-failed");
+    expect(word.className).toContain("bg-status-failed/10");
+    expect(word.className).toContain("rounded-full");
     expect(word.className).not.toContain("border");
     expect(word.querySelector(".bg-current")).not.toBeNull();
   });
@@ -133,7 +170,7 @@ describe("the snapshot draft list", () => {
     render(<DraftTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} runNotes={NOTES} />);
     expect(screen.getAllByRole("list", { name: "Snapshot drafts" })).toHaveLength(1);
     // Name and meta, then status and time, with Delete beside them; from sm up they are columns.
-    expect(items()[0].className).toContain("sm:grid-cols-[");
+    expect(items()[0].className).toContain("lg:grid-cols-[");
     expect(items()[0].className).toContain("grid-cols-[minmax(0,1fr)_auto]");
   });
 

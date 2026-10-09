@@ -43,7 +43,7 @@ export function SaveDraftButton({
         disabled={saving || disabled}
         aria-describedby={explained ? reasonId : undefined}
         onClick={onClick}
-        className={cn("min-h-10 sm:min-h-9", className)}
+        className={cn("min-h-10 rounded-xl px-4 text-[13.5px] font-semibold sm:min-h-10", className)}
       >
         {saving ? (
           <>
@@ -74,7 +74,7 @@ export function SaveDraftButton({
  */
 export function NewDraftStatus({ state }: { state: "unsaved" | "saving" | "saved" }) {
   return (
-    <div className="text-xs text-hero-foreground-muted">
+    <div className="text-[12.5px] text-hero-faint">
       {state === "saving" ? (
         <span className="inline-flex items-center gap-1.5">
           <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden="true" />

@@ -94,9 +94,8 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
 const start = () => screen.getByLabelText("Start") as HTMLInputElement;
 const end = () => screen.getByLabelText("End") as HTMLInputElement;
 const checkbox = (name: string | RegExp) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
-/** Output variables and Compute are closed until asked for. */
+/** Output variables are closed until asked for; the compute fields are always there. */
 const openVariables = () => fireEvent.click(screen.getByRole("button", { name: "Choose output variables" }));
-const openCompute = () => fireEvent.click(screen.getByRole("button", { name: "Change compute" }));
 
 /** The output-variable checkboxes: every checkbox but the post-processing one. */
 const variableBoxes = () =>
@@ -164,7 +163,6 @@ describe("the draft run step: fields the wizard can focus", () => {
       },
     });
     openVariables();
-    openCompute();
     const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
     expect(marked("start")).toBe(start());
     expect(marked("end")).toBe(end());
@@ -193,23 +191,48 @@ describe("the draft run step: fields the wizard can focus", () => {
 describe("the draft run step: the quiet path", () => {
   const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`);
 
-  it("shows the run period, and only a line and a button for the variables and the compute", () => {
+  it("shows the run period and the compute fields, and only a line and a button for the variables", () => {
     step();
     expect(start()).toBeTruthy();
     expect(end()).toBeTruthy();
     expect(variableBoxes()).toHaveLength(0);
-    expect(screen.queryByLabelText("Cores")).toBeNull();
-    expect(screen.queryByLabelText(/^Walltime/)).toBeNull();
+    expect(screen.getByLabelText("Cores")).toBeTruthy();
+    expect(screen.getByLabelText(/^Walltime/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Choose output variables" }).textContent).toBe("Choose…");
-    expect(screen.getByRole("button", { name: "Change compute" }).textContent).toBe("Change");
+    expect(screen.queryByRole("button", { name: /compute/i })).toBeNull();
   });
 
-  it("is one card of five parts, with no tinted band", () => {
+  it("is a white card for each of the five parts, with no tinted band", () => {
     const { container } = step();
-    const panel = container.querySelector(".divide-y") as HTMLElement;
-    expect(panel.querySelectorAll(":scope > section")).toHaveLength(5);
-    expect(panel.className).toContain("rounded-card");
+    const sections = Array.from(container.querySelectorAll("section"));
+    expect(sections).toHaveLength(5);
+    for (const section of sections) expect(section.className).toContain("rounded-card");
     expect(container.innerHTML).not.toContain("bg-muted/40");
+  });
+
+  it("draws the period over the snapshot's coverage, for the eye only", () => {
+    step();
+    const bar = screen.getByTestId("run-period-bar");
+    expect(bar.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getByTestId("run-period-fill")).toBeTruthy();
+  });
+
+  it("draws the variables as a bar of segments for the eye only, and says how many are selected", () => {
+    const { container } = step();
+    const bar = screen.getByTestId("variables-bar");
+    expect(bar.getAttribute("aria-hidden")).toBe("true");
+    expect(bar.children.length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-testid="variables-bar"] > div')?.className).toContain("bg-data-1/20");
+    expect(screen.getByText("All 3 variables").parentElement?.textContent).toContain("All 3 variables selected");
+  });
+
+  it("fills a segment of the bar as far as its variables are chosen", () => {
+    step({ parameters: { ...PARAMETERS, variables: [] } });
+    const fills = screen.getByTestId("variables-bar").querySelectorAll(":scope > div > div");
+    expect(fills.length).toBeGreaterThan(0);
+    for (const fill of fills) {
+      expect((fill as HTMLElement).style.width).toBe("0%");
+    }
   });
 
   it("says in one line what the variables are", () => {
@@ -259,7 +282,6 @@ describe("the draft run step: the quiet path", () => {
     step({ slurm: { cores: 8, walltime: "12:00:00" } });
     expect(screen.getByText("Custom: 8 cores · 12 h")).toBeTruthy();
     // Still reachable.
-    openCompute();
     expect((screen.getByLabelText("Cores") as HTMLInputElement).value).toBe("8");
   });
 
@@ -287,12 +309,11 @@ describe("the draft run step: the quiet path", () => {
     expect(screen.queryByRole("button", { name: /compute/ })).toBeNull();
   });
 
-  it("marks the two buttons so that an Edit link can open them", () => {
+  it("marks the variables button so that an Edit link can open it, and has the compute fields in place", () => {
     step();
     expect(screen.getByRole("button", { name: "Choose output variables" }).getAttribute("data-draft-reveals")).toBe("variables");
-    expect(screen.getByRole("button", { name: "Change compute" }).getAttribute("data-draft-reveals")).toBe("cores walltime");
     expect(marked("variables")).toBeNull();
-    expect(marked("cores")).toBeNull();
+    expect(marked("cores")).toBe(screen.getByLabelText("Cores"));
   });
 });
 
@@ -484,7 +505,6 @@ describe("the draft run step: without a snapshot", () => {
     expect(screen.getByRole("checkbox", { name: "discharge" })).toBeTruthy();
     expect(screen.queryByText("not in this snapshot")).toBeNull();
     // The compute fields have no recommendation to show.
-    openCompute();
     expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("Recommended");
   });
 });
@@ -589,9 +609,21 @@ describe("the draft run step: what a submit refuses", () => {
 });
 
 describe("the draft run step: compute", () => {
+  it("says what is recommended under each field", () => {
+    step();
+    expect(screen.getByText("Recommended 16").id).toBe(
+      screen.getByLabelText("Cores").getAttribute("aria-describedby")!.split(" ").find((i) => i.endsWith("-cores-hint"))
+    );
+    expect(screen.getByText(/^Recommended \d+:\d\d:\d\d$/)).toBeTruthy();
+  });
+
+  it("says nothing is recommended when the snapshot gave nothing to recommend", () => {
+    step({ recommended: null });
+    expect(screen.queryByText(/^Recommended \d/)).toBeNull();
+  });
+
   it("passes cores and walltime on", () => {
     const { onSlurmChange } = step({ slurm: { cores: null, walltime: "02:00:00" } });
-    openCompute();
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "4" } });
     expect(onSlurmChange).toHaveBeenCalledWith({ cores: 4, walltime: "02:00:00" });
     expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16");
@@ -613,7 +645,6 @@ describe("the draft run step: a walltime the snapshot's reference simulation doe
     // Visible with the fields closed.
     const notice = screen.getByText(/reference simulation took about 111 h 30 min, more than the 96 h/);
     expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
-    openCompute();
     expect(notice.textContent).toMatch(/Shorten the run period or set a walltime\./);
     // One line, with the long reason behind a button.
     expect(screen.queryByText(/the simulation may be stopped when time runs out/)).toBeNull();
@@ -634,7 +665,6 @@ describe("the draft run step: a walltime the snapshot's reference simulation doe
   it("says nothing for a recommendation that fits", () => {
     step();
     expect(screen.queryByText(/reference simulation took/)).toBeNull();
-    openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("00:22:30");
     expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
   });
@@ -642,7 +672,6 @@ describe("the draft run step: a walltime the snapshot's reference simulation doe
   it("only hints, without an error, at a walltime shorter than the reference simulation", () => {
     step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
     expect(screen.getByText(/reference simulation took about 4 h 30 min/)).toBeTruthy();
-    openCompute();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("aria-invalid")).not.toBe("true");
   });
 });
@@ -665,7 +694,6 @@ describe("the draft run step: cores below the recommended count", () => {
         "so 64 cores gives about 121.3 GB and 1 core only about 1.9 GB: " +
         "the simulation may be stopped for running out of memory."
     );
-    openCompute();
     const cores = screen.getByLabelText("Cores");
     expect(cores.getAttribute("aria-describedby")).toContain(note.closest("div")!.id);
     expect(cores.getAttribute("aria-invalid")).not.toBe("true");
@@ -674,7 +702,6 @@ describe("the draft run step: cores below the recommended count", () => {
   it("appears and goes as the value is typed", () => {
     const { onSlurmChange, rerender } = step({ recommended: BIG });
     expect(warning()).toBeNull();
-    openCompute();
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "1" } });
     expect(onSlurmChange).toHaveBeenLastCalledWith({ cores: 1, walltime: null });
 
@@ -723,7 +750,8 @@ describe("the draft run step: disabled", () => {
     expect(off(start())).toBe(true);
     expect(off(end())).toBe(true);
     expect(off(screen.getByRole("button", { name: "Choose output variables" }))).toBe(true);
-    expect(off(screen.getByRole("button", { name: "Change compute" }))).toBe(true);
+    expect(off(screen.getByLabelText("Cores"))).toBe(true);
+    expect(off(screen.getByLabelText(/^Walltime/))).toBe(true);
     for (const remove of screen.getAllByRole("button", { name: "Remove" })) expect(off(remove)).toBe(true);
   });
 });
@@ -862,6 +890,14 @@ describe("the draft run step: the Post-processing choice", () => {
   const climatologyDataset = fakeDataset({
     ...dataset,
     postProcessing: "climatology",
+  });
+
+  it("is a switch to look at and a checkbox to everything else: one input with its own label, and a track hidden from assistive technology", () => {
+    step();
+    const input = box();
+    expect(input.type).toBe("checkbox");
+    expect(screen.getByLabelText(CHECKBOX)).toBe(input);
+    expect(input.nextElementSibling?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("is one checkbox, unchecked when the snapshot's own is standard and the draft has none", () => {
@@ -1058,6 +1094,15 @@ describe("the draft run step: the Post-processing choice", () => {
       expect(rows()).toHaveLength(6);
     });
 
+    it("puts each value in a pill, green for what the init switches on", () => {
+      withSettings({ run: false });
+      const pills = (text: string) => list().getAllByText(text);
+      expect(pills("Off")[0].className).toContain("bg-muted");
+      expect(pills("On")[0].className).toContain("bg-success/10");
+      expect(pills("On (default)")[0].className).toContain("bg-success/10");
+      expect(pills("Not set")[0].className).toContain("bg-muted");
+    });
+
     it("has nothing to edit", () => {
       withSettings({});
       expect(dlElement().querySelectorAll("input, select, textarea, button")).toHaveLength(0);
@@ -1097,15 +1142,16 @@ describe("the draft run step: the Post-processing choice", () => {
     step({ ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: available }), snapshotState: "found" } });
     expect(box().disabled).toBe(true);
     expect(box().checked).toBe(false);
-    expect(
-      screen.getByText(
-        "Not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
-      )
-    ).toBeTruthy();
+    // The pill beside the label says it, and the line says why.
+    const pill = screen.getByText("Not available yet");
+    expect(pill.closest("label")).toBeNull();
+    expect(box().getAttribute("aria-describedby")).toContain(pill.id);
+    const why = screen.getByText(
+      "WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
+    );
     expect(screen.getByText(/^Writes /)).toBeTruthy();
     expect(screen.queryByText(/Measured on this snapshot/)).toBeNull();
-    const note = screen.getByText(/Not available yet/).parentElement!;
-    expect(box().getAttribute("aria-describedby")).toContain(note.id);
+    expect(box().getAttribute("aria-describedby")).toContain(why.parentElement!.id);
   });
 
   it("lets a stored climatology be unchecked while it is off", () => {
@@ -1150,7 +1196,6 @@ describe("the draft run step: the walltime of a climatology choice", () => {
     // 15 min + 45 min, and half as much again.
     step({ parameters: climatology });
     expect(screen.getByText("Recommended: 16 cores · 1 h 30 min")).toBeTruthy();
-    openCompute();
     expect(screen.getByText("Empty = recommended: 16 cores, 1 h 30 min, with the post-processing.")).toBeTruthy();
     expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("01:30:00");
   });
@@ -1158,7 +1203,6 @@ describe("the draft run step: the walltime of a climatology choice", () => {
   it("leaves the automatic walltime alone for the standard output", () => {
     step({ parameters: { ...PARAMETERS, post_processing: "standard" } });
     expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
-    openCompute();
     expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
   });
 
