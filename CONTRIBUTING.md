@@ -38,8 +38,10 @@ in local development requires it.
   ```
 - **The `openghm` toolkit** (`packages/openghm/`): has a real test suite.
   ```bash
-  cd packages/openghm && pip install -e ".[dev]" && pytest
+  cd packages/openghm && pip install -e ".[output,dev]" && pytest
   ```
+  The `output` extra (h5py, numpy, h5netcdf) is what `openghm output` needs;
+  without it `tests/test_output.py` is skipped.
 - **Documentation** (`docs/`): run the checker before opening a pull request.
   ```bash
   python3 docs/tools/check_devdocs.py

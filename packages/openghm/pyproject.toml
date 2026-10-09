@@ -12,8 +12,10 @@ license = { text = "MIT" }
 authors = [{ name = "openghm" }]
 keywords = ["wbm", "hydrology", "hpc", "anvil", "singularity"]
 
-# All dependencies are pure-Python (no native extensions), so `pip install`
-# works cleanly on Anvil's `module load python/3.9.5` toolchain.
+# The dependencies are pure-Python (no native extensions), so `pip install`
+# works cleanly on Anvil's `module load python/3.9.5` toolchain. The one
+# exception is the optional `output` extra below (h5py and numpy are native
+# wheels), which only `openghm output ...` needs.
 dependencies = [
   "click>=8.1",
   "rich>=13",
@@ -30,6 +32,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# `openghm output inventory` / `openghm output subset` (ADR 0033) read and write
+# NetCDF-4. h5py and numpy are native wheels that install on Anvil's Python 3.9
+# (h5py 3.14.0, numpy 2.0.2 checked 2026-10-09); h5netcdf writes the downloaded
+# subset as a valid NetCDF-4 file. Nothing else in the toolkit imports them.
+output = ["h5py>=3.8", "numpy>=1.24", "h5netcdf>=1.3"]
 dev = ["pytest>=7"]
 
 [project.scripts]

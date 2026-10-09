@@ -35,6 +35,12 @@ pip install openghm          # once published to PyPI (or: pip install packages/
 openghm init                 # interactive: pick runtime, download image, configure
 ```
 
+The one exception to "pure-Python" is the optional extra `output`
+(`pip install 'openghm[output]'`): `h5py`, `numpy` and `h5netcdf` are native wheels, and
+only `openghm output ...` ([below](#reading-output-openghm-output)) needs them. They
+install on Anvil's `module load python/3.9.5` (h5py 3.14.0 and numpy 2.0.2, checked
+2026-10-09); without the extra every other command works and `output` exits 1 saying so.
+
 **Installing from a checkout needs pip 21.3 or newer.** The package reaches the
 spec schemas through a relative symlink (`src/openghm/schemas` -> the repository's
 top-level `schemas/`), and pip older than 21.3 copies the source tree to a temporary
@@ -158,6 +164,8 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
 | `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`); `--all` deletes every unit no running simulation holds, whatever the quota says |
 | `openghm spool status [--json]` | `myquota` | print the scratch quota (files and bytes) and what the spool cache holds per variant, with the unexpired leases; deletes nothing |
+| `openghm output inventory <work dir>\|--snapshot <id>` | h5py (extra `output`) | describe a run's WBM output: the files and years that exist, each variable with its units and display settings, the grid; see [Reading output](#reading-output-openghm-output) |
+| `openghm output subset <work dir>\|--snapshot <id> --var V --resolution R --format nc\|png\|json` | h5py (extra `output`) | cut one variable by period and area: a NetCDF file, a north-up map, or a pixel's series; refuses a call over its limits |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
 | `openghm sim logs <id> [-f]` | slurm `.out`/`.err` | print or `--follow` (tail) the SLURM log |
@@ -335,6 +343,118 @@ Exit codes:
 | 7 | verification failed: a key is missing, not public-read, or the wrong size, mode or hash |
 
 A line `snapshot id: <id>` is printed, to stdout, before the first write.
+
+### Reading output (`openghm output`)
+
+WBM output is read **where it is**, on Anvil, and the commands answer subsets
+(ADR 0033); nothing is precomputed or stored. They are short commands for a login node
+(rule 7): each refuses, with a message, a call that would read or write more than its
+[limits](#limits).
+
+```sh
+pip install 'openghm[output]'                            # h5py, numpy, h5netcdf (see Install)
+openghm output inventory <work dir> --json               # a run on scratch: <output_base>/<sim id>
+openghm output inventory --snapshot <id> --json          # a published snapshot's wbm_output/
+openghm output subset <work dir> --var runoff --resolution monthly --start 2000-03 --format png --json
+openghm output subset --snapshot <id> --var runoff --resolution daily --start 2000 --point -99.3,42.6 --format json
+openghm output subset <work dir> --var runoff --resolution daily --start 2000-01 --end 2000-03 \
+    --bbox -105,35,-100,40 --format nc --out /scratch/x/runoff.nc --json
+```
+
+**The source** is a work directory (the output is at `wbm_output/<run>/` under it; `--run NAME`
+picks one when there are several, and the directory named for the simulation is taken without
+being asked) or `--snapshot <id>`. A snapshot is listed with anonymous ListObjectsV2 (its
+`SHA256SUMS` leaves `wbm_output/` out, so cannot say what exists) and read by HTTP range
+requests from the bucket (`s3_base_url` in the config, default the bucket `fetch` uses); no
+file is downloaded. A scratch file is opened with HDF5's file locking off, because a run still
+writing holds a lock on its current year.
+
+**The layout it reads** is WBM's: `daily/wbm_<year>.nc` (every variable, one year),
+`monthly/<variable>/wbm_<year>.nc` and `yearly/<variable>/wbm_<year>.nc` (one variable and its
+`_sigma`), `climatology/wbm_<variable>_<dc|mc|yc>.nc`, `<ID>.MT.csv`. Each variable is `float
+v(time, lat, lon)` with `_FillValue = -9999`; `time` is `days since 1900-01-01` (daily files
+stamp each day, monthly files the middle of the month, yearly files July 1); `lat` is stored
+**south to north**. The monthly and yearly files hold per-day values (`mm/day`) where the MT
+shows `mm/month` with `Var_Scale 30`.
+
+**`output inventory`** lists what exists, not what the MT claims (it lists climatology records
+that were never written, and its `File_Path` is a path inside the run's container, which is never
+used). The files decide the variables, resolutions and years; the MT, found as `<run>.MT.csv`
+or as the only `*.MT.csv`, adds display settings. With `--json`:
+
+```json
+{"source": {"kind": "folder", "path": "...", "run": "...", "base": "..."},
+ "mt": "wbm_test.MT.csv",
+ "grid": {"rows": 425, "cols": 807, "crs": "EPSG:4326", "cellSize": 0.0833,
+          "bounds": {"west": -127.83, "south": 21.75, "east": -60.58, "north": 57.17},
+          "lat": {"first": 21.79, "last": 57.13, "step": 0.0833}, "lon": {"first": ..., "last": ..., "step": ...},
+          "latOrder": "south-to-north"},
+ "resolutions": {"daily": {"years": [2000, 2001], "first": "2000-01-01", "last": "2001-12-31", "path": "daily/wbm_{year}.nc"},
+                 "monthly": {"years": [...], "first": "...", "last": "...", "path": "monthly/{variable}/wbm_{year}.nc"},
+                 "yearly": {...}, "climatology": {"kinds": ["daily", "monthly"]}},
+ "variables": [{"name": "runoff", "longName": "Runoff", "units": "mm/day",
+                "resolutions": {"daily": {"years": [...], "path": "daily/wbm_{year}.nc", "display": {...}},
+                                "monthly": {"years": [...], "path": "monthly/runoff/wbm_{year}.nc", "display": {...}},
+                                "climatology": {"daily": {"path": "climatology/wbm_runoff_dc.nc", "display": {...}}}}}],
+ "files": {"count": 120, "bytes": 123456}, "warnings": []}
+```
+
+`units` is what the file stores. `display` (null when the MT has no record) is
+`{"units": "mm/month", "scale": 30.0, "offset": 0.0, "legend": {"ramp": "DarkBlue", "min": 0.0, "max": 100.0, "log": false},
+"processing": null, "round": "%.2f"}`: a displayed value is `stored * scale + offset`, and `legend` is
+the MT's `DarkBlue(0:100)` (`Log` suffix: `log` true). The variables come in the MT's order, then the rest by
+name. A file that cannot be opened is a `warnings` entry, not a failure.
+
+**`output subset`** cuts one variable (`--var`) at one resolution (`daily`, `monthly` or `yearly`;
+climatology is listed, not cut) between `--start` and `--end` over `--bbox W,S,E,N` or a `--point LON,LAT`:
+
+- **Dates** are `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. A start rounds down to the first day it names and
+  an end up to the last; a start alone means its own day, month or year; neither means everything the
+  output holds. A time step is taken when its period overlaps the dates (a monthly step is its month,
+  a yearly step its year). **Every year between the dates must have a file**: a gap is a refusal that
+  names the years that exist.
+- `--format nc` writes `--out` (required): a NetCDF-4 file of `time`, `lat`, `lon`, a `crs` and the one variable,
+  with the source's attributes, units and fill value, `lat` as the source stores it (the attribute
+  `openghm_lat_order` says so), compressed at deflate level 1. It is written to `<out>.part` and renamed, so `--out`
+  is only ever a complete file; the directory is created (mode 0700). Answer: `path`, `bytes`, `rows`, `cols`,
+  `latOrder`, `bbox` (the cells' outer edges), `units`, `fill`.
+- `--format png` is a **north-up** map of **one** time step over the box (default: the whole grid),
+  `--width` x `--height` pixels (default one per cell, shrunk to fit the size limit; one given keeps the box's shape),
+  each pixel the value of the cell its centre falls in, coloured by the variable's legend, with fill, NaN and cells
+  outside the grid **transparent**. A variable the MT does not describe is drawn over its own range with `Rainbow`
+  (`legend.auto` true). Written to `--out`, or returned as `base64` in the answer. Answer: `width`, `height`,
+  `bbox` (the box drawn), `time`, `units` (displayed), `legend` (`ramp`, `rampUsed`, `min`, `max`, `log`, `auto`, nine
+  `colors` for a legend bar), `valueRange` (of the cells drawn, displayed), `bytes`, `path`, `base64`.
+- `--format json` needs `--point`: the nearest cell's values over the period, `{"point": {"lon", "lat", "row", "col",
+  "cellLon", "cellLat"}, "units", "valuesIn": "stored", "fill", "times": [...], "values": [...]}`, fill as `null`, each value
+  the shortest decimal that reads back as the stored float32 (what `ncdump` prints). `--display` returns
+  `stored * scale + offset` in the MT's units (`valuesIn: "display"`).
+
+Every answer also has `format`, `variable`, `resolution`, `source`, `period` (`first`, `last`, `steps`) and
+`read` (`cells` decoded, `limit`). Without `--json` the commands print a few lines for a person.
+
+**Colours are ours.** The MT names a ramp and a range (`DarkBlue(0:20)`), but the ramps' definitions live in UNH's private
+EarthAtlas code. `openghm.output.image.RAMPS` is our approximation, in one place, of the six families the MTs use: `DarkBlue`,
+`DarkRed`, `DarkGreen` (light to dark), `Rainbow` (violet to red), `RainbowBR` (blue to red) and `RainbowRB` (its reverse). A name
+not in the table is drawn with `Rainbow` and reported as `rampUsed`. A `Log` legend takes the base-10 logarithm of the value and
+the range, and a value of zero or less is transparent.
+
+#### Limits
+
+Checked from the files' headers before any data is read; all in `openghm/output/limits.py`, with their basis:
+
+| Limit | Value | Why |
+|---|---|---|
+| Cells decoded per call (`MAX_CELLS_READ`) | 400 million | Chunks are one time step over the whole grid and are read whole, however small the area: the cost is steps x cells per chunk touched, not the cells kept. Measured on an Anvil login node (2026-10-09): a 365-day pixel series of a Wyoming daily file on scratch, 57.9 million cells, 3.2 s (about 18 million cells/s); over HTTPS from Anvil S3, 31 days of one pixel, 4.9 million cells, 0.36 s (about 14 million/s). 400 million is about 22 s from scratch and 30 s over HTTPS. A Global pixel series for a year (305 million) fits; a whole-globe year (2.7 billion) does not |
+| An `nc` file, uncompressed (`MAX_NC_BYTES`) | 1 GiB | steps x rows x cols x 4 bytes, known before the first read |
+| A map's size (`MAX_IMAGE_SIDE`, `MAX_IMAGE_PIXELS`) | 4096 per side, 8 million pixels | an RGBA PNG is built in memory |
+| HTTP range reads (`BLOCK_SIZE`, `CACHE_BLOCKS`) | 1 MiB blocks, 32 kept | **not measured yet**; tune against Anvil S3 |
+
+The numbers are knobs: the orchestrator measures on Anvil (Global in particular) and adjusts them.
+
+Exit codes: `0` done; `1` failed (the extra is not installed, a file cannot be read, the network failed); `2` refused (the
+request is wrong, or over a limit; the message says what to ask for instead); `3` there is no output at the source (not written
+yet, purged, never published). The gateway maps them to HTTP errors.
 
 ### Simulations (`openghm sim`)
 
@@ -558,8 +678,8 @@ openghm sim post-process <output_base>/run-001 --wbm-exit-code 0   # what the jo
 
 ```sh
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
-pytest                 # parity goldens + dry-run contract + wizard + public API
+pip install -e ".[output,dev]"   # without `output`, tests/test_output.py is skipped
+pytest                 # parity goldens + dry-run contract + wizard + public API + output
 python -m build        # wheel + sdist (pip install build)
 ```
 

@@ -729,6 +729,141 @@ def spool_status_cmd(config_path: Optional[str], as_json: bool) -> None:
             click.echo(line)
 
 
+@cli.group("output")
+def output_group() -> None:
+    """read a run's WBM output where it is: describe it, cut subsets of it (ADR 0033).
+
+    SOURCE is a simulation's work directory (<output_base>/<sim id>; the output is at wbm_output/<run>/
+    under it) or --snapshot <id>, a published snapshot's output read from the bucket. Needs the
+    optional extra: pip install 'openghm[output]'. Each call is short and refuses what would read
+    or write more than its limits.
+
+    \b
+    Exit codes:
+      0  done
+      1  failed: the extra is not installed, a file cannot be read, the network failed
+      2  refused: the request is wrong or over a limit (the message says how)
+      3  there is no output at the source (not written yet, purged, or never published)
+    """
+
+
+def _comma_floats(n: int, what: str):
+    def parse(ctx, param, value):
+        if value is None:
+            return None
+        try:
+            parts = tuple(float(p) for p in value.split(","))
+        except ValueError:
+            parts = ()
+        if len(parts) != n:
+            raise click.BadParameter(f"expected {what}")
+        return parts
+
+    return parse
+
+
+def _output_options(f):
+    for opt in reversed([
+        click.argument("source", required=False, metavar="[SOURCE]"),
+        click.option("--snapshot", "snapshot", default=None, metavar="ID",
+                     help="read a published snapshot's output instead (anonymous HTTPS from the bucket)"),
+        click.option("--run", "run", default=None, metavar="NAME",
+                     help="the run's directory under wbm_output/ (default: the only one)"),
+        click.option("--config", "config_path", default=None, metavar="PATH",
+                     help="config file (default: ~/.openghm/config.toml)"),
+        click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output"),
+    ]):
+        f = opt(f)
+    return f
+
+
+def _run_output(config_path: Optional[str], source: Optional[str], snapshot: Optional[str], run: Optional[str],
+                work: Callable, as_json: bool, describe: Callable) -> None:
+    """Open the source, run ``work(source)``, print its answer; map failures to the exit codes."""
+    from ..errors import OutputMissing
+    from ..output import netcdf
+    from ..output.source import open_source
+
+    src = None
+    try:
+        netcdf.require()
+        cfg = load_config(path=config_path).config
+        src = open_source(source, snapshot, run, base_url=cfg.s3_base_url or None)
+        result = work(src)
+    except OutputMissing as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(3)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    except RuntimeError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(1)
+    except Exception as e:  # noqa: BLE001 - an unreadable file, a dropped connection: the caller's 502
+        click.echo(f"openghm: cannot read the output: {type(e).__name__}: {e}", err=True)
+        raise SystemExit(1)
+    finally:
+        if src is not None:
+            src.close()
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+    else:
+        for line in describe(result):
+            click.echo(line)
+
+
+@output_group.command("inventory")
+@_output_options
+def output_inventory_cmd(source, snapshot, run, config_path, as_json) -> None:
+    """list what a run's output holds: the files and years that exist, each variable with its units and display settings, the grid
+
+    Built from the files that exist, not from the run's MT csv (which lists climatology records
+    that were never written); the MT adds each variable's display units, scale, legend and rounding.
+    Opens only a few files' headers. With --json: source, mt, grid, resolutions, variables, files, warnings.
+    """
+    from ..output import inventory as inv
+
+    _run_output(config_path, source, snapshot, run, inv.inventory, as_json, inv.describe)
+
+
+@output_group.command("subset")
+@_output_options
+@click.option("--var", "variable", required=True, metavar="NAME", help="the variable (a name `output inventory` lists)")
+@click.option("--resolution", type=click.Choice(["daily", "monthly", "yearly"]), required=True)
+@click.option("--format", "fmt", type=click.Choice(["nc", "png", "json"]), required=True,
+              help="nc: a NetCDF-4 file (--out); png: a north-up map of one time step; json: a pixel's series (--point)")
+@click.option("--start", default=None, metavar="DATE", help="YYYY, YYYY-MM or YYYY-MM-DD: the period's first day")
+@click.option("--end", default=None, metavar="DATE",
+              help="the period's last day (default: the end of --start's own period; with neither, everything)")
+@click.option("--bbox", default=None, metavar="W,S,E,N", callback=_comma_floats(4, "W,S,E,N in degrees"),
+              help="the area, in degrees (nc, png; default: the whole grid)")
+@click.option("--point", default=None, metavar="LON,LAT", callback=_comma_floats(2, "LON,LAT in degrees"),
+              help="the pixel, in degrees (json): its nearest cell")
+@click.option("--width", type=int, default=None, metavar="N", help="png: pixels across (default: one per cell)")
+@click.option("--height", type=int, default=None, metavar="N", help="png: pixels down")
+@click.option("--out", "out", default=None, metavar="PATH",
+              help="nc: where to write (required); png: write here instead of returning base64")
+@click.option("--display", is_flag=True, help="json: values as the MT shows them (stored * scale + offset)")
+def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, resolution, fmt, start, end,
+                      bbox, point, width, height, out, display) -> None:
+    """cut one variable by period and area: a NetCDF file, a map, or a pixel's time series
+
+    \b
+    Dates are YYYY, YYYY-MM or YYYY-MM-DD; a start rounds down and an end up; a start alone means its own
+    day, month or year. Every year in the period must have a file. The cells a call may read
+    (whole chunks, however small the area) and an nc file's size are limited; a call over a
+    limit is refused with a message before it reads anything.
+    With --json: format, variable, resolution, source, period, read, and the format's own fields
+    (nc: path, bytes, rows, cols, bbox; png: width, height, bbox, legend, valueRange, path or base64;
+    json: point, units, times, values).
+    """
+    from ..output import subset as sub
+
+    req = sub.Request(variable=variable, resolution=resolution, format=fmt, start=start, end=end, bbox=bbox,
+                      point=point, width=width, height=height, out=out, display=display)
+    _run_output(config_path, source, snapshot, run, lambda s: sub.subset(s, req), as_json, sub.describe)
+
+
 @cli.command("wizard")
 def wizard_cmd() -> None:
     """interactive, prompt-driven mode (asks for options step by step)"""

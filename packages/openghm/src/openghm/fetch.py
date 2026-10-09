@@ -178,16 +178,19 @@ def _list_page(url: str):
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-def list_objects(base_url: str, prefix: str) -> List[Tuple[str, int, str]]:
+def list_objects(base_url: str, prefix: str, delimiter: Optional[str] = None) -> List[Tuple[str, int, str]]:
     """Every ``(key, size, etag)`` under ``prefix``, following pagination.
 
     Anonymous ``GET <base>?list-type=2``. ETags are returned unquoted. Each page is retried on a
-    transient error (see :func:`_list_page`).
+    transient error (see :func:`_list_page`). With ``delimiter="/"`` only the objects directly
+    under ``prefix`` are returned (the folders are :func:`list_folders`'s).
     """
     out: List[Tuple[str, int, str]] = []
     token: Optional[str] = None
     while True:
         query = f"list-type=2&prefix={urllib.parse.quote(prefix, safe='/')}&max-keys=1000"
+        if delimiter:
+            query += f"&delimiter={urllib.parse.quote(delimiter, safe='')}"
         if token:
             query += f"&continuation-token={urllib.parse.quote(token, safe='')}"
         url = f"{base_url}?{query}"
@@ -209,6 +212,41 @@ def list_objects(base_url: str, prefix: str) -> List[Tuple[str, int, str]]:
                 token = el.text
         if not truncated:
             return out
+        if not token:
+            raise OpenghmError(f"the listing at {url} is truncated but has no continuation token")
+
+
+def list_folders(base_url: str, prefix: str) -> List[str]:
+    """The names of the immediate subfolders of ``prefix`` (a key ending in ``/``), sorted: the
+    ``CommonPrefixes`` of an anonymous ``GET <base>?list-type=2&delimiter=/``, each with ``prefix``
+    and the trailing ``/`` taken off. Follows pagination; each page is retried like
+    :func:`list_objects`'s."""
+    out: List[str] = []
+    token: Optional[str] = None
+    while True:
+        query = f"list-type=2&prefix={urllib.parse.quote(prefix, safe='/')}&delimiter=/&max-keys=1000"
+        if token:
+            query += f"&continuation-token={urllib.parse.quote(token, safe='')}"
+        url = f"{base_url}?{query}"
+        try:
+            root = _list_page(url)
+        except OpenghmError:
+            raise
+        except (ET.ParseError, OSError, http.client.HTTPException) as e:
+            raise OpenghmError(f"cannot read the listing at {url}: {e}")
+        truncated, token = False, None
+        for el in root:
+            name = _local(el.tag)
+            if name == "CommonPrefixes":
+                for c in el:
+                    if _local(c.tag) == "Prefix" and c.text:
+                        out.append(c.text[len(prefix):].rstrip("/"))
+            elif name == "IsTruncated":
+                truncated = (el.text or "").strip().lower() == "true"
+            elif name == "NextContinuationToken":
+                token = el.text
+        if not truncated:
+            return sorted(out)
         if not token:
             raise OpenghmError(f"the listing at {url} is truncated but has no continuation token")
 

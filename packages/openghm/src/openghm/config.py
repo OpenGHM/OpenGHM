@@ -63,6 +63,10 @@ class Config:
     spool_prune_low: float = SPOOL_PRUNE_LOW
     #: Image ref for the docker runtime (local builds).
     docker_image: str = "wbm-lite:latest"
+    #: The bucket's public URL, for the commands that read published objects
+    #: (``output ... --snapshot``). Empty: :data:`openghm.fetch.S3_BASE`. Not written to the
+    #: default file; set it to read a mirror.
+    s3_base_url: str = ""
 
     # Used by `sim submit` / `sim run` (SLURM defaults + per-sim work/output root).
     # A snapshot is addressed by folder path, so no snapshot_root registry is needed.

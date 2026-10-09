@@ -13,3 +13,9 @@ class OpenghmError(Exception):
 
 class ValidationError(OpenghmError):
     """Invalid or missing options."""
+
+
+class OutputMissing(OpenghmError):
+    """``openghm output``: there is no WBM output at the source (no ``wbm_output/<run>/``
+    folder, or a snapshot that published none). The CLI exits 3, so a caller can tell "nothing
+    there" from a request that is wrong (exit 2)."""
