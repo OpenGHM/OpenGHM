@@ -6,7 +6,6 @@ import { fetchCatalogue } from "@/lib/repository/actions";
 import { catalogueFiltersToParams, parseCatalogueFilters } from "@/lib/repository/url-filters";
 import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
 import type { CatalogueFilterState, CatalogueResponse } from "@/lib/repository/types";
-import { CatalogueHeader } from "./catalogue-header";
 import { CatalogueResults } from "./catalogue-results";
 import { CatalogueSidebar } from "./catalogue-sidebar";
 
@@ -66,28 +65,25 @@ export function CatalogueClient({
     });
 
   return (
-    <div className="mx-auto max-w-[1360px] px-4 py-6 sm:px-7 lg:py-9">
-      <CatalogueHeader />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-7">
-        <CatalogueSidebar
-          filters={filters}
-          facets={facets}
-          onChange={setFilters}
-          onClearAll={handleClearAll}
-        />
-        <CatalogueResults
-          result={result}
-          filters={filters}
-          facets={facets}
-          isLoading={isPending}
-          error={error}
-          onChange={setFilters}
-          onClearAll={handleClearAll}
-          onRetry={retry}
-          onToggleTag={handleToggleTag}
-          onToggleKeyword={handleToggleKeyword}
-        />
-      </div>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-7">
+      <CatalogueSidebar
+        filters={filters}
+        facets={facets}
+        onChange={setFilters}
+        onClearAll={handleClearAll}
+      />
+      <CatalogueResults
+        result={result}
+        filters={filters}
+        facets={facets}
+        isLoading={isPending}
+        error={error}
+        onChange={setFilters}
+        onClearAll={handleClearAll}
+        onRetry={retry}
+        onToggleTag={handleToggleTag}
+        onToggleKeyword={handleToggleKeyword}
+      />
     </div>
   );
 }

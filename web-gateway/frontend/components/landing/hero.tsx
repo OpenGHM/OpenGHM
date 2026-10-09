@@ -23,7 +23,7 @@ export function Hero() {
           computing and massive datasets directly via your browser.
         </p>
         <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <Link href="/repository" className="inline-flex items-center justify-center min-h-12 rounded-xl bg-accent px-6 py-3 text-base font-semibold text-white shadow-[0_10px_20px_-5px] shadow-accent/40 sm:px-9 sm:py-4 transition-all hover:brightness-110">
+          <Link href="/repository" className="inline-flex items-center justify-center min-h-12 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-white shadow-[0_10px_20px_-5px] shadow-primary/40 sm:px-9 sm:py-4 transition-all hover:brightness-110">
             Explore Data Repository
           </Link>
           <button className="inline-flex items-center justify-center gap-2 min-h-12 rounded-xl border border-white/30 bg-white/10 px-6 py-3 sm:px-9 sm:py-4 text-base font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20">

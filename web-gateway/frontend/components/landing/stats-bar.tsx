@@ -11,7 +11,7 @@ export function StatsBar() {
       <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-4 gap-y-8 px-4 text-center sm:px-6 lg:grid-cols-4 lg:gap-10 lg:px-10">
         {STATS.map((stat) => (
           <div key={stat.label}>
-            <h3 className="mb-2 text-3xl sm:text-4xl font-bold text-accent">
+            <h3 className="mb-2 text-3xl sm:text-4xl font-bold text-hero-eyebrow">
               {stat.value}
             </h3>
             <p className="text-sm font-medium uppercase tracking-wider text-slate-400">

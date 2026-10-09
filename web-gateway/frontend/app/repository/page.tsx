@@ -1,6 +1,7 @@
 import { Metadata } from "next";
-import { Header } from "@/components/landing/header";
+import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
+import { CatalogueHeader } from "@/components/repository/catalogue-header";
 import { CatalogueClient } from "@/components/repository/catalogue-client";
 import { EMPTY_CATALOGUE } from "@/lib/repository/catalogue";
 import { fetchCatalogue } from "@/lib/repository/actions";
@@ -34,14 +35,14 @@ export default async function RepositoryPage({
 
   return (
     <>
-      <Header />
-      <main className="min-h-screen bg-muted/30">
+      <CatalogueHeader />
+      <PageBody>
         <CatalogueClient
           initialFilters={filters}
           initialData={initialData}
           initialError={initialError}
         />
-      </main>
+      </PageBody>
       <Footer />
     </>
   );

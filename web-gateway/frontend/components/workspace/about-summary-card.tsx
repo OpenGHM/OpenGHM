@@ -42,7 +42,7 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
                 {c.email && (
                   <a
                     href={`mailto:${c.email}`}
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:text-accent"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover"
                   >
                     <Mail className="size-3" />
                     {c.email}

@@ -12,10 +12,13 @@ export function UserAvatar({
   name,
   email,
   className = "h-7 w-7 text-xs",
+  tone = "varied",
 }: {
   name?: string | null;
   email?: string | null;
   className?: string;
+  /** `varied` picks a colour per user; `brand` is always the primary colour (the header). */
+  tone?: "varied" | "brand";
 }) {
   const display = name ?? email ?? "?";
   const initials = display
@@ -25,7 +28,7 @@ export function UserAvatar({
     .join("")
     .toUpperCase();
 
-  const bg = COLORS[display.charCodeAt(0) % COLORS.length];
+  const bg = tone === "brand" ? "bg-primary" : COLORS[display.charCodeAt(0) % COLORS.length];
 
   return (
     <span

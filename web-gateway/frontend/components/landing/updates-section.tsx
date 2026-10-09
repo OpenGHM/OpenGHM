@@ -68,7 +68,7 @@ export function UpdatesSection() {
                 className="h-[200px] w-full object-cover"
               />
               <div className="p-6">
-                <span className="mb-3 block text-xs font-semibold uppercase text-accent">
+                <span className="mb-3 block text-xs font-semibold uppercase text-primary">
                   {update.tag}
                 </span>
                 <h3 className="mb-3 text-lg font-bold leading-snug text-[#0f172a]">

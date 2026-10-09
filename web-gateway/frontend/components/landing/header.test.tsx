@@ -138,19 +138,22 @@ describe("the header's current-page highlight", () => {
     expect(current()).toEqual([]);
   });
 
-  it("gives the lit tab a block, and every tab the same shape", () => {
+  it("gives the lit tab a white pill, and every tab the same shape", () => {
     usePathname.mockReturnValue("/repository");
     useSession.mockReturnValue({ data: null });
     render(<Header />);
     const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    const classes = (el: HTMLElement) => el.className.split(" ");
     const lit = nav.getByRole("link", { name: "Data Repository" });
-    expect(lit.className).toContain("bg-slate-100");
-    expect(lit.className).toContain("text-foreground");
-    expect(lit.className).not.toContain("text-primary");
+    expect(classes(lit)).toContain("bg-white");
+    expect(classes(lit)).toContain("text-foreground");
+    expect(classes(lit)).not.toContain("text-hero-foreground-muted");
     for (const name of ["Home", "Workspace", "Community", "About"]) {
       const link = nav.getByRole("link", { name });
-      expect(link.className).toContain("px-3");
-      expect(link.className).not.toContain("bg-slate-100");
+      expect(classes(link)).toContain("rounded-full");
+      expect(classes(link)).toContain("px-[clamp(9px,1.1vw,16px)]");
+      expect(classes(link)).not.toContain("bg-white");
+      expect(classes(link)).toContain("text-hero-foreground-muted");
     }
   });
 
@@ -171,6 +174,35 @@ describe("the header's current-page highlight", () => {
     const menu = openMenu();
     const lit = menu.getAllByRole("menuitem").filter((el) => el.getAttribute("aria-current") === "page");
     expect(lit.map((el) => el.textContent)).toEqual(["Data Repository"]);
-    expect(lit[0].className).toContain("bg-slate-100");
+    expect(lit[0].className).toContain("bg-secondary");
+  });
+});
+
+describe("the header on the navy band", () => {
+  it("is transparent inside a hero and a navy sticky bar on its own", () => {
+    useSession.mockReturnValue({ data: null });
+    const { container, rerender } = render(<Header variant="overlay" />);
+    const overlay = container.querySelector("header");
+    expect(overlay?.className).not.toContain("bg-hero");
+    expect(overlay?.className).not.toContain("sticky");
+    rerender(<Header />);
+    const standalone = container.querySelector("header");
+    expect(standalone?.className).toContain("bg-hero");
+    expect(standalone?.className).toContain("sticky");
+  });
+
+  it("shows a visitor a white Sign In pill and a signed-in user a name pill", () => {
+    useSession.mockReturnValue({ data: null });
+    const { unmount } = render(<Header />);
+    const signIn = screen.getAllByRole("link", { name: "Sign In" })[0];
+    expect(signIn.getAttribute("href")).toBe("/auth/signin");
+    expect(signIn.className).toContain("rounded-full");
+    expect(signIn.className.split(" ")).toContain("bg-white");
+    unmount();
+
+    signedIn("user");
+    render(<Header />);
+    expect(screen.queryByRole("link", { name: "Sign In" })).toBeNull();
+    expect(screen.getByRole("button", { name: /Ada/ }).className).toContain("rounded-full");
   });
 });

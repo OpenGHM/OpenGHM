@@ -207,7 +207,7 @@ export function RunDetailsCard({
             <Link
               href={`/repository/${job.dataset_id}`}
               title={job.dataset_title}
-              className={`${clampClass(2)} text-primary transition-colors hover:text-accent hover:underline`}
+              className={`${clampClass(2)} text-primary transition-colors hover:text-primary-hover hover:underline`}
             >
               {job.dataset_title}
             </Link>

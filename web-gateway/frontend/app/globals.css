@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Google Sans", "Google Sans Text", sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -51,7 +51,11 @@
   --color-info: var(--info);
   --color-compute: var(--compute);
   --color-highlight: var(--highlight);
+  --color-primary-hover: var(--primary-hover);
   --color-hero: var(--hero);
+  --color-hero-foreground: var(--hero-foreground);
+  --color-hero-foreground-muted: var(--hero-foreground-muted);
+  --color-hero-eyebrow: var(--hero-eyebrow);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -60,28 +64,43 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  /* The design's two big surfaces: a card (22 px) and a section panel (28 px).
+     Use rounded-card and rounded-panel; do not hard-code the pixels. */
+  --radius-card: 22px;
+  --radius-panel: 28px;
+  /* shadow-card: a card at rest. shadow-raised: a card that stands on the hero
+     band or a page section. */
+  --shadow-card: 0 1px 2px rgba(16, 40, 58, 0.05);
+  --shadow-raised:
+    0 1px 2px rgba(16, 40, 58, 0.05), 0 32px 64px -40px rgba(16, 40, 58, 0.4);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: #ffffff;
-  --foreground: #0f172a;
+  /* 12 px at rounded-lg; the design's card is rounded-card (22 px). */
+  --radius: 0.75rem;
+  --background: #f2f4f6;
+  --foreground: #10283a;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #10283a;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #006994;
+  --popover-foreground: #10283a;
+  --primary: #0b6a8f;
+  --primary-hover: #08506d;
   --primary-foreground: #ffffff;
-  --secondary: #e0f7fb;
-  --secondary-foreground: #004e6e;
-  --muted: #f1f8fa;
-  --muted-foreground: #64748b;
-  --accent: #00b4d8;
-  --accent-foreground: #ffffff;
+  --secondary: #e3f0f6;
+  --secondary-foreground: #0b5d82;
+  --muted: #f1f4f6;
+  /* AA on #fff (5.3), the page #f2f4f6 (4.8) and secondary #e3f0f6 (4.6). */
+  --muted-foreground: #5d6d79;
+  /* A light tint for hover and focus states (menu items, ghost buttons). It is
+     not a brand colour: for emphasis use --primary. */
+  --accent: #e6eff4;
+  --accent-foreground: #10283a;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: #e2e8f0;
-  --input: #f8fafc;
-  --ring: #006994;
+  --border: #e3e7ea;
+  /* The edge of a form field (Input, Textarea); a fill is bg-muted. */
+  --input: #d3d9de;
+  --ring: #0b6a8f;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -110,16 +129,21 @@
      Never interaction or selection, which stays --primary. AA as text on a
      10% tint of itself. */
   --highlight: #ac4b07;
-  /* The navy of the landing hero and the footer. */
-  --hero: #0a192f;
-  --sidebar: #f8fafc;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #e6f6fb;
-  --sidebar-primary-foreground: #006994;
-  --sidebar-accent: #f1f8fa;
-  --sidebar-accent-foreground: #004e6e;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #006994;
+  /* The navy band at the top of a page (components/layout/page-hero.tsx) and
+     what is written on it: body text, muted text and the mono eyebrow. Each
+     reads at AA (9:1) on --hero. */
+  --hero: #0b2a3d;
+  --hero-foreground: #ffffff;
+  --hero-foreground-muted: #c3ccd4;
+  --hero-eyebrow: #9fd3e6;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #10283a;
+  --sidebar-primary: #e3f0f6;
+  --sidebar-primary-foreground: #0b6a8f;
+  --sidebar-accent: #f1f4f6;
+  --sidebar-accent-foreground: #0b5d82;
+  --sidebar-border: #e3e7ea;
+  --sidebar-ring: #0b6a8f;
 }
 
 .dark {
@@ -131,6 +155,7 @@
   --popover-foreground: oklch(0.985 0 0);
   --highlight: oklch(0.78 0.15 65);
   --primary: oklch(0.922 0 0);
+  --primary-hover: oklch(0.85 0 0);
   --primary-foreground: oklch(0.205 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
@@ -164,6 +189,20 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* The dotted texture of the hero band: 1 px dots every 22 px, fading out
+   downward. Put it on an absolutely positioned layer. */
+@utility hero-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
+}
+
+/* The soft light in the band's top-right corner. */
+@utility hero-glow {
+  background: radial-gradient(circle, rgba(56, 160, 200, 0.22), transparent 65%);
 }
 
 /* Loading feedback that waits to be needed. A skeleton or spinner that carries

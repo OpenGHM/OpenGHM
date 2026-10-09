@@ -185,7 +185,7 @@ function YearInput({
         onKeyDown={(e) => {
           if (e.key === "Enter") commit();
         }}
-        className="h-10 rounded-lg border-border bg-input px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
+        className="h-10 rounded-lg border-border bg-muted px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
       />
     </div>
   );
@@ -540,7 +540,7 @@ export function RegionFilter({
                 onChange={(e) => edit(edge, e.target.value)}
                 onFocus={() => setFocused(edge)}
                 onBlur={() => setFocused((f) => (f === edge ? null : f))}
-                className="h-10 rounded-lg border-border bg-input px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
+                className="h-10 rounded-lg border-border bg-muted px-2.5 font-mono text-[13.5px] md:text-[13.5px] lg:h-9"
               />
               {message && (
                 <p id={`${id}-error`} className="mt-1 text-xs text-destructive">

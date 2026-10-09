@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+
+// The band carries the site header, which reads the session and the path.
+vi.mock("next-auth/react", () => ({ useSession: () => ({ data: null }), signOut: vi.fn() }));
+vi.mock("@/lib/auth-actions", () => ({ revokeSession: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/repository" }));
+
 import { CatalogueHeader } from "./catalogue-header";
 
 afterEach(cleanup);
