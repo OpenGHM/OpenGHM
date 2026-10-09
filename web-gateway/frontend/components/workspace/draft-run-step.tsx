@@ -10,6 +10,7 @@ import { DraftBasis } from "@/components/workspace/draft-basis";
 import { draftField } from "@/components/workspace/draft-field";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
+import { useWizardHelp } from "@/components/workspace/wizard-help-context";
 import { OutputChoiceSection } from "@/components/workspace/output-choice-field";
 import {
   OutputVariablesSection,
@@ -119,10 +120,16 @@ export function DraftRunStep({
 }) {
   const id = useId();
   const nameRef = useRef<HTMLInputElement>(null);
+  const help = useWizardHelp();
   // Once, as the step opens. Moving to the step by Back or the strip sends focus
-  // to its heading afterwards (the wizard's effect runs after this one).
+  // to its heading afterwards (the wizard's effect runs after this one). The
+  // help panel does not take it for the person going to the Name: it opens on
+  // the step's overview.
   useEffect(() => {
-    if (autoFocusName) nameRef.current?.focus();
+    const focusName = () => nameRef.current?.focus();
+    if (!autoFocusName) return;
+    if (help) help.quietly(focusName);
+    else focusName();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const dataset = ctx.dataset;
@@ -185,7 +192,7 @@ export function DraftRunStep({
       />
 
       <DraftPanel>
-        <DraftSection title="Name and description">
+        <DraftSection title="Name and description" help="about">
           <div className="space-y-1.5">
             <Label htmlFor={`${id}-name`} className="text-xs text-muted-foreground">
               Name
@@ -231,7 +238,7 @@ export function DraftRunStep({
           </div>
         </DraftSection>
 
-        <DraftSection title="Run period">
+        <DraftSection title="Run period" help="period">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={`${id}-start`} className="text-xs text-muted-foreground">

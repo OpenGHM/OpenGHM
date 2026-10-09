@@ -21,6 +21,7 @@ import { LeaveDraftDialog } from "@/components/workspace/leave-draft-dialog";
 import { NewDraftStatus, SaveDraftButton } from "@/components/workspace/new-draft-controls";
 import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { SaveStatus } from "@/components/workspace/save-status";
+import { WizardLayout } from "@/components/workspace/wizard-layout";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure } from "@/components/workspace/submit-summary";
 import { fetchJob, submitDraft } from "@/lib/jobs/actions";
@@ -636,6 +637,7 @@ function WizardBody({
   return (
     <main className={WORKSPACE_MAIN}>
       <PageHeader
+        wide
         top={<DraftBreadcrumb current={name} />}
         title={name}
         badge={
@@ -726,121 +728,123 @@ function WizardBody({
         <DraftProgress hrefFor={hrefFor} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
       </PageHeader>
 
-      <div className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10">
-        <div className="mx-auto max-w-[1024px]">
-          {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
-          {state.kind === "conflict" && (
-            <div
-              role="alert"
-              className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+      <WizardLayout
+        step={step}
+        facts={{ climatologyAvailable: ctx.dataset?.climatologyAvailable === true }}
+        className="py-6 sm:py-8"
+      >
+        {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
+        {state.kind === "conflict" && (
+          <div
+            role="alert"
+            className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p className="flex items-start gap-2 font-medium">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              This snapshot draft was submitted or changed elsewhere
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => router.refresh()}
+              className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
             >
-              <p className="flex items-start gap-2 font-medium">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                This snapshot draft was submitted or changed elsewhere
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => router.refresh()}
-                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
-              >
-                Reload
-              </Button>
-            </div>
-          )}
-          {state.kind === "gone" && (
-            <div
-              role="alert"
-              className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
-            >
-              <p className="flex items-start gap-2 font-medium">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                This draft was deleted
-              </p>
-              <Button
-                asChild
-                size="sm"
-                variant="outline"
-                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
-              >
-                <Link href="/workspace">Go to My snapshot drafts</Link>
-              </Button>
-            </div>
-          )}
-
-          <>
-            {step === "run" && (
-              <DraftRunStep
-                datasetId={datasetId}
-                datasetTitle={initialJob.dataset_title}
-                ctx={ctx}
-                parameters={local.parameters}
-                slurm={local.slurm}
-                recommended={recommended}
-                modelInputId={local.modelInputId}
-                resolvedModelInput={modelInput}
-                name={local.name}
-                description={local.description}
-                autoFocusName={focusNameOnOpen}
-                onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
-                onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
-                serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
-                startRefusal={isNew ? null : saver.startRefusal}
-                onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
-                onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
-                onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
-                disabled={submitting}
-              />
-            )}
-            {step === "review" && (
-              <DraftReviewStep
-                datasetId={datasetId}
-                datasetTitle={initialJob.dataset_title}
-                ctx={ctx}
-                local={local}
-                recommended={recommended}
-                onEditStep={goTo}
-                disabled={submitting}
-                publishedAnswer={publishedState}
-                submitArea={submitCard(publishedState.status === "answered")}
-              />
-            )}
-          </>
-
-          {/* Never blocked: a step with problems says so on the strip. Run
-              settings has no Back (the browser's goes to Start from), Review no
-              Next. */}
-          <div className="mt-8 flex items-center justify-between gap-3">
-            {step === "run" ? (
-              <SaveDraftButton
-                saving={saving}
-                disabled={saveDisabled}
-                reason={saveReason}
-                label={saveLabel}
-                onClick={saveNow}
-              />
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-                onClick={() => goTo(DRAFT_STEPS[index - 1])}
-                className="min-h-10"
-              >
-                <ArrowLeft aria-hidden="true" />
-                Back
-              </Button>
-            )}
-            {step !== "review" && (
-              <Button type="button" onClick={() => goTo(DRAFT_STEPS[index + 1])} className="min-h-10">
-                Next
-                <ArrowRight aria-hidden="true" />
-              </Button>
-            )}
+              Reload
+            </Button>
           </div>
+        )}
+        {state.kind === "gone" && (
+          <div
+            role="alert"
+            className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p className="flex items-start gap-2 font-medium">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              This draft was deleted
+            </p>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
+            >
+              <Link href="/workspace">Go to My snapshot drafts</Link>
+            </Button>
+          </div>
+        )}
+
+        <>
+          {step === "run" && (
+            <DraftRunStep
+              datasetId={datasetId}
+              datasetTitle={initialJob.dataset_title}
+              ctx={ctx}
+              parameters={local.parameters}
+              slurm={local.slurm}
+              recommended={recommended}
+              modelInputId={local.modelInputId}
+              resolvedModelInput={modelInput}
+              name={local.name}
+              description={local.description}
+              autoFocusName={focusNameOnOpen}
+              onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
+              onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
+              serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
+              startRefusal={isNew ? null : saver.startRefusal}
+              onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
+              onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
+              onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
+              disabled={submitting}
+            />
+          )}
+          {step === "review" && (
+            <DraftReviewStep
+              datasetId={datasetId}
+              datasetTitle={initialJob.dataset_title}
+              ctx={ctx}
+              local={local}
+              recommended={recommended}
+              onEditStep={goTo}
+              disabled={submitting}
+              publishedAnswer={publishedState}
+              submitArea={submitCard(publishedState.status === "answered")}
+            />
+          )}
+        </>
+
+        {/* Never blocked: a step with problems says so on the strip. Run
+            settings has no Back (the browser's goes to Start from), Review no
+            Next. */}
+        <div className="mt-8 flex items-center justify-between gap-3">
+          {step === "run" ? (
+            <SaveDraftButton
+              saving={saving}
+              disabled={saveDisabled}
+              reason={saveReason}
+              label={saveLabel}
+              onClick={saveNow}
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => goTo(DRAFT_STEPS[index - 1])}
+              className="min-h-10"
+            >
+              <ArrowLeft aria-hidden="true" />
+              Back
+            </Button>
+          )}
+          {step !== "review" && (
+            <Button type="button" onClick={() => goTo(DRAFT_STEPS[index + 1])} className="min-h-10">
+              Next
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          )}
         </div>
-      </div>
+      </WizardLayout>
 
       <LeaveDraftDialog
         stored={!isNew}

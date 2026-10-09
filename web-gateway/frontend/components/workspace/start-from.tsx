@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SnapshotPicker } from "@/components/workspace/snapshot-picker";
+import { WizardHelpButton } from "@/components/workspace/wizard-help-panel";
 import { EMPTY_CATALOGUE } from "@/lib/repository/catalogue";
 import type { CatalogueFilterState, CatalogueResponse, Dataset } from "@/lib/repository/types";
 import { newStepHref } from "@/lib/workspace/draft-wizard";
@@ -43,7 +44,10 @@ export function StartFrom({ usedIds, picker }: { usedIds: readonly string[]; pic
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold text-foreground">Choose a model snapshot</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-foreground">Choose a model snapshot</h2>
+          <WizardHelpButton />
+        </div>
         <p className="text-sm text-muted-foreground">
           Your snapshot draft starts from it. You can change its settings next.
         </p>

@@ -3,7 +3,9 @@
 import { useId, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { revealsDraftField } from "@/components/workspace/draft-field";
+import { useSectionHelp } from "@/components/workspace/wizard-help-context";
 import type { DraftField } from "@/lib/workspace/draft-wizard";
+import type { HelpSection } from "@/lib/workspace/wizard-help";
 
 /**
  * The one surface a draft step is written on: a single bordered card whose
@@ -25,20 +27,27 @@ export function DraftPanel({ children, className }: { children: ReactNode; class
 /**
  * A part of a step: a plain heading, an optional action at its end, and the
  * body. The heading is `h3` under the step's `h2`.
+ *
+ * `help` names the part for the wizard's help panel: focus inside the section,
+ * or the pointer over it, makes the panel show that section's help (see
+ * `useSectionHelp`). It changes nothing on the section itself.
  */
 export function DraftSection({
   title,
   action,
+  help,
   className,
   children,
 }: {
   title?: string;
   action?: ReactNode;
+  help?: HelpSection;
   className?: string;
   children: ReactNode;
 }) {
+  const helpProps = useSectionHelp(help);
   return (
-    <section className={cn("space-y-4 px-5 py-5 sm:px-7 sm:py-6", className)}>
+    <section {...helpProps} className={cn("space-y-4 px-5 py-5 sm:px-7 sm:py-6", className)}>
       {(title || action) && (
         <div className="flex min-h-8 items-center justify-between gap-3">
           {title && <h3 className="text-base font-semibold text-foreground">{title}</h3>}
@@ -69,6 +78,7 @@ export function DraftCollapsible({
   openLabel,
   closeLabel = "Done",
   forceOpen = false,
+  help,
   children,
 }: {
   title: string;
@@ -80,6 +90,8 @@ export function DraftCollapsible({
   openLabel: string;
   closeLabel?: string;
   forceOpen?: boolean;
+  /** The part's help in the wizard's help panel (`DraftSection`). */
+  help?: HelpSection;
   children: ReactNode;
 }) {
   const panelId = useId();
@@ -89,6 +101,7 @@ export function DraftCollapsible({
   return (
     <DraftSection
       title={title}
+      help={help}
       action={
         forceOpen ? undefined : (
           <button

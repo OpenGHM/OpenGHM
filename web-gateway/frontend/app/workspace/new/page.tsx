@@ -5,6 +5,7 @@ import { Footer } from "@/components/landing/footer";
 import { StartProgress } from "@/components/workspace/draft-progress";
 import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { StartFrom } from "@/components/workspace/start-from";
+import { WizardLayout } from "@/components/workspace/wizard-layout";
 import { fetchJobs } from "@/lib/jobs/actions";
 import { fetchModelInputIds, fetchSnapshots } from "@/lib/repository/actions";
 import { parsePickerFilters, toURLSearchParams } from "@/lib/repository/url-filters";
@@ -49,6 +50,7 @@ export default async function NewDraftPage({
       <Header />
       <main className={WORKSPACE_MAIN}>
         <PageHeader
+          wide
           top={<DraftBreadcrumb current="New snapshot" />}
           title="New snapshot"
           meta={<p className="mt-2.5 text-sm text-muted-foreground">Start from a published model snapshot</p>}
@@ -56,11 +58,9 @@ export default async function NewDraftPage({
           <StartProgress />
         </PageHeader>
 
-        <div className="flex-1 px-4 py-8 sm:px-6 lg:px-10">
-          <div className="mx-auto max-w-[1024px]">
-            <StartFrom usedIds={usedIds} picker={{ filters, data, modelInputIds }} />
-          </div>
-        </div>
+        <WizardLayout step="start" facts={{}} className="py-8">
+          <StartFrom usedIds={usedIds} picker={{ filters, data, modelInputIds }} />
+        </WizardLayout>
       </main>
       <Footer />
     </div>

@@ -108,7 +108,7 @@ export function OutputChoiceSection({
   const errorId = `${id}-error`;
 
   return (
-    <DraftSection title="Output">
+    <DraftSection title="Output" help="output">
       <div
         role="radiogroup"
         aria-label="Output"

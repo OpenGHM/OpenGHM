@@ -9,6 +9,14 @@ import { cn } from "@/lib/utils";
  */
 export const WORKSPACE_CONTAINER = "mx-auto w-full max-w-[1104px] px-4 sm:px-6 lg:px-10";
 
+/**
+ * The draft wizard's column: `WORKSPACE_CONTAINER` until `xl`, where it grows to
+ * 1376 px of content so that the 1024 px column the steps keep has the help
+ * panel (20 rem and a 2 rem gap) beside it. The wizard's header and its body
+ * both use it, so their left edges stay together.
+ */
+export const WIZARD_CONTAINER = cn(WORKSPACE_CONTAINER, "xl:max-w-[1456px]");
+
 /** The page body under the site header: the repository's light background. */
 export const WORKSPACE_MAIN = "flex flex-1 flex-col bg-muted/30";
 
@@ -57,7 +65,8 @@ export function DraftBreadcrumb({ current }: { current: string }) {
  * status), a muted line under it (`meta`), whatever the page does on the right
  * (`aside`: buttons, a one-line description), and anything that belongs to the
  * header's bottom edge (`children`: the section tabs, the wizard's steps).
- * It brings the page's column; the content under it uses `WORKSPACE_CONTAINER`.
+ * It brings the page's column; the content under it uses `WORKSPACE_CONTAINER`
+ * (`WIZARD_CONTAINER` with `wide`).
  */
 export function PageHeader({
   top,
@@ -65,6 +74,7 @@ export function PageHeader({
   badge,
   meta,
   aside,
+  wide = false,
   children,
 }: {
   top: React.ReactNode;
@@ -72,10 +82,12 @@ export function PageHeader({
   badge?: React.ReactNode;
   meta?: React.ReactNode;
   aside?: React.ReactNode;
+  /** Use the wizard's wider column (`WIZARD_CONTAINER`) from `xl`. */
+  wide?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <header className={cn(WORKSPACE_CONTAINER, "pt-8 sm:pt-10")}>
+    <header className={cn(wide ? WIZARD_CONTAINER : WORKSPACE_CONTAINER, "pt-8 sm:pt-10")}>
       {top}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         {/* From `lg` the title block takes what the actions leave, so a long `meta` line is cut

@@ -733,6 +733,20 @@ sentence: the backend's own `message` for a `{code, message}` or plain-string
 `detail`, and fixed ones for a backend that cannot be reached, a timeout and a
 5xx with no message (`web-gateway/frontend/lib/action-failure.ts`).
 
+**The wizard's help panel.** Each screen of the draft wizard (Start from, Run settings, Review &
+submit) has a help panel written for a hydrologist: the step's overview, and on Run settings one block
+per section (name and description, run period, output variables, output, compute). From `xl` (1280 px)
+the wizard is a two-column grid in a 1456 px container: the steps keep their 1024 px column and the
+panel is a 20 rem `sticky` aside under the site header, scrolling by itself when it is taller than the
+viewport. Below `xl` a "Help" button beside the step's heading opens the same content in the sheet used
+elsewhere. Focus inside a section stays on that section's help until focus enters another or "Back to
+overview" is pressed; the pointer over a section shows its help while it is there. The panel is a polite
+live region and never takes focus. All the words are in one module,
+`web-gateway/frontend/lib/workspace/wizard-help.ts`, which reads the numbers it quotes (memory per core,
+the 96 h limit, the 30 days) from where the code keeps them, and says whether climatology is available
+from `climatologyAvailable`. A section declares its help with `DraftSection`'s `help` prop
+(`web-gateway/frontend/components/workspace/draft-section.tsx`).
+
 **The job page** (`/workspace/{id}` past DRAFT, `web-gateway/frontend/components/workspace/job-detail.tsx`)
 reads top to bottom in the order a person asks: the header (breadcrumb, the
 snapshot draft's own name with its status, the title of the snapshot it is based on
@@ -753,7 +767,7 @@ as the submit does it (`effectiveCompute`, marked as recommended, with the
 post-processing time in the walltime when the job asked for climatology), and while
 SLURM has the job the limit it enforces. The job document stores no resolved
 cores or walltime, so the page reads the snapshot for them; with no snapshot it
-shows a dash. The page is as wide as the Workspace list and the draft wizard.
+shows a dash. The page is as wide as the Workspace list and the draft wizard's content column.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

@@ -192,7 +192,7 @@ describe("the page", () => {
       `/repository/${dataset.id}`
     );
     expect(screen.getByRole("navigation", { name: "Steps" })).toBeTruthy();
-    expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Saved", { exact: false, ignore: HELP_ASIDE })).toBeTruthy();
     expect(button("Delete snapshot draft")).not.toBeNull();
   });
 
@@ -454,6 +454,8 @@ describe("the step", () => {
 });
 
 // Hidden too: a dialog open over the page hides it from the accessibility tree.
+/** The help panel's own text says "saved" too; the save status is not in it. */
+const HELP_ASIDE = "script, style, aside *";
 const saveButtons = () =>
   screen.getAllByRole("button", { name: /^Save draft$|^Saving…$/, hidden: true }) as HTMLButtonElement[];
 const pressSave = () => fireEvent.click(saveButtons()[0]);
@@ -488,7 +490,7 @@ const keydown = (init: KeyboardEventInit) => {
 describe("saving is a button", () => {
   it("says Unsaved changes after an edit, sends nothing, and the button is on", async () => {
     wizard({ step: "run" });
-    expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Saved", { exact: false, ignore: HELP_ASIDE })).toBeTruthy();
     type("Colorado");
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
     expect(saveButtons().every((b) => !b.disabled)).toBe(true);
@@ -510,7 +512,7 @@ describe("saving is a button", () => {
 
     expect(updateDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
-    expect(screen.getByText("Saved", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Saved", { exact: false, ignore: HELP_ASIDE })).toBeTruthy();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
     expect(toast.success).toHaveBeenCalledWith("Draft saved");
     expect(readDraftCache("job-1")?.about).toEqual({ name: "Colorado" });
@@ -531,7 +533,7 @@ describe("saving is a button", () => {
     type("Colorado");
     pressSave();
     await waitFor(() => expect(saveButtons()[0].disabled).toBe(true));
-    await waitFor(() => expect(screen.getByText("Saved", { exact: false })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Saved", { exact: false, ignore: HELP_ASIDE })).toBeTruthy());
     type("Colorado 2");
     expect(saveButtons()[0].disabled).toBe(false);
   });

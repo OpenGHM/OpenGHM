@@ -182,6 +182,7 @@ export function OutputVariablesSection({
   return (
     <DraftCollapsible
       title="Output variables"
+      help="variables"
       fields={["variables"]}
       openLabel="Choose…"
       forceOpen={hasSnapshot && options.some((o) => !o.listed)}

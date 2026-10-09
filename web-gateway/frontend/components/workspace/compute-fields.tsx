@@ -114,6 +114,7 @@ export function ComputeSection({
   return (
     <DraftCollapsible
       title="Compute"
+      help="compute"
       fields={["cores", "walltime"]}
       openLabel="Change"
       forceOpen={coresError !== undefined || walltimeError !== undefined}
