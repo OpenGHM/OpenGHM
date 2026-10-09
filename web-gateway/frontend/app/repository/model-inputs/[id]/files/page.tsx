@@ -7,6 +7,7 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { TreeBrowser } from "@/components/repository/tree-browser";
+import { aboutName } from "@/lib/jobs/display-name";
 
 export default async function ModelInputFilesPage({
   params,
@@ -16,7 +17,7 @@ export default async function ModelInputFilesPage({
   const { id } = await params;
   const modelInput = await fetchModelInputById(id);
   if (!modelInput) notFound();
-  const { name } = modelInput.about;
+  const name = aboutName(modelInput.about);
 
   return (
     <div className="flex min-h-screen flex-col">

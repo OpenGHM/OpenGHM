@@ -136,6 +136,16 @@ def test_filter_by_search_matches_name(all_datasets):
     assert {d.slug for d in result} == {"wbm_storage_v1.0.0_global"}
 
 
+def test_filter_by_search_matches_short_name_and_the_response_carries_it():
+    data = json.loads((EXAMPLES_DIR / V2).read_text())
+    data["about"]["shortName"] = "Qwerty tutorial"
+    d = DatasetResponse.from_metadata_json(build_envelope(data))
+    assert d.about.shortName == "Qwerty tutorial"
+    assert filter_datasets([d], q="qwerty") == [d]
+    assert filter_datasets([d], q="no-such-term-anywhere") == []
+    assert d.model_dump(mode="json")["about"]["shortName"] == "Qwerty tutorial"
+
+
 def test_filter_by_search_matches_keyword(all_datasets):
     result = filter_datasets(all_datasets, q="hydrology")
     assert len(result) == 3  # all three examples carry "hydrology" as a keyword

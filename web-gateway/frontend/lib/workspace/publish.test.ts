@@ -117,6 +117,7 @@ describe("the form", () => {
   it("starts from the stored about, and from nothing at all", () => {
     expect(formFromAbout(GOOD_ABOUT)).toEqual({
       name: "A run",
+      shortName: "",
       description: "What it holds.",
       creators: [{ name: "Ada", email: "ada@example.test", orcid: "" }],
       license: "CC-BY-4.0",
@@ -191,6 +192,49 @@ describe("the form", () => {
     expect(Object.keys(body)).not.toContain("url");
     expect(Object.keys(body)).not.toContain("isBasedOn");
     expect(Object.keys(aboutFromForm(formFromAbout(GOOD_ABOUT), GOOD_ABOUT))).not.toContain("relatedLink");
+  });
+});
+
+describe("the short name", () => {
+  it("starts empty: nothing is derived from the name, and the base's is never taken", () => {
+    expect(formFromAbout(GOOD_ABOUT).shortName).toBe("");
+    expect(formFromAbout(prefillAbout(null, { ...BASE_ABOUT, shortName: "Base short" })).shortName).toBe("");
+    expect(prefillAbout(null, { ...BASE_ABOUT, shortName: "Base short" })).not.toHaveProperty("shortName");
+  });
+
+  it("starts from the stored one, such as a failed attempt's", () => {
+    expect(formFromAbout({ ...GOOD_ABOUT, shortName: "A run (short)" }).shortName).toBe("A run (short)");
+  });
+
+  it("is optional, and may be 60 characters but not 61", () => {
+    const base = formFromAbout(GOOD_ABOUT);
+    expect(isValid(validatePublishForm({ ...base, shortName: "" }))).toBe(true);
+    expect(isValid(validatePublishForm({ ...base, shortName: "   " }))).toBe(true);
+    expect(isValid(validatePublishForm({ ...base, shortName: "x".repeat(60) }))).toBe(true);
+    const errors = validatePublishForm({ ...base, shortName: "x".repeat(61) });
+    expect(errors.fields.shortName).toMatch(/60 characters/);
+    expect(firstInvalid(errors)).toBe("shortName");
+  });
+
+  it("counts characters the way the spec does, not UTF-16 units", () => {
+    const base = formFromAbout(GOOD_ABOUT);
+    // 60 astral characters are 120 UTF-16 units, and 60 code points.
+    expect(isValid(validatePublishForm({ ...base, shortName: "\u{1F30A}".repeat(60) }))).toBe(true);
+    expect(isValid(validatePublishForm({ ...base, shortName: "\u{1F30A}".repeat(61) }))).toBe(false);
+  });
+
+  it("goes into the request trimmed, and is left out when empty", () => {
+    const base = formFromAbout(GOOD_ABOUT);
+    expect(aboutFromForm({ ...base, shortName: "  WBM v1 Global  " }, null).shortName).toBe("WBM v1 Global");
+    expect(Object.keys(aboutFromForm({ ...base, shortName: "  " }, null))).not.toContain("shortName");
+    expect(Object.keys(aboutFromForm(base, null))).not.toContain("shortName");
+  });
+
+  it("maps a refusal of about.shortName to its field", () => {
+    expect(fieldOfPath("about.shortName")).toBe("shortName");
+    expect(splitServerErrors([{ path: "about.shortName", message: "Too long." }]).fields).toEqual({
+      shortName: "Too long.",
+    });
   });
 });
 

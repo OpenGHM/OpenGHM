@@ -7,6 +7,7 @@ import { CARD_SURFACE } from "@/components/repository/catalogue-card";
 import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { TagChips } from "@/components/repository/tag-chips";
 import { snapshotBox, snapshotFacts } from "@/components/workspace/snapshot-facts";
+import { aboutName } from "@/lib/jobs/display-name";
 import { cn } from "@/lib/utils";
 import type { Dataset } from "@/lib/repository/types";
 
@@ -78,7 +79,7 @@ function SnapshotCard({
             onClick={() => onSelect(dataset)}
             className="block w-full text-left outline-none after:absolute after:inset-0 after:content-['']"
           >
-            <span className="line-clamp-2 break-words">{about.name}</span>
+            <span className="line-clamp-2 break-words">{aboutName(about)}</span>
           </button>
         </h3>
         <p id={factsId} className="font-mono text-xs text-muted-foreground">
@@ -93,7 +94,7 @@ function SnapshotCard({
             type="button"
             variant="link"
             size="sm"
-            aria-label={`Details: ${about.name}`}
+            aria-label={`Details: ${aboutName(about)}`}
             onClick={() => onDetails(dataset)}
             className="relative z-10 -mr-2 h-10 shrink-0 px-2 text-muted-foreground hover:text-primary sm:h-8"
           >

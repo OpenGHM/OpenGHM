@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
+import { basisFullTitle, basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
 import { describeOutput, snapshotOutput } from "@/components/workspace/output-choice-field";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
 import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
@@ -149,6 +149,7 @@ function AnswerSkeleton() {
 export function DraftReviewStep({
   datasetId,
   datasetTitle,
+  datasetShortTitle,
   ctx,
   local,
   recommended,
@@ -159,6 +160,8 @@ export function DraftReviewStep({
 }: {
   datasetId: string;
   datasetTitle: string;
+  /** The draft's `dataset_short_title`, if it has one. */
+  datasetShortTitle?: string | null;
   ctx: DraftContext;
   local: DraftLocal;
   recommended: Recommended | null;
@@ -178,7 +181,8 @@ export function DraftReviewStep({
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const title = basisTitle(ctx, datasetTitle);
+  const title = basisTitle(ctx, datasetTitle, datasetShortTitle);
+  const fullTitle = basisFullTitle(ctx, datasetTitle);
   const facts = found ? snapshotFacts(found) : [];
   const name = local.name.trim();
   const description = local.description.trim();
@@ -229,7 +233,7 @@ export function DraftReviewStep({
                 ) : undefined
               }
             >
-              <span title={title} className="line-clamp-2 font-medium break-words">
+              <span title={fullTitle} className="line-clamp-2 font-medium break-words">
                 {title}
               </span>
               {facts.length > 0 && <span className="block text-[13px] text-muted-foreground">{facts.join(" · ")}</span>}

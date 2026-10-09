@@ -10,6 +10,7 @@ import {
 import { EmptyState } from "@/components/admin/admin-page";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { basedOnName } from "@/lib/jobs/display-name";
 import { displayStatus } from "@/lib/jobs/display-status";
 import type { Job } from "@/lib/jobs/types";
 
@@ -55,7 +56,7 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
               </Link>
             </StackedCell>
             <StackedCell label="Dataset" className="text-sm sm:max-w-48 sm:truncate">
-              {job.dataset_title}
+              <span title={job.dataset_title}>{basedOnName(job)}</span>
             </StackedCell>
             <StackedCell label="Status">
               <JobStatusBadge status={displayStatus(job)} />

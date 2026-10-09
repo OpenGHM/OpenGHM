@@ -8,6 +8,12 @@
   "required": ["name", "description", "datePublished", "tags", "creator", "license", "keywords", "url"],
   "properties": {
     "name": { "type": "string", "minLength": 1 },
+    "shortName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "A short display name for lists, cards and headers, where the full title does not fit. Optional: a reader that has none shows 'name'. 'name' stays the full, citable title; this is never what is cited."
+    },
     "description": { "type": "string", "minLength": 1 },
     "datePublished": { "type": "string", "format": "date" },
     "tags": {

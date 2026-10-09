@@ -345,6 +345,17 @@ enforces it — and the string can't be queried or range-filtered. `unit` is the
 name WBM's own grid convention uses (`arc-minute`, `arc-second`), not a
 standard unit-conversion identifier.
 
+#### `about.shortName`
+
+Optional, 1 to 60 characters. A short display name for lists, cards, headers
+and "Based on" lines, where `about.name` (often a paper's full title) does not
+fit. `name` stays the full, citable title and is what the citation shows; a
+reader that finds no `shortName` shows `name`, so nothing depends on it being
+there. The gateway shows `shortName` as the title and `name` beneath it on a
+snapshot's page, and a search matches either. The publish form leaves it empty
+unless the person fills it: it is never derived from `name`. The field lives in
+the shared `about` block, so a model input carries it with the same meaning.
+
 #### `about.tags`
 
 A closed list, not free text: one or more values from the table below, no
@@ -431,6 +442,7 @@ twice.
 `about`'s field names are schema.org/Dataset property names on purpose, so a
 JSON-LD island can be generated for Google Dataset Search at render time. That
 projection is **generated, never stored**: it drops `tags` (schema.org/Dataset has no counterpart), maps
+`shortName` to `alternateName`, maps
 `relatedLink` to `citation` with the DOI as a nested `identifier`
 (`PropertyValue`, `propertyID: "DOI"`), reaches into `simulation` for
 `spatialCoverage`, `temporalCoverage` and `outputVariables`, and reshapes those

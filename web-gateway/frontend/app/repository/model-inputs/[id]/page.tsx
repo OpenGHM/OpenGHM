@@ -25,6 +25,8 @@ import { ModelInputDatasetsTable } from "@/components/repository/model-input-dat
 import { DownloadCard } from "@/components/repository/download-card";
 import { CitationCard } from "@/components/repository/citation-card";
 import { TagChips } from "@/components/repository/tag-chips";
+import { HeroTitle } from "@/components/repository/hero-title";
+import { aboutName } from "@/lib/jobs/display-name";
 import { formatLongDate } from "@/lib/workspace/time";
 
 export default async function ModelInputDetailPage({
@@ -52,7 +54,9 @@ export default async function ModelInputDetailPage({
             Data Repository
           </Link>
           <span className="mx-2">/</span>
-          <span className="text-foreground">{about.name}</span>
+          <span title={about.name} className="text-foreground">
+            {aboutName(about)}
+          </span>
         </div>
       </div>
 
@@ -65,9 +69,7 @@ export default async function ModelInputDetailPage({
               Model Input
             </span>
           </div>
-          <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
-            {about.name}
-          </h1>
+          <HeroTitle about={about} />
           <div className="flex flex-wrap gap-4">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-sm text-white backdrop-blur-sm">
               <Calendar className="size-4" />

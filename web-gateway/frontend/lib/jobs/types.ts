@@ -292,6 +292,9 @@ export interface Job extends JobVerdictFields {
   user_id: string;
   dataset_id: string;
   dataset_title: string;
+  /** The snapshot's `about.shortName` when it had one at the time (see
+   *  `basedOnName`); null or absent otherwise. */
+  dataset_short_title?: string | null;
   slug: string | null;
   about: PartialAbout | null;
   /** Set to run against an input other than the base snapshot's. Null means

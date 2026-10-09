@@ -152,6 +152,10 @@ class OpenGHMCitationBlock(BaseModel):
         extra='forbid',
     )
     name: constr(min_length=1)
+    shortName: constr(min_length=1, max_length=60) | None = Field(
+        None,
+        description="A short display name for lists, cards and headers, where the full title does not fit. Optional: a reader that has none shows 'name'. 'name' stays the full, citable title; this is never what is cited.",
+    )
     description: constr(min_length=1)
     datePublished: date
     tags: list[Tag] = Field(

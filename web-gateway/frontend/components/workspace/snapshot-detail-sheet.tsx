@@ -15,6 +15,7 @@ import {
 import { BoundingBoxMap } from "@/components/repository/bounding-box-map-dynamic";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import { TagChips } from "@/components/repository/tag-chips";
+import { aboutName } from "@/lib/jobs/display-name";
 import type { Dataset } from "@/lib/repository/types";
 
 /**
@@ -51,7 +52,12 @@ export function SnapshotDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle className="text-base leading-snug break-words">{dataset.about.name}</SheetTitle>
+          <SheetTitle className="text-base leading-snug break-words">
+            {aboutName(dataset.about)}
+          </SheetTitle>
+          {dataset.about.shortName && dataset.about.shortName !== dataset.about.name && (
+            <p className="text-xs leading-relaxed break-words text-muted-foreground">{dataset.about.name}</p>
+          )}
           <TagChips tags={dataset.about.tags} />
         </SheetHeader>
 

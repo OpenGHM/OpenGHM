@@ -136,6 +136,17 @@ describe("the run details card: what the page says once", () => {
     expect(screen.getByText("Based on", { selector: "dt" })).toBeTruthy();
   });
 
+  it("says it by the snapshot's short name when the job has one, the full title still on hover", () => {
+    const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
+    const job = previewDraftJob("completed", {
+      overrides: { dataset_title: title, dataset_short_title: "WBM v1 Global 2000–2009" },
+    });
+    details(job, null);
+    const link = screen.getByRole("link", { name: "WBM v1 Global 2000–2009" });
+    expect(link.getAttribute("title")).toBe(title);
+    expect(screen.queryByText(title)).toBeNull();
+  });
+
   it("has the run period, the Slurm job and the run id", () => {
     const job = previewDraftJob("completed");
     details(job, null);

@@ -3,6 +3,7 @@ import { Clock, Cpu, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
+import { basedOnName } from "@/lib/jobs/display-name";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { Job } from "@/lib/jobs/types";
@@ -31,8 +32,8 @@ export function DraftCard({ job }: { job: Job }) {
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-base font-semibold text-foreground">
-                {job.dataset_title}
+              <p title={job.dataset_title} className="truncate text-base font-semibold text-foreground">
+                {basedOnName(job)}
               </p>
               <code className="mt-0.5 block font-mono text-xs text-muted-foreground">
                 {displayId}

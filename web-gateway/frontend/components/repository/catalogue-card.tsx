@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { cn } from "@/lib/utils";
+import { aboutName } from "@/lib/jobs/display-name";
 import { humanizeTag } from "@/lib/repository/catalogue";
 import {
   cardKeywords,
@@ -161,7 +162,18 @@ function toBox(item: CatalogueItem) {
  * (which is `relative`), so the whole card opens the detail page and the title
  * is the only link. The card shows the focus ring, not the title text.
  */
-function TitleLink({ href, name, className }: { href: string; name: string; className?: string }) {
+function TitleLink({
+  href,
+  name,
+  fullName,
+  className,
+}: {
+  href: string;
+  name: string;
+  /** The full title, as a tooltip when `name` is a short name that stands in for it. */
+  fullName?: string;
+  className?: string;
+}) {
   return (
     <h3
       className={cn(
@@ -171,6 +183,7 @@ function TitleLink({ href, name, className }: { href: string; name: string; clas
     >
       <Link
         href={href}
+        title={fullName && fullName !== name ? fullName : undefined}
         className="outline-none after:absolute after:inset-0 after:content-['']"
       >
         {name}
@@ -218,7 +231,7 @@ export function CatalogueCard({
         </div>
         <div className="flex flex-1 flex-col gap-2.5 p-4">
           <KindBadge kind={item.kind} />
-          <TitleLink href={href} name={about.name} className="line-clamp-4 text-base" />
+          <TitleLink href={href} name={aboutName(about)} fullName={about.name} className="line-clamp-4 text-base" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
           <p className="mt-auto border-t pt-3 text-right text-xs text-muted-foreground">
             <TimeStamp value={about.datePublished} format="date" />
@@ -242,7 +255,7 @@ export function CatalogueCard({
           </span>
         </div>
 
-        <TitleLink href={href} name={about.name} className="text-lg" />
+        <TitleLink href={href} name={aboutName(about)} fullName={about.name} className="text-lg" />
 
         <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{about.description}</p>
 

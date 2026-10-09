@@ -294,6 +294,8 @@ class JobDB(BaseModel):
     user_email: str
     dataset_id: str
     dataset_title: str
+    #: The snapshot's `about.shortName`, when it has one (see `dataset_title`).
+    dataset_short_title: str | None = None
 
     # Descriptive half a citable snapshot will eventually need (spec.md's
     # "Two entities, not three") — present from the moment a snapshot draft is
@@ -540,6 +542,9 @@ class JobResponse(JobVerdictFields):
     user_id: str
     dataset_id: str
     dataset_title: str
+    #: The snapshot's `about.shortName`, copied when the draft was made; null when
+    #: it had none, and on every job made before the field existed.
+    dataset_short_title: str | None = None
     slug: str | None = None
     about: PartialAbout | None = None
     #: The raw override, if any — never the resolved value. `None` here

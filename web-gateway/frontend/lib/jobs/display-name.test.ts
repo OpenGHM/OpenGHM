@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayName, listName } from "@/lib/jobs/display-name";
+import { aboutName, basedOnName, displayName, listName } from "@/lib/jobs/display-name";
 import { fakeDraft } from "@/lib/workspace/fixtures";
 
 const job = (overrides: Parameters<typeof fakeDraft>[1]) =>
@@ -33,5 +33,30 @@ describe("listName", () => {
 
   it("splits a draft nobody named into 'Untitled draft' and the start of its id", () => {
     expect(listName(job({}))).toEqual({ text: "Untitled draft", id: "01234567" });
+  });
+});
+
+describe("aboutName", () => {
+  it("is the short name when there is one", () => {
+    expect(aboutName({ name: "The full, citable title of a paper", shortName: "WBM v1 Global" })).toBe("WBM v1 Global");
+  });
+
+  it("is the name, exactly as before, when there is no short name", () => {
+    expect(aboutName({ name: "The full title" })).toBe("The full title");
+    expect(aboutName({ name: "The full title", shortName: null })).toBe("The full title");
+    expect(aboutName({ name: "The full title", shortName: undefined })).toBe("The full title");
+  });
+
+  it("treats an empty or blank short name as none", () => {
+    expect(aboutName({ name: "The full title", shortName: "" })).toBe("The full title");
+    expect(aboutName({ name: "The full title", shortName: "   " })).toBe("The full title");
+  });
+});
+
+describe("basedOnName", () => {
+  it("is the short name copied onto the job, else the title it was made with", () => {
+    expect(basedOnName({ dataset_title: "Full title", dataset_short_title: "Short" })).toBe("Short");
+    expect(basedOnName({ dataset_title: "Full title", dataset_short_title: null })).toBe("Full title");
+    expect(basedOnName({ dataset_title: "Full title" })).toBe("Full title");
   });
 });

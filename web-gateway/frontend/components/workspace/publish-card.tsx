@@ -11,6 +11,7 @@ import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { PublishSheet } from "@/components/workspace/publish-sheet";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { publishDraft } from "@/lib/jobs/actions";
+import { aboutName } from "@/lib/jobs/display-name";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { Job, PartialAbout, PublishAbout, PublishRecord, PublishRetry } from "@/lib/jobs/types";
 import { PUBLISH_RETRY_COPY, publishFailureCopyFor } from "@/lib/workspace/failure-copy";
@@ -349,7 +350,7 @@ export function PublishCard({
         onOpenChange={setOpen}
         jobId={jobId}
         about={prefill}
-        baseName={baseAbout?.name ?? null}
+        baseName={baseAbout?.name ? aboutName({ name: baseAbout.name, shortName: baseAbout.shortName }) : null}
         preview={preview}
         onPublished={taken}
         onRefused={refresh}

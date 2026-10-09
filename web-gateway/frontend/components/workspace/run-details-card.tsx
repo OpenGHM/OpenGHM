@@ -32,6 +32,7 @@ import {
   parseSlurmTime,
   type Recommended,
 } from "@/lib/jobs/compute";
+import { basedOnName } from "@/lib/jobs/display-name";
 import type { Job } from "@/lib/jobs/types";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import { useNow } from "@/lib/workspace/use-now";
@@ -208,7 +209,7 @@ export function RunDetailsCard({
               title={job.dataset_title}
               className="line-clamp-3 break-words text-primary transition-colors hover:text-accent hover:underline"
             >
-              {job.dataset_title}
+              {basedOnName(job)}
             </Link>
           </InfoRow>
           <InfoRow icon={<Calendar />} label="Run period">

@@ -368,8 +368,8 @@ filter a kind cannot satisfy excludes that kind: a model input has no output
 variables, forcing, processes or container, so any selection in those four
 facets leaves only snapshots.
 
-- `q` is a case-insensitive substring over `about.name`, `about.description`,
-  `about.keywords` and `about.tags`.
+- `q` is a case-insensitive substring over `about.name`, `about.shortName`
+  (when present), `about.description`, `about.keywords` and `about.tags`.
 - `year_start`/`year_end` select by overlap with the temporal coverage
   (`simulation.temporalCoverage`; a model input's `coverage.temporalCoverage`).
   An artifact with no temporal coverage, which a climatological model input
@@ -403,8 +403,9 @@ when nothing has a temporal coverage.
 
 **Order** is deterministic and ends in the id. `newest` is
 `about.datePublished` descending, then name, then id. `title-az` and `title-za`
-sort by `about.name` case-insensitively. `relevance` with a `q` scores a name
-hit 3, a keyword or tag hit 2 and a description hit 1, summed, highest first, and
+sort by the name a reader sees, `about.shortName` when present, else `about.name`,
+case-insensitively. `relevance` with a `q` scores a name
+hit (`name` or `shortName`) 3, a keyword or tag hit 2 and a description hit 1, summed, highest first, and
 breaks ties as `newest`; with no `q` it is `newest`.
 `coverage-start` puts the earliest temporal coverage start first
 (`simulation.temporalCoverage.start`; a model input's
@@ -877,7 +878,7 @@ It has its own record on the job, `publish`, beside the run's. `status` stays
 `COMPLETED`, so nothing that reads it changes.
 
 **Who and when.** `POST /jobs/{id}/publish` takes the `about` a person
-writes: name, description, creators, license, keywords and tags. The
+writes: name, an optional short name, description, creators, license, keywords and tags. The
 draft's owner or an admin may call it.
 
 - **Publishable** means:

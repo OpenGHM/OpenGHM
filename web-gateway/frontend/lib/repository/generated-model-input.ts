@@ -137,6 +137,10 @@ export interface OpenGHMModelInputMetadata {
  */
 export interface OpenGHMCitationBlock {
   name: string;
+  /**
+   * A short display name for lists, cards and headers, where the full title does not fit. Optional: a reader that has none shows 'name'. 'name' stays the full, citable title; this is never what is cited.
+   */
+  shortName?: string;
   description: string;
   datePublished: string;
   /**

@@ -123,6 +123,30 @@ def test_about_is_what_the_person_wrote_plus_what_the_gateway_sets():
     assert "relatedLink" not in about  # none was given, and none is inherited from the base
 
 
+def test_a_short_name_is_kept_and_the_document_stays_a_valid_snapshot():
+    doc = compose({**ABOUT, "shortName": "WBM v2 tutorial, wetter"})
+    assert doc["about"]["shortName"] == "WBM v2 tutorial, wetter"
+    assert doc["about"]["name"] == ABOUT["name"]  # the full title stays the citable one
+    OpenGHMSnapshotMetadata.model_validate(doc)
+
+
+def test_no_short_name_is_not_invented_from_the_name():
+    assert "shortName" not in compose()["about"]
+
+
+def test_a_short_name_of_sixty_characters_is_accepted_and_sixty_one_refused():
+    assert compose({**ABOUT, "shortName": "x" * 60})["about"]["shortName"] == "x" * 60
+    with pytest.raises(publish.ComposeError) as exc:
+        compose({**ABOUT, "shortName": "x" * 61})
+    assert [e["field"] for e in exc.value.errors] == ["about.shortName"]
+
+
+def test_an_empty_short_name_is_refused():
+    with pytest.raises(publish.ComposeError) as exc:
+        compose({**ABOUT, "shortName": ""})
+    assert [e["field"] for e in exc.value.errors] == ["about.shortName"]
+
+
 def test_a_related_link_is_kept():
     link = {"relation": "isDescribedBy", "url": "https://example.org/paper", "doi": "10.5194/gmd-15-7287-2022"}
     assert compose({**ABOUT, "relatedLink": [link]})["about"]["relatedLink"][0]["doi"] == "10.5194/gmd-15-7287-2022"
