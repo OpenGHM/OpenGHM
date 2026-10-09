@@ -27,6 +27,7 @@ import { describeSubmitFailure } from "@/components/workspace/submit-summary";
 import { fetchJob, submitDraft } from "@/lib/jobs/actions";
 import { displayName } from "@/lib/jobs/display-name";
 import { draftSource } from "@/lib/jobs/draft-source";
+import { clampClass } from "@/components/common/clamped-name";
 import type { ActionFailure, ActionResult, Job, SubmitError } from "@/lib/jobs/types";
 import { newerJob, writeDraftCache } from "@/lib/workspace/draft-cache";
 import {
@@ -654,7 +655,7 @@ function WizardBody({
             <Link
               href={source.href}
               title={source.title}
-              className="block max-w-full truncate rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={`${clampClass(1)} rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50`}
             >
               Based on {source.title}
             </Link>

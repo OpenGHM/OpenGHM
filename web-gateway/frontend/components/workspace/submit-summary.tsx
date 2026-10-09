@@ -4,6 +4,7 @@ import {
   describeSlurmTime,
   describeUnsupportedField,
 } from "@/lib/jobs/compute";
+import { ClampedName } from "@/components/common/clamped-name";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import type { ActionFailure, PostProcessingChoice } from "@/lib/jobs/types";
 
@@ -99,7 +100,9 @@ export function SubmitSummary({
   return (
     <>
       <dl className="space-y-1.5 text-sm">
-        <SummaryRow label="Model Snapshot">{snapshotTitle}</SummaryRow>
+        <SummaryRow label="Model Snapshot">
+          <ClampedName lines={3}>{snapshotTitle}</ClampedName>
+        </SummaryRow>
         <SummaryRow label="Run period">
           {start} to {end}
         </SummaryRow>

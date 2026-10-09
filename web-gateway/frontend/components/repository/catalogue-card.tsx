@@ -3,6 +3,7 @@ import { ArrowUpRight, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { ClampedName } from "@/components/common/clamped-name";
 import { cn } from "@/lib/utils";
 import { humanizeTag } from "@/lib/repository/catalogue";
 import {
@@ -163,11 +164,11 @@ function toBox(item: CatalogueItem) {
  */
 function TitleLink({ href, name, className }: { href: string; name: string; className?: string }) {
   return (
-    <h3
-      className={cn(
-        "min-w-0 leading-snug font-semibold break-words text-foreground",
-        className
-      )}
+    <ClampedName
+      as="h3"
+      lines={3}
+      title={name}
+      className={cn("leading-snug font-semibold text-foreground", className)}
     >
       <Link
         href={href}
@@ -175,7 +176,7 @@ function TitleLink({ href, name, className }: { href: string; name: string; clas
       >
         {name}
       </Link>
-    </h3>
+    </ClampedName>
   );
 }
 
@@ -218,7 +219,7 @@ export function CatalogueCard({
         </div>
         <div className="flex flex-1 flex-col gap-2.5 p-4">
           <KindBadge kind={item.kind} />
-          <TitleLink href={href} name={about.name} className="line-clamp-4 text-base" />
+          <TitleLink href={href} name={about.name} className="text-base" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
           <p className="mt-auto border-t pt-3 text-right text-xs text-muted-foreground">
             <TimeStamp value={about.datePublished} format="date" />

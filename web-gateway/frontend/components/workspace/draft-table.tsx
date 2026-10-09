@@ -12,6 +12,7 @@ import { matchesQuery } from "@/components/workspace/search-field";
 import { useDraftSearch } from "@/components/workspace/draft-search";
 import { displayStatus } from "@/lib/jobs/display-status";
 import { displayName, listName } from "@/lib/jobs/display-name";
+import { ClampedName, clampClass } from "@/components/common/clamped-name";
 import { draftSource } from "@/lib/jobs/draft-source";
 import { kindLabel } from "@/lib/repository/catalogue-format";
 import type { Job } from "@/lib/jobs/types";
@@ -128,7 +129,8 @@ export function DraftTable({
                   <p className="flex min-w-0 items-baseline gap-2">
                     <Link
                       href={`/workspace/${job.id}`}
-                      className="min-w-0 truncate text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+                      title={shown.text}
+                      className={`${clampClass(1)} text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']`}
                     >
                       {shown.text}
                     </Link>
@@ -136,9 +138,7 @@ export function DraftTable({
                   </p>
                   <p className="mt-0.5 flex min-w-0 items-baseline gap-x-2 text-[13px] text-muted-foreground">
                     {source.kind !== "snapshot" && <span className="shrink-0">{kindLabel(source.kind)} ·</span>}
-                    <span title={source.title} className="min-w-0 truncate">
-                      {source.title}
-                    </span>
+                    <ClampedName lines={1}>{source.title}</ClampedName>
                     {runNote && <span className="shrink-0 whitespace-nowrap">· {runNote}</span>}
                   </p>
                 </div>

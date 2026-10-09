@@ -168,6 +168,14 @@ describe("the header", () => {
     expect(nav.querySelector("a")?.getAttribute("href")).toBe("/workspace");
     expect(screen.queryByText("Back to snapshot drafts")).toBeNull();
   });
+
+  it("keeps the breadcrumb's current page to one line, with the whole name on hover", () => {
+    renderHeader("completed");
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const current = nav.querySelector("[aria-current='page']")!.firstElementChild!;
+    expect(current.className).toContain("truncate");
+    expect(current.getAttribute("title")).toBe(current.textContent);
+  });
 });
 
 function answer(status: JobStatus): JobStatusResponse {

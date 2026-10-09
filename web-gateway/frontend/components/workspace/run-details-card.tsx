@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { clampClass } from "@/components/common/clamped-name";
 import { CopyButton } from "@/components/workspace/copy-button";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
@@ -206,7 +207,7 @@ export function RunDetailsCard({
             <Link
               href={`/repository/${job.dataset_id}`}
               title={job.dataset_title}
-              className="line-clamp-3 break-words text-primary transition-colors hover:text-accent hover:underline"
+              className={`${clampClass(2)} text-primary transition-colors hover:text-accent hover:underline`}
             >
               {job.dataset_title}
             </Link>

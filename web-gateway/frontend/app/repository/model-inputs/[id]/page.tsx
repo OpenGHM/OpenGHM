@@ -25,6 +25,8 @@ import { ModelInputDatasetsTable } from "@/components/repository/model-input-dat
 import { DownloadCard } from "@/components/repository/download-card";
 import { CitationCard } from "@/components/repository/citation-card";
 import { TagChips } from "@/components/repository/tag-chips";
+import { HeroTitle } from "@/components/repository/hero-title";
+import { ClampedName } from "@/components/common/clamped-name";
 import { formatLongDate } from "@/lib/workspace/time";
 
 export default async function ModelInputDetailPage({
@@ -47,12 +49,14 @@ export default async function ModelInputDetailPage({
 
       {/* Breadcrumb */}
       <div className="bg-muted/50 border-b">
-        <div className="mx-auto max-w-[1280px] px-10 py-3 text-sm text-muted-foreground">
-          <Link href="/repository" className="hover:text-foreground transition-colors">
+        <div className="mx-auto flex max-w-[1280px] items-center px-10 py-3 text-sm text-muted-foreground">
+          <Link href="/repository" className="shrink-0 hover:text-foreground transition-colors">
             Data Repository
           </Link>
-          <span className="mx-2">/</span>
-          <span className="text-foreground">{about.name}</span>
+          <span className="mx-2 shrink-0">/</span>
+          <ClampedName lines={1} className="text-foreground">
+            {about.name}
+          </ClampedName>
         </div>
       </div>
 
@@ -65,9 +69,7 @@ export default async function ModelInputDetailPage({
               Model Input
             </span>
           </div>
-          <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
-            {about.name}
-          </h1>
+          <HeroTitle name={about.name} />
           <div className="flex flex-wrap gap-4">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-sm text-white backdrop-blur-sm">
               <Calendar className="size-4" />

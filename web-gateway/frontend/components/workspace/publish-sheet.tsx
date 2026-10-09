@@ -15,6 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ClampedName } from "@/components/common/clamped-name";
 import { ActionError } from "@/components/workspace/action-error";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { publishDraft } from "@/lib/jobs/actions";
@@ -265,9 +266,9 @@ function PublishForm({
             onChange={(e) => set({ name: e.target.value })}
           />
           {baseName && (
-            <p id={`${id}-name-base`} className="break-words text-xs text-muted-foreground">
+            <ClampedName as="p" lines={2} title={baseName} className="text-xs text-muted-foreground" id={`${id}-name-base`}>
               Based on: {baseName}
-            </p>
+            </ClampedName>
           )}
           {shown("name") && <FieldError id={`${id}-name-error`}>{shown("name")}</FieldError>}
         </div>

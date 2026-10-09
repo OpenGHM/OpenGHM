@@ -3,6 +3,7 @@ import { History, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { clampClass } from "@/components/common/clamped-name";
 import { CARD_SURFACE } from "@/components/repository/catalogue-card";
 import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { TagChips } from "@/components/repository/tag-chips";
@@ -78,7 +79,7 @@ function SnapshotCard({
             onClick={() => onSelect(dataset)}
             className="block w-full text-left outline-none after:absolute after:inset-0 after:content-['']"
           >
-            <span className="line-clamp-2 break-words">{about.name}</span>
+            <span className={clampClass(2)}>{about.name}</span>
           </button>
         </h3>
         <p id={factsId} className="font-mono text-xs text-muted-foreground">

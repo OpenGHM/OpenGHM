@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { draftField } from "@/components/workspace/draft-field";
 import { snapshotBox, snapshotFacts } from "@/components/workspace/snapshot-facts";
+import { ClampedName, clampClass } from "@/components/common/clamped-name";
+import { cn } from "@/lib/utils";
 import type { ModelInput } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
@@ -79,6 +81,7 @@ export function DraftBasis({
           Model input:{" "}
           <Link
             href={`/repository/model-inputs/${encodeURIComponent(shownId)}`}
+            title={modelInput.resolved.about.name}
             className="text-primary underline-offset-2 hover:underline"
           >
             {modelInput.resolved.about.name}
@@ -108,11 +111,11 @@ export function DraftBasis({
           )}
           <div className="min-w-0 max-w-full flex-1 space-y-0.5">
             <p className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Based on</p>
-            <p title={title} className="line-clamp-2 text-base leading-snug font-semibold break-words text-foreground">
+            <ClampedName as="p" lines={2} className="text-base leading-snug font-semibold text-foreground">
               {title}
-            </p>
+            </ClampedName>
             {(facts.length > 0 || modelInputText) && (
-              <p className="text-[13px] break-words text-muted-foreground">
+              <p className={cn(clampClass(2), "text-[13px] text-muted-foreground")}>
                 {facts.map((fact, i) => (
                   <span key={fact}>
                     {i > 0 && " · "}

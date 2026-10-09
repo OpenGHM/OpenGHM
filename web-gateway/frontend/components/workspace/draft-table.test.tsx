@@ -76,6 +76,15 @@ describe("the snapshot draft list", () => {
     expect(line.parentElement?.className).toContain("text-muted-foreground");
   });
 
+  it("keeps a long draft name to one line and puts the whole name on hover", () => {
+    const name = "A draft named like a paper title: ".repeat(8).trim();
+    render(<DraftTable jobs={[job("a", "COMPLETED", { about: { name } })]} runNotes={NOTES} />);
+    const link = within(items()[0]).getByRole("link", { name });
+    expect(link.getAttribute("title")).toBe(name);
+    expect(link.className).toContain("truncate");
+    expect(link.className).toContain("min-w-0");
+  });
+
   it("makes up no name for the snapshot: nothing but its title and the run note is there", () => {
     render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
     expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);

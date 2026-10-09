@@ -32,6 +32,9 @@ import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 import { DownloadCard } from "@/components/repository/download-card";
 import { TagChips } from "@/components/repository/tag-chips";
 import { ExecutionCard } from "@/components/repository/execution-card";
+import { HeroTitle } from "@/components/repository/hero-title";
+import { ClampedName, clampClass, type ClampLines } from "@/components/common/clamped-name";
+import { cn } from "@/lib/utils";
 
 export default async function DatasetDetailPage({
   params,
@@ -58,12 +61,14 @@ export default async function DatasetDetailPage({
 
       {/* Breadcrumb */}
       <div className="bg-muted/50 border-b">
-        <div className="mx-auto max-w-[1280px] px-10 py-3 text-sm text-muted-foreground">
-          <Link href="/repository" className="hover:text-foreground transition-colors">
+        <div className="mx-auto flex max-w-[1280px] items-center px-10 py-3 text-sm text-muted-foreground">
+          <Link href="/repository" className="shrink-0 hover:text-foreground transition-colors">
             Data Repository
           </Link>
-          <span className="mx-2">/</span>
-          <span className="text-foreground">{about.name}</span>
+          <span className="mx-2 shrink-0">/</span>
+          <ClampedName lines={1} className="text-foreground">
+            {about.name}
+          </ClampedName>
         </div>
       </div>
 
@@ -76,9 +81,7 @@ export default async function DatasetDetailPage({
               Model Snapshot
             </span>
           </div>
-          <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
-            {about.name}
-          </h1>
+          <HeroTitle name={about.name} />
           <div className="flex flex-wrap gap-4">
             {[
               { icon: <Calendar className="size-4" />, text: temporalLabel },
@@ -327,6 +330,7 @@ export default async function DatasetDetailPage({
                       label="Model Input"
                       value={modelInput?.about.name ?? `${modelInputId.slice(0, 12)}…`}
                       internalHref={modelInput ? `/repository/model-inputs/${modelInputId}` : undefined}
+                      clamp={3}
                       iconColor="text-teal-500"
                     />
                     <InfoRow
@@ -432,6 +436,7 @@ function InfoRow({
   href,
   internalHref,
   title,
+  clamp,
   iconColor = "text-muted-foreground",
 }: {
   icon: React.ReactNode;
@@ -441,6 +446,8 @@ function InfoRow({
   internalHref?: string;
   /** A tooltip for the value, for what does not fit the row (a hash). */
   title?: string;
+  /** Keep the value to this many lines, the whole of it on hover: for a name, which can be any length. */
+  clamp?: ClampLines;
   iconColor?: string;
 }) {
   return (
@@ -448,7 +455,7 @@ function InfoRow({
       <div className={`mt-0.5 ${iconColor}`}>{icon}</div>
       <div className="min-w-0">
         <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="text-sm font-medium text-foreground" title={title}>
+        <dd className="text-sm font-medium text-foreground" title={title ?? (clamp ? value : undefined)}>
           {href ? (
             <a
               href={href}
@@ -461,7 +468,10 @@ function InfoRow({
           ) : internalHref ? (
             <Link
               href={internalHref}
-              className="break-all text-[#006994] transition-colors hover:text-[#00b4d8]"
+              className={cn(
+                clamp ? clampClass(clamp) : "break-all",
+                "text-[#006994] transition-colors hover:text-[#00b4d8]"
+              )}
             >
               {value}
             </Link>

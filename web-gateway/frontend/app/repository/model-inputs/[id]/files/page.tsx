@@ -7,6 +7,8 @@ import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { TreeBrowser } from "@/components/repository/tree-browser";
+import { ClampedName } from "@/components/common/clamped-name";
+import { heroTitleSize } from "@/components/repository/hero-title";
 
 export default async function ModelInputFilesPage({
   params,
@@ -24,16 +26,16 @@ export default async function ModelInputFilesPage({
 
       {/* Breadcrumb */}
       <div className="bg-muted/50 border-b">
-        <div className="mx-auto max-w-[1280px] px-10 py-3 text-sm text-muted-foreground">
-          <Link href="/repository" className="hover:text-foreground transition-colors">
+        <div className="mx-auto flex max-w-[1280px] items-center px-10 py-3 text-sm text-muted-foreground">
+          <Link href="/repository" className="shrink-0 hover:text-foreground transition-colors">
             Data Repository
           </Link>
-          <span className="mx-2">/</span>
-          <Link href={`/repository/model-inputs/${id}`} className="hover:text-foreground transition-colors">
-            {name}
+          <span className="mx-2 shrink-0">/</span>
+          <Link href={`/repository/model-inputs/${id}`} className="min-w-0 hover:text-foreground transition-colors">
+            <ClampedName lines={1}>{name}</ClampedName>
           </Link>
-          <span className="mx-2">/</span>
-          <span className="text-foreground">Files</span>
+          <span className="mx-2 shrink-0">/</span>
+          <span className="shrink-0 text-foreground">Files</span>
         </div>
       </div>
 
@@ -45,11 +47,11 @@ export default async function ModelInputFilesPage({
               Model Input
             </span>
           </div>
-          <h1 className="flex items-center gap-3 text-2xl font-bold leading-tight text-white md:text-3xl">
-            <FolderTree className="size-7 shrink-0" aria-hidden="true" />
-            <span>
+          <h1 className={`flex items-start gap-3 leading-tight font-bold text-balance text-white ${heroTitleSize(name)}`}>
+            <FolderTree className="mt-0.5 size-7 shrink-0" aria-hidden="true" />
+            <ClampedName lines={3} title={`Files of ${name}`}>
               Files <span className="font-normal text-white/80">of {name}</span>
-            </span>
+            </ClampedName>
           </h1>
         </div>
       </div>

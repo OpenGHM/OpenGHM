@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClampedName } from "@/components/common/clamped-name";
 import { basisTitle, snapshotHref } from "@/components/workspace/draft-basis";
 import { describeOutput, snapshotOutput } from "@/components/workspace/output-choice-field";
 import { snapshotFacts } from "@/components/workspace/snapshot-facts";
@@ -198,7 +199,9 @@ export function DraftReviewStep({
           <dl className="-my-3 divide-y">
             <Row label="Name" edit={<EditLink step="run" field="name" label="name" onEditStep={onEditStep} />}>
               {name ? (
-                <span className="font-medium">{name}</span>
+                <ClampedName lines={3} className="font-medium">
+                  {name}
+                </ClampedName>
               ) : (
                 <>
                   <span className="text-muted-foreground">Not named yet</span>
@@ -229,9 +232,9 @@ export function DraftReviewStep({
                 ) : undefined
               }
             >
-              <span title={title} className="line-clamp-2 font-medium break-words">
+              <ClampedName lines={2} className="font-medium">
                 {title}
-              </span>
+              </ClampedName>
               {facts.length > 0 && <span className="block text-[13px] text-muted-foreground">{facts.join(" · ")}</span>}
             </Row>
             <Row

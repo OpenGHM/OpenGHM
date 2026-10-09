@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClampedName } from "@/components/common/clamped-name";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,8 +53,8 @@ export function DraftBreadcrumb({ current }: { current: string }) {
         <li aria-hidden="true" className="shrink-0">
           /
         </li>
-        <li aria-current="page" className="min-w-0 truncate text-foreground">
-          {current}
+        <li aria-current="page" className="min-w-0 text-foreground">
+          <ClampedName lines={1}>{current}</ClampedName>
         </li>
       </ol>
     </nav>

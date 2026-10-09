@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TimeStamp } from "@/components/common/time-stamp";
+import { clampClass } from "@/components/common/clamped-name";
 import { MyDataKindTabs, pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { SearchField, matchesQuery } from "@/components/workspace/search-field";
 import { VisibilityBadge } from "@/components/workspace/visibility-badge";
@@ -125,7 +126,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
                     <Link
                       href={detailHref(item)}
                       title={item.about.name}
-                      className="block truncate text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+                      className={cn(clampClass(1), "text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']")}
                     >
                       {item.about.name}
                     </Link>

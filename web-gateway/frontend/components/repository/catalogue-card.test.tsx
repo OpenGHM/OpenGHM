@@ -360,7 +360,7 @@ describe("CatalogueCard layout", () => {
 
   it("lets long text wrap instead of overflowing", () => {
     renderCard(snapshotItem());
-    expect(screen.getByRole("heading", { level: 3 }).className).toContain("break-words");
+    expect(screen.getByRole("heading", { level: 3 }).className).toContain("[overflow-wrap:anywhere]");
     expect(screen.getByText("Ada Hydro +1").className).toContain("break-words");
   });
 
@@ -394,6 +394,20 @@ describe("CatalogueCardSkeleton", () => {
   );
 });
 
+describe("CatalogueCard with a paper-length name", () => {
+  const NAME =
+    "WBM v1.0.0 Wyoming_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model with water-tracking functionality': [Wyoming] [2000-2009]";
+
+  it.each<CatalogueView>(["list", "grid"])("clamps the title to three lines with the whole name on hover in the %s view", (view) => {
+    renderCard(snapshotItem({ about: { ...snapshotItem().about, name: NAME } }), [], view);
+    const heading = screen.getByRole("heading", { level: 3 });
+    expect(heading.className).toContain("line-clamp-3");
+    expect(heading.className).toContain("min-w-0");
+    expect(heading.getAttribute("title")).toBe(NAME);
+    expect(heading.textContent).toBe(NAME);
+  });
+});
+
 describe("CatalogueCard in the grid view", () => {
   it("shows the map first, then the badge, the title and the compact coverage line", () => {
     const { container } = renderCard(snapshotItem(), [], "grid");
@@ -401,7 +415,7 @@ describe("CatalogueCard in the grid view", () => {
     expect(card.firstElementChild?.className).toContain("h-[150px]");
     expect(card.firstElementChild?.querySelector("svg[role='img']")).not.toBeNull();
     expect(screen.getByText("Model Snapshot").className).toContain("border-border");
-    expect(screen.getByRole("heading", { level: 3 }).className).toContain("line-clamp-4");
+    expect(screen.getByRole("heading", { level: 3 }).className).toContain("line-clamp-3");
     expect(screen.getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
   });
 
