@@ -374,6 +374,48 @@ async def run_remote(
     )
 
 
+async def stream_remote_file(path: str, *, chunk_size: int = 1024 * 1024):
+    """The bytes of a file on Anvil, `chunk_size` at a time, over SFTP: an async
+    generator, so the file is never held whole. A file that is not there, or a
+    transport failure, raises when the generator is advanced (`SSHTransportError`
+    for a connection that cannot be had, asyncssh's own `SFTPError` for the
+    file).
+
+    slurmly has no public "read this file" API (its `read_text` decodes text and
+    returns it whole), so this reaches for the client's transport and the one
+    asyncssh connection it keeps open (`_transport._ensure_conn`), and opens an
+    SFTP channel on it. Both are private to a pinned commit of slurmly (rule 2),
+    like `run_remote`'s `_run`: this and `remove_remote_file` are the places to
+    change when the pin moves. The channel is outside the client's command
+    semaphore, which bounds commands, not the bytes of a long read. Closing the
+    generator early (a client that went away) closes the channel."""
+    client = await get_slurm_client()
+    conn = await client._transport._ensure_conn()
+    async with conn.start_sftp_client() as sftp:
+        async with sftp.open(path, "rb") as remote:
+            while True:
+                data = await remote.read(chunk_size)
+                if not data:
+                    return
+                yield data
+
+
+async def remove_remote_file(path: str) -> None:
+    """Delete one file on Anvil over SFTP; a file that is already gone is not an
+    error. Private-API like `stream_remote_file` (same connection, same rule 2).
+    It removes whatever path it is given: the caller decides which paths are its
+    own to remove."""
+    import asyncssh
+
+    client = await get_slurm_client()
+    conn = await client._transport._ensure_conn()
+    async with conn.start_sftp_client() as sftp:
+        try:
+            await sftp.remove(path)
+        except asyncssh.SFTPNoSuchFile:
+            pass
+
+
 async def read_outcome(remote_job_dir: str, name: str = "outcome.json") -> dict | None:
     """The job's `outcome.json` (a publish job's `publish-outcome.json`: `name`),
     or None when there is none or it does not parse to an object. A transport

@@ -940,6 +940,59 @@ Verified live on 2026-10-07 from draft `8b8e9490…`:
   again" then published under the same id, on attempt 3.
 - **Cleanup.** The test snapshots were deleted afterwards.
 
+### Reading output — the toolkit cuts, the gateway forwards
+
+A run's WBM output can be described and cut into subsets, for a snapshot draft's run
+on scratch and for a published snapshot
+([ADR 0033](../decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md)). The
+gateway has no NetCDF reader and no copy of the output's layout: each call runs one
+`openghm output inventory` or `openghm output subset` on Anvil
+(`web-gateway/backend/app/services/wbm_output.py`), through `slurm.run_remote` and the
+same `<ANVIL_OPENGHM_HOME>/bin/openghm … --config <ANVIL_OPENGHM_HOME>/gateway.toml` a
+job uses, and passes the toolkit's JSON on as it is. The shapes are the
+toolkit's, documented in [its README](../../packages/openghm/README.md#reading-output-openghm-output)
+(rule 4). The routes are in `web-gateway/backend/app/api/v1/wbm_output.py`, the same
+four for each source:
+
+| Route | Answers |
+|---|---|
+| `GET …/output` | the inventory: files and years that exist, each variable with its units and display settings, the grid |
+| `GET …/output/map?variable&resolution&start[&bbox&width&height&encoding]` | a PNG (content type image/png): a north-up map of one time step, transparent where there is no data; `encoding=json` gives the toolkit's answer, with the PNG as `base64` beside the legend, value range, units and box |
+| `GET …/output/series?variable&resolution&point[&start&end&display]` | JSON: the values of the cell nearest `point` (`LON,LAT`) over the period |
+| `GET …/output/subset?variable&resolution[&start&end&bbox]` | a NetCDF-4 file (application/x-netcdf), as an attachment: one variable over the period and box |
+
+`…` is `/api/v1/jobs/{job_id}` or `/api/v1/repository/datasets/{dataset_id}`. Dates are
+`YYYY`, `YYYY-MM` or `YYYY-MM-DD`, `bbox` is `W,S,E,N` and `resolution` is `daily`,
+`monthly` or `yearly`; the gateway checks only their syntax (422 before anything runs),
+and what they mean is the toolkit's.
+
+- **Who.** A job's output is for the job's owner and holders of `JOB_VIEW_ANY` (staff and
+  admins), as its logs are; anyone else gets the 404 a missing job gets
+  ([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). A published snapshot's is open to anyone, like the other
+  repository read routes, and 404 for an id the catalogue does not hold. The work
+  directory is `ANVIL_OUTPUT_BASE/<sim_id>`; a draft that never ran is 404
+  `output_missing`, and one whose scratch Anvil purged (`files: purged`) is 410
+  `output_purged`.
+- **Errors** are `{"code", "message"}`. The toolkit's exit status decides: 2 (it refuses
+  the request: a year the output lacks, a box with no cell, a call over its limits) is
+  422 `output_request_refused` with its message; 3 (no output there) is 404
+  `output_missing`; anything else, or an answer that is not a JSON object, is 502
+  `output_failed`. 503 `anvil_not_configured` and `anvil_unreachable` are as for the
+  admin routes; 503 `output_busy` is a read that found all three places
+  (`MAX_CONCURRENT_READS`) taken for 15 s: the published routes are open, and each call is a
+  process on a login node.
+- **Download.** The toolkit writes the `nc` subset to `<uuid>.nc` under
+  `ANVIL_OUTPUT_DOWNLOAD_DIR` (default `<ANVIL_REMOTE_BASE_DIR>/output-downloads`, on
+  scratch), the backend streams it over SFTP on slurmly's one connection
+  (`slurm.stream_remote_file`, which reaches into slurmly's transport; its
+  docstring says so, rule 2) with `Content-Length` and a `Content-Disposition` filename, and
+  deletes it when the stream ends, fails or is cancelled (`slurm.remove_remote_file`). A file
+  nobody streamed (a client that left before the first byte, a restart) is removed by a sweep
+  of files a day old that runs before a download, at most every ten minutes.
+- **Nothing is stored.** No cache, no derivative, no job document field: each request is
+  one SSH round trip, about a second plus the read. `Cache-Control` is `public,
+  max-age=3600` for a snapshot's maps and `private, no-cache` for a run's.
+
 ## 6. What is absent, and not by oversight
 
 Each row below was described as present in the v1.1 gateway overview that this

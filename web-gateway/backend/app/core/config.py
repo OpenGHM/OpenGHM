@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # and 20974771), while on /home it serialised across nodes (20974926 on
     # a000, 20974927 on a004). The directory must exist on Anvil.
     ANVIL_FETCH_LOCK: str = "/home/x-openghm/apps/openghm/locks/fetch.lock"
+    # Reading WBM output (ADR 0033): where the toolkit writes a `nc` subset for
+    # the backend to stream back over SFTP, on Anvil, one file per request and
+    # deleted after it. Empty means `<ANVIL_REMOTE_BASE_DIR>/output-downloads`.
+    # Scratch, and writable by the gateway's Anvil account; the toolkit creates
+    # the directory (mode 0700) on the first download.
+    ANVIL_OUTPUT_DOWNLOAD_DIR: str = ""
     # Publishing a snapshot draft (ADR 0031). The user-facing origin the new
     # snapshot's canonical `about.url` is built on (`<origin>/snapshots/<id>`),
     # the form the three published snapshots use. The s3cmd credentials file the

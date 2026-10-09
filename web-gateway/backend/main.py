@@ -11,6 +11,7 @@ from app.api.v1 import auth as auth_router
 from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
 from app.api.v1 import users as users_router
+from app.api.v1 import wbm_output as wbm_output_router
 from app.core import pending_sso, sessions
 from app.core.config import settings
 from app.core.database import close_db, get_client, get_db
@@ -193,6 +194,7 @@ app.include_router(users_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(repository_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(wbm_output_router.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")
