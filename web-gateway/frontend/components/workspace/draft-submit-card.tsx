@@ -22,7 +22,6 @@ import {
   runsClimatology,
   type Recommended,
 } from "@/lib/jobs/compute";
-import { basedOnName } from "@/lib/jobs/display-name";
 import type { ActionResult, Job, PostProcessingChoice, SubmitError } from "@/lib/jobs/types";
 import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
@@ -370,7 +369,7 @@ export function DraftSubmitCard({
 
           {saved && compute && (
             <SubmitSummary
-              snapshotTitle={basedOnName(saved)}
+              snapshotTitle={saved.dataset_title}
               start={saved.parameters.temporal_range_start}
               end={saved.parameters.temporal_range_end}
               variables={saved.parameters.variables}

@@ -27,7 +27,6 @@ import {
   formFromAbout,
   isValid,
   newCreatorRow,
-  SHORT_NAME_MAX,
   splitServerErrors,
   validatePublishForm,
   type PublishField,
@@ -271,33 +270,6 @@ function PublishForm({
             </p>
           )}
           {shown("name") && <FieldError id={`${id}-name-error`}>{shown("name")}</FieldError>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor={`${id}-shortName`} className="text-xs text-muted-foreground">
-            Short name <span className="font-normal">(optional)</span>
-          </Label>
-          <Input
-            id={`${id}-shortName`}
-            data-publish-field="shortName"
-            value={values.shortName}
-            autoComplete="off"
-            className="h-10 md:h-9"
-            placeholder="e.g. WBM v1 Global 2000–2009"
-            aria-invalid={shown("shortName") ? true : undefined}
-            aria-describedby={[`${id}-shortName-hint`, describedBy("shortName")].filter(Boolean).join(" ")}
-            onChange={(e) => set({ shortName: e.target.value })}
-          />
-          <p id={`${id}-shortName-hint`} className="flex justify-between gap-3 text-xs text-muted-foreground">
-            <span>
-              Shown in lists, cards and headers, where the full name is too long. The name above stays the
-              title to cite.
-            </span>
-            <span className="shrink-0 tabular-nums">
-              {[...values.shortName.trim()].length}/{SHORT_NAME_MAX}
-            </span>
-          </p>
-          {shown("shortName") && <FieldError id={`${id}-shortName-error`}>{shown("shortName")}</FieldError>}
         </div>
 
         <div className="space-y-1.5">

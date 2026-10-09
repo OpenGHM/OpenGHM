@@ -16,20 +16,16 @@ import type {
 import { ABOUT_TAGS, type AboutTag } from "@/lib/repository/catalogue";
 
 /** The `about` fields a person writes, in the order the form lists them. */
-export type PublishField = "name" | "shortName" | "description" | "creator" | "license" | "keywords" | "tags";
+export type PublishField = "name" | "description" | "creator" | "license" | "keywords" | "tags";
 
 export const PUBLISH_FIELDS: readonly PublishField[] = [
   "name",
-  "shortName",
   "description",
   "creator",
   "license",
   "keywords",
   "tags",
 ];
-
-/** The longest `about.shortName` (`schemas/common/about/1.0.0.json`). */
-export const SHORT_NAME_MAX = 60;
 
 /** Licenses the form suggests: bare SPDX identifiers (`about.license` is not a
  *  URL). The field takes any identifier. */
@@ -71,8 +67,6 @@ export interface CreatorRow {
 /** What the form holds. Keywords are one line of text, split on commas. */
 export interface PublishFormValues {
   name: string;
-  /** Optional; empty means the snapshot has none. */
-  shortName: string;
   description: string;
   creators: CreatorRow[];
   license: string;
@@ -93,7 +87,6 @@ export function formFromAbout(about: PartialAbout | null | undefined): PublishFo
   const known = new Set<string>(ABOUT_TAGS);
   return {
     name: about?.name ?? "",
-    shortName: about?.shortName ?? "",
     description: about?.description ?? "",
     creators:
       about?.creator && about.creator.length > 0
@@ -167,10 +160,6 @@ export function validatePublishForm(values: PublishFormValues): PublishFormError
   const creators: PublishFormErrors["creators"] = {};
 
   if (!values.name.trim()) fields.name = "Give the snapshot a name.";
-  // The spec counts characters (code points), not UTF-16 units.
-  if ([...values.shortName.trim()].length > SHORT_NAME_MAX) {
-    fields.shortName = `Keep the short name to ${SHORT_NAME_MAX} characters or fewer.`;
-  }
   if (!values.description.trim()) fields.description = "Describe what the snapshot holds.";
 
   const named = values.creators.filter((c) => c.name.trim() || c.email.trim() || c.orcid.trim());
@@ -222,10 +211,8 @@ export function aboutFromForm(values: PublishFormValues, stored: PartialAbout | 
       ...(c.email.trim() ? { email: c.email.trim() } : {}),
       ...(c.orcid.trim() ? { orcid: c.orcid.trim() } : {}),
     }));
-  const shortName = values.shortName.trim();
   const about = {
     name: values.name.trim(),
-    ...(shortName ? { shortName } : {}),
     description: values.description.trim(),
     creator,
     license: values.license.trim(),

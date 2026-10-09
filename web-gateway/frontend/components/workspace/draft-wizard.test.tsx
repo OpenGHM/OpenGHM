@@ -163,13 +163,6 @@ describe("the header", () => {
     expect(link.getAttribute("href")).toBe(`/repository/${dataset.id}`);
   });
 
-  it("says it by the snapshot's short name when the draft has one, the full title still on hover", () => {
-    const title = "A very long model snapshot title ".repeat(6);
-    wizard({ job: { ...JOB, dataset_title: title, dataset_short_title: "WBM v1 Global 2000" } });
-    const link = screen.getByRole("link", { name: "Based on WBM v1 Global 2000" });
-    expect(link.getAttribute("title")).toBe(title);
-  });
-
   it("says the same when the snapshot is gone: the title the draft was made with", () => {
     wizard({
       job: { ...JOB, dataset_title: "A very long model snapshot title ".repeat(6) },

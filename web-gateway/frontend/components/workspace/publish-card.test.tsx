@@ -174,42 +174,6 @@ describe("a publishable draft", () => {
     expect(within(sheet).getByLabelText("Name").getAttribute("aria-invalid")).toBe("true");
   });
 
-  it("has an optional Short name field, empty, with its hint and a count out of 60", async () => {
-    render(card(job("completed")));
-    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
-    const sheet = await screen.findByRole("dialog");
-    const field = within(sheet).getByLabelText(/^Short name/) as HTMLInputElement;
-    expect(field.value).toBe("");
-    expect(within(sheet).getByText(/Shown in lists, cards and headers/)).toBeTruthy();
-    expect(within(sheet).getByText("0/60")).toBeTruthy();
-    fireEvent.change(field, { target: { value: "WBM v1 Global" } });
-    expect(within(sheet).getByText("13/60")).toBeTruthy();
-  });
-
-  it("refuses a short name over 60 characters beside the field, and sends nothing", async () => {
-    render(card(job("completed")));
-    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
-    const sheet = await screen.findByRole("dialog");
-    const field = within(sheet).getByLabelText(/^Short name/);
-    fireEvent.change(field, { target: { value: "x".repeat(61) } });
-    fireEvent.click(within(sheet).getByRole("button", { name: "Publish snapshot" }));
-    expect(await within(sheet).findByText("Keep the short name to 60 characters or fewer.")).toBeTruthy();
-    expect(field.getAttribute("aria-invalid")).toBe("true");
-    expect(publishDraft).not.toHaveBeenCalled();
-  });
-
-  it("sends a short name with the about, trimmed", async () => {
-    vi.mocked(publishDraft).mockResolvedValue({ ok: true, data: { publish: fakePublish("publishing") } });
-    vi.mocked(pollJobStatus).mockResolvedValue({ ok: false, reason: "error", message: "x", status: 502 });
-    render(card(job("completed")));
-    fireEvent.click(screen.getByRole("button", { name: "Publish as snapshot" }));
-    const sheet = await screen.findByRole("dialog");
-    fireEvent.change(within(sheet).getByLabelText(/^Short name/), { target: { value: " WBM v1 Global " } });
-    fireEvent.click(within(sheet).getByRole("button", { name: "Publish snapshot" }));
-    await waitFor(() => expect(publishDraft).toHaveBeenCalled());
-    expect(vi.mocked(publishDraft).mock.calls[0][1]).toMatchObject({ name: "A published run", shortName: "WBM v1 Global" });
-  });
-
   it("sends the about through the server action, then shows the publish as under way", async () => {
     vi.mocked(publishDraft).mockResolvedValue({ ok: true, data: { publish: fakePublish("publishing") } });
     vi.mocked(pollJobStatus).mockResolvedValue({ ok: false, reason: "error", message: "x", status: 502 });

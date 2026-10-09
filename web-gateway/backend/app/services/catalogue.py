@@ -140,11 +140,10 @@ FACETS: dict[str, Callable[[Item], list[Option]]] = {
 
 
 def _text_fields(item: Item) -> tuple[str, str, list[str]]:
-    """name (``about.name`` and, when there is one, ``about.shortName``, so a
-    search finds either title), description, and the keyword-like terms
-    (``about.keywords`` and ``about.tags``; a hit in either counts the same)."""
+    """name, description, and the keyword-like terms (``about.keywords`` and
+    ``about.tags``; a hit in either counts the same)."""
     return (
-        f"{item.about.name}\n{item.about.shortName or ''}".lower(),
+        item.about.name.lower(),
         item.about.description.lower(),
         [k.root.lower() for k in item.about.keywords] + [t.value.lower() for t in item.about.tags],
     )
@@ -298,12 +297,6 @@ def year_bounds(items: list[Item]) -> YearBounds | None:
 # ---- sorting -------------------------------------------------------------
 
 
-def _display_name(item: Item) -> str:
-    """The title the gateway shows for an item: ``about.shortName`` when it has
-    one, else ``about.name``. Title order follows what a reader sees."""
-    return item.about.shortName or item.about.name
-
-
 def relevance_score(item: Item, q: str | None) -> int:
     """name hit 3, keyword or tag hit 2, description hit 1, summed over the fields hit."""
     if not q or not q.strip():
@@ -328,17 +321,17 @@ def sort_catalogue(items: list[Item], sort: str, q: str | None = None) -> list[I
     """Pure, not in-place, and total: every order ends in the id."""
     out = sorted(items, key=lambda i: i.id)
     if sort == "title-az":
-        out.sort(key=lambda i: _display_name(i).casefold())
+        out.sort(key=lambda i: i.about.name.casefold())
     elif sort == "title-za":
-        out.sort(key=lambda i: _display_name(i).casefold(), reverse=True)
+        out.sort(key=lambda i: i.about.name.casefold(), reverse=True)
         # reverse=True keeps equal elements in their (id-ascending) order.
     elif sort == "coverage-start":
         # Earliest temporal coverage start first; no coverage last; then name, id.
-        out.sort(key=lambda i: _display_name(i).casefold())
+        out.sort(key=lambda i: i.about.name.casefold())
         out.sort(key=_coverage_start_key)
     else:
         # newest, and relevance's tie-break: datePublished desc, name asc, id.
-        out.sort(key=lambda i: _display_name(i).casefold())
+        out.sort(key=lambda i: i.about.name.casefold())
         out.sort(key=lambda i: i.about.datePublished, reverse=True)
         if sort == "relevance" and q and q.strip():
             out.sort(key=lambda i: relevance_score(i, q), reverse=True)

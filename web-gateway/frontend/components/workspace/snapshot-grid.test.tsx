@@ -156,23 +156,3 @@ describe("while a draft is being made", () => {
     expect(first.querySelector("[data-slot=card]")?.className).not.toContain("pointer-events-none");
   });
 });
-
-describe("a card with a short name", () => {
-  const SHORT = fakeDataset({
-    id: "short",
-    about: { ...fakeDataset().about, name: LONG_TITLE, shortName: "WBM v1 Global 2000–2009" },
-  });
-
-  it("is named by the short name, with the full title on hover and in the Details name", () => {
-    grid({ datasets: [SHORT] });
-    expect(headings()).toEqual(["WBM v1 Global 2000–2009"]);
-    const select = within(cards()[0]).getByRole("button", { name: "WBM v1 Global 2000–2009" });
-    expect(select.getAttribute("title")).toBe(LONG_TITLE);
-    expect(within(cards()[0]).getByRole("button", { name: "Details: WBM v1 Global 2000–2009" })).toBeTruthy();
-  });
-
-  it("is the full title when there is none", () => {
-    grid({ datasets: [GLOBAL] });
-    expect(headings()).toEqual([LONG_TITLE]);
-  });
-});

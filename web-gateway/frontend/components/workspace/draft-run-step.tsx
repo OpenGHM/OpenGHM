@@ -73,7 +73,6 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
 export function DraftRunStep({
   datasetId,
   datasetTitle,
-  datasetShortTitle,
   ctx,
   parameters,
   slurm,
@@ -94,8 +93,6 @@ export function DraftRunStep({
 }: {
   datasetId: string;
   datasetTitle: string;
-  /** The draft's `dataset_short_title`, if it has one. */
-  datasetShortTitle?: string | null;
   ctx: DraftContext;
   parameters: JobParameters;
   slurm: SlurmConfig;
@@ -185,7 +182,6 @@ export function DraftRunStep({
         ctx={ctx}
         datasetId={datasetId}
         fallbackTitle={datasetTitle}
-        fallbackShortTitle={datasetShortTitle}
         modelInput={{
           id: modelInputId,
           resolved: resolvedModelInput,

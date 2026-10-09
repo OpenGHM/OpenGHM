@@ -378,11 +378,7 @@ function WizardBody({
   );
 
   const recommended = recommendedComputeFor(ctx.dataset);
-  const source = draftSource({
-    dataset_id: datasetId,
-    dataset_title: initialJob.dataset_title,
-    dataset_short_title: initialJob.dataset_short_title,
-  });
+  const source = draftSource({ dataset_id: datasetId, dataset_title: initialJob.dataset_title });
   const name = isNew ? local.name.trim() || "New snapshot" : liveName(local.name, initialJob);
   const index = DRAFT_STEPS.indexOf(step);
 
@@ -657,7 +653,7 @@ function WizardBody({
           <p className="mt-2.5 min-w-0 text-sm text-muted-foreground">
             <Link
               href={source.href}
-              title={source.fullTitle}
+              title={source.title}
               className="block max-w-full truncate rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               Based on {source.title}
@@ -783,7 +779,6 @@ function WizardBody({
             <DraftRunStep
               datasetId={datasetId}
               datasetTitle={initialJob.dataset_title}
-              datasetShortTitle={initialJob.dataset_short_title}
               ctx={ctx}
               parameters={local.parameters}
               slurm={local.slurm}
@@ -807,7 +802,6 @@ function WizardBody({
             <DraftReviewStep
               datasetId={datasetId}
               datasetTitle={initialJob.dataset_title}
-              datasetShortTitle={initialJob.dataset_short_title}
               ctx={ctx}
               local={local}
               recommended={recommended}

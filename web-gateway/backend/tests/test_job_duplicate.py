@@ -153,12 +153,6 @@ def test_the_title_is_read_from_the_snapshot_again(client, db, source):
     assert body["dataset_title"] == "Dataset renamed"
 
 
-def test_the_short_title_is_read_from_the_snapshot_again(client, db, source):
-    assert client.post(DUPLICATE, headers=HEADERS).json()["dataset_short_title"] is None
-    db.datasets.docs["ds-1"]["document"]["about"]["shortName"] = "Short one"
-    assert client.post(DUPLICATE, headers=HEADERS).json()["dataset_short_title"] == "Short one"
-
-
 def test_a_source_without_a_name_gets_no_copy_suffix(client, db):
     db.jobs.docs["job-1"] = make_job("job-1", OWNER, "DRAFT")
     assert client.post(DUPLICATE, headers=HEADERS).json()["about"] is None

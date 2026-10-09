@@ -438,24 +438,3 @@ describe("CatalogueCard in the grid view", () => {
     onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });
 });
-
-describe("CatalogueCard with a short name", () => {
-  const FULL = "WBM v1.0.0 Wyoming_tracking simulation for 'Water balance model (WBM) v.1.0.0: a scalable gridded global hydrologic model': [Wyoming] [2000-2009]";
-  const withShort = () => {
-    const item = snapshotItem();
-    return { ...item, about: { ...item.about, name: FULL, shortName: "WBM v1 Wyoming 2000–2009" } };
-  };
-
-  it.each<CatalogueView>(["list", "grid"])("titles the %s card by the short name, the full name on hover", (layout) => {
-    renderCard(withShort(), [], layout);
-    const link = onlyLink("WBM v1 Wyoming 2000–2009", "/repository/snap-1");
-    expect(link.getAttribute("title")).toBe(FULL);
-    expect(screen.queryByText(FULL)).toBeNull();
-  });
-
-  it.each<CatalogueView>(["list", "grid"])("is exactly as before without one, in the %s card", (layout) => {
-    renderCard(snapshotItem(), [], layout);
-    const link = onlyLink("Global Storage Run", "/repository/snap-1");
-    expect(link.getAttribute("title")).toBeNull();
-  });
-});

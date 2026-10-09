@@ -153,7 +153,6 @@ def _doc_to_response(
         user_id=doc["user_id"],
         dataset_id=doc["dataset_id"],
         dataset_title=doc["dataset_title"],
-        dataset_short_title=doc.get("dataset_short_title"),
         slug=doc.get("slug"),
         about=doc.get("about"),
         model_input_id=doc.get("model_input_id"),
@@ -254,7 +253,6 @@ def _new_draft_document(
     slug: str | None,
     user: TokenPayload,
     now: datetime,
-    dataset_short_title: str | None = None,
     model_input_id: str | None = None,
     about: dict | None = None,
     slurm_config: SlurmConfig | None = None,
@@ -274,10 +272,6 @@ def _new_draft_document(
         "user_email": user.email,
         "dataset_id": dataset_id,
         "dataset_title": dataset_title,
-        # The snapshot's `about.shortName`, copied beside the title for the
-        # lists that show a job without loading its snapshot. Absent when the
-        # snapshot has none, and on every job made before the field existed.
-        "dataset_short_title": dataset_short_title,
         "slug": slug,
         "about": about,
         "model_input_id": model_input_id,
@@ -309,7 +303,6 @@ def _duplicate_document(
     user: TokenPayload,
     now: datetime,
     dataset_title: str,
-    dataset_short_title: str | None = None,
 ) -> dict:
     """A new draft that starts with `source`'s settings. Pure. It is built by
     `_new_draft_document` from an explicit list of what a copy takes (the
@@ -318,8 +311,7 @@ def _duplicate_document(
     (the sparse unique index would refuse a second one) and `orphan_sim_ids` (the
     sweep runs scancel on them) belong to the simulation that was, and a field added to a
     job later is left out of a copy until someone decides it belongs in one.
-    `dataset_title` and `dataset_short_title` are read from the snapshot again by
-    the caller, not copied."""
+    `dataset_title` is read from the snapshot again by the caller, not copied."""
     about = copy.deepcopy(source.get("about"))
     if about and about.get("name"):
         about["name"] = f"{about['name']} (copy)"
@@ -327,7 +319,6 @@ def _duplicate_document(
         job_id=job_id,
         dataset_id=source["dataset_id"],
         dataset_title=dataset_title,
-        dataset_short_title=dataset_short_title,
         parameters=JobParameters.model_validate(read_stored_parameters(source["parameters"])),
         slug=source.get("slug"),
         user=user,
@@ -404,7 +395,6 @@ async def _derived_draft(
         job_id=job_id,
         dataset_id=dataset_id,
         dataset_title=dataset_doc.get("about", {}).get("name", dataset_id),
-        dataset_short_title=dataset_doc.get("about", {}).get("shortName"),
         parameters=_derive_simulation_parameters(dataset_doc),
         slug=slug,
         user=user,
@@ -502,7 +492,6 @@ async def duplicate_simulation(
         user=user,
         now=now,
         dataset_title=envelope["document"].get("about", {}).get("name", source["dataset_id"]),
-        dataset_short_title=envelope["document"].get("about", {}).get("shortName"),
     )
     await db.jobs.insert_one(doc)
 

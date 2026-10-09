@@ -333,17 +333,6 @@ def test_draft_document_carries_updated_at():
 # ---- deriving through the route: the answer and the audit event -----------
 
 
-def test_derive_carries_the_snapshots_short_name_beside_its_title(client, db):
-    from route_helpers import make_user, token_for
-
-    db.users.docs["alice"] = make_user("alice")
-    first = client.post("/api/v1/jobs/derive/ds-1", json={}, headers=token_for("alice")).json()
-    assert first["dataset_short_title"] is None  # the snapshot has none: nothing is made up
-    db.datasets.docs["ds-1"]["document"]["about"]["shortName"] = "Short one"
-    second = client.post("/api/v1/jobs/derive/ds-1", json={}, headers=token_for("alice")).json()
-    assert second["dataset_short_title"] == "Short one" and second["dataset_title"] == "Dataset one"
-
-
 def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
     from route_helpers import make_user, token_for
 

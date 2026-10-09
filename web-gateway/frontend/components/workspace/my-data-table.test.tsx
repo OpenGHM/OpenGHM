@@ -285,21 +285,3 @@ describe("the section", () => {
     expect(redirectToSignIn).toHaveBeenCalledWith("/workspace/data");
   });
 });
-
-describe("a row with a short name", () => {
-  const FULL = "A very long paper title: [Wyoming] [2000-2009]";
-  const SHORT = mineItem(
-    snapshotItem({ id: "short-1", about: { ...snapshotItem().about, name: FULL, shortName: "Wyoming 2000s" } })
-  );
-
-  it("is titled by it, with the full name on hover, and still found by either", () => {
-    render(<MyDataTable items={[SHORT, SNAP2]} />);
-    const link = screen.getByRole("link", { name: "Wyoming 2000s" });
-    expect(link.getAttribute("title")).toBe(FULL);
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "wyoming 2000s" } });
-    expect(rows()).toHaveLength(1);
-    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "paper title" } });
-    expect(rows()).toHaveLength(1);
-    expect(within(rows()[0]).getByRole("link", { name: "Wyoming 2000s" })).toBeTruthy();
-  });
-});

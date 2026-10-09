@@ -20,8 +20,6 @@ function buildJsonLd(dataset: Dataset) {
     // tree, not just this one document, and that isn't settled yet.
     identifier: dataset.id,
     name: about.name,
-    // The short display name, as schema.org's other name for the dataset.
-    ...(about.shortName ? { alternateName: about.shortName } : {}),
     description: about.description,
     datePublished: about.datePublished,
     license: dataset.licenseUrl,

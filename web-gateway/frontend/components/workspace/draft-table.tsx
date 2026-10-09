@@ -136,7 +136,7 @@ export function DraftTable({
                   </p>
                   <p className="mt-0.5 flex min-w-0 items-baseline gap-x-2 text-[13px] text-muted-foreground">
                     {source.kind !== "snapshot" && <span className="shrink-0">{kindLabel(source.kind)} ·</span>}
-                    <span title={source.fullTitle} className="min-w-0 truncate">
+                    <span title={source.title} className="min-w-0 truncate">
                       {source.title}
                     </span>
                     {runNote && <span className="shrink-0 whitespace-nowrap">· {runNote}</span>}

@@ -4,24 +4,14 @@ import { Button } from "@/components/ui/button";
 import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { draftField } from "@/components/workspace/draft-field";
 import { snapshotBox, snapshotFacts } from "@/components/workspace/snapshot-facts";
-import { aboutName } from "@/lib/jobs/display-name";
 import type { ModelInput } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
 const shortId = (id: string) => `${id.slice(0, 12)}…`;
 
-/** The name of the snapshot a draft is based on, as the page shows it: the
- *  snapshot's own (`aboutName`: its short name when it has one) when it was
- *  found, else the one the draft was made with (`fallbackShortTitle` is the
- *  short name copied onto the draft, if any). */
-export function basisTitle(ctx: DraftContext, fallbackTitle: string, fallbackShortTitle?: string | null): string {
-  return ctx.snapshotState === "found" && ctx.dataset
-    ? aboutName(ctx.dataset.about)
-    : aboutName({ name: fallbackTitle, shortName: fallbackShortTitle });
-}
-
-/** The same snapshot's full title, for the tooltip on `basisTitle`. */
-export function basisFullTitle(ctx: DraftContext, fallbackTitle: string): string {
+/** The title of the snapshot a draft is based on, whole: the snapshot's own
+ *  (`about.name`) when it was found, else the title the draft was made with. */
+export function basisTitle(ctx: DraftContext, fallbackTitle: string): string {
   return ctx.snapshotState === "found" && ctx.dataset ? ctx.dataset.about.name : fallbackTitle;
 }
 
@@ -51,7 +41,6 @@ export function DraftBasis({
   ctx,
   datasetId,
   fallbackTitle,
-  fallbackShortTitle,
   modelInput,
   disabled = false,
 }: {
@@ -59,8 +48,6 @@ export function DraftBasis({
   datasetId: string;
   /** The draft's `dataset_title`, for when there is no snapshot to read it from. */
   fallbackTitle: string;
-  /** The draft's `dataset_short_title`, if it has one. */
-  fallbackShortTitle?: string | null;
   /** Run settings only; Review leaves it out. */
   modelInput?: {
     /** The draft's own override; null inherits the snapshot's. */
@@ -76,8 +63,7 @@ export function DraftBasis({
 }) {
   const href = snapshotHref(datasetId);
   const dataset = ctx.snapshotState === "found" ? ctx.dataset : null;
-  const title = basisTitle(ctx, fallbackTitle, fallbackShortTitle);
-  const fullTitle = basisFullTitle(ctx, fallbackTitle);
+  const title = basisTitle(ctx, fallbackTitle);
   const inheritedId = dataset?.uses.modelInput.id ?? null;
   const chosen = modelInput?.id ?? null;
   const shownId = chosen ?? inheritedId;
@@ -95,7 +81,7 @@ export function DraftBasis({
             href={`/repository/model-inputs/${encodeURIComponent(shownId)}`}
             className="text-primary underline-offset-2 hover:underline"
           >
-            {aboutName(modelInput.resolved.about)}
+            {modelInput.resolved.about.name}
           </Link>
         </>
       ) : (
@@ -122,7 +108,7 @@ export function DraftBasis({
           )}
           <div className="min-w-0 max-w-full flex-1 space-y-0.5">
             <p className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Based on</p>
-            <p title={fullTitle} className="line-clamp-2 text-base leading-snug font-semibold break-words text-foreground">
+            <p title={title} className="line-clamp-2 text-base leading-snug font-semibold break-words text-foreground">
               {title}
             </p>
             {(facts.length > 0 || modelInputText) && (
@@ -170,7 +156,7 @@ export function DraftBasis({
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 break-words">
               This draft uses a different model input
-              {modelInput.resolved ? `: ${aboutName(modelInput.resolved.about)}` : ` (${shortId(chosen)})`}
+              {modelInput.resolved ? `: ${modelInput.resolved.about.name}` : ` (${shortId(chosen)})`}
               . It can&apos;t run yet; revert to the snapshot&apos;s own to submit.
             </span>
           </p>

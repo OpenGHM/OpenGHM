@@ -122,7 +122,6 @@ def filter_datasets(
         datasets = [
             d for d in datasets
             if q_lower in d.about.name.lower()
-            or q_lower in (d.about.shortName or "").lower()
             or q_lower in d.about.description.lower()
             or any(q_lower in kw.root.lower() for kw in d.about.keywords)
         ]

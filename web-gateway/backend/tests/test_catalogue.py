@@ -440,33 +440,6 @@ def test_sort_coverage_start(items):
     assert got[5:] == [ZETA_ID, SOIL_ID]
 
 
-def _short_named_zeta_doc() -> dict:
-    d = _zeta_doc()
-    d["about"]["shortName"] = "Qwerty basin"
-    return d
-
-
-def test_q_matches_the_short_name_as_well_as_the_name(items):
-    items = [i for i in items if i.id != ZETA_ID] + [_snap(_short_named_zeta_doc())]
-    assert set(_ids(_run(items, q="qwerty"))) == {ZETA_ID}
-    assert set(_ids(_run(items, q="zeta"))) == {ZETA_ID}  # the full name still matches
-    assert _ids(_run(items, q="no-such-short-name")) == []
-
-
-def test_relevance_counts_a_short_name_hit_as_a_name_hit(items):
-    zeta = _snap(_short_named_zeta_doc())
-    assert catalogue_service.relevance_score(zeta, "qwerty") == 3
-
-
-def test_title_order_follows_the_name_a_reader_sees(items):
-    # Zeta's full name sorts late ("Zeta flood study"); its short name sorts first.
-    d = _zeta_doc()
-    d["about"]["shortName"] = "000 first"
-    items = [i for i in items if i.id != ZETA_ID] + [_snap(d)]
-    assert _ids(_run(items, sort="title-az"))[0] == ZETA_ID
-    assert _ids(_run(items, sort="title-za"))[-1] == ZETA_ID
-
-
 def test_sort_title(items):
     az = [i.about.name for i in _run(items, sort="title-az").items]
     assert az == sorted(az, key=str.casefold)

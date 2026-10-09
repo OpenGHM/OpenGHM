@@ -179,22 +179,6 @@ def test_is_based_on_is_accepted_by_the_model_input_spec_too():
     assert not spec.validate_document(doc, spec="model-input-spec").ok
 
 
-# ---- about.shortName ------------------------------------------------------------
-
-
-@pytest.mark.parametrize("which", ["snapshot-spec", "model-input-spec"])
-def test_short_name_is_optional_and_bounded_in_both_specs(which):
-    example = SNAPSHOT_EXAMPLE if which == "snapshot-spec" else MODEL_INPUT_EXAMPLE
-    assert "shortName" not in example["about"]
-    for short, ok in (("x" * 60, True), ("Short name", True), ("", False), ("x" * 61, False), (7, False)):
-        doc = copy.deepcopy(example)
-        doc["about"]["shortName"] = short
-        result = spec.validate_document(doc, spec=which)
-        assert result.ok is ok, (short, result.errors)
-        if not ok:
-            assert any("shortName" in e for e in result.errors), result.errors
-
-
 # ---- uses.modelCode (ADR 0032) ------------------------------------------------
 
 

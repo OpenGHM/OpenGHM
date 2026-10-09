@@ -7,7 +7,6 @@ import { TimeStamp } from "@/components/common/time-stamp";
 import { MyDataKindTabs, pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { SearchField, matchesQuery } from "@/components/workspace/search-field";
 import { VisibilityBadge } from "@/components/workspace/visibility-badge";
-import { aboutName } from "@/lib/jobs/display-name";
 import { coverageLine, detailHref, kindLabel } from "@/lib/repository/catalogue-format";
 import type { MineItem } from "@/lib/repository/types";
 import { cn } from "@/lib/utils";
@@ -63,7 +62,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
   const [query, setQuery] = useState("");
   const counts = countByKind(items);
   const ofKind = filterByKind(items, kind);
-  const rows = ofKind.filter((item) => matchesQuery(`${item.about.name} ${item.about.shortName ?? ""} ${item.id}`, query));
+  const rows = ofKind.filter((item) => matchesQuery(`${item.about.name} ${item.id}`, query));
   const tab = KIND_TABS.find((t) => t.value === kind) ?? KIND_TABS[0];
 
   return (
@@ -128,7 +127,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
                       title={item.about.name}
                       className="block truncate text-[15px] font-medium text-foreground outline-none after:absolute after:inset-0 after:content-['']"
                     >
-                      {aboutName(item.about)}
+                      {item.about.name}
                     </Link>
                     <p className="mt-0.5 font-mono text-xs break-words text-muted-foreground sm:truncate">
                       {shortId(item.id)} · {coverageLine(item)}

@@ -202,7 +202,6 @@ def compose_metadata(
         key: value
         for key, value in (
             ("name", validated.get("name")),
-            ("shortName", validated.get("shortName")),
             ("description", validated.get("description")),
             ("datePublished", now.astimezone(timezone.utc).date().isoformat()),
             ("tags", validated.get("tags")),

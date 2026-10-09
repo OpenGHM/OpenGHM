@@ -31,8 +31,6 @@ import { OutputVariablesTable } from "@/components/repository/output-variables-t
 import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 import { DownloadCard } from "@/components/repository/download-card";
 import { TagChips } from "@/components/repository/tag-chips";
-import { HeroTitle } from "@/components/repository/hero-title";
-import { aboutName } from "@/lib/jobs/display-name";
 import { ExecutionCard } from "@/components/repository/execution-card";
 
 export default async function DatasetDetailPage({
@@ -65,9 +63,7 @@ export default async function DatasetDetailPage({
             Data Repository
           </Link>
           <span className="mx-2">/</span>
-          <span title={about.name} className="text-foreground">
-            {aboutName(about)}
-          </span>
+          <span className="text-foreground">{about.name}</span>
         </div>
       </div>
 
@@ -80,7 +76,9 @@ export default async function DatasetDetailPage({
               Model Snapshot
             </span>
           </div>
-          <HeroTitle about={about} />
+          <h1 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">
+            {about.name}
+          </h1>
           <div className="flex flex-wrap gap-4">
             {[
               { icon: <Calendar className="size-4" />, text: temporalLabel },
@@ -327,7 +325,7 @@ export default async function DatasetDetailPage({
                     <InfoRow
                       icon={<Container className="size-4" />}
                       label="Model Input"
-                      value={modelInput ? aboutName(modelInput.about) : `${modelInputId.slice(0, 12)}…`}
+                      value={modelInput?.about.name ?? `${modelInputId.slice(0, 12)}…`}
                       internalHref={modelInput ? `/repository/model-inputs/${modelInputId}` : undefined}
                       iconColor="text-teal-500"
                     />
