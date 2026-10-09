@@ -740,8 +740,9 @@ the wizard is a two-column grid in a 1456 px container: the steps keep their 102
 panel is a 20 rem `sticky` aside under the site header, scrolling by itself when it is taller than the
 viewport. Below `xl` a "Help" button beside the step's heading opens the same content in the sheet used
 elsewhere. The panel shows the help of the section last focused or last entered by the pointer, and keeps
-it when the pointer leaves, until another section is chosen, "Back to overview" is pressed or the step
-changes. The panel is a polite live region and never takes focus. All the words are in one module,
+it when the pointer leaves, until another section is chosen or the step changes. On Run settings an index
+above the topic lists the overview and every section and marks the one shown; choosing an entry shows that
+topic. The topic is a polite live region and the panel never takes focus. All the words are in one module,
 `web-gateway/frontend/lib/workspace/wizard-help.ts`, which reads the numbers it quotes (memory per core,
 the 96 h limit, the 30 days) from where the code keeps them, and says whether climatology is available
 from `climatologyAvailable`. A section declares its help with `DraftSection`'s `help` prop

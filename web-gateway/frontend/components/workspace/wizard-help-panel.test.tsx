@@ -66,14 +66,6 @@ describe("WizardHelpPanel", () => {
     expect(shown()).toBe("Compute");
   });
 
-  it("goes back to the overview on request", () => {
-    render(<Sections />);
-    expect(screen.queryByRole("button", { name: /back to/i })).toBeNull();
-    fireEvent.focus(screen.getByLabelText("Start"));
-    fireEvent.click(screen.getByRole("button", { name: "Back to run settings" }));
-    expect(shown()).toBe("Run settings");
-  });
-
   it("never takes focus", () => {
     render(<Sections />);
     const input = screen.getByLabelText("Start");
@@ -110,15 +102,6 @@ describe("WizardHelpPanel", () => {
     expect(shown()).toBe("Run period");
     fireEvent.pointerEnter(section);
     expect(shown()).toBe("Compute");
-  });
-
-  it("goes back to the overview after a hover when asked", () => {
-    render(<Sections />);
-    const section = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
-    fireEvent.pointerEnter(section);
-    fireEvent.pointerLeave(section);
-    fireEvent.click(screen.getByRole("button", { name: "Back to run settings" }));
-    expect(shown()).toBe("Run settings");
   });
 
   it("starts over when the step changes after a hover", () => {
@@ -204,6 +187,82 @@ describe("WizardHelpPanel", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Run settings" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Help" })).toBeNull();
     expect(container.querySelector("section")).not.toBeNull();
+  });
+});
+
+describe("the help topics index", () => {
+  const nav = () => screen.getByRole("navigation", { name: "Help topics" });
+  const entry = (name: string) => within(nav()).getByRole("button", { name });
+  const current = () =>
+    within(nav())
+      .getAllByRole("button")
+      .filter((b) => b.getAttribute("aria-current") === "true")
+      .map((b) => b.textContent);
+
+  it("lists the topics of Run settings, in order, and none on Start or Review", () => {
+    const { rerender } = render(<Sections />);
+    expect(within(nav()).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Run settings",
+      "Name and description",
+      "Run period",
+      "Output variables",
+      "Output",
+      "Compute",
+    ]);
+    rerender(<Sections step="start" />);
+    expect(screen.queryByRole("navigation", { name: "Help topics" })).toBeNull();
+    rerender(<Sections step="review" />);
+    expect(screen.queryByRole("navigation", { name: "Help topics" })).toBeNull();
+  });
+
+  it("marks the topic shown, and follows hover and focus", () => {
+    render(<Sections />);
+    expect(current()).toEqual(["Run settings"]);
+    fireEvent.focus(screen.getByLabelText("Start"));
+    expect(current()).toEqual(["Run period"]);
+    const compute = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
+    fireEvent.pointerEnter(compute);
+    expect(current()).toEqual(["Compute"]);
+    fireEvent.pointerLeave(compute);
+    expect(current()).toEqual(["Compute"]);
+  });
+
+  it("shows the topic of the entry that is clicked, and keeps it", () => {
+    render(<Sections />);
+    fireEvent.click(entry("Compute"));
+    expect(shown()).toBe("Compute");
+    expect(current()).toEqual(["Compute"]);
+    expect(entry("Compute").getAttribute("aria-current")).toBe("true");
+    expect(entry("Run period").hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("returns to the overview from its entry", () => {
+    render(<Sections />);
+    fireEvent.click(entry("Compute"));
+    fireEvent.click(entry("Run settings"));
+    expect(shown()).toBe("Run settings");
+    expect(current()).toEqual(["Run settings"]);
+  });
+
+  it("has no Back to overview button", () => {
+    render(<Sections />);
+    fireEvent.click(entry("Compute"));
+    expect(screen.queryByRole("button", { name: /back to/i })).toBeNull();
+  });
+
+  it("is in the sheet too, and shows the topic there", () => {
+    render(
+      <WizardHelpProvider step="run" facts={{}}>
+        <WizardHelpButton />
+        <DraftSection title="Compute" help="compute">
+          <input aria-label="Cores" />
+        </DraftSection>
+      </WizardHelpProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    const sheet = screen.getByRole("dialog", { name: "Help" });
+    fireEvent.click(within(within(sheet).getByRole("navigation", { name: "Help topics" })).getByRole("button", { name: "Compute" }));
+    expect(within(sheet).getByRole("heading", { level: 3, name: "Compute" })).toBeTruthy();
   });
 });
 

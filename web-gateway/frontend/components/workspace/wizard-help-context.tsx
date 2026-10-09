@@ -18,14 +18,15 @@ interface WizardHelp {
   /** The section whose help is shown, or null for the step's overview. */
   section: HelpSection | null;
   /** Focus moved into a section. The section stays until another one is
-   *  focused or hovered, or `showOverview` is used, so the panel does not jump
+   *  focused or hovered, or `showSection` is used, so the panel does not jump
    *  back when focus is on the page background or on the panel itself. */
   focusSection: (section: HelpSection) => void;
   /** The pointer entered a section. Leaving it changes nothing, so the pointer
    *  can cross to the panel, and the section stays like a focused one. */
   hoverSection: (section: HelpSection) => void;
-  /** Back to the step's overview. */
-  showOverview: () => void;
+  /** Show a topic chosen from the panel's index: a section, or null for the
+   *  step's overview. It stays like a focused section. */
+  showSection: (section: HelpSection | null) => void;
   /** Run `focus` without it counting as the person going to a section (the
    *  wizard focusing the Name input as the step opens). */
   quietly: (focus: () => void) => void;
@@ -42,7 +43,7 @@ export function useWizardHelp(): WizardHelp | null {
 /**
  * Which part of the screen the help panel is about. A section is chosen by
  * focus or by the pointer entering it, whichever came last, and stays until
- * another is chosen or `showOverview` is used. The state starts over when the
+ * another is chosen or `showSection` is used (the panel's index). The state starts over when the
  * step changes. Nothing here moves focus.
  */
 export function WizardHelpProvider({
@@ -66,7 +67,7 @@ export function WizardHelpProvider({
     if (!ignoreFocus.current) setSection(next);
   }, []);
   const hoverSection = useCallback((next: HelpSection) => setSection(next), []);
-  const showOverview = useCallback(() => setSection(null), []);
+  const showSection = useCallback((next: HelpSection | null) => setSection(next), []);
   const quietly = useCallback((focus: () => void) => {
     ignoreFocus.current = true;
     try {
@@ -84,10 +85,10 @@ export function WizardHelpProvider({
       section,
       focusSection,
       hoverSection,
-      showOverview,
+      showSection,
       quietly,
     }),
-    [step, climatologyAvailable, section, focusSection, hoverSection, showOverview, quietly]
+    [step, climatologyAvailable, section, focusSection, hoverSection, showSection, quietly]
   );
 
   return <WizardHelpContext.Provider value={value}>{children}</WizardHelpContext.Provider>;

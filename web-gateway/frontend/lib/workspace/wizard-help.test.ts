@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_WALLTIME } from "@/lib/jobs/types";
 import { ANVIL_SHARED_MB_PER_CORE } from "@/lib/jobs/compute";
 import { RETENTION_DAYS } from "@/lib/workspace/format";
-import { HELP_SECTIONS, helpTopic, type HelpBlock, type HelpTopic } from "@/lib/workspace/wizard-help";
+import { HELP_SECTIONS, helpIndex, helpTopic, type HelpBlock, type HelpTopic } from "@/lib/workspace/wizard-help";
 
 const ALL: HelpTopic[] = [
   helpTopic("start"),
@@ -69,5 +69,19 @@ describe("helpTopic", () => {
     for (const topic of ALL) {
       expect(words(topic)).not.toMatch(/\bADR\b|\.tsx?\b|[A-Z]{3,}_[A-Z_]+|\bparameters\.|\bjob_script\b/);
     }
+  });
+});
+
+describe("helpIndex", () => {
+  it("lists the overview and then each section of Run settings, with the topics' own titles", () => {
+    const index = helpIndex("run");
+    expect(index.map((e) => e.section)).toEqual([null, ...HELP_SECTIONS]);
+    expect(index.map((e) => e.title)).toEqual(index.map((e) => helpTopic("run", e.section).title));
+    expect(index[0]).toEqual({ section: null, title: "Run settings" });
+  });
+
+  it("is empty for the steps that have no sections", () => {
+    expect(helpIndex("start")).toEqual([]);
+    expect(helpIndex("review")).toEqual([]);
   });
 });

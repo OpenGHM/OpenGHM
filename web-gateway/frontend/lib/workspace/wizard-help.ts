@@ -8,7 +8,8 @@
  * for a hydrologist: plain words, no names of files, settings or decisions.
  *
  * A topic is the help for one step (its overview) or, on Run settings, for one
- * section of it. `helpTopic` picks it; the panel only draws it.
+ * section of it. `helpTopic` picks it and `helpIndex` lists a step's topics;
+ * the panel only draws them.
  */
 import { ANVIL_SHARED_MB_PER_CORE } from "@/lib/jobs/compute";
 import { MAX_WALLTIME, MAX_WALLTIME_SECONDS } from "@/lib/jobs/types";
@@ -191,4 +192,18 @@ export function helpTopic(step: HelpStep, section: HelpSection | null = null, fa
   if (step === "review") return REVIEW;
   if (section === "output") return outputTopic(facts);
   return section ? SECTIONS[section] : RUN;
+}
+
+/**
+ * The topics of a step, in the order the panel's index lists them: on Run
+ * settings the overview (section null) and then each section in
+ * `HELP_SECTIONS` order. A step with no sections (Start, Review) has none, so
+ * its index is empty. Titles are the topics' own.
+ */
+export function helpIndex(
+  step: HelpStep,
+  facts: HelpFacts = {}
+): { section: HelpSection | null; title: string }[] {
+  if (step !== "run") return [];
+  return [null, ...HELP_SECTIONS].map((section) => ({ section, title: helpTopic(step, section, facts).title }));
 }

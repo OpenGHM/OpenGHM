@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { useWizardHelp } from "@/components/workspace/wizard-help-context";
 import { cn } from "@/lib/utils";
-import { helpTopic, type HelpTopic } from "@/lib/workspace/wizard-help";
+import { helpIndex, helpTopic, type HelpTopic } from "@/lib/workspace/wizard-help";
 
 /** A topic's heading and blocks: a few short paragraphs or bullets. */
 function TopicBody({ topic }: { topic: HelpTopic }) {
@@ -39,10 +39,12 @@ function TopicBody({ topic }: { topic: HelpTopic }) {
 
 /**
  * What the help panel says now: the help of the section the person last
- * focused or pointed at, else the step's overview (`helpTopic`). The body is a polite
- * live region, so a screen reader hears the new text after it has finished
- * what it is saying; the panel never takes focus. When a section is shown,
- * "Back to overview" returns to the step's help.
+ * focused or pointed at, else the step's overview (`helpTopic`). Above it, when
+ * the step has sections, an index (`helpIndex`) lists every topic and marks the
+ * one shown (`aria-current`); choosing an entry shows that topic and moves
+ * nothing else. The body is a polite live region, so a screen reader hears
+ * the new text after it has finished what it is saying; the panel never takes
+ * focus.
  *
  * `plain` is the contents without the card around them, for the sheet.
  * Nothing is drawn outside a `WizardHelpProvider`.
@@ -51,22 +53,39 @@ export function WizardHelpPanel({ plain = false, className }: { plain?: boolean;
   const help = useWizardHelp();
   if (!help) return null;
   const topic = helpTopic(help.step, help.section, help.facts);
-  const overview = helpTopic(help.step, null, help.facts);
+  const index = helpIndex(help.step, help.facts);
 
   const body = (
     <>
+      {index.length > 0 && (
+        <nav aria-label="Help topics" className="border-b pb-3">
+          <ul className="space-y-0.5">
+            {index.map((entry) => {
+              const current = entry.section === help.section;
+              return (
+                <li key={entry.section ?? "overview"}>
+                  <button
+                    type="button"
+                    aria-current={current ? "true" : undefined}
+                    onClick={() => help.showSection(entry.section)}
+                    className={cn(
+                      "flex min-h-10 w-full items-center rounded-r border-l-2 px-3 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8",
+                      current
+                        ? "border-primary font-medium text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {entry.title}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
       <div aria-live="polite" aria-atomic="true" className="space-y-3">
         <TopicBody topic={topic} />
       </div>
-      {help.section !== null && (
-        <button
-          type="button"
-          onClick={help.showOverview}
-          className="inline-flex min-h-10 items-center rounded text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8"
-        >
-          Back to {overview.title.toLowerCase()}
-        </button>
-      )}
     </>
   );
 
