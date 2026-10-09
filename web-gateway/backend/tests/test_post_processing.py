@@ -130,68 +130,76 @@ def test_the_v1_init_without_a_block_is_none():
     assert run_start.post_processing_from_init(stripped) == "none"
 
 
-P = run_start.PostProcessingProducts
+S = run_start.PostProcessingSettings
+
+
+def settings_of(run=True, temporal=True, climatology=True, default=True, multi_year=None, polygon=False, forks=None):
+    return S(run, temporal, climatology, default, multi_year, polygon, forks)
 
 
 @pytest.mark.parametrize(
     "name, expected",
     [
-        ("v1_Global_tracking.init", P(True, None, False)),
-        ("v1_test.init", P(True, None, False)),               # no multi-year keys at all
-        ("init_files_wbm_test.init", P(True, (2001, 2), False)),
-        ("fc66a2cd_wbm_test.init", P(True, (2001, 2), False)),  # `Polygon_Aggregation => ,` is empty
-        ("fc66a2cd_wbm_SHORT.init", P(True, None, False)),
-        ("fc66a2cd_wbm_SHORT_standard.init", P(True, None, False)),
+        ("v1_Global_tracking.init", settings_of(run=False, forks=8)),
+        ("v1_test.init", settings_of(run=False, forks=4)),        # no multi-year keys at all
+        ("init_files_wbm_test.init", settings_of(multi_year=(2001, 2), forks=4)),
+        ("fc66a2cd_wbm_test.init", settings_of(run=False, multi_year=(2001, 2), forks=4)),  # `Polygon_Aggregation => ,` is empty
+        ("fc66a2cd_wbm_SHORT.init", settings_of(forks=8)),
+        ("fc66a2cd_wbm_SHORT_standard.init", settings_of(forks=8)),
     ],
 )
-def test_the_real_inits_say_what_a_post_processing_run_makes(name, expected):
-    assert run_start.post_processing_products_from_init(fixture(name)) == expected
-    assert run_start.rules_from_init(fixture(name)).post_processing_products == expected
+def test_the_real_inits_say_what_their_block_sets(name, expected):
+    assert run_start.post_processing_settings_from_init(fixture(name)) == expected
+    assert run_start.rules_from_init(fixture(name)).post_processing_settings == expected
 
 
 @pytest.mark.parametrize(
     "block, expected",
     [
-        ("Run => 1", P(False, None, False)),                         # no Temporal_Aggregation
-        ("Run => 1, Temporal_Aggregation => 0", P(False, None, False)),
-        ("Run => 1, Temporal_Aggregation => 1", P(True, None, False)),
-        ("Run => 0, Temporal_Aggregation => 1", P(True, None, False)),  # Run does not change the products
-        ("Run => 1, Temporal_Aggregation => 1, Climatology => 0", P(False, None, False)),
-        ("Run => 1, Temporal_Aggregation => 1, Climatology => '0'", P(False, None, False)),
-        ("Run => 1, Temporal_Aggregation => 1, Climatology => ''", P(True, None, False)),   # set_default
-        ("Run => 1, Temporal_Aggregation => 1, Climatology => 1", P(True, None, False)),
+        ("Run => 1", settings_of(temporal=False)),                    # no Temporal_Aggregation
+        ("Run => 0", settings_of(run=False, temporal=False)),
+        ("Run => 1, Temporal_Aggregation => 0", settings_of(temporal=False)),
+        ("Run => 1, Temporal_Aggregation => 1", settings_of()),
+        ("Run => 0, Temporal_Aggregation => 1", settings_of(run=False)),
+        ("Run => 1, Temporal_Aggregation => 1, Climatology => 0", settings_of(climatology=False, default=False)),
+        ("Run => 1, Temporal_Aggregation => 1, Climatology => '0'", settings_of(climatology=False, default=False)),
+        ("Run => 1, Temporal_Aggregation => 1, Climatology => ''", settings_of()),   # set_default
+        ("Run => 1, Temporal_Aggregation => 1, Climatology => 1", settings_of(default=False)),
         (
             "Run => 1, Temporal_Aggregation => 1, TA_multi_year_start => 1990, TA_multi_year_timestep => 5",
-            P(True, (1990, 5), False),
+            settings_of(multi_year=(1990, 5)),
         ),
         (
             "Run => 1, Temporal_Aggregation => 1, TA_multi_year_start => '1990', TA_multi_year_timestep => '5'",
-            P(True, (1990, 5), False),
+            settings_of(multi_year=(1990, 5)),
         ),
         (
             "Run => 1, Temporal_Aggregation => 1, TA_multi_year_start => 1990, TA_multi_year_timestep => 0",
-            P(True, None, False),
+            settings_of(),
         ),
         (
             "Run => 1, Temporal_Aggregation => 1, TA_multi_year_start => '', TA_multi_year_timestep => 5",
-            P(True, None, False),
+            settings_of(),
         ),
         (
+            # The multi-year pair is reported as set even when climatology is off: it does not take effect.
             "Run => 1, Temporal_Aggregation => 1, Climatology => 0, "
             "TA_multi_year_start => 1990, TA_multi_year_timestep => 5",
-            P(False, None, False),                                   # multi-year is a climatology
+            settings_of(climatology=False, default=False, multi_year=(1990, 5)),
         ),
-        ("Run => 1, Polygon_Aggregation => { IDs => 'a', Rasterization_Res => 5 }", P(False, None, True)),
-        ("Run => 1, Polygon_Aggregation => { IDs => 'a' }, Temporal_Aggregation => 1", P(True, None, True)),
-        ("Run => 1, Polygon_Aggregation => ''", P(False, None, False)),
-        ("Run => 1, Polygon_Aggregation => 'basins'", P(False, None, True)),
+        ("Run => 1, Polygon_Aggregation => { IDs => 'a', Rasterization_Res => 5 }", settings_of(temporal=False, polygon=True)),
+        ("Run => 1, Polygon_Aggregation => ''", settings_of(temporal=False)),
+        ("Run => 1, Polygon_Aggregation => 'basins'", settings_of(temporal=False, polygon=True)),
+        ("Run => 1, Forks => 12", settings_of(temporal=False, forks=12)),
+        ("Run => 1, Forks => '6'", settings_of(temporal=False, forks=6)),
+        ("Run => 1, Forks => ''", settings_of(temporal=False)),
         # Only the block's own top-level keys count.
-        ("Run => 1, Inner => { Temporal_Aggregation => 1 }", P(False, None, False)),
-        ("Run => 1, Forks => 'Temporal_Aggregation => 1'", P(False, None, False)),
+        ("Run => 1, Inner => { Temporal_Aggregation => 1, Forks => 3 }", settings_of(temporal=False)),
+        ("Run => 1, Forks => 'Temporal_Aggregation => 1'", settings_of(temporal=False, forks=0)),
     ],
 )
-def test_the_products_follow_the_blocks_own_keys(block, expected):
-    assert run_start.post_processing_products_from_init(with_block(f"PostProcessing => {{ {block} }},")) == expected
+def test_the_settings_follow_the_blocks_own_keys(block, expected):
+    assert run_start.post_processing_settings_from_init(with_block(f"PostProcessing => {{ {block} }},")) == expected
 
 
 @pytest.mark.parametrize(
@@ -204,8 +212,8 @@ def test_the_products_follow_the_blocks_own_keys(block, expected):
         "{\nPostProcessing => { Run => 1,\n",
     ],
 )
-def test_no_products_without_a_block_with_a_run(text):
-    assert run_start.post_processing_products_from_init(text) is None
+def test_no_settings_without_a_block_with_a_run(text):
+    assert run_start.post_processing_settings_from_init(text) is None
 
 
 # ---- GET /repository/datasets/{id} --------------------------------------------------
@@ -248,27 +256,35 @@ def test_the_snapshot_response_carries_the_snapshots_own_choice(db, monkeypatch,
 @pytest.mark.parametrize(
     "init, expected",
     [
-        ("fc66a2cd_wbm_test.init", {"climatology": True, "multiYear": {"start": 2001, "step": 2}, "polygonAggregation": False}),
-        ("fc66a2cd_wbm_SHORT.init", {"climatology": True, "multiYear": None, "polygonAggregation": False}),
+        (
+            "fc66a2cd_wbm_test.init",
+            {"run": False, "temporalAggregation": True, "climatology": True, "climatologyDefault": True,
+             "multiYear": {"start": 2001, "step": 2}, "polygonAggregation": False, "forks": 4},
+        ),
+        (
+            "fc66a2cd_wbm_SHORT.init",
+            {"run": True, "temporalAggregation": True, "climatology": True, "climatologyDefault": True,
+             "multiYear": None, "polygonAggregation": False, "forks": 8},
+        ),
     ],
 )
-def test_the_snapshot_response_carries_what_post_processing_makes(db, monkeypatch, init, expected):
+def test_the_snapshot_response_carries_what_the_block_sets(db, monkeypatch, init, expected):
     _serve(monkeypatch, fixture(init))
     envelope = _envelope()
     db.datasets.docs[envelope["_id"]] = envelope
     monkeypatch.setattr(repository_router, "get_db", lambda: db)
     answer = asyncio.run(repository_router.get_dataset(envelope["_id"]))
-    assert answer.model_dump(by_alias=True, mode="json")["postProcessingProducts"] == expected
+    assert answer.model_dump(by_alias=True, mode="json")["postProcessingSettings"] == expected
 
 
-def test_the_snapshot_response_has_no_products_without_a_block_or_an_init(db, monkeypatch):
+def test_the_snapshot_response_has_no_settings_without_a_block_or_an_init(db, monkeypatch):
     envelope = _envelope()
     db.datasets.docs[envelope["_id"]] = envelope
     monkeypatch.setattr(repository_router, "get_db", lambda: db)
-    assert asyncio.run(repository_router.get_dataset(envelope["_id"])).postProcessingProducts is None
+    assert asyncio.run(repository_router.get_dataset(envelope["_id"])).postProcessingSettings is None
     _serve(monkeypatch, with_block(""))
     run_start._rules.clear()
-    assert asyncio.run(repository_router.get_dataset(envelope["_id"])).postProcessingProducts is None
+    assert asyncio.run(repository_router.get_dataset(envelope["_id"])).postProcessingSettings is None
 
 
 def test_the_snapshot_response_says_none_for_an_init_without_a_block(db, monkeypatch):

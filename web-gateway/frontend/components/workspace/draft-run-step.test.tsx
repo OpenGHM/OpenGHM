@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { JobParameters } from "@/lib/jobs/types";
+import type { Dataset, PostProcessingSettings } from "@/lib/repository/types";
 
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import type { DraftContext } from "@/lib/workspace/draft-state";
@@ -8,11 +9,22 @@ import { fakeDataset } from "@/lib/workspace/fixtures";
 
 afterEach(cleanup);
 
+/** The block a snapshot's init sets: post-processing on, temporal aggregation, default climatology. */
+const SETTINGS: PostProcessingSettings = {
+  run: true,
+  temporalAggregation: true,
+  climatology: true,
+  climatologyDefault: true,
+  multiYear: null,
+  polygonAggregation: false,
+  forks: 8,
+};
+
 // 2001-01-01 .. 2001-12-31, one file per year, three variables.
 const dataset = fakeDataset({
   runStartAlignment: "year",
   climatologyAvailable: true,
-  postProcessingProducts: { climatology: true, multiYear: null, polygonAggregation: false },
+  postProcessingSettings: SETTINGS,
   simulation: {
     ...fakeDataset().simulation,
     outputVariables: [
@@ -863,7 +875,7 @@ describe("the draft run step: the Post-processing choice", () => {
     const { unmount } = step({ ctx: { dataset: climatologyDataset, snapshotState: "found" } });
     expect(box().checked).toBe(true);
     unmount();
-    const unread = step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null, postProcessingProducts: null }), snapshotState: "found" } });
+    const unread = step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null, postProcessingSettings: null }), snapshotState: "found" } });
     expect(box().checked).toBe(false);
     expect(box().disabled).toBe(false);
     expect(screen.getByText("What it writes depends on the snapshot's init, which could not be read just now.")).toBeTruthy();
@@ -916,38 +928,159 @@ describe("the draft run step: the Post-processing choice", () => {
   it.each([
     [
       "multi-year climatologies",
-      { climatology: true, multiYear: { start: 2001, step: 2 }, polygonAggregation: false },
+      { multiYear: { start: 2001, step: 2 } },
       "Writes daily, monthly and yearly climatologies of each output variable (9 files) and yearly climatologies over 2-year periods from 2001.",
     ],
     [
       "polygon aggregates",
-      { climatology: true, multiYear: null, polygonAggregation: true },
+      { polygonAggregation: true },
       "Writes daily, monthly and yearly climatologies of each output variable (9 files) and aggregates over polygons.",
     ],
     [
       "all three",
-      { climatology: true, multiYear: { start: 1990, step: 5 }, polygonAggregation: true },
+      { multiYear: { start: 1990, step: 5 }, polygonAggregation: true },
       "Writes daily, monthly and yearly climatologies of each output variable (9 files), yearly climatologies over 5-year periods from 1990 and aggregates over polygons.",
     ],
     [
-      "polygons only",
-      { climatology: false, multiYear: null, polygonAggregation: true },
+      "polygons only (climatology off)",
+      { climatology: false, polygonAggregation: true },
       "Writes aggregates over polygons.",
     ],
     [
-      "nothing",
-      { climatology: false, multiYear: null, polygonAggregation: false },
+      "polygons only (temporal aggregation off)",
+      { temporalAggregation: false, polygonAggregation: true },
+      "Writes aggregates over polygons.",
+    ],
+    [
+      "no multi-year without climatology",
+      { climatology: false, multiYear: { start: 2001, step: 2 } },
       "This snapshot's init sets nothing for post-processing to write, so running it produces nothing.",
     ],
-  ])("describes %s from the snapshot's init", (_label, products, line) => {
-    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessingProducts: products }), snapshotState: "found" } });
+    [
+      "nothing",
+      { climatology: false },
+      "This snapshot's init sets nothing for post-processing to write, so running it produces nothing.",
+    ],
+  ] as [string, Partial<PostProcessingSettings>, string][])("describes %s from the snapshot's init", (_label, changes, line) => {
+    step({
+      ctx: { dataset: fakeDataset({ ...dataset, postProcessingSettings: { ...SETTINGS, ...changes } }), snapshotState: "found" },
+    });
     expect(screen.getByText(line)).toBeTruthy();
+  });
+
+  describe("the read-only list of what the init sets", () => {
+    const dlElement = () => {
+      const dl = screen.getByText("Set in this snapshot's init").parentElement!.querySelector("dl");
+      if (!dl) throw new Error("no list");
+      return dl;
+    };
+    const list = () => within(dlElement());
+    /** The dt/dd pairs as [label + key, value + note] texts, in order. */
+    const rows = () => {
+      return Array.from(dlElement().querySelectorAll("dt")).map((dt) => [
+        dt.textContent,
+        dt.nextElementSibling?.textContent,
+      ]);
+    };
+    const withSettings = (changes: Partial<PostProcessingSettings>, extra: Partial<Dataset> = {}) =>
+      step({
+        ctx: {
+          dataset: fakeDataset({ ...dataset, ...extra, postProcessingSettings: { ...SETTINGS, ...changes } }),
+          snapshotState: "found",
+        },
+      });
+
+    it("lists each setting with its init key, in order, for a plain init", () => {
+      withSettings({});
+      expect(rows()).toEqual([
+        ["Run after the simulationRun", "On"],
+        ["Temporal aggregationTemporal_Aggregation", "On"],
+        ["ClimatologyClimatology", "On (default)"],
+        ["Multi-year climatologyTA_multi_year_start, TA_multi_year_timestep", "Not set"],
+        ["Polygon aggregationPolygon_Aggregation", "Not set"],
+        ["ForksForks", "8A run that post-processes uses its job's cores instead."],
+      ]);
+    });
+
+    it("shows v1_Global_tracking.init: run off, temporal aggregation on, nothing else set", () => {
+      withSettings({ run: false });
+      const [run, temporal, climatology, multiYear, polygon] = rows();
+      expect(run[1]).toBe("Off");
+      expect(temporal[1]).toBe("On");
+      expect(climatology[1]).toBe("On (default)");
+      expect(multiYear[1]).toBe("Not set");
+      expect(polygon[1]).toBe("Not set");
+    });
+
+    it("shows init_files_wbm_test.init: the multi-year pair and 4 forks, no default marker when Climatology is stated", () => {
+      withSettings({ multiYear: { start: 2001, step: 2 }, forks: 4, climatologyDefault: false });
+      const r = rows();
+      expect(r[2][1]).toBe("On");
+      expect(r[3][1]).toBe("Every 2 years from 2001");
+      expect(r[5][1]).toMatch(/^4/);
+      expect(screen.queryByText(/No effect/)).toBeNull();
+    });
+
+    it("says one year, and a missing Forks falls back to WBM's default", () => {
+      withSettings({ multiYear: { start: 1990, step: 1 }, forks: null });
+      expect(list().getByText("Every 1 year from 1990")).toBeTruthy();
+      expect(list().getByText("Not set (WBM's default is 8)")).toBeTruthy();
+    });
+
+    it("says a set polygon aggregation is Set", () => {
+      withSettings({ polygonAggregation: true });
+      expect(list().getByText("Set")).toBeTruthy();
+    });
+
+    it("marks climatology and multi-year as without effect when temporal aggregation is off", () => {
+      withSettings({ temporalAggregation: false, multiYear: { start: 2001, step: 2 } });
+      const r = rows();
+      expect(r[1][1]).toBe("Off");
+      expect(r[2][1]).toBe("On (default)No effect: temporal aggregation is off.");
+      expect(r[3][1]).toBe("Every 2 years from 2001No effect: temporal aggregation is off.");
+    });
+
+    it("marks multi-year as without effect when climatology is off, and says nothing about the off climatology itself", () => {
+      withSettings({ climatology: false, climatologyDefault: false, multiYear: { start: 2001, step: 2 } });
+      const r = rows();
+      expect(r[2][1]).toBe("Off");
+      expect(r[3][1]).toBe("Every 2 years from 2001No effect: climatology is off.");
+    });
+
+    it("does not note an unset multi-year pair", () => {
+      withSettings({ temporalAggregation: false });
+      expect(rows()[3][1]).toBe("Not set");
+    });
+
+    it("is shown while the checkbox is disabled", () => {
+      withSettings({}, { climatologyAvailable: false });
+      expect(box().disabled).toBe(true);
+      expect(rows()).toHaveLength(6);
+    });
+
+    it("has nothing to edit", () => {
+      withSettings({});
+      expect(dlElement().querySelectorAll("input, select, textarea, button")).toHaveLength(0);
+      expect(dlElement().getAttribute("aria-labelledby")).toBe(screen.getByText("Set in this snapshot's init").id);
+    });
+
+    it("is absent when the init has no block, or could not be read", () => {
+      const none = step({
+        ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "none", postProcessingSettings: null }), snapshotState: "found" },
+      });
+      expect(screen.queryByText("Set in this snapshot's init")).toBeNull();
+      none.unmount();
+      step({
+        ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null, postProcessingSettings: null }), snapshotState: "found" },
+      });
+      expect(screen.queryByText("Set in this snapshot's init")).toBeNull();
+    });
   });
 
   it("is disabled, with one line, for a snapshot whose init has no post-processing settings", () => {
     step({
       ctx: {
-        dataset: fakeDataset({ ...dataset, postProcessing: "none", postProcessingProducts: null }),
+        dataset: fakeDataset({ ...dataset, postProcessing: "none", postProcessingSettings: null }),
         snapshotState: "found",
       },
     });

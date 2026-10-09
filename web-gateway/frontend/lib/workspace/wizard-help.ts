@@ -132,6 +132,7 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
       ),
       list(
         "What post-processing writes depends on the snapshot's init: climatologies of each output variable, yearly climatologies over several years, or aggregates over polygons. The line under the checkbox says which, for this snapshot.",
+        "Under it, a list shows what the snapshot's init sets for post-processing, item by item. It is read-only.",
         "A snapshot whose init has no post-processing settings cannot change this choice.",
         "No published snapshot holds the results of post-processing, so asking for it always means a new simulation."
       ),

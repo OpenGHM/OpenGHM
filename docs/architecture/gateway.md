@@ -251,21 +251,32 @@ and spatial aggregation into the output's spatial_agg directory when `Polygon_Ag
 gives the snapshot's own choice, which `GET /api/v1/repository/datasets/{id}` carries as `postProcessing`:
 `standard` (`Run` false in Perl's sense: `0`, `'0'`, `''`), `climatology` (`Run` true), `none` (no
 `PostProcessing` block, or none with a `Run` key of its own, directly in it, not `Run_Start`/`Run_End` or a
-`Run` in a nested hash), or `null` when the init could not be read. It also carries what `Run => 1` would
-write as `postProcessingProducts` (`{ climatology, multiYear: { start, step } | null, polygonAggregation }`,
-`null` where `postProcessing` is `none` or `null`; `multiYear` only with `climatology`). The backend reads
-the block brace-balanced, top-level keys only, with a reader of its own (`run_start.post_processing_from_init`
-and `post_processing_products_from_init`, tested on the same real inits as the toolkit's
+`Run` in a nested hash), or `null` when the init could not be read. It also carries what the block sets,
+key by key as WBM reads it, as `postProcessingSettings` (`{ run, temporalAggregation, climatology,
+climatologyDefault, multiYear: { start, step } | null, polygonAggregation, forks: number | null }`, `null`
+where `postProcessing` is `none` or `null`). `climatology` is `Climatology` with WBM's default (true) for an
+absent or empty key, which `climatologyDefault` says; `multiYear` is set when both `TA_multi_year_*` keys
+are, whatever `climatology` says, and `forks` is null when `Forks` is absent. Whether a setting takes effect
+is derived by the reader: climatology files need temporal aggregation, multi-year climatologies need those.
+The backend reads the block brace-balanced, top-level keys only, with a reader of its own
+(`run_start.post_processing_from_init` and `post_processing_settings_from_init`, tested on the same real
+inits as the toolkit's
 `openghm.post_processing`). A draft holds the choice as `parameters.post_processing`:
 `"standard"`, `"climatology"` or `null`, the snapshot's own, which a new draft starts at and a
 draft stored before the field has. Run settings shows it as one checkbox, "Run post-processing after the
 simulation" in the "Post-processing" section (checked is `"climatology"`, unchecked `"standard"`),
 showing the snapshot's own value until the draft has one. The line under it says what post-processing
-writes for this snapshot's init (from `postProcessingProducts`: climatologies of each output variable with
+writes for this snapshot's init (derived from `postProcessingSettings`: climatologies of each output variable with
 their file count, variables × 3, yearly climatologies over N-year periods from a year, aggregates over
 polygons, or that the init sets nothing to write) and gives the snapshot's own
 measured post-processing time, `recommendedCompute.postProcessingWalltime`
-([metadata-format.md](../reference/metadata-format.md#where-simulation-comes-from)). Review, the submit
+([metadata-format.md](../reference/metadata-format.md#where-simulation-comes-from)). Below it a read-only
+list, "Set in this snapshot's init", shows each setting with its init key: `Run`, `Temporal_Aggregation`,
+`Climatology` (marked "(default)" when the init does not say), the multi-year pair, `Polygon_Aggregation`
+and `Forks`, with "no effect" beside a climatology or multi-year setting whose parent is off. It is shown
+whenever the settings are known, also while the checkbox is disabled, and nothing in it is editable. Its
+`Forks` row notes that a run that post-processes uses its job's cores instead: the toolkit sets the staged
+init's `Forks` to the cores the job holds (`sim.py`) and puts the init's own value back afterwards. Review, the submit
 confirmation and the job page say "On" or "Off".
 A snapshot whose choice is `none` shows the checkbox disabled. `PATCH /jobs/{id}` stores the value with
 the rest of `parameters`, and the submit passes `--post-processing <value>` to `sim run` only when the

@@ -47,12 +47,11 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
    *  `standard` its `Run` is false, `climatology` its `Run` is true (WBM's
    *  post-processing runs after the simulation); `null` the init could not be read. Absent on a list row. */
   postProcessing?: "none" | "standard" | "climatology" | null;
-  /** What running that init's post-processing makes, read from the init's
-   *  `PostProcessing` block by the single snapshot route only: `climatology` the
-   *  daily, monthly and yearly climatologies, `multiYear` yearly climatologies
-   *  over each `step`-year range from `start`, `polygonAggregation` aggregates
-   *  over polygons. `null` when `postProcessing` is `none` or `null`. */
-  postProcessingProducts?: PostProcessingProducts | null;
+  /** What the init's `PostProcessing` block sets, key by key as WBM reads it, from
+   *  the single snapshot route only; `null` when `postProcessing` is `none` or
+   *  `null`. Whether a setting takes effect is derived by the reader
+   *  (`components/workspace/output-choice-field.tsx`). */
+  postProcessingSettings?: PostProcessingSettings | null;
   /** Whether a draft may ask for climatology: the backend has it switched on
    *  (`CLIMATOLOGY_ENABLED`, off by default), the init has a post-processing run
    *  to turn on and the snapshot has a measured `postProcessingWalltime` to size
@@ -60,10 +59,24 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
   climatologyAvailable?: boolean;
 }
 
-export interface PostProcessingProducts {
+export interface PostProcessingSettings {
+  /** `Run`: WBM post-processes after the simulation. */
+  run: boolean;
+  /** `Temporal_Aggregation`: daily to monthly to yearly files. */
+  temporalAggregation: boolean;
+  /** `Climatology`, WBM's default (true) when the init does not say. Climatology
+   *  files are written only with `temporalAggregation`. */
   climatology: boolean;
+  /** `Climatology` is absent or empty, so `climatology` is WBM's default. */
+  climatologyDefault: boolean;
+  /** `TA_multi_year_start` and `TA_multi_year_timestep`, both set: yearly
+   *  climatologies over each `step`-year range from `start`. Set whatever
+   *  `climatology` says; it takes effect only with climatology on. */
   multiYear: { start: number; step: number } | null;
+  /** `Polygon_Aggregation` is set. */
   polygonAggregation: boolean;
+  /** `Forks`; `null` when the init does not set it (WBM's default is 8). */
+  forks: number | null;
 }
 
 // ─── Model input ───────────────────────────────────────────────────────────────

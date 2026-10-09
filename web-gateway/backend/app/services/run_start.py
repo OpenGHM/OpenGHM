@@ -50,9 +50,9 @@ has no such block or the block has no `Run` of its own (a toolkit flag cannot
 change what is not there), `"standard"` when `Run` is false in Perl's sense (`0`,
 `'0'`, `''`), `"climatology"` when it is true. Only the block's own top-level
 `Run` counts, never `Run_Start`/`Run_End` or a `Run` in a nested hash. The same
-block gives `post_processing_products`, what `Run => 1` would make (climatology
-files, multi-year climatologies, spatial aggregation), from its other top-level
-keys as `PostProcessing.pl` reads them. The backend does not import the toolkit, so `post_processing_from_init` is a compact
+block gives `post_processing_settings`, what it sets (`Run`, `Temporal_Aggregation`,
+`Climatology`, the multi-year pair, `Polygon_Aggregation`, `Forks`), each from its
+top-level key as `PostProcessing.pl` reads it. The backend does not import the toolkit, so `post_processing_from_init` is a compact
 reader of its own; `openghm.post_processing.requested_run_value` is the toolkit's,
 and both are tested on the same real inits (tests/test_post_processing.py).
 
@@ -160,6 +160,7 @@ _PP_KEYS = (
     "TA_multi_year_start",
     "TA_multi_year_timestep",
     "Polygon_Aggregation",
+    "Forks",
 )
 _PP_KEY_RES = {
     key: re.compile(rf"""(?:(['"]){key}\1|(?<![\w$@%]){key}(?!\w))\s*=>\s*""") for key in _PP_KEYS
@@ -221,18 +222,27 @@ def post_processing_from_init(content: str) -> PostProcessing:
 
 
 @dataclass(frozen=True)
-class PostProcessingProducts:
-    """What WBM's `PostProcessing.pl` makes when the init's block is run with `Run => 1`."""
+class PostProcessingSettings:
+    """What the init's `PostProcessing` block sets, as `PostProcessing.pl` reads each key
+    (images/wbm-tools-lite/wbm/model/RIMS/WBM.pm, `PostProcessing`). Each field is the
+    key's own value; whether it takes effect (climatology needs temporal aggregation,
+    multi-year needs climatology) is for the reader to derive."""
 
-    #: Climatology files (`_dc`, `_mc`, `_yc` in `climatology/`): `Temporal_Aggregation`
-    #: is true and `Climatology` is (1 when the init does not say).
+    #: `Run` is true in Perl's sense: WBM post-processes after the simulation.
+    run: bool
+    #: `Temporal_Aggregation` is true: daily to monthly to yearly files.
+    temporal_aggregation: bool
+    #: `Climatology`, WBM's `set_default` of it: 1 when the init does not say.
     climatology: bool
-    #: `(start year, step in years)`: yearly climatologies over each `step`-year range
-    #: from `start`; set only with climatology and when both `TA_multi_year_start`
-    #: and `TA_multi_year_timestep` are set.
+    #: `Climatology` is absent or empty, so `climatology` is the default rather than the init's word.
+    climatology_default: bool
+    #: `(start year, step in years)` when both `TA_multi_year_start` and
+    #: `TA_multi_year_timestep` are set, whatever `climatology` says.
     multi_year: tuple[int, int] | None
-    #: Aggregation into `spatial_agg/` over the polygons: `Polygon_Aggregation` is set.
+    #: `Polygon_Aggregation` is set (true in Perl's sense).
     polygon_aggregation: bool
+    #: `Forks` as an integer; None when the init does not set it (WBM's default is 8).
+    forks: int | None
 
 
 def _perl_int(literal: str) -> int:
@@ -249,27 +259,29 @@ def _unquoted(literal: str) -> str:
     return s[1:-1].strip() if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"" else s
 
 
-def post_processing_products_from_init(content: str) -> PostProcessingProducts | None:
-    """What a `Run => 1` of this init would produce, from the block's own keys as
-    `PostProcessing.pl` reads them (images/wbm-tools-lite/wbm/model/RIMS/WBM.pm,
-    `PostProcessing`). None when `post_processing_from_init` says `"none"`: no
-    block, no `Run`, or an unreadable init."""
+def post_processing_settings_from_init(content: str) -> PostProcessingSettings | None:
+    """The block's settings as it reads them. None when `post_processing_from_init`
+    says `"none"`: no block, no `Run`, or an unreadable init."""
     block = _pp_block(content)
     if block is None or "Run" not in block:
         return None
-    temporal = _is_perl_true(block.get("Temporal_Aggregation", ""))
     clim = block.get("Climatology", "")
-    # WBM's `set_default`: an absent or empty value is the default, 1.
-    climatology = temporal and (not _unquoted(clim) or _perl_int(clim) != 0)
+    climatology_default = not _unquoted(clim)
     first = _unquoted(block.get("TA_multi_year_start", ""))
     step = _unquoted(block.get("TA_multi_year_timestep", ""))
     multi_year = None
-    if climatology and re.fullmatch(r"\d{4}", first) and re.fullmatch(r"\d+", step) and int(step) > 0:
+    if re.fullmatch(r"\d{4}", first) and re.fullmatch(r"\d+", step) and int(step) > 0:
         multi_year = (int(first), int(step))
-    return PostProcessingProducts(
-        climatology=climatology,
+    forks = block.get("Forks", "")
+    return PostProcessingSettings(
+        run=_is_perl_true(block["Run"]),
+        temporal_aggregation=_is_perl_true(block.get("Temporal_Aggregation", "")),
+        # WBM's `set_default`: an absent or empty value is the default, 1.
+        climatology=climatology_default or _perl_int(clim) != 0,
+        climatology_default=climatology_default,
         multi_year=multi_year,
         polygon_aggregation=_is_perl_true(block.get("Polygon_Aggregation", "")),
+        forks=_perl_int(forks) if _unquoted(forks) else None,
     )
 
 
@@ -282,8 +294,8 @@ class InitRules:
     aggregation_start_year: int | None
     #: What the init's `PostProcessing => { Run => … }` asks for.
     post_processing: PostProcessing = "none"
-    #: What `Run => 1` of the init would produce; None when `post_processing` is `"none"`.
-    post_processing_products: PostProcessingProducts | None = None
+    #: What the init's `PostProcessing` block sets; None when `post_processing` is `"none"`.
+    post_processing_settings: PostProcessingSettings | None = None
 
 
 def rules_from_init(content: str) -> InitRules:
@@ -291,7 +303,7 @@ def rules_from_init(content: str) -> InitRules:
         alignment_from_init(content),
         aggregation_start_year_from_init(content),
         post_processing_from_init(content),
-        post_processing_products_from_init(content),
+        post_processing_settings_from_init(content),
     )
 
 

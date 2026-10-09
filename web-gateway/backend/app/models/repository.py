@@ -158,9 +158,9 @@ class DatasetDetailResponse(DatasetResponse):
     #: ``"climatology"`` it also runs the climatologies (``Run`` true). ``null``
     #: when the init could not be read: nothing is known and nothing is blocked.
     postProcessing: Literal["none", "standard", "climatology"] | None = None
-    #: What ``Run => 1`` of that init would make (``PostProcessingProducts``); ``null``
+    #: What that init's ``PostProcessing`` block sets (``PostProcessingSettings``); ``null``
     #: when ``postProcessing`` is ``"none"`` or ``null``.
-    postProcessingProducts: PostProcessingProducts | None = None
+    postProcessingSettings: PostProcessingSettings | None = None
     #: Whether a draft may ask for climatology: the ``CLIMATOLOGY_ENABLED`` setting is
     #: on, the init has a ``PostProcessing`` block with a ``Run`` (``postProcessing``
     #: is not ``"none"``) and the snapshot has a measured
@@ -180,19 +180,28 @@ class MultiYearAggregation(BaseModel):
     step: int
 
 
-class PostProcessingProducts(BaseModel):
-    """What WBM's post-processing (``Run => 1``) makes for a snapshot's init, read from
-    the init's ``PostProcessing`` block (``app.services.run_start``)."""
+class PostProcessingSettings(BaseModel):
+    """What a snapshot's init ``PostProcessing`` block sets (``app.services.run_start``),
+    each key as WBM reads it; whether one takes effect is for the reader to derive."""
 
     model_config = ConfigDict(extra="forbid")
 
-    #: Daily, monthly and yearly climatology files per output variable.
+    #: ``Run``: WBM post-processes after the simulation.
+    run: bool
+    #: ``Temporal_Aggregation``: daily to monthly to yearly files.
+    temporalAggregation: bool
+    #: ``Climatology`` (1 when the init does not say): climatology files, with temporal
+    #: aggregation.
     climatology: bool
-    #: Yearly climatologies over each ``step``-year range from ``start``; only with
-    #: ``climatology``.
+    #: ``Climatology`` is absent or empty, so ``climatology`` is WBM's default.
+    climatologyDefault: bool
+    #: Yearly climatologies over each ``step``-year range from ``start``: both
+    #: ``TA_multi_year_*`` keys are set, whatever ``climatology`` says.
     multiYear: MultiYearAggregation | None = None
-    #: Aggregates over polygons, into ``spatial_agg/``.
+    #: ``Polygon_Aggregation`` is set: aggregates over polygons, into ``spatial_agg/``.
     polygonAggregation: bool
+    #: ``Forks``; ``null`` when the init does not set it (WBM's default is 8).
+    forks: int | None = None
 
 
 class RepositoryListResponse(BaseModel):
