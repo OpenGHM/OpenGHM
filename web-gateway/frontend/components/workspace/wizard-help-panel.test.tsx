@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import { DraftSection } from "@/components/workspace/draft-section";
-import { HOVER_LINGER_MS, WizardHelpProvider, useWizardHelp } from "@/components/workspace/wizard-help-context";
+import { WizardHelpProvider, useWizardHelp } from "@/components/workspace/wizard-help-context";
 import { WizardHelpButton, WizardHelpPanel } from "@/components/workspace/wizard-help-panel";
 import type { JobParameters } from "@/lib/jobs/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
@@ -10,7 +10,6 @@ import { fakeDataset } from "@/lib/workspace/fixtures";
 import type { HelpStep } from "@/lib/workspace/wizard-help";
 
 afterEach(() => {
-  vi.useRealTimers();
   cleanup();
 });
 
@@ -83,37 +82,50 @@ describe("WizardHelpPanel", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it("follows the pointer, which wins while it is over a section, and lingers briefly after", () => {
-    vi.useFakeTimers();
+  it("shows a hovered section's help, and keeps it after the pointer leaves", () => {
     render(<Sections />);
     const section = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
     fireEvent.pointerEnter(section);
     expect(shown()).toBe("Compute");
-    // Focus is elsewhere: the pointer wins.
-    fireEvent.focus(screen.getByLabelText("Start"));
-    expect(shown()).toBe("Compute");
     fireEvent.pointerLeave(section);
     expect(shown()).toBe("Compute");
-    act(() => {
-      vi.advanceTimersByTime(HOVER_LINGER_MS + 1);
-    });
+  });
+
+  it("switches to another section when it is hovered", () => {
+    render(<Sections />);
+    const compute = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
+    const period = screen.getByRole("heading", { name: "Run period" }).closest("section")!;
+    fireEvent.pointerEnter(compute);
+    fireEvent.pointerLeave(compute);
+    fireEvent.pointerEnter(period);
     expect(shown()).toBe("Run period");
   });
 
-  it("keeps what it shows while the pointer is on the panel", () => {
-    vi.useFakeTimers();
+  it("follows whichever of focus and hover came last", () => {
     render(<Sections />);
     const section = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
-    const panel = screen.getByRole("complementary", { name: "Help" }).firstElementChild!;
     fireEvent.pointerEnter(section);
     fireEvent.pointerLeave(section);
-    fireEvent.pointerEnter(panel);
-    act(() => {
-      vi.advanceTimersByTime(HOVER_LINGER_MS * 3);
-    });
+    fireEvent.focus(screen.getByLabelText("Start"));
+    expect(shown()).toBe("Run period");
+    fireEvent.pointerEnter(section);
     expect(shown()).toBe("Compute");
-    fireEvent.pointerLeave(panel);
+  });
+
+  it("goes back to the overview after a hover when asked", () => {
+    render(<Sections />);
+    const section = screen.getByRole("heading", { name: "Compute" }).closest("section")!;
+    fireEvent.pointerEnter(section);
+    fireEvent.pointerLeave(section);
+    fireEvent.click(screen.getByRole("button", { name: "Back to run settings" }));
     expect(shown()).toBe("Run settings");
+  });
+
+  it("starts over when the step changes after a hover", () => {
+    const { rerender } = render(<Sections />);
+    fireEvent.pointerEnter(screen.getByRole("heading", { name: "Compute" }).closest("section")!);
+    rerender(<Sections step="review" />);
+    expect(shown()).toBe("Review and submit");
   });
 
   it("ignores a touch, which is a tap that focuses a control", () => {

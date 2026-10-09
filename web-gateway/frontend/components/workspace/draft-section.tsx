@@ -29,7 +29,7 @@ export function DraftPanel({ children, className }: { children: ReactNode; class
  * body. The heading is `h3` under the step's `h2`.
  *
  * `help` names the part for the wizard's help panel: focus inside the section,
- * or the pointer over it, makes the panel show that section's help (see
+ * or the pointer entering it, makes the panel show that section's help (see
  * `useSectionHelp`). It changes nothing on the section itself.
  */
 export function DraftSection({

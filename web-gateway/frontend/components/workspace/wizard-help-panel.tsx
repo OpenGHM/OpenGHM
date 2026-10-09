@@ -38,8 +38,8 @@ function TopicBody({ topic }: { topic: HelpTopic }) {
 }
 
 /**
- * What the help panel says now: the help of the section the person is in or
- * pointing at, else the step's overview (`helpTopic`). The body is a polite
+ * What the help panel says now: the help of the section the person last
+ * focused or pointed at, else the step's overview (`helpTopic`). The body is a polite
  * live region, so a screen reader hears the new text after it has finished
  * what it is saying; the panel never takes focus. When a section is shown,
  * "Back to overview" returns to the step's help.
@@ -74,8 +74,6 @@ export function WizardHelpPanel({ plain = false, className }: { plain?: boolean;
 
   return (
     <div
-      onPointerEnter={() => help.holdHover(true)}
-      onPointerLeave={() => help.holdHover(false)}
       className={cn("overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm", className)}
     >
       <div className="flex items-center gap-2 border-b bg-muted/50 px-5 py-3 font-mono text-xs tracking-wider text-muted-foreground uppercase">
