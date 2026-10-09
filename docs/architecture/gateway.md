@@ -757,9 +757,9 @@ sentence: the backend's own `message` for a `{code, message}` or plain-string
 **The wizard's help panel.** Each screen of the draft wizard (Start from, Run settings, Review &
 submit) has a help panel written for a hydrologist: the step's overview, and on Run settings one block
 per section (name and description, run period, output variables, output, compute). From `xl` (1280 px)
-the wizard is a two-column grid in a 1456 px container: the steps keep their 1024 px column and the
-panel is a 20 rem `sticky` aside under the site header, scrolling by itself when it is taller than the
-viewport. Below `xl` a "Help" button beside the step's heading opens the same content in the sheet used
+the wizard is a two-column grid in the page's column (1360 px at most): the steps take what is left and
+the panel is a 20 rem `sticky` aside 20 px from the top of the viewport, scrolling by itself when it is
+taller than the viewport. Below `xl` a "Help" button beside the step's heading opens the same content in the sheet used
 elsewhere. The panel shows the help of the section last focused or last entered by the pointer, and keeps
 it when the pointer leaves, until another section is chosen or the step changes. On Run settings an index
 above the topic lists the overview and every section and marks the one shown; choosing an entry shows that
@@ -773,8 +773,8 @@ from `climatologyAvailable`. A section declares its help with `DraftSection`'s `
 reads top to bottom in the order a person asks: the header (breadcrumb, the
 snapshot draft's own name with its status, and once the job has ended the buttons
 "Duplicate" (a completed job only), "New from this model snapshot" and "Delete
-snapshot draft", which on a phone are one "More actions" menu; a light header
-like the Data Repository's), one status summary
+snapshot draft", which on a phone are one "More actions" menu; in the same navy band as
+the Data Repository's and the wizard's), one status summary
 (`job-status-summary.tsx`) that changes with the live status, the publish card,
 and the Logs. The summary is the only place with a state's main
 action: Cancel simulation while it is queued or running, "Try again with these settings"
@@ -794,11 +794,10 @@ waited, ended with how long it ran, in the viewer's zone, the full date on
 hover). The job document stores no resolved cores or walltime, so the page
 reads the snapshot for them; with no snapshot it shows a dash. Each fact is on
 the page once: the card has the work directory only where the summary has no
-results path. The page is in the wide column (`WIDE_CONTAINER`, the
-header's too) and, from `xl` (1280 px), a grid like the wizard's
-(`aside-layout.tsx`): the card is a 20 rem `sticky` aside beside the
+results path. From `xl` (1280 px) the page is a grid like the wizard's
+(`aside-layout.tsx`, in the page's column, 1360 px at most): the card is a 20 rem `sticky` aside beside the
 status summary, the publish card and the Logs; below `xl` it follows the status
-summary in the page. The Workspace lists use the same wide column.
+summary in the page.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`

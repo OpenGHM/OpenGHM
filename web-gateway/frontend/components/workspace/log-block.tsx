@@ -36,11 +36,11 @@ interface RowProps {
 
 const LogRowView = memo(function LogRowView({ kind, number, text, severity, retry, onRetry, digits }: RowProps) {
   if (kind === "separator") {
-    return <div className="mt-3 mb-1 font-semibold text-slate-300 first:mt-0">{text}</div>;
+    return <div className="mt-3 mb-1 font-semibold text-hero-foreground-muted first:mt-0">{text}</div>;
   }
   if (kind === "note") {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 text-slate-400 italic">
+      <div className="flex flex-wrap items-center gap-x-3 text-hero-subtle italic">
         <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
         {retry && (
           <Button
@@ -48,7 +48,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, retr
             variant="outline"
             size="sm"
             onClick={() => onRetry(retry)}
-            className="my-1 min-h-10 bg-transparent text-xs text-slate-200 not-italic hover:bg-slate-800 hover:text-white sm:min-h-8"
+            className="my-1 min-h-10 border-white/20 bg-white/10 text-xs text-hero-text not-italic hover:bg-white/15 hover:text-white sm:min-h-8"
           >
             <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />
             Retry
@@ -61,7 +61,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, retr
   return (
     <div
       data-severity={severity ?? undefined}
-      className={`-mx-3 flex gap-3 px-3 ${tone?.row ?? ""}`}
+      className={`-mx-3.5 flex gap-3 px-3.5 ${tone?.row ?? ""}`}
     >
       <span aria-hidden="true" data-marker className="w-[1ch] shrink-0 text-center font-bold select-none">
         {tone?.mark}
@@ -69,7 +69,7 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, retr
       <span
         aria-hidden="true"
         data-line-number
-        className="shrink-0 select-none text-right text-slate-500"
+        className="shrink-0 select-none text-right text-hero-faint"
         style={{ minWidth: `${digits}ch` }}
       >
         {number}
@@ -132,7 +132,7 @@ export function LogBlock({
         aria-label={label}
         tabIndex={0}
         onScroll={onScroll}
-        className="relative max-h-[560px] min-h-24 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="relative max-h-[560px] min-h-24 overflow-auto rounded-[14px] bg-hero p-3.5 font-mono text-xs leading-relaxed text-hero-text outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         {rows.map((row, i) => (
           <LogRowView
@@ -167,9 +167,9 @@ export function LogBlock({
  *  300 ms (`reveal-delayed`), so a read that answers quickly shows none. */
 export function LogSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading the log" className="reveal-delayed space-y-2.5 rounded-lg bg-slate-900 p-4">
+    <div aria-busy="true" aria-label="Loading the log" className="reveal-delayed space-y-2.5 rounded-[14px] bg-hero p-4">
       {["w-4/5", "w-3/5", "w-11/12", "w-2/5", "w-3/4", "w-1/2"].map((w, i) => (
-        <Skeleton key={i} className={`h-3 ${w} animate-none bg-slate-700 motion-safe:animate-pulse`} />
+        <Skeleton key={i} className={`h-3 ${w} animate-none bg-white/15 motion-safe:animate-pulse`} />
       ))}
     </div>
   );

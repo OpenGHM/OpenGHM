@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth-guard";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { DevPreviewSwitcher } from "@/components/workspace/dev-preview-switcher";
 import { JobDetail } from "@/components/workspace/job-detail";
@@ -39,7 +38,6 @@ export default async function DevWorkspacePreviewPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
       <DevPreviewSwitcher active={preview.key} />
       <JobDetail
         job={job}

@@ -25,10 +25,10 @@ export default function WorkspaceError({
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-7">
         <div
           role="alert"
-          className="space-y-3 rounded-lg border border-dashed border-destructive/25 bg-destructive/5 p-8 text-center"
+          className="space-y-3 rounded-card border border-destructive/25 bg-card p-8 text-center shadow-card"
         >
           <p className="font-medium text-status-failed">Something went wrong loading this page.</p>
           <p className="text-sm text-destructive">

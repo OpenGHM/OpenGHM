@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface Variable {
   name: string;
@@ -11,6 +12,10 @@ interface Variable {
 
 const INITIAL_ROWS = 5;
 
+// The design's swatch colours, taken in turn by row: a swatch tells the rows
+// apart at a glance, it does not say what the variable is.
+const SWATCHES = [1, 8, 7, 2, 3, 6, 4, 5].map((n) => `var(--data-${n})`);
+
 export function OutputVariablesTable({ variables }: { variables: Variable[] }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -18,38 +23,42 @@ export function OutputVariablesTable({ variables }: { variables: Variable[] }) {
   const hasMore = variables.length > INITIAL_ROWS;
 
   return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="rounded-l-lg bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Name</th>
-              <th className="bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Unit</th>
-              <th className="rounded-r-lg bg-emerald-50 px-3 py-2.5 font-semibold text-emerald-800">Full Name</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((v) => (
-              <tr key={v.name} className="border-b border-slate-100 last:border-0">
-                <td className="px-3 py-2.5 font-medium text-foreground">{v.name}</td>
-                <td className="px-3 py-2.5">
-                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
-                    {v.unit}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                  {v.fullName}
-                </td>
-              </tr>
+    <div className="flex flex-col gap-4">
+      <div className="overflow-hidden rounded-[14px] border border-border/70">
+        <Table className="min-w-[480px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead aria-hidden="true" className="w-7 pr-0" />
+              <TableHead>Name</TableHead>
+              <TableHead>Unit</TableHead>
+              <TableHead>Full Name</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.map((v, i) => (
+              <TableRow key={v.name}>
+                <TableCell className="pr-0">
+                  <span
+                    aria-hidden="true"
+                    style={{ backgroundColor: SWATCHES[i % SWATCHES.length] }}
+                    className="block size-3 rounded-[4px]"
+                  />
+                </TableCell>
+                <TableCell className="py-3 font-mono text-[13px] font-medium">{v.name}</TableCell>
+                <TableCell className="font-mono text-[13px] text-foreground/75">{v.unit}</TableCell>
+                <TableCell className="whitespace-normal text-foreground/90">{v.fullName}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {hasMore && (
         <button
+          type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+          aria-expanded={expanded}
+          className="inline-flex items-center gap-1.5 self-start rounded-[10px] bg-muted px-3.5 py-[9px] text-[13.5px] font-semibold transition-colors outline-none hover:bg-secondary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           {expanded ? (
             <>

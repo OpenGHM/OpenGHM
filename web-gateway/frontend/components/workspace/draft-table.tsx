@@ -82,7 +82,7 @@ export function DraftTable({
   const rows = jobs.filter((job) => matchesQuery(displayName(job), query));
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+    <div className="overflow-hidden rounded-card border border-border/70 bg-card text-card-foreground shadow-card">
       {sessionExpired && (
         <div className="border-b p-3">
           <SessionExpiredBanner />
@@ -91,7 +91,7 @@ export function DraftTable({
 
       <div
         aria-hidden="true"
-        className={`hidden gap-x-4 border-b bg-muted/40 px-5 py-2.5 font-mono text-[11px] tracking-wider text-muted-foreground uppercase sm:grid ${COLUMNS}`}
+        className={`hidden gap-x-4 border-b bg-muted/60 px-6 py-3 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase sm:grid ${COLUMNS}`}
       >
         <span>Name</span>
         <span>Status</span>
@@ -123,7 +123,7 @@ export function DraftTable({
             return (
               <li
                 key={job.id}
-                className={`relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-x-4 sm:px-5 sm:py-3.5 ${COLUMNS}`}
+                className={`relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-x-4 sm:px-6 sm:py-4 ${COLUMNS}`}
               >
                 <div className="min-w-0">
                   <p className="flex min-w-0 items-baseline gap-2">
@@ -151,7 +151,7 @@ export function DraftTable({
                   <span aria-hidden="true" className="text-muted-foreground sm:hidden">
                     ·
                   </span>
-                  <span className="text-[13px] text-muted-foreground">
+                  <span className="font-mono text-xs text-muted-foreground">
                     <span className="sr-only">Updated </span>
                     <TimeStamp value={job.updated_at ?? job.created_at} format="relative" />
                   </span>

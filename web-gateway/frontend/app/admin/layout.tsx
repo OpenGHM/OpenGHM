@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/landing/header";
-import { AdminNav } from "@/components/admin/admin-nav";
+import { Footer } from "@/components/landing/footer";
+import { AdminRoleProvider } from "@/components/admin/admin-nav";
 
 export default async function AdminLayout({
   children,
@@ -20,12 +20,11 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header />
-      <div className="flex flex-1 flex-col md:flex-row">
-        <AdminNav role={session.user.role} />
-        <main className="min-w-0 flex-1 bg-slate-50">{children}</main>
+    <AdminRoleProvider role={session.user.role}>
+      <div className="flex min-h-screen flex-col">
+        <div className="flex-1">{children}</div>
+        <Footer />
       </div>
-    </div>
+    </AdminRoleProvider>
   );
 }

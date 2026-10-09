@@ -77,7 +77,7 @@ export function JobActionsMenu({
           dialog opens as it closes. */}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button ref={triggerRef} type="button" variant="outline" className="min-h-10 shrink-0 gap-2 font-medium">
+          <Button ref={triggerRef} type="button" variant="on-dark" className="min-h-10 shrink-0 gap-2 font-medium">
             {pending ? (
               <Loader2 className="motion-safe:animate-spin" aria-hidden="true" />
             ) : (
@@ -120,7 +120,7 @@ export function JobActionsMenu({
 
       {error?.kind === "session-expired" && <SessionExpiredBanner className="w-full max-w-md" />}
       {error?.kind === "error" && (
-        <p role="alert" className="text-xs text-status-failed">
+        <p role="alert" className="text-xs text-hero-error">
           {errorMessage(error)}
         </p>
       )}

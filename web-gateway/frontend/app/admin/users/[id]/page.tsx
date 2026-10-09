@@ -1,9 +1,8 @@
 import { auth } from "@/lib/auth";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdminPage, EmptyState, InlineError } from "@/components/admin/admin-page";
+import { AdminPage } from "@/components/admin/admin-page";
+import { EmptyState, InlineError } from "@/components/admin/admin-states";
 import { UserRoleStatusCard } from "@/components/admin/user-role-status-card";
 import { UserSessionsTable } from "@/components/admin/user-sessions-table";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
@@ -43,15 +42,15 @@ export default async function AdminUserDetailPage({
       : [];
 
   return (
-    <AdminPage>
-      <Link
-        href="/admin/users"
-        className="inline-flex min-h-10 items-center gap-1 text-sm text-slate-500 hover:text-slate-700 sm:min-h-0"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-        Back to users
-      </Link>
-
+    <AdminPage
+      title={user.name}
+      description={user.email}
+      breadcrumb={[
+        { label: "Admin", href: "/admin" },
+        { label: "Users", href: "/admin/users" },
+        { label: user.name },
+      ]}
+    >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-1">
           <UserRoleStatusCard user={user} isSelf={user.id === session?.user.id} canManage={isAdmin} />
@@ -76,7 +75,7 @@ export default async function AdminUserDetailPage({
             <CardHeader>
               <CardTitle>
                 Recent jobs {user.job_counts && Object.keys(user.job_counts).length > 0 && (
-                  <span className="text-sm font-normal text-slate-500">
+                  <span className="text-sm font-normal text-muted-foreground">
                     ({Object.entries(user.job_counts).map(([status, count]) => `${count} ${status.toLowerCase()}`).join(", ")})
                   </span>
                 )}

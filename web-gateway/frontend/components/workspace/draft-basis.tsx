@@ -95,12 +95,12 @@ export function DraftBasis({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm sm:px-5">
+    <div className="space-y-3 rounded-card border border-border/70 bg-card p-4 shadow-card sm:px-6 sm:py-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
         {/* On a phone the thumbnail sits above the text, so the title has the card's whole width. */}
         <div className="flex min-w-0 flex-1 flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
           {dataset && (
-            <div className="relative h-12 w-24 shrink-0 overflow-hidden rounded-lg border bg-muted">
+            <div className="relative h-12 w-24 shrink-0 overflow-hidden rounded-xl border bg-muted">
               <CoverageThumbnail
                 box={snapshotBox(dataset)}
                 aspect="wide"
@@ -110,7 +110,7 @@ export function DraftBasis({
             </div>
           )}
           <div className="min-w-0 max-w-full flex-1 space-y-0.5">
-            <p className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">Based on</p>
+            <p className="font-mono text-xs tracking-[0.06em] text-primary uppercase">Based on</p>
             <ClampedName as="p" lines={2} className="text-base leading-snug font-semibold text-foreground">
               {title}
             </ClampedName>

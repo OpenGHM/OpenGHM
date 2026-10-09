@@ -13,9 +13,13 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => search,
 }));
 vi.mock("@/lib/repository/actions", () => ({ fetchCatalogue: vi.fn() }));
+// The page body sits under the band's module, which carries the site header.
+vi.mock("next-auth/react", () => ({ useSession: () => ({ data: null }), signOut: vi.fn() }));
+vi.mock("@/lib/auth-actions", () => ({ revokeSession: vi.fn() }));
 
 import { fetchCatalogue } from "@/lib/repository/actions";
 import { CatalogueClient } from "./catalogue-client";
+import { CatalogueSearch } from "./catalogue-search";
 import { catalogueFiltersToParams } from "@/lib/repository/url-filters";
 import { filters, modelInputItem, response, snapshotItem } from "./catalogue.fixtures";
 
@@ -39,7 +43,7 @@ function setup(initial = filters()) {
   search = catalogueFiltersToParams(initial);
   const data = response([snapshotItem(), modelInputItem()]);
   vi.mocked(fetchCatalogue).mockResolvedValue(data);
-  return render(<CatalogueClient initialFilters={initial} initialData={data} />);
+  return render(<CatalogueClient hero={<CatalogueSearch />} initialFilters={initial} initialData={data} />);
 }
 
 describe("CatalogueClient tag chips", () => {
@@ -61,5 +65,19 @@ describe("CatalogueClient tag chips", () => {
     expect(vi.mocked(fetchCatalogue).mock.calls.at(-1)?.[0].tag).toEqual(["climate-forcing"]);
     const query = new URLSearchParams(String(pushState.mock.calls.at(-1)?.[2]).split("?")[1]);
     expect(query.getAll("tag")).toEqual(["climate-forcing"]);
+  });
+});
+
+describe("CatalogueClient search box", () => {
+  it("edits the query in the URL from the band, back on page 1, and asks the backend with it", async () => {
+    setup(filters({ page: 2 }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search the repository" }), {
+      target: { value: "gpcc" },
+    });
+    await waitFor(() => expect(fetchCatalogue).toHaveBeenCalled());
+    expect(vi.mocked(fetchCatalogue).mock.calls.at(-1)?.[0].searchQuery).toBe("gpcc");
+    const query = new URLSearchParams(String(pushState.mock.calls.at(-1)?.[2]).split("?")[1]);
+    expect(query.get("q")).toBe("gpcc");
+    expect(query.has("page")).toBe(false);
   });
 });

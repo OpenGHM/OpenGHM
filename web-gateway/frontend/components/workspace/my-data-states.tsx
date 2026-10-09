@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { AlertCircle, PackageOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListToolbar } from "@/components/workspace/list-toolbar";
 
 /** The caller has no snapshot or model input at all: says so, with no button. */
 export function MyDataEmpty() {
   return (
-    <div className="rounded-xl border border-dashed bg-card px-4 py-16 text-center sm:py-20">
+    <div className="rounded-card border border-dashed bg-card px-4 py-16 text-center shadow-raised sm:py-20">
       <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
         <PackageOpen className="size-6 text-muted-foreground" aria-hidden="true" />
       </div>
@@ -23,7 +24,7 @@ export function MyDataLoadError({ retryHref }: { retryHref: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+      className="flex items-start gap-3 rounded-card border border-destructive/25 bg-card p-5 text-sm text-destructive shadow-raised"
     >
       <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <div className="space-y-1">
@@ -52,15 +53,15 @@ export function MyDataSkeleton() {
       aria-label="Loading snapshots and inputs"
       className="reveal-delayed"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Skeleton className="h-10.5 w-full rounded-xl sm:w-[26rem]" />
-        <Skeleton className="hidden h-10.5 w-72 rounded-xl sm:block" />
-      </div>
-      <div className="mt-4 overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="hidden h-9 border-b bg-muted/40 sm:block" />
+      <ListToolbar>
+        <Skeleton className="h-[46px] w-full rounded-[11px] sm:w-[26rem]" />
+        <Skeleton className="hidden h-[46px] w-72 rounded-[11px] sm:block" />
+      </ListToolbar>
+      <div className="mt-4 overflow-hidden rounded-card border border-border/70 bg-card shadow-card">
+        <div className="hidden h-10 border-b bg-muted/60 sm:block" />
         <div className="divide-y">
           {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="flex items-center gap-4 px-4 py-4 sm:px-5">
+            <div key={i} className="flex items-center gap-4 px-4 py-4 sm:px-6">
               <div className="min-w-0 flex-1 space-y-2">
                 <Skeleton className="h-4 w-2/3 sm:w-1/2" />
                 <Skeleton className="h-3 w-1/2 sm:w-1/3" />

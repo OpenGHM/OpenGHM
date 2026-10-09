@@ -4,6 +4,8 @@ import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { WorkspaceSections } from "@/components/workspace/workspace-sections";
 
 const status = { pending: false };
+// The site header reads the session, which these tests have no provider for.
+vi.mock("@/components/landing/header", () => ({ Header: () => null }));
 vi.mock("next/link", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/link")>()),
   useLinkStatus: () => status,
@@ -53,7 +55,7 @@ describe("the Workspace section switch while a section loads", () => {
 });
 
 describe("the Workspace header", () => {
-  it("is the Data Repository's light header: eyebrow, title, and the section's action", () => {
+  it("is a navy band: eyebrow, title, and the section's action", () => {
     render(<WorkspaceHeader section="drafts" />);
     expect(screen.getByText("Workspace")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Snapshot drafts" })).toBeTruthy();
@@ -69,14 +71,15 @@ describe("the Workspace header", () => {
     expect(links().find((a) => a.getAttribute("aria-current"))?.textContent).toBe("Snapshots & Inputs");
   });
 
-  it.each(["drafts", "data"] as const)("is in the wide column from xl, as the list under it is (%s)", (section) => {
+  it.each(["drafts", "data"] as const)("is the page's navy band, as the repository's is (%s)", (section) => {
     const { container } = render(<WorkspaceHeader section={section} />);
-    expect(container.querySelector("header")?.className).toContain("xl:max-w-[1456px]");
+    expect((container.firstElementChild as HTMLElement).className).toContain("bg-hero");
   });
 
-  it("has no dark gradient", () => {
-    const { container } = render(<WorkspaceHeader section="drafts" />);
-    expect(container.innerHTML).not.toContain("gradient");
-    expect(container.innerHTML).not.toContain("text-white");
+  it("draws the section switch as the site header's pill, the current section the white segment", () => {
+    render(<WorkspaceHeader section="data" />);
+    const [drafts, data] = links();
+    expect(data.classList.contains("bg-white")).toBe(true);
+    expect(drafts.classList.contains("bg-white")).toBe(false);
   });
 });

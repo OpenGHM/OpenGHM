@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdminPage, InlineError } from "@/components/admin/admin-page";
-import { SectionHeader } from "@/components/admin/section-header";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InlineError } from "@/components/admin/admin-states";
 import { UsersTable } from "@/components/admin/users-table";
 import { UserSearchFilters } from "@/components/admin/user-search-filters";
 import { ServerPagination } from "@/components/shared/server-pagination";
@@ -32,16 +32,14 @@ export default async function AdminUsersPage({
   const users = usersResult ?? EMPTY_USERS;
 
   return (
-    <AdminPage>
-      <SectionHeader
-        title="Users"
-        description={
-          isAdmin
-            ? "User directory — change roles or deactivate accounts."
-            : "Read-only view — role and status changes require admin."
-        }
-      />
-
+    <AdminPage
+      title="Users"
+      description={
+        isAdmin
+          ? "User directory — change roles or deactivate accounts."
+          : "Read-only view — role and status changes require admin."
+      }
+    >
       <UserSearchFilters initialQuery={q} role={role} status={params.is_active} />
 
       <Card>

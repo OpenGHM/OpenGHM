@@ -1,9 +1,13 @@
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SectionEyebrow, SectionTitle } from "./section-parts";
 
 interface Update {
   image: string;
   tag: string;
+  /** Background and text colour of the tag pill. */
+  tagClassName: string;
   title: string;
   description: string;
   linkText: string;
@@ -13,6 +17,7 @@ const UPDATES: Update[] = [
   {
     image: "/images/update-dataset.jpg",
     tag: "New Dataset",
+    tagClassName: "bg-secondary text-secondary-foreground",
     title: "Amazon Basin High-Res Precipitation (2000-2023)",
     description:
       "Now available in ZARR format. Includes hourly precipitation estimates derived from IMERG satellite products.",
@@ -21,6 +26,7 @@ const UPDATES: Update[] = [
   {
     image: "/images/update-api.jpg",
     tag: "Platform Update",
+    tagClassName: "bg-compute/10 text-compute",
     title: "Python API v2.0 Released",
     description:
       "Major performance improvements for spatial resampling and new authentication flows for the JupyterHub gateway.",
@@ -29,6 +35,7 @@ const UPDATES: Update[] = [
   {
     image: "/images/update-workshop.jpg",
     tag: "Community Event",
+    tagClassName: "bg-success/10 text-success",
     title: "AGU Fall Meeting 2024 Workshop",
     description:
       "Join the OpenGHM team in San Francisco for a hands-on workshop on cloud-native hydrology.",
@@ -38,53 +45,55 @@ const UPDATES: Update[] = [
 
 export function UpdatesSection() {
   return (
-    <section className="bg-white py-16 lg:py-30">
-      <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-10">
-        <div className="mb-8 flex flex-col items-start gap-4 border-b border-muted pb-6 sm:flex-row sm:items-end sm:justify-between lg:mb-15">
-          <div>
-            <span className="mb-4 block text-sm font-bold uppercase tracking-widest text-primary">
-              What&apos;s New
-            </span>
-            <h2 className="text-3xl font-extrabold leading-tight sm:text-4xl lg:text-[42px] tracking-tight text-[#0f172a]">
-              Latest Datasets &amp; News
-            </h2>
-          </div>
-          <button className="min-h-12 w-full rounded-xl border border-muted bg-white px-6 py-3 sm:w-auto sm:px-9 sm:py-4 text-base font-semibold text-primary transition-all hover:bg-muted">
-            View all updates
-          </button>
+    <section className="flex flex-col gap-9">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex flex-col gap-3.5">
+          <SectionEyebrow>What&apos;s New</SectionEyebrow>
+          <SectionTitle>Latest Datasets &amp; News</SectionTitle>
         </div>
+        <Button
+          variant="outline"
+          className="h-auto rounded-[11px] px-4 py-[11px] font-semibold shadow-none hover:border-primary hover:bg-card hover:text-primary"
+        >
+          View all updates
+          <ArrowRight aria-hidden="true" />
+        </Button>
+      </div>
 
-        <div className="mx-auto grid max-w-md grid-cols-1 gap-6 md:max-w-none md:grid-cols-3 lg:gap-8">
-          {UPDATES.map((update) => (
-            <div
-              key={update.title}
-              className="min-w-0 cursor-pointer overflow-hidden rounded-lg border border-muted transition-shadow hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
-            >
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-3.5">
+        {UPDATES.map((update) => (
+          <article
+            key={update.title}
+            className="flex min-w-0 flex-col rounded-card bg-card p-2 transition-[transform,box-shadow] duration-200 hover:shadow-lift motion-safe:hover:-translate-y-[3px]"
+          >
+            <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-accent">
               <Image
                 src={update.image}
                 alt={update.title}
-                width={400}
-                height={200}
-                className="h-[200px] w-full object-cover"
+                fill
+                sizes="(min-width: 1360px) 440px, (min-width: 768px) 33vw, 100vw"
+                className="object-cover"
               />
-              <div className="p-6">
-                <span className="mb-3 block text-xs font-semibold uppercase text-primary">
-                  {update.tag}
-                </span>
-                <h3 className="mb-3 text-lg font-bold leading-snug text-[#0f172a]">
-                  {update.title}
-                </h3>
-                <p className="mb-5 text-[15px] leading-relaxed text-slate-500">
-                  {update.description}
-                </p>
-                <a className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-primary">
-                  {update.linkText}
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-              </div>
             </div>
-          ))}
-        </div>
+            <div className="flex flex-1 flex-col gap-2.5 px-3.5 pt-[18px] pb-3">
+              <span
+                className={`self-start rounded-full px-2.5 py-1 text-xs font-semibold ${update.tagClassName}`}
+              >
+                {update.tag}
+              </span>
+              <h3 className="text-lg leading-[1.3] font-[650] tracking-[-0.02em] text-pretty">
+                {update.title}
+              </h3>
+              <p className="text-sm leading-[1.6] text-pretty text-muted-foreground">
+                {update.description}
+              </p>
+              <span className="mt-auto inline-flex items-center gap-1.5 pt-2 text-sm font-semibold text-primary">
+                {update.linkText}
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </span>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );

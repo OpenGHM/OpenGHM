@@ -7,7 +7,7 @@ const BoundingBoxMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[240px] w-full items-center justify-center rounded-lg bg-slate-100 text-sm text-muted-foreground">
+      <div className="flex h-[280px] w-full items-center justify-center rounded-xl bg-muted text-sm text-muted-foreground">
         Loading map…
       </div>
     ),

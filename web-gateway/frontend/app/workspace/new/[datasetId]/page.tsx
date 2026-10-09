@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { redirectToSignIn, requireSession } from "@/lib/auth-guard";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { fetchMe } from "@/lib/account/actions";
@@ -59,7 +58,6 @@ export default async function NewDraftFromSnapshotPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
       <DraftWizard
         key={datasetId}
         job={preview.data}

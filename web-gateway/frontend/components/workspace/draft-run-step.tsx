@@ -173,7 +173,7 @@ export function DraftRunStep({
   const customEntries = custom ? Object.entries(custom) : [];
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
+    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
       <DraftStepHeading step="run">
         The run period, the output variables, and how much compute to ask Anvil for.
       </DraftStepHeading>
@@ -228,7 +228,7 @@ export function DraftRunStep({
               aria-describedby={serverErrors.description ? `${id}-description-error` : undefined}
               aria-invalid={serverErrors.description ? true : undefined}
               onChange={(e) => onDescriptionChange(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm"
+              className="w-full rounded-xl border border-input bg-card px-3.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm"
             />
             {serverErrors.description && (
               <p id={`${id}-description-error`} className="text-xs text-destructive">
@@ -248,7 +248,7 @@ export function DraftRunStep({
                 id={`${id}-start`}
                 {...draftField("start")}
                 type="date"
-                className="h-10 md:h-9"
+                className="h-10 font-mono md:h-9"
                 min={coverage?.start}
                 max={coverage?.end}
                 value={start}
@@ -285,7 +285,7 @@ export function DraftRunStep({
                 id={`${id}-end`}
                 {...draftField("end")}
                 type="date"
-                className="h-10 md:h-9"
+                className="h-10 font-mono md:h-9"
                 min={coverage?.start}
                 max={coverage?.end}
                 value={end}

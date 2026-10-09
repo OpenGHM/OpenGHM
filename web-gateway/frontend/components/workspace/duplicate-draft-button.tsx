@@ -23,7 +23,7 @@ export function errorMessage(error: CreateError): string {
 /**
  * A new draft that copies this snapshot draft's run settings
  * (`POST /jobs/{id}/duplicate`), opened at the draft wizard's second step.
- * Unlike `DeriveDraftButton`, which starts over from the snapshot's
+ * Unlike a draft started over from the snapshot's
  * defaults, nothing the owner chose is lost. The snapshot draft itself is not
  * touched.
  *
@@ -46,8 +46,9 @@ export function DuplicateDraftButton({
 }: {
   jobId: string;
   label?: string;
-  /** `default`: the page's one emphasised action (a failed simulation). `outline`: a quieter one. */
-  variant?: "default" | "outline";
+  /** `default`: the page's one emphasised action (a failed simulation). `outline`: a quieter one.
+   *  `on-dark`: a quieter one on the navy band. */
+  variant?: "default" | "outline" | "on-dark";
   Icon?: LucideIcon;
   className?: string;
 }) {
@@ -82,7 +83,7 @@ export function DuplicateDraftButton({
       </p>
       {error?.kind === "session-expired" && <SessionExpiredBanner className="w-full max-w-md" />}
       {error?.kind === "error" && (
-        <p role="alert" className="text-xs text-status-failed">
+        <p role="alert" className={cn("text-xs", variant === "on-dark" ? "text-hero-error" : "text-status-failed")}>
           {message}
         </p>
       )}

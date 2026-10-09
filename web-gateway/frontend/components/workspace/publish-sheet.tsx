@@ -35,7 +35,7 @@ import {
 } from "@/lib/workspace/publish";
 
 const TEXTAREA =
-  "w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm";
+  "w-full rounded-xl border border-input bg-card px-3.5 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive md:text-sm";
 
 /** A problem under its field. */
 function FieldError({ id, children }: { id: string; children: React.ReactNode }) {
@@ -299,7 +299,7 @@ function PublishForm({
             {values.creators.map((creator, index) => {
               const row = tried ? errors.creators[index] : undefined;
               return (
-                <li key={index} className="space-y-2 rounded-lg border bg-card p-3">
+                <li key={index} className="space-y-2 rounded-xl border bg-card p-3">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <Label htmlFor={`${id}-creator-${index}-name`} className="text-xs text-muted-foreground">

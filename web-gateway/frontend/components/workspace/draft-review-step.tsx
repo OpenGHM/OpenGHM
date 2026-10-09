@@ -20,6 +20,7 @@ import {
   runsClimatology,
   type Recommended,
 } from "@/lib/jobs/compute";
+import { cn } from "@/lib/utils";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import type { DraftContext, DraftField, DraftLocal } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
@@ -36,16 +37,24 @@ export const NAME_NUDGE = "Add a name so you can find this snapshot draft later.
 function Row({
   label,
   edit,
+  mono = false,
   children,
 }: {
   label: string;
   edit?: ReactNode;
+  /** A value that is a date or a number: set in mono. */
+  mono?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className="grid grid-cols-[1fr_auto] items-start gap-x-4 gap-y-0.5 py-3 sm:grid-cols-[9rem_1fr_auto] sm:gap-x-6">
       <dt className="text-sm text-muted-foreground sm:pt-0.5">{label}</dt>
-      <dd className="order-last col-span-2 min-w-0 break-words text-sm text-foreground sm:order-none sm:col-span-1">
+      <dd
+        className={cn(
+          "order-last col-span-2 min-w-0 break-words text-sm text-foreground sm:order-none sm:col-span-1",
+          mono && "font-mono text-[13px]"
+        )}
+      >
         {children}
       </dd>
       <dd className="col-start-2 row-start-1 sm:col-start-3">{edit}</dd>
@@ -185,7 +194,7 @@ export function DraftReviewStep({
   const description = local.description.trim();
 
   return (
-    <fieldset disabled={disabled} className="min-w-0 space-y-6 border-0 p-0">
+    <fieldset disabled={disabled} className="min-w-0 space-y-5 border-0 p-0">
       <DraftStepHeading step="review">
         {publishedAnswer.status === "answered"
           ? "Check what you asked for, then download the published results."
@@ -238,6 +247,7 @@ export function DraftReviewStep({
               {facts.length > 0 && <span className="block text-[13px] text-muted-foreground">{facts.join(" · ")}</span>}
             </Row>
             <Row
+              mono
               label="Run period"
               edit={<EditLink step="run" field="start" label="run period" onEditStep={onEditStep} />}
             >
@@ -256,6 +266,7 @@ export function DraftReviewStep({
               {describeOutput(parameters.post_processing ?? snapshotOutput(ctx.dataset))}
             </Row>
             <Row
+              mono
               label="Cores"
               edit={<EditLink step="run" field="cores" label="cores" onEditStep={onEditStep} />}
             >
@@ -266,6 +277,7 @@ export function DraftReviewStep({
               {coresWarning && <span className="block text-xs text-warning">{coresWarning}</span>}
             </Row>
             <Row
+              mono
               label="Walltime"
               edit={<EditLink step="run" field="walltime" label="walltime" onEditStep={onEditStep} />}
             >

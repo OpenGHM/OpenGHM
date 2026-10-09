@@ -2,13 +2,18 @@
 
 import { useId, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
- * A collapsible group of filters, separated from the next by a rule: a header
- * button with a + (closed) or – (open) at its right edge, and the controls
- * below it. The button's name is the group's title; `aria-expanded` and
- * `aria-controls` say whether, and what, it opens. A group that holds a
- * selection opens on first render, so the choice is not hidden.
+ * A collapsible group of filters: a header button with a + (closed) or – (open)
+ * at its right edge, and the controls below it. The button's name is the
+ * group's title; `aria-expanded` and `aria-controls` say whether, and what, it
+ * opens. A group that holds a selection opens on first render, so the choice
+ * is not hidden.
+ *
+ * A group that opens by default is a section of the panel, headed by a small
+ * uppercase label; one that starts closed is a row of the list below, set off
+ * by a rule and titled in bold, as in the design.
  */
 export function FilterGroup({
   title,
@@ -28,14 +33,19 @@ export function FilterGroup({
   const Icon = open ? Minus : Plus;
 
   return (
-    <div className="border-b border-border px-4 pb-1 last:border-b-0 sm:px-[18px]">
+    <div className={cn("px-5", defaultOpen ? "pb-3" : "border-t border-border/70")}>
       <button
         type="button"
         id={buttonId}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
-        className="-mx-1 flex min-h-11 w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded-md px-1 text-left text-[13.5px] font-semibold text-foreground outline-none hover:text-foreground/70 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className={cn(
+          "-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded-md px-1 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          defaultOpen
+            ? "min-h-11 text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase hover:text-foreground"
+            : "min-h-12 text-sm font-semibold text-foreground hover:text-foreground/70"
+        )}
       >
         <span className="min-w-0">{title}</span>
         <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />

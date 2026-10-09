@@ -9,25 +9,28 @@ export function AboutSummaryCard({ about }: { about: PartialAbout | null }) {
   if (!about || Object.keys(about).length === 0) return null;
 
   return (
-    <section aria-labelledby="about-heading">
-      <h2 id="about-heading" className="mb-3 text-lg font-semibold text-foreground">
+    <section
+      aria-labelledby="about-heading"
+      className="space-y-4 rounded-card border border-border/70 bg-card p-6 shadow-card sm:p-7"
+    >
+      <h2 id="about-heading" className="text-xl font-[650] tracking-[-0.02em] text-foreground">
         About
       </h2>
-      <div className="space-y-4 rounded-xl border bg-card p-5 shadow-sm sm:p-6">
+      <div className="space-y-4">
         {about.name && <p className="text-base font-semibold text-foreground">{about.name}</p>}
         {about.description && (
           <p className="text-sm leading-relaxed text-muted-foreground">{about.description}</p>
         )}
         <div className="flex flex-wrap gap-4 text-sm">
           {about.tags && about.tags.length > 0 && <TagChips tags={about.tags} />}
-          {about.license && <span className="text-xs text-muted-foreground">License: {about.license}</span>}
+          {about.license && <span className="font-mono text-xs text-muted-foreground">License: {about.license}</span>}
         </div>
         {about.keywords && about.keywords.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {about.keywords.map((kw) => (
               <span
                 key={kw}
-                className="rounded-md bg-muted px-2 py-0.5 text-xs text-foreground"
+                className="rounded-full border px-2.5 py-[3px] font-mono text-xs text-foreground/80"
               >
                 {kw}
               </span>

@@ -30,7 +30,7 @@ export function StackedRow({ className, ...props }: React.ComponentProps<typeof 
   return (
     <TableRow
       className={cn(
-        "max-sm:block max-sm:rounded-lg max-sm:border! max-sm:bg-card max-sm:p-3",
+        "max-sm:block max-sm:rounded-xl max-sm:border! max-sm:bg-card max-sm:p-3",
         className
       )}
       {...props}
@@ -48,7 +48,7 @@ export function StackedCell({
       data-label={label}
       className={cn(
         label
-          ? "max-sm:flex max-sm:items-center max-sm:justify-between max-sm:gap-3 max-sm:whitespace-normal max-sm:px-0 max-sm:py-1.5 max-sm:text-right max-sm:before:shrink-0 max-sm:before:text-left max-sm:before:text-xs max-sm:before:text-slate-500 max-sm:before:content-[attr(data-label)]"
+          ? "max-sm:flex max-sm:items-center max-sm:justify-between max-sm:gap-3 max-sm:whitespace-normal max-sm:px-0 max-sm:py-1.5 max-sm:text-right max-sm:before:shrink-0 max-sm:before:text-left max-sm:before:text-xs max-sm:before:text-muted-foreground max-sm:before:content-[attr(data-label)]"
           : "max-sm:block max-sm:whitespace-normal max-sm:px-0 max-sm:py-1",
         className
       )}

@@ -17,6 +17,7 @@ export function SaveDraftButton({
   disabled = false,
   reason,
   label = "Save as draft",
+  variant = "outline",
   onClick,
   className,
 }: {
@@ -27,6 +28,8 @@ export function SaveDraftButton({
   /** Why it is off, when `disabled`. */
   reason?: string;
   label?: string;
+  /** `on-dark` where the button sits on the navy band. */
+  variant?: "outline" | "on-dark";
   onClick: () => void;
   className?: string;
 }) {
@@ -36,7 +39,7 @@ export function SaveDraftButton({
     <span title={explained ? reason : undefined} className="inline-flex">
       <Button
         type="button"
-        variant="outline"
+        variant={variant}
         disabled={saving || disabled}
         aria-describedby={explained ? reasonId : undefined}
         onClick={onClick}
@@ -64,14 +67,14 @@ export function SaveDraftButton({
 }
 
 /**
- * What the header says about a snapshot draft that is not saved yet, where a stored
+ * What the band says about a snapshot draft that is not saved yet, where a stored
  * draft's `SaveStatus` says where saving stands. Nothing here is saved
  * unless the person asks, so "Saved" is never shown for the edits on screen:
  * only once a draft exists (a submit that asked for one) and holds all of them.
  */
 export function NewDraftStatus({ state }: { state: "unsaved" | "saving" | "saved" }) {
   return (
-    <div className="text-xs text-muted-foreground">
+    <div className="text-xs text-hero-foreground-muted">
       {state === "saving" ? (
         <span className="inline-flex items-center gap-1.5">
           <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden="true" />

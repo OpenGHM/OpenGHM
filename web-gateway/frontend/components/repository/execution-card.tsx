@@ -1,5 +1,4 @@
-import { Shield } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { DetailSection } from "@/components/repository/detail-section";
 import type { Dataset } from "@/lib/repository/types";
 
 /**
@@ -11,39 +10,45 @@ import type { Dataset } from "@/lib/repository/types";
  * `openghm code hash` prints for a fetched copy.
  */
 export function ExecutionCard({ uses, runtime }: Pick<Dataset, "uses" | "runtime">) {
-  const items = [
-    { label: "WBM Code", value: `${uses.modelCode.name} ${uses.modelCode.version}` },
-    { label: "Code Tree Hash", value: uses.modelCode.treeHash },
-    { label: "Container Image", value: `${uses.container.image}:${uses.container.version}` },
-    { label: "Digest", value: uses.container.digest },
+  // The identity of the code and the container, one under another, then the run in four tiles.
+  const identity = [
+    { label: "Container Image", value: `${uses.container.image}:${uses.container.version}`, long: false },
+    { label: "Digest", value: uses.container.digest, long: true },
+    { label: "WBM Code", value: `${uses.modelCode.name} ${uses.modelCode.version}`, long: false },
+    { label: "Code Tree Hash", value: uses.modelCode.treeHash, long: true },
+  ];
+  const run = [
     { label: "Cluster", value: runtime.execution.cluster },
     { label: "Cores", value: String(runtime.execution.cores) },
     { label: "Elapsed Walltime", value: runtime.execution.elapsedWalltime },
     { label: "SLURM Job ID", value: runtime.execution.slurmJobId },
   ];
   return (
-    <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-slate-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-slate-500/10">
-            <Shield className="size-4 text-slate-600" />
-          </div>
-          Code, Container &amp; Execution
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-5 pb-6">
-        <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-          {items.map((item) => (
-            <div
-              key={item.label}
-              className={`rounded-lg bg-slate-50 p-3${item.label === "Code Tree Hash" ? " sm:col-span-2" : ""}`}
+    <DetailSection title="Code, Container & Execution" heading="side" tone="navy">
+      <dl className="flex flex-col gap-4">
+        {identity.map((item) => (
+          <div key={item.label} className="flex flex-col gap-[3px]">
+            <dt className="text-xs text-hero-eyebrow">{item.label}</dt>
+            <dd
+              className={
+                item.long
+                  ? "font-mono text-xs leading-normal break-all text-hero-text"
+                  : "font-mono text-sm break-all"
+              }
             >
-              <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">{item.label}</dt>
-              <dd className="mt-1 break-all font-mono text-xs font-medium text-foreground">{item.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="grid grid-cols-2 gap-2">
+        {run.map((item) => (
+          <div key={item.label} className="flex min-w-0 flex-col gap-[3px] rounded-xl bg-white/[0.06] p-3">
+            <dt className="text-[11.5px] text-hero-eyebrow">{item.label}</dt>
+            <dd className="font-mono text-[15px] break-words">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </DetailSection>
   );
 }

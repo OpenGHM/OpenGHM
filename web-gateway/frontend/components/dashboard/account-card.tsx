@@ -19,6 +19,11 @@ const ROLE_LABELS: Record<UserProfile["role"], string> = {
   guest: "Guest",
 };
 
+// The label-over-value list of the dataset page: a hairline between rows.
+const DETAIL_ROW = "flex flex-col gap-0.5 border-t border-border py-3 first:border-t-0 first:pt-0";
+const DETAIL_LABEL = "text-xs text-muted-foreground";
+const DETAIL_VALUE = "text-sm font-medium text-foreground";
+
 export function AccountCard({ profile }: { profile: UserProfile }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,7 +96,7 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
     signOut({ callbackUrl: "/auth/signin?passwordChanged=1" });
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-slate-500">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
           Password changed. Signing you out to sign back in...
         </CardContent>
       </Card>
@@ -119,7 +124,7 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
                 placeholder="Purdue University"
               />
             </div>
-            {profileError && <p className="text-xs text-red-600">{profileError}</p>}
+            {profileError && <p className="text-xs text-destructive">{profileError}</p>}
             <div className="flex gap-2">
               <Button size="sm" onClick={handleSaveProfile} disabled={pending || !name.trim()}>
                 Save
@@ -130,43 +135,45 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Name</span>
-              <span className="font-medium text-slate-900">{profile.name}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Email</span>
-              <span className="flex items-center gap-2 font-medium text-slate-900">
-                {profile.email}
-                <Badge variant={profile.email_verified ? "secondary" : "outline"}>
-                  {profile.email_verified ? "Verified" : "Unverified"}
-                </Badge>
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Organization</span>
-              <span className="font-medium text-slate-900">{profile.organization ?? "—"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Role</span>
-              <span className="font-medium text-slate-900">{ROLE_LABELS[profile.role]}</span>
-            </div>
-            {profile.created_at && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Member since</span>
-                <span className="font-medium text-slate-900" suppressHydrationWarning>
-                  {new Date(profile.created_at).toLocaleDateString()}
-                </span>
+          <div className="space-y-4">
+            <dl>
+              <div className={DETAIL_ROW}>
+                <dt className={DETAIL_LABEL}>Name</dt>
+                <dd className={DETAIL_VALUE}>{profile.name}</dd>
               </div>
-            )}
+              <div className={DETAIL_ROW}>
+                <dt className={DETAIL_LABEL}>Email</dt>
+                <dd className={`${DETAIL_VALUE} flex flex-wrap items-center gap-2`}>
+                  <span className="[overflow-wrap:anywhere]">{profile.email}</span>
+                  <Badge variant={profile.email_verified ? "secondary" : "outline"}>
+                    {profile.email_verified ? "Verified" : "Unverified"}
+                  </Badge>
+                </dd>
+              </div>
+              <div className={DETAIL_ROW}>
+                <dt className={DETAIL_LABEL}>Organization</dt>
+                <dd className={DETAIL_VALUE}>{profile.organization ?? "—"}</dd>
+              </div>
+              <div className={DETAIL_ROW}>
+                <dt className={DETAIL_LABEL}>Role</dt>
+                <dd className={DETAIL_VALUE}>{ROLE_LABELS[profile.role]}</dd>
+              </div>
+              {profile.created_at && (
+                <div className={DETAIL_ROW}>
+                  <dt className={DETAIL_LABEL}>Member since</dt>
+                  <dd className={DETAIL_VALUE} suppressHydrationWarning>
+                    {new Date(profile.created_at).toLocaleDateString()}
+                  </dd>
+                </div>
+              )}
+            </dl>
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
               Edit profile
             </Button>
           </div>
         )}
 
-        <div className="border-t border-slate-100 pt-4">
+        <div className="border-t border-border pt-5">
           {showPasswordForm ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -200,7 +207,7 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
                   autoComplete="new-password"
                 />
               </div>
-              {passwordError && <p className="text-xs text-red-600">{passwordError}</p>}
+              {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
               <div className="flex gap-2">
                 <Button
                   size="sm"

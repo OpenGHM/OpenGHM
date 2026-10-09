@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Monitor } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/admin/admin-page";
+import { EmptyState } from "@/components/admin/admin-states";
 import { SignOutDialog } from "@/components/admin/sign-out-dialog";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { SessionEntry } from "@/lib/account/types";
@@ -49,15 +49,15 @@ export function UserSessionsTable({
           visible.map((s) => (
             <div
               key={s.id}
-              className="flex flex-col gap-2 rounded-md border border-slate-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+              className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <Monitor className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+                <Monitor className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0">
-                  <p className="text-xs text-slate-600 [overflow-wrap:anywhere] sm:truncate">
+                  <p className="text-xs text-foreground/80 [overflow-wrap:anywhere] sm:truncate">
                     {s.user_agent ?? "Unknown device"}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Last used <TimeStamp value={s.last_used_at} format="relative" />
                   </p>
                 </div>

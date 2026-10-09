@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { clampClass } from "@/components/common/clamped-name";
+import { ListToolbar } from "@/components/workspace/list-toolbar";
 import { MyDataKindTabs, pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { SearchField, matchesQuery } from "@/components/workspace/search-field";
 import { VisibilityBadge } from "@/components/workspace/visibility-badge";
@@ -68,7 +69,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
 
   return (
     <>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <ListToolbar>
         <MyDataKindTabs active={kind} counts={counts} />
         {ofKind.length > 0 && (
           <SearchField
@@ -78,10 +79,10 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
             className="sm:w-72"
           />
         )}
-      </div>
+      </ListToolbar>
 
       {ofKind.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed bg-card px-4 py-12 text-center">
+        <div className="mt-4 rounded-card border border-dashed bg-card px-4 py-12 text-center shadow-card">
           <p className="mb-1 text-sm font-medium text-foreground">{tab.empty}</p>
           <p className="mx-auto mb-4 max-w-sm text-sm text-muted-foreground">Nothing of this type is in your list.</p>
           <Link
@@ -93,10 +94,10 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
           </Link>
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="mt-4 overflow-hidden rounded-card border border-border/70 bg-card text-card-foreground shadow-card">
           <div
             aria-hidden="true"
-            className={`hidden gap-x-4 border-b bg-muted/40 px-5 py-2.5 font-mono text-[11px] tracking-wider text-muted-foreground uppercase sm:grid ${COLUMNS}`}
+            className={`hidden gap-x-4 border-b bg-muted/60 px-6 py-3 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase sm:grid ${COLUMNS}`}
           >
             <span>Name</span>
             <span>Type</span>
@@ -120,7 +121,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
               {rows.map((item) => (
                 <li
                   key={rowKey(item)}
-                  className={`relative grid grid-cols-1 items-center gap-x-4 gap-y-1.5 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-y-0 sm:px-5 sm:py-3.5 ${COLUMNS}`}
+                  className={`relative grid grid-cols-1 items-center gap-x-4 gap-y-1.5 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50 has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-inset has-[a:focus-visible]:ring-ring/50 motion-reduce:transition-none sm:gap-y-0 sm:px-6 sm:py-4 ${COLUMNS}`}
                 >
                   <div className="min-w-0">
                     <Link
@@ -138,7 +139,7 @@ export function MyDataTable({ items }: { items: MineItem[] }) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:contents">
                     <KindLabel kind={item.kind} />
                     <VisibilityBadge visibility={item.visibility} />
-                    <span className="text-[13px] text-muted-foreground sm:hidden md:block">
+                    <span className="font-mono text-xs text-muted-foreground sm:hidden md:block">
                       <span className="sr-only">Published </span>
                       <TimeStamp value={item.about.datePublished} format="date" />
                     </span>

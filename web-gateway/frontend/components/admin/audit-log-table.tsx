@@ -7,7 +7,7 @@ import {
   StackedRow,
   StackedTable,
 } from "@/components/admin/stacked-table";
-import { EmptyState } from "@/components/admin/admin-page";
+import { EmptyState } from "@/components/admin/admin-states";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AuditCategory, AuditLogEntry } from "@/lib/admin/types";
 
@@ -15,8 +15,8 @@ function ActionBadge({ action }: { action: string }) {
   const isFailure = action.includes("failed") || action.includes("rejected");
   return (
     <span
-      className={`rounded px-2 py-0.5 text-xs font-medium ${
-        isFailure ? "bg-destructive/10 text-destructive" : "bg-slate-100 text-slate-700"
+      className={`rounded-full px-2.5 py-0.5 font-mono text-[11.5px] ${
+        isFailure ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground/80"
       }`}
     >
       {action}
@@ -50,10 +50,10 @@ function CategoryTabs({
             key={tab.label}
             href={href}
             aria-current={isActive ? "page" : undefined}
-            className={`inline-flex items-center rounded-md px-3 py-1 text-sm font-medium transition-colors max-sm:min-h-10 ${
+            className={`inline-flex items-center rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors max-sm:min-h-10 ${
               isActive
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "border bg-card text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
             }`}
           >
             {tab.label}
@@ -104,17 +104,17 @@ export function AuditLogTable({
                 <StackedCell label="Actor" className="break-all text-sm">
                   {e.actor_email ?? e.actor_id}
                 </StackedCell>
-                <StackedCell label="Target" className="break-all text-sm text-slate-500">
+                <StackedCell label="Target" className="break-all text-sm text-muted-foreground">
                   {e.target_id ?? "—"}
                 </StackedCell>
                 <StackedCell
                   label="Detail"
-                  className="break-all text-xs text-slate-500 sm:max-w-xs sm:truncate"
+                  className="break-all text-xs text-muted-foreground sm:max-w-xs sm:truncate"
                   title={e.detail ? JSON.stringify(e.detail, null, 2) : undefined}
                 >
                   {e.detail ? JSON.stringify(e.detail) : "—"}
                 </StackedCell>
-                <StackedCell label="When" className="text-xs text-slate-500">
+                <StackedCell label="When" className="text-xs text-muted-foreground">
                   <TimeStamp value={e.created_at} format="datetime" />
                 </StackedCell>
               </StackedRow>

@@ -1,21 +1,29 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { HUE } from "@/lib/jobs/status-hue";
 import type { JobStatsResponse } from "@/lib/jobs/types";
 
 export function StatCard({
   label,
   value,
-  valueClass = "text-slate-900",
+  valueClass,
 }: {
   label: string;
   value: React.ReactNode;
   valueClass?: string;
 }) {
   return (
-    <Card>
-      <CardContent className="py-4">
-        <p className={`text-2xl font-bold ${valueClass}`}>{value}</p>
-        <p className="text-sm text-slate-500">{label}</p>
+    <Card className="gap-2 py-5">
+      <CardContent className="px-5">
+        <p className="font-mono text-[11.5px] tracking-[0.06em] text-muted-foreground uppercase">{label}</p>
+        <p
+          className={cn(
+            "mt-2 text-2xl font-bold tracking-[-0.03em] text-foreground [overflow-wrap:anywhere]",
+            valueClass
+          )}
+        >
+          {value}
+        </p>
       </CardContent>
     </Card>
   );

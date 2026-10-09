@@ -7,7 +7,7 @@ import {
   StackedRow,
   StackedTable,
 } from "@/components/admin/stacked-table";
-import { EmptyState } from "@/components/admin/admin-page";
+import { EmptyState } from "@/components/admin/admin-states";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { ClampedName } from "@/components/common/clamped-name";
@@ -50,7 +50,7 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
             <StackedCell label="Owner">
               <Link
                 href={`/admin/users/${job.user_id}`}
-                className="break-all text-xs text-slate-600 hover:underline"
+                className="break-all text-xs text-muted-foreground hover:underline"
               >
                 {job.user_id}
               </Link>
@@ -61,10 +61,10 @@ export function AdminJobsTable({ jobs }: { jobs: Job[] }) {
             <StackedCell label="Status">
               <JobStatusBadge status={displayStatus(job)} />
             </StackedCell>
-            <StackedCell label="Slurm ID" className="text-xs text-slate-500">
+            <StackedCell label="Slurm ID" className="text-xs text-muted-foreground">
               {job.slurm_job_id ?? "—"}
             </StackedCell>
-            <StackedCell label="Submitted" className="text-xs text-slate-500">
+            <StackedCell label="Submitted" className="text-xs text-muted-foreground">
               <TimeStamp value={job.created_at} format="datetime" />
             </StackedCell>
           </StackedRow>

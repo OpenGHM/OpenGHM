@@ -5,7 +5,7 @@ import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * A search box drawn like the Data Repository's: a rounded field with a
+ * A search box drawn like the Data Repository's controls: a quiet rounded field with a
  * magnifier and, once something is typed, a Clear button. Escape clears it.
  * The Workspace lists use it to filter the rows they have already loaded as you
  * type; nothing is sent anywhere.
@@ -29,7 +29,7 @@ export function SearchField({
   return (
     <div
       className={cn(
-        "flex h-10.5 min-w-0 items-center gap-2.5 rounded-xl border bg-card px-3 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none",
+        "flex h-[46px] min-w-0 items-center gap-2.5 rounded-[11px] bg-muted px-3.5 transition-shadow focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none",
         className
       )}
     >

@@ -43,28 +43,37 @@ describe("CatalogueCard for a model snapshot", () => {
     onlyLink("Global Storage Run", "/repository/snap-1");
   });
 
-  it("has no View details, Download or Cite action", () => {
+  it("has no Download or Cite action, and a View details button that is only decoration for the title link", () => {
     renderCard(snapshotItem());
-    expect(screen.queryByText(/View details|Download|Cite/)).toBeNull();
+    expect(screen.queryByText(/Download|Cite/)).toBeNull();
     expect(screen.queryByRole("link", { name: /View details|Download|Cite/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /View details/ })).toBeNull();
+    const view = screen.getByText("View details →");
+    expect(view.getAttribute("aria-hidden")).toBe("true");
+    expect(view.className).toContain("pointer-events-none");
+    expect(view.className).toContain("bg-primary");
+    expect(view.className).toContain("group-hover/card:bg-primary-hover");
+    expect(view.className).toContain("group-has-[a:focus-visible]/card:bg-primary-hover");
+    expect(view.closest("a, button")).toBeNull();
   });
 
-  it("shows the Model Snapshot badge as an outlined label with a brand dot, the mono version and licence line, and the tags", () => {
+  it("shows the Model Snapshot badge as a pill in the brand tint, the mono version and licence line, and the tags", () => {
     renderCard(snapshotItem());
     const badge = screen.getByText("Model Snapshot");
-    expect(badge.className).toContain("border-border");
-    expect(badge.querySelector(".bg-primary")).not.toBeNull();
+    expect(badge.className).toContain("rounded-full");
+    expect(badge.className).toContain("bg-secondary");
     const line = screen.getByText("WBM 22.1.1 · GPL-3.0-only");
     expect(line.className).toContain("font-mono");
     expect(screen.getByText("Publication")).toBeTruthy();
     expect(screen.getByText("Climate forcing")).toBeTruthy();
   });
 
-  it("shows Authors, Coverage and Resolution with the values in mono", () => {
+  it("shows Authors, Coverage and Resolution in grey boxes, with the coverage and resolution values in mono", () => {
     renderCard(snapshotItem());
     for (const label of ["Authors", "Coverage", "Resolution"]) {
-      expect(screen.getByText(label).className).toContain("uppercase");
+      expect(screen.getByText(label).parentElement?.className).toContain("bg-muted");
     }
+    expect(screen.getByText("Ada Hydro +1").className).not.toContain("font-mono");
     expect(screen.getByText("Ada Hydro +1").title).toBe("Ada Hydro, Bo Flow");
     expect(screen.getByText("2000–2009").className).toContain("font-mono");
     expect(screen.getByText("5 arc-min").className).toContain("font-mono");
@@ -127,9 +136,9 @@ describe("CatalogueCard for a model input", () => {
     onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });
 
-  it("shows the Model Input badge in the info tint, datasets and networks, and distinct resolutions", () => {
+  it("shows the Model Input badge in the compute tint, datasets and networks, and distinct resolutions", () => {
     renderCard(modelInputItem());
-    expect(screen.getByText("Model Input").querySelector(".bg-compute")).not.toBeNull();
+    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
     expect(screen.getByText("3 datasets · 3 networks · CC-BY-4.0")).toBeTruthy();
     expect(screen.getByText("5 arc-min, 30 arc-sec")).toBeTruthy();
     expect(screen.getByText("Climatological")).toBeTruthy();
@@ -304,14 +313,13 @@ describe("CatalogueCard layout", () => {
     expect(title.className).not.toContain("focus-visible:ring");
   });
 
-  it.each(["list", "grid"] as const)("lifts, deepens its shadow and tints its border on hover in the %s view, the lift only with motion allowed", (view) => {
+  it.each(["list", "grid"] as const)("lifts and deepens its shadow on hover in the %s view, the lift only with motion allowed", (view) => {
     const { container } = renderCard(snapshotItem(), [], view);
     const card = container.firstElementChild!;
     expect(card.className).toContain("group/card");
     expect(card.className).toContain("motion-safe:hover:-translate-y-0.5");
-    expect(card.className).toContain("hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)]");
-    expect(card.className).toContain("hover:border-foreground/20");
-    expect(card.className).toContain("transition-[translate,box-shadow,border-color]");
+    expect(card.className).toContain("hover:shadow-lift");
+    expect(card.className).toContain("transition-[translate,box-shadow]");
     expect(card.className).not.toContain("motion-reduce:transition-none");
     expect(card.className).not.toMatch(/(^|\s)hover:-translate-y/);
   });
@@ -322,24 +330,6 @@ describe("CatalogueCard layout", () => {
     expect(heading.className).not.toContain("text-primary");
     expect(heading.className).not.toContain("transition-colors");
     expect(heading.className).not.toContain("underline");
-  });
-
-  it.each(["list", "grid"] as const)("shows a decorative arrow in the map panel's corner on hover or focus in the %s view", (view) => {
-    const { container } = renderCard(snapshotItem(), [], view);
-    const arrow = container.querySelector("span[aria-hidden='true'].size-8")!;
-    expect(arrow).not.toBeNull();
-    expect(arrow.className).toContain("pointer-events-none");
-    expect(arrow.className).toContain("opacity-0");
-    expect(arrow.className).toContain("group-hover/card:opacity-100");
-    expect(arrow.className).toContain("group-has-[a:focus-visible]/card:opacity-100");
-    expect(arrow.className).toContain("motion-safe:translate-y-1");
-    expect(arrow.className).toContain("motion-safe:group-hover/card:translate-y-0");
-    expect(arrow.className).toContain("top-3");
-    expect(arrow.className).toContain("right-3");
-    expect(arrow.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
-    expect(arrow.closest("a, button")).toBeNull();
-    expect(arrow.querySelector("a, button")).toBeNull();
-    expect(container.querySelectorAll("a")).toHaveLength(1);
   });
 
   it("scales the map only, the corner label and the panel frame staying put", () => {
@@ -364,16 +354,17 @@ describe("CatalogueCard layout", () => {
     expect(screen.getByText("Ada Hydro +1").className).toContain("break-words");
   });
 
-  it("puts the map panel beside the content from md and below it on a phone", () => {
+  it("puts the map tile on the left from md and above the content on a phone", () => {
     const { container } = renderCard(snapshotItem());
     const card = container.firstElementChild!;
     expect(card.className).toContain("md:flex-row");
-    // The panel comes last in the document, so it sits below the content on a phone.
-    const panel = card.lastElementChild!;
-    expect(panel.querySelector("svg")).not.toBeNull();
-    expect(panel.className).toContain("h-36");
-    expect(panel.className).toContain("md:w-[260px]");
-    expect(card.firstElementChild?.querySelector("svg[role='img']")).toBeNull();
+    // The tile comes first in the document, so it sits above the content on a phone.
+    const tile = card.firstElementChild!;
+    expect(tile.querySelector("svg")).not.toBeNull();
+    expect(tile.className).toContain("rounded-2xl");
+    expect(tile.className).toContain("h-44");
+    expect(tile.className).toContain("md:w-[260px]");
+    expect(card.lastElementChild?.querySelector("svg[role='img']")).toBeNull();
   });
 
   it("uses no raw colour", () => {
@@ -412,17 +403,19 @@ describe("CatalogueCard in the grid view", () => {
   it("shows the map first, then the badge, the title and the compact coverage line", () => {
     const { container } = renderCard(snapshotItem(), [], "grid");
     const card = container.firstElementChild!;
-    expect(card.firstElementChild?.className).toContain("h-[150px]");
+    expect(card.firstElementChild?.className).toContain("h-40");
+    expect(card.firstElementChild?.className).toContain("rounded-2xl");
     expect(card.firstElementChild?.querySelector("svg[role='img']")).not.toBeNull();
-    expect(screen.getByText("Model Snapshot").className).toContain("border-border");
+    expect(screen.getByText("Model Snapshot").className).toContain("bg-secondary");
     expect(screen.getByRole("heading", { level: 3 }).className).toContain("line-clamp-3");
     expect(screen.getByText("2000–2009 · 5 arc-min").className).toContain("font-mono");
   });
 
-  it("has exactly one link, the title, and no action buttons, keywords or Cite", () => {
+  it("has exactly one link, the title, and no action buttons, keywords or Cite, only a decorative View", () => {
     renderCard(snapshotItem(), [], "grid");
     onlyLink("Global Storage Run", "/repository/snap-1");
-    expect(screen.queryByText(/View|Download|Cite/)).toBeNull();
+    expect(screen.getByText("View →").getAttribute("aria-hidden")).toBe("true");
+    expect(screen.queryByText(/Download|Cite/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByText("Publication")).toBeNull();
   });
@@ -432,7 +425,7 @@ describe("CatalogueCard in the grid view", () => {
     const card = container.firstElementChild!;
     expect(card.className).toContain("relative");
     expect(card.className).toContain("cursor-pointer");
-    expect(card.className).toContain("hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)]");
+    expect(card.className).toContain("hover:shadow-lift");
     expect(card.className).toContain("has-[a:focus-visible]:ring-[3px]");
     const title = screen.getByRole("link");
     expect(title.className).toContain("after:absolute");
@@ -447,7 +440,7 @@ describe("CatalogueCard in the grid view", () => {
 
   it("describes a model input the same way", () => {
     renderCard(modelInputItem(), [], "grid");
-    expect(screen.getByText("Model Input").querySelector(".bg-compute")).not.toBeNull();
+    expect(screen.getByText("Model Input").className).toContain("bg-compute/10");
     expect(screen.getByText("Climatological · 5 arc-min, 30 arc-sec")).toBeTruthy();
     onlyLink("Ancillary Data v1", "/repository/model-inputs/mi-1");
   });

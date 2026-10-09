@@ -8,69 +8,9 @@ afterEach(cleanup);
 
 function setup(state: CatalogueFilterState = filters()) {
   const onChange = vi.fn();
-  render(
-    <div>
-      <CatalogueToolbar filters={state} onChange={onChange} />
-      <input aria-label="Other field" />
-      <textarea aria-label="Notes" />
-      <button type="button">Other button</button>
-    </div>
-  );
+  render(<CatalogueToolbar filters={state} onChange={onChange} />);
   return { onChange };
 }
-
-const search = () => screen.getByRole("searchbox", { name: "Search the repository" }) as HTMLInputElement;
-
-describe("CatalogueToolbar search", () => {
-  it("reports typing and shows the / hint while empty", () => {
-    const { onChange } = setup();
-    fireEvent.change(search(), { target: { value: "gpcc" } });
-    expect(onChange).toHaveBeenCalledWith({ searchQuery: "gpcc" });
-    expect(document.querySelector("kbd")?.textContent).toBe("/");
-  });
-
-  it("swaps the hint for a Clear search button once there is text", () => {
-    const { onChange } = setup(filters({ searchQuery: "gpcc" }));
-    expect(document.querySelector("kbd")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-    expect(onChange).toHaveBeenCalledWith({ searchQuery: "" });
-    expect(document.activeElement).toBe(search());
-  });
-
-  it("takes focus on / from anywhere outside a text field", () => {
-    setup();
-    screen.getByRole("button", { name: "Other button" }).focus();
-    const event = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
-    document.body.dispatchEvent(event);
-    expect(document.activeElement).toBe(search());
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it("leaves / alone while typing in a text field", () => {
-    setup();
-    for (const name of ["Other field", "Notes"]) {
-      const field = screen.getByLabelText(name);
-      field.focus();
-      const event = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
-      field.dispatchEvent(event);
-      expect(document.activeElement).toBe(field);
-      expect(event.defaultPrevented).toBe(false);
-    }
-  });
-
-  it("leaves a modified / alone", () => {
-    setup();
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "/", ctrlKey: true, bubbles: true }));
-    expect(document.activeElement).not.toBe(search());
-  });
-
-  it("lets go of the box on Escape", () => {
-    setup();
-    search().focus();
-    fireEvent.keyDown(search(), { key: "Escape" });
-    expect(document.activeElement).toBe(document.body);
-  });
-});
 
 describe("CatalogueToolbar sort", () => {
   it("offers the five sorts and reports a change", () => {

@@ -26,7 +26,7 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
 
   if (total === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
         No jobs yet. They will show here as people run simulations.
       </div>
     );
@@ -34,7 +34,7 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
 
   return (
     <div className="space-y-3">
-      <div className="flex h-4 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="flex h-4 w-full overflow-hidden rounded-full bg-muted">
         {nonZero.map((item) => (
           <div
             key={item.status}
@@ -51,8 +51,8 @@ export function StatusBreakdownChart({ items, total }: { items: StatusCount[]; t
               className="size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: COLORS[item.status] ?? FALLBACK }}
             />
-            <span className="text-slate-600">{labelFor(item.status)}</span>
-            <span className="ml-auto font-medium text-slate-900">{item.count}</span>
+            <span className="text-muted-foreground">{labelFor(item.status)}</span>
+            <span className="ml-auto font-mono font-medium text-foreground">{item.count}</span>
           </div>
         ))}
       </div>

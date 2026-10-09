@@ -19,7 +19,8 @@ import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { LeaveDraftDialog } from "@/components/workspace/leave-draft-dialog";
 import { NewDraftStatus, SaveDraftButton } from "@/components/workspace/new-draft-controls";
-import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { PageBody } from "@/components/layout/page-hero";
+import { PageHeader, draftBreadcrumb } from "@/components/workspace/page-header";
 import { SaveStatus } from "@/components/workspace/save-status";
 import { WizardLayout } from "@/components/workspace/wizard-layout";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
@@ -636,10 +637,9 @@ function WizardBody({
     );
 
   return (
-    <main className={WORKSPACE_MAIN}>
+    <>
       <PageHeader
-        wide
-        top={<DraftBreadcrumb current={name} />}
+        breadcrumb={draftBreadcrumb(name)}
         title={name}
         badge={
           isNew ? (
@@ -651,34 +651,169 @@ function WizardBody({
           )
         }
         meta={
-          <p className="mt-2.5 min-w-0 text-sm text-muted-foreground">
-            <Link
-              href={source.href}
-              title={source.title}
-              className={`${clampClass(1)} rounded underline-offset-2 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50`}
-            >
-              Based on {source.title}
-            </Link>
-          </p>
+          <Link
+            href={source.href}
+            title={source.title}
+            className={`${clampClass(1)} min-w-0 rounded text-[15px] underline-offset-2 outline-none transition-colors hover:text-white hover:underline focus-visible:ring-2 focus-visible:ring-hero-eyebrow`}
+          >
+            Based on {source.title}
+          </Link>
         }
-        aside={
-          isNew ? (
-            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-              <NewDraftStatus
-                state={newDraft.saving ? "saving" : newDraft.saved && !dirty ? "saved" : "unsaved"}
-              />
-              <Button asChild variant="ghost" className="min-h-10 sm:min-h-9">
-                <Link href="/workspace">Cancel</Link>
+      >
+        {newDraft.error?.reason === "session_expired" && <SessionExpiredBanner className="w-full sm:max-w-md" />}
+        {newDraft.error?.reason === "error" && (
+          <ActionError>Couldn&apos;t save the draft: {newDraft.error.message}</ActionError>
+        )}
+        {deleteExpired && <SessionExpiredBanner className="w-full sm:max-w-md" />}
+        {deleteError && <ActionError>{deleteError}</ActionError>}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <DraftProgress hrefFor={hrefFor} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
+          <div className="flex flex-wrap items-center gap-3">
+            {isNew ? (
+              <>
+                <NewDraftStatus
+                  state={newDraft.saving ? "saving" : newDraft.saved && !dirty ? "saved" : "unsaved"}
+                />
+                <Button asChild variant="on-dark" className="min-h-10 sm:min-h-9">
+                  <Link href="/workspace">Cancel</Link>
+                </Button>
+                <SaveDraftButton variant="on-dark" saving={saving} disabled={saveDisabled} onClick={saveNow} />
+              </>
+            ) : (
+              <>
+                <SaveStatus
+                  state={state}
+                  onRetry={saver.retry}
+                  onGoToField={(field) => goTo(FIELD_STEP[field], field)}
+                />
+                <SaveDraftButton
+                  variant="on-dark"
+                  saving={saving}
+                  disabled={saveDisabled}
+                  reason={saveReason}
+                  label={saveLabel}
+                  onClick={saveNow}
+                />
+                <JobDeleteButton
+                  jobId={jobId}
+                  isDraft
+                  workDir={null}
+                  remoteJobDir={null}
+                  files={null}
+                  onOpen={() => {
+                    setDeleteError(null);
+                    setDeleteExpired(false);
+                  }}
+                  onOpenChange={(open) => {
+                    // Nothing is saved behind a Delete that may go through. A
+                    // dialog that closes without deleting gives saving back.
+                    if (open) suspend();
+                    else if (!deleted.current) resume();
+                  }}
+                  onDeleted={() => {
+                    deleted.current = true;
+                    suspend();
+                    router.push("/workspace");
+                  }}
+                  onError={setDeleteError}
+                  onSessionExpired={() => setDeleteExpired(true)}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </PageHeader>
+
+      <PageBody className="flex-1">
+        <WizardLayout
+          step={step}
+          facts={{ climatologyAvailable: ctx.dataset?.climatologyAvailable === true }}
+        >
+          {state.kind === "session-expired" && <SessionExpiredBanner className="mb-5 shadow-card" />}
+          {state.kind === "conflict" && (
+            <div
+              role="alert"
+              className="mb-5 flex flex-col gap-3 rounded-2xl border border-warning/30 bg-card p-4 text-sm text-warning shadow-card sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="flex items-start gap-2 font-medium">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                This snapshot draft was submitted or changed elsewhere
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => router.refresh()}
+                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
+              >
+                Reload
               </Button>
-              <SaveDraftButton saving={saving} disabled={saveDisabled} onClick={saveNow} />
             </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-              <SaveStatus
-                state={state}
-                onRetry={saver.retry}
-                onGoToField={(field) => goTo(FIELD_STEP[field], field)}
+          )}
+          {state.kind === "gone" && (
+            <div
+              role="alert"
+              className="mb-5 flex flex-col gap-3 rounded-2xl border border-warning/30 bg-card p-4 text-sm text-warning shadow-card sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="flex items-start gap-2 font-medium">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                This draft was deleted
+              </p>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
+              >
+                <Link href="/workspace">Go to My snapshot drafts</Link>
+              </Button>
+            </div>
+          )}
+
+          <>
+            {step === "run" && (
+              <DraftRunStep
+                datasetId={datasetId}
+                datasetTitle={initialJob.dataset_title}
+                ctx={ctx}
+                parameters={local.parameters}
+                slurm={local.slurm}
+                recommended={recommended}
+                modelInputId={local.modelInputId}
+                resolvedModelInput={modelInput}
+                name={local.name}
+                description={local.description}
+                autoFocusName={focusNameOnOpen}
+                onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
+                onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
+                serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
+                startRefusal={isNew ? null : saver.startRefusal}
+                onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
+                onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
+                onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
+                disabled={submitting}
               />
+            )}
+            {step === "review" && (
+              <DraftReviewStep
+                datasetId={datasetId}
+                datasetTitle={initialJob.dataset_title}
+                ctx={ctx}
+                local={local}
+                recommended={recommended}
+                onEditStep={goTo}
+                disabled={submitting}
+                publishedAnswer={publishedState}
+                submitArea={submitCard(publishedState.status === "answered")}
+              />
+            )}
+          </>
+
+          {/* Never blocked: a step with problems says so on the strip. Run
+              settings has no Back (the browser's goes to Start from), Review no
+              Next. */}
+          <div className="mt-8 flex items-center justify-between gap-3">
+            {step === "run" ? (
               <SaveDraftButton
                 saving={saving}
                 disabled={saveDisabled}
@@ -686,166 +821,27 @@ function WizardBody({
                 label={saveLabel}
                 onClick={saveNow}
               />
-              <JobDeleteButton
-                jobId={jobId}
-                isDraft
-                workDir={null}
-                remoteJobDir={null}
-                files={null}
-                onOpen={() => {
-                  setDeleteError(null);
-                  setDeleteExpired(false);
-                }}
-                onOpenChange={(open) => {
-                  // Nothing is saved behind a Delete that may go through. A
-                  // dialog that closes without deleting gives saving back.
-                  if (open) suspend();
-                  else if (!deleted.current) resume();
-                }}
-                onDeleted={() => {
-                  deleted.current = true;
-                  suspend();
-                  router.push("/workspace");
-                }}
-                onError={setDeleteError}
-                onSessionExpired={() => setDeleteExpired(true)}
-              />
-            </div>
-          )
-        }
-      >
-        {newDraft.error?.reason === "session_expired" && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
-        {newDraft.error?.reason === "error" && (
-          <div className="mt-4">
-            <ActionError>Couldn&apos;t save the draft: {newDraft.error.message}</ActionError>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={() => goTo(DRAFT_STEPS[index - 1])}
+                className="min-h-10"
+              >
+                <ArrowLeft aria-hidden="true" />
+                Back
+              </Button>
+            )}
+            {step !== "review" && (
+              <Button type="button" onClick={() => goTo(DRAFT_STEPS[index + 1])} className="min-h-10">
+                Next
+                <ArrowRight aria-hidden="true" />
+              </Button>
+            )}
           </div>
-        )}
-        {deleteExpired && <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />}
-        {deleteError && (
-          <div className="mt-4">
-            <ActionError>{deleteError}</ActionError>
-          </div>
-        )}
-        <DraftProgress hrefFor={hrefFor} current={step} problemSteps={problemSteps} onSelectStep={goTo} />
-      </PageHeader>
-
-      <WizardLayout
-        step={step}
-        facts={{ climatologyAvailable: ctx.dataset?.climatologyAvailable === true }}
-        className="py-6 sm:py-8"
-      >
-        {state.kind === "session-expired" && <SessionExpiredBanner className="mb-6" />}
-        {state.kind === "conflict" && (
-          <div
-            role="alert"
-            className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
-          >
-            <p className="flex items-start gap-2 font-medium">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              This snapshot draft was submitted or changed elsewhere
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => router.refresh()}
-              className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
-            >
-              Reload
-            </Button>
-          </div>
-        )}
-        {state.kind === "gone" && (
-          <div
-            role="alert"
-            className="mb-6 flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between"
-          >
-            <p className="flex items-start gap-2 font-medium">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              This draft was deleted
-            </p>
-            <Button
-              asChild
-              size="sm"
-              variant="outline"
-              className="min-h-10 shrink-0 border-warning/30 bg-background text-warning hover:bg-warning/10 sm:min-h-8"
-            >
-              <Link href="/workspace">Go to My snapshot drafts</Link>
-            </Button>
-          </div>
-        )}
-
-        <>
-          {step === "run" && (
-            <DraftRunStep
-              datasetId={datasetId}
-              datasetTitle={initialJob.dataset_title}
-              ctx={ctx}
-              parameters={local.parameters}
-              slurm={local.slurm}
-              recommended={recommended}
-              modelInputId={local.modelInputId}
-              resolvedModelInput={modelInput}
-              name={local.name}
-              description={local.description}
-              autoFocusName={focusNameOnOpen}
-              onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
-              onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
-              serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
-              startRefusal={isNew ? null : saver.startRefusal}
-              onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
-              onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
-              onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
-              disabled={submitting}
-            />
-          )}
-          {step === "review" && (
-            <DraftReviewStep
-              datasetId={datasetId}
-              datasetTitle={initialJob.dataset_title}
-              ctx={ctx}
-              local={local}
-              recommended={recommended}
-              onEditStep={goTo}
-              disabled={submitting}
-              publishedAnswer={publishedState}
-              submitArea={submitCard(publishedState.status === "answered")}
-            />
-          )}
-        </>
-
-        {/* Never blocked: a step with problems says so on the strip. Run
-            settings has no Back (the browser's goes to Start from), Review no
-            Next. */}
-        <div className="mt-8 flex items-center justify-between gap-3">
-          {step === "run" ? (
-            <SaveDraftButton
-              saving={saving}
-              disabled={saveDisabled}
-              reason={saveReason}
-              label={saveLabel}
-              onClick={saveNow}
-            />
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => goTo(DRAFT_STEPS[index - 1])}
-              className="min-h-10"
-            >
-              <ArrowLeft aria-hidden="true" />
-              Back
-            </Button>
-          )}
-          {step !== "review" && (
-            <Button type="button" onClick={() => goTo(DRAFT_STEPS[index + 1])} className="min-h-10">
-              Next
-              <ArrowRight aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-      </WizardLayout>
+        </WizardLayout>
+      </PageBody>
 
       <LeaveDraftDialog
         stored={!isNew}
@@ -865,6 +861,6 @@ function WizardBody({
         }}
         onKeep={guard.stay}
       />
-    </main>
+    </>
   );
 }

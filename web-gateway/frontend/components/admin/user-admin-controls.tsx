@@ -188,7 +188,7 @@ export function RunPermissionControl({
         onClick={() => setOpen(true)}
         disabled={disabled}
         className={`relative inline-flex h-6 w-11 shrink-0 after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] items-center rounded-full outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 ${
-          shown ? "bg-primary" : "bg-slate-300"
+          shown ? "bg-primary" : "bg-input"
         }`}
       >
         <span

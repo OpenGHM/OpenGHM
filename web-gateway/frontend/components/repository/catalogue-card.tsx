@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/common/time-stamp";
@@ -21,35 +21,37 @@ import { CoverageThumbnail } from "./coverage-thumbnail";
 import { KindBadge } from "./kind-badge";
 
 /** The grid the cards sit in, wherever they are listed in the grid view. */
-export const CARD_GRID_CLASS = "grid gap-3.5 md:grid-cols-2 xl:grid-cols-3";
+export const CARD_GRID_CLASS = "grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]";
 
 /**
  * The surface of a card the whole of which is one control (a link here, a
  * button in the Start screen's snapshot picker, which borrows it). It is
  * `relative` for the control's overlay and the `group/card` the hover effects
- * hang from: on hover it lifts 2px, its shadow deepens and its border takes a
- * tint of the brand (the lift is `motion-safe:`; colour and shadow still
- * change under reduced motion).
+ * hang from: on hover it lifts 2px and its shadow deepens (the lift is
+ * `motion-safe:`; the shadow still changes under reduced motion).
  */
 export const CARD_SURFACE =
-  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-xl border py-0 shadow-none transition-[translate,box-shadow,border-color] duration-300 ease-out hover:border-foreground/20 hover:shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] motion-safe:hover:-translate-y-0.5";
+  "group/card relative cursor-pointer gap-0 overflow-hidden rounded-card border-0 py-0 shadow-card transition-[translate,box-shadow] duration-300 ease-out hover:shadow-lift motion-safe:hover:-translate-y-0.5";
 
 /** `CARD_SURFACE`, and the focus ring on the card itself when the title link has keyboard focus. */
 const CARD = `${CARD_SURFACE} has-[a:focus-visible]:ring-[3px] has-[a:focus-visible]:ring-ring/50`;
 
 /**
- * The corner mark of a map panel: a round chip with an arrow that fades in
- * (and slides into place, under `motion-safe:`) when the card is hovered or its
- * link has keyboard focus. It is decorative (the card is the link), so it is
- * `aria-hidden` and takes no pointer events.
+ * The card's call to action. It looks like the design's primary button, but the
+ * card is the link (the title's stretched link covers it), so it is `aria-hidden`
+ * text that takes no pointer events and darkens when the card is hovered or
+ * its link has keyboard focus.
  */
-function ArrowChip() {
+function ViewButton({ children, className }: { children: string; className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute top-3 right-3 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-card text-foreground opacity-0 shadow-sm transition-[opacity,translate] delay-75 duration-200 ease-out group-hover/card:opacity-100 group-has-[a:focus-visible]/card:opacity-100 motion-safe:translate-y-1 motion-safe:group-hover/card:translate-y-0 motion-safe:group-has-[a:focus-visible]/card:translate-y-0"
+      className={cn(
+        "pointer-events-none inline-flex items-center rounded-[11px] bg-primary px-4 py-[9px] text-[13px] font-semibold whitespace-nowrap text-primary-foreground transition-colors group-hover/card:bg-primary-hover group-has-[a:focus-visible]/card:bg-primary-hover motion-reduce:transition-none",
+        className
+      )}
     >
-      <ArrowUpRight className="size-4" />
+      {children}
     </span>
   );
 }
@@ -80,7 +82,7 @@ function TagChip({
       >
         <span
           className={cn(
-            "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-[11.5px] font-medium transition-colors group-focus-visible/tag:ring-[3px] group-focus-visible/tag:ring-ring/50 motion-reduce:transition-none",
+            "inline-flex max-w-full items-center gap-1 rounded-full border px-[9px] py-[3px] text-[11.5px] font-medium transition-colors group-focus-visible/tag:ring-[3px] group-focus-visible/tag:ring-ring/50 motion-reduce:transition-none",
             selected
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-transparent text-foreground group-hover/tag:border-foreground/30"
@@ -127,7 +129,7 @@ function KeywordChip({
       >
         <span
           className={cn(
-            "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[11.5px] transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50 motion-reduce:transition-none",
+            "inline-flex max-w-full items-center gap-1 rounded-full border px-[9px] py-[3px] font-mono text-[11.5px] transition-colors group-focus-visible/keyword:ring-[3px] group-focus-visible/keyword:ring-ring/50 motion-reduce:transition-none",
             selected
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-muted/60 text-foreground/80 group-hover/keyword:border-foreground/30 group-hover/keyword:text-foreground"
@@ -143,9 +145,9 @@ function KeywordChip({
 
 function MetaCell({ label, title, mono = false, children }: { label: string; title?: string; mono?: boolean; children: React.ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-[11px] tracking-wider text-muted-foreground uppercase">{label}</dt>
-      <dd title={title} className={cn("text-[13px] break-words text-foreground", mono && "font-mono")}>
+    <div className="flex min-w-0 flex-col gap-[3px] rounded-xl bg-muted px-3 py-2.5">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd title={title} className={cn("text-[13px] font-medium break-words text-foreground", mono && "font-mono")}>
         {children}
       </dd>
     </div>
@@ -212,18 +214,20 @@ export function CatalogueCard({
 
   if (grid) {
     return (
-      <Card className={cn(CARD, "h-full")}>
-        <div className="relative h-[150px] shrink-0 border-b bg-slate-100">
+      <Card className={cn(CARD, "h-full p-2")}>
+        <div className="relative h-40 shrink-0 overflow-hidden rounded-2xl bg-accent">
           <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
-          <ArrowChip />
         </div>
-        <div className="flex flex-1 flex-col gap-2.5 p-4">
+        <div className="flex flex-1 flex-col gap-2.5 px-2.5 pt-3.5 pb-2">
           <KindBadge kind={item.kind} />
-          <TitleLink href={href} name={about.name} className="text-base" />
+          <TitleLink href={href} name={about.name} className="text-[15.5px] tracking-[-0.015em]" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
-          <p className="mt-auto border-t pt-3 text-right text-xs text-muted-foreground">
-            <TimeStamp value={about.datePublished} format="date" />
-          </p>
+          <div className="mt-auto flex items-center gap-1.5 pt-2">
+            <ViewButton className="px-3.5 py-2">View →</ViewButton>
+            <span className="ml-auto text-xs text-muted-foreground">
+              <TimeStamp value={about.datePublished} format="date" />
+            </span>
+          </div>
         </div>
       </Card>
     );
@@ -233,21 +237,34 @@ export function CatalogueCard({
   const keywords = cardKeywords(item);
 
   return (
-    <Card className={cn(CARD, "md:flex-row")}>
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:px-6 md:pt-[22px] md:pb-[18px]">
+    <Card className={cn(CARD, "gap-2.5 p-2.5 md:flex-row")}>
+      <div className="relative h-44 shrink-0 overflow-hidden rounded-2xl bg-accent md:h-auto md:min-h-[200px] md:w-[260px]">
+        <CoverageThumbnail
+          box={toBox(item)}
+          aspect="wide"
+          className="absolute inset-0 aspect-auto rounded-none border-0 md:hidden"
+        />
+        <CoverageThumbnail
+          box={toBox(item)}
+          aspect="tall"
+          className="absolute inset-0 hidden aspect-auto rounded-none border-0 md:block"
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-3 px-3.5 pt-3.5 pb-2.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <KindBadge kind={item.kind} />
           <span className="font-mono text-[11.5px] text-muted-foreground">{contentsLine(item)}</span>
-          <span className="text-[12.5px] text-muted-foreground sm:ml-auto">
+          <span className="text-xs text-muted-foreground sm:ml-auto">
             Published <TimeStamp value={about.datePublished} format="date" />
           </span>
         </div>
 
-        <TitleLink href={href} name={about.name} className="text-lg" />
+        <TitleLink href={href} name={about.name} className="text-[19px] tracking-[-0.02em]" />
 
-        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">{about.description}</p>
+        <p className="line-clamp-2 text-sm leading-[1.55] text-muted-foreground">{about.description}</p>
 
-        <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 border-y py-3">
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
           <MetaCell label="Authors" title={about.creator.map((c) => c.name).join(", ")}>
             {creator ? `${creator.first}${creator.more > 0 ? ` +${creator.more}` : ""}` : "—"}
           </MetaCell>
@@ -259,34 +276,26 @@ export function CatalogueCard({
           </MetaCell>
         </dl>
 
-        <ul className="flex flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5" aria-label="Tags and keywords">
-          {about.tags.map((tag) => (
-            <TagChip key={tag} tag={tag} selected={selectedTags.includes(tag)} onToggle={onToggleTag} />
-          ))}
-          {keywords.shown.map((keyword) => (
-            <KeywordChip
-              key={keyword}
-              keyword={keyword}
-              selected={selectedKeywords.includes(keyword)}
-              onToggle={onToggleKeyword}
-            />
-          ))}
-          {keywords.more > 0 && <MoreChip count={keywords.more} hidden={keywords.hidden} />}
-        </ul>
-      </div>
-
-      <div className="relative h-36 shrink-0 border-t bg-slate-100 md:h-auto md:w-[260px] md:border-t-0 md:border-l">
-        <CoverageThumbnail
-          box={toBox(item)}
-          aspect="wide"
-          className="absolute inset-0 aspect-auto rounded-none border-0 md:hidden"
-        />
-        <CoverageThumbnail
-          box={toBox(item)}
-          aspect="tall"
-          className="absolute inset-0 hidden aspect-auto rounded-none border-0 md:block"
-        />
-        <ArrowChip />
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+          <ul
+            className="flex min-w-0 flex-[1_1_200px] flex-wrap items-center gap-x-1.5 gap-y-0 sm:gap-y-1.5"
+            aria-label="Tags and keywords"
+          >
+            {about.tags.map((tag) => (
+              <TagChip key={tag} tag={tag} selected={selectedTags.includes(tag)} onToggle={onToggleTag} />
+            ))}
+            {keywords.shown.map((keyword) => (
+              <KeywordChip
+                key={keyword}
+                keyword={keyword}
+                selected={selectedKeywords.includes(keyword)}
+                onToggle={onToggleKeyword}
+              />
+            ))}
+            {keywords.more > 0 && <MoreChip count={keywords.more} hidden={keywords.hidden} />}
+          </ul>
+          <ViewButton>View details →</ViewButton>
+        </div>
       </div>
     </Card>
   );
@@ -296,14 +305,15 @@ export function CatalogueCard({
 export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView }) {
   if (view === "grid") {
     return (
-      <Card aria-hidden="true" className="h-full gap-0 overflow-hidden rounded-xl border py-0 shadow-none">
-        <Skeleton className="h-[150px] shrink-0 rounded-none" />
-        <div className="flex flex-1 flex-col gap-2.5 p-4">
-          <Skeleton className="h-5 w-24" />
+      <Card aria-hidden="true" className="h-full gap-0 overflow-hidden rounded-card border-0 p-2 shadow-card">
+        <Skeleton className="h-40 shrink-0 rounded-2xl" />
+        <div className="flex flex-1 flex-col gap-2.5 px-2.5 pt-3.5 pb-2">
+          <Skeleton className="h-6 w-28 rounded-full" />
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-3.5 w-32" />
-          <div className="mt-auto flex justify-end border-t pt-3">
+          <div className="mt-auto flex items-center justify-between pt-2">
+            <Skeleton className="h-8 w-20 rounded-[11px]" />
             <Skeleton className="h-3.5 w-20" />
           </div>
         </div>
@@ -311,10 +321,11 @@ export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView 
     );
   }
   return (
-    <Card aria-hidden="true" className="gap-0 overflow-hidden rounded-xl border py-0 shadow-none md:flex-row">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-5 md:px-6">
+    <Card aria-hidden="true" className="gap-2.5 overflow-hidden rounded-card border-0 p-2.5 shadow-card md:flex-row">
+      <Skeleton className="h-44 shrink-0 rounded-2xl md:h-auto md:min-h-[200px] md:w-[260px]" />
+      <div className="flex min-w-0 flex-1 flex-col gap-3 px-3.5 pt-3.5 pb-2.5">
         <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-6 w-28 rounded-full" />
           <Skeleton className="h-3.5 w-36" />
           <Skeleton className="h-3.5 w-28 sm:ml-auto" />
         </div>
@@ -323,18 +334,18 @@ export function CatalogueCardSkeleton({ view = "list" }: { view?: CatalogueView 
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-4/5" />
         </div>
-        <div className="grid grid-cols-3 gap-3 border-y py-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
+        <div className="grid grid-cols-3 gap-2">
+          <Skeleton className="h-14 w-full rounded-xl" />
+          <Skeleton className="h-14 w-full rounded-xl" />
+          <Skeleton className="h-14 w-full rounded-xl" />
         </div>
-        <div className="flex gap-1.5">
-          <Skeleton className="h-5 w-16" />
-          <Skeleton className="h-5 w-14" />
-          <Skeleton className="h-5 w-16" />
+        <div className="flex items-center gap-1.5">
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-5 w-14 rounded-full" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="ml-auto h-9 w-28 rounded-[11px]" />
         </div>
       </div>
-      <Skeleton className="h-36 shrink-0 rounded-none md:h-auto md:w-[260px]" />
     </Card>
   );
 }

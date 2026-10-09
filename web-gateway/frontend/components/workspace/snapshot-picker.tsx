@@ -176,7 +176,7 @@ export function SnapshotPicker({
         {error ? (
           <div
             role="alert"
-            className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-5 sm:flex-row sm:items-center"
+            className="flex flex-col items-start gap-3 rounded-card border border-destructive/30 bg-card p-5 shadow-card sm:flex-row sm:items-center"
           >
             <CircleAlert aria-hidden="true" className="size-5 shrink-0 text-destructive" />
             <div className="min-w-0 flex-1">
@@ -190,7 +190,7 @@ export function SnapshotPicker({
             </Button>
           </div>
         ) : snapshots.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+          <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-border bg-card px-6 py-14 text-center shadow-card">
             <SearchX aria-hidden="true" className="size-10 text-muted-foreground/60" />
             <h3 className="text-lg font-semibold text-foreground">
               {filtered ? "No model snapshots match" : "No model snapshots have been published yet"}

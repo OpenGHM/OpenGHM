@@ -315,13 +315,14 @@ export function DraftSubmitCard({
           <Button
             type="button"
             variant={rerun ? "outline" : "default"}
+            size={rerun ? "default" : "xl"}
             disabled={blocked || stage !== "idle"}
             aria-describedby={blocked ? noteId : undefined}
             onClick={() => void start()}
             className={
               rerun
                 ? "min-h-10 w-full shrink-0 border-warning/40 px-6 text-warning hover:bg-warning/10 hover:text-warning sm:w-auto"
-                : "min-h-10 w-full shrink-0 px-6 font-semibold sm:w-auto"
+                : "w-full shrink-0 sm:w-auto"
             }
           >
             {stage === "flushing" ? (
@@ -417,5 +418,9 @@ export function DraftSubmitCard({
 
   // A rerun sits below the published results, outside the review panel: no
   // "Submit" section of its own.
-  return rerun ? <div className="space-y-4">{body}</div> : <DraftSection title="Submit">{body}</DraftSection>;
+  return rerun ? (
+    <div className="space-y-4 rounded-card border border-border/70 bg-card p-6 shadow-card sm:px-7">{body}</div>
+  ) : (
+    <DraftSection title="Submit">{body}</DraftSection>
+  );
 }

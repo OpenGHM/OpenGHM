@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CardContent } from "@/components/ui/card";
+import { AuthNotice } from "@/components/auth/auth-shell";
 import { safeCallbackUrl } from "@/lib/auth-redirect";
 
 type DevAccount = { label: string; email: string; password: string };
@@ -71,16 +71,10 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   }
 
   return (
-    <CardContent className="space-y-4">
-      {registered && (
-        <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded px-3 py-2">
-          Account created successfully. Please sign in.
-        </p>
-      )}
+    <div className="space-y-5">
+      {registered && <AuthNotice tone="success">Account created successfully. Please sign in.</AuthNotice>}
       {reset && (
-        <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded px-3 py-2">
-          Password reset. Please sign in with your new password.
-        </p>
+        <AuthNotice tone="success">Password reset. Please sign in with your new password.</AuthNotice>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -111,23 +105,23 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
         <p className="text-right text-sm">
           <Link
             href="/auth/forgot-password"
-            className="text-primary hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Forgot password?
           </Link>
         </p>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" className="w-full" disabled={loading}>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" size="xl" className="w-full" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </Button>
       </form>
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-2 text-slate-500">or</span>
+          <span className="bg-card px-3 font-mono tracking-[0.06em] text-muted-foreground">or</span>
         </div>
       </div>
 
@@ -135,6 +129,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
         <Button
           type="button"
           variant="outline"
+          size="xl"
           className="w-full"
           disabled={loading}
           onClick={() => signIn("cilogon", { callbackUrl })}
@@ -144,6 +139,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
       ) : (
         <Button
           variant="outline"
+          size="xl"
           className="w-full opacity-50 cursor-not-allowed"
           disabled
           title="CILogon sign-in is not available on this server"
@@ -153,8 +149,8 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
       )}
 
       {devAccounts.length > 0 && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-2">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+        <div className="space-y-2.5 rounded-xl border border-dashed border-warning/40 bg-warning/5 p-3.5">
+          <p className="font-mono text-xs tracking-[0.06em] text-warning uppercase">
             Dev quick login
           </p>
           <div className="flex gap-2">
@@ -164,7 +160,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="flex-1 border-amber-300 bg-white text-amber-800 hover:bg-amber-100 text-xs"
+                className="flex-1 border-warning/30 text-xs text-warning hover:bg-warning/10 hover:text-warning"
                 disabled={loading}
                 onClick={() => handleDevLogin(acc.email, acc.password)}
               >
@@ -175,7 +171,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
         </div>
       )}
 
-      <p className="text-center text-sm text-slate-600">
+      <p className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
         <Link
           href="/auth/register"
@@ -184,7 +180,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
           Create one
         </Link>
       </p>
-    </CardContent>
+    </div>
   );
 }
 
@@ -192,7 +188,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
 // "use client" itself, and useSearchParams() gets the Suspense boundary it requires.
 export function SignInForm({ devAccounts }: { devAccounts: DevAccount[] }) {
   return (
-    <Suspense fallback={<CardContent><p className="text-sm text-muted-foreground">Loading…</p></CardContent>}>
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
       <SignInFormInner devAccounts={devAccounts} />
     </Suspense>
   );

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdminPage, InlineError } from "@/components/admin/admin-page";
-import { SectionHeader } from "@/components/admin/section-header";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InlineError } from "@/components/admin/admin-states";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { ServerPagination } from "@/components/shared/server-pagination";
 import { fetchAuditLog } from "@/lib/admin/actions";
@@ -21,9 +21,7 @@ export default async function AdminAuditPage({
   const auditLog = auditResult ?? EMPTY_AUDIT;
 
   return (
-    <AdminPage>
-      <SectionHeader title="Audit log" description="Authentication and job activity across the site." />
-
+    <AdminPage title="Audit log" description="Authentication and job activity across the site.">
       <Card>
         <CardHeader>
           <CardTitle>{auditResult === null ? "Events" : `${auditLog.total_count} events`}</CardTitle>

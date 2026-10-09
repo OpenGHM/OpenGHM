@@ -122,7 +122,7 @@ function PreviewBody({
     if (view.code === "preview_unavailable") {
       return (
         <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
-          <AlertCircle className="size-8 text-amber-500" aria-hidden="true" />
+          <AlertCircle className="size-8 text-warning" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
             The preview is unavailable right now. The storage service did not answer.
           </p>
@@ -135,7 +135,7 @@ function PreviewBody({
     }
     return (
       <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
-        <AlertCircle className="size-8 text-amber-500" aria-hidden="true" />
+        <AlertCircle className="size-8 text-warning" aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
           {view.code === "invalid_path"
             ? "That is not a valid file path."
@@ -144,7 +144,7 @@ function PreviewBody({
         <a
           href={rootHref}
           onClick={pushOnPlainClick(rootHref)}
-          className="text-sm text-[#006994] hover:underline"
+          className="text-sm text-primary hover:text-primary-hover hover:underline"
         >
           Back to the root of the tree
         </a>
@@ -160,22 +160,22 @@ function PreviewBody({
   return (
     <div className="space-y-3">
       {preview.truncated && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">
           Showing the first 256 KB of {formatBytes(preview.size)}. Download it for the whole file.
         </p>
       )}
       {preview.text === "" ? (
         <p className="text-sm text-muted-foreground">The file is empty.</p>
       ) : (
-        <div className="flex overflow-hidden rounded-lg border bg-slate-50 font-mono text-xs leading-5">
+        <div className="flex overflow-hidden rounded-[14px] bg-hero font-mono text-xs leading-5">
           <pre
             aria-hidden="true"
             data-testid="line-numbers"
-            className="select-none border-r bg-slate-100 px-3 py-3 text-right text-slate-400"
+            className="select-none border-r border-white/10 bg-white/[0.04] px-3 py-3 text-right text-hero-faint"
           >
             {lines.map((_, i) => i + 1).join("\n")}
           </pre>
-          <pre data-testid="preview-text" className="min-w-0 flex-1 overflow-x-auto px-3 py-3 text-slate-800">
+          <pre data-testid="preview-text" className="min-w-0 flex-1 overflow-x-auto px-3 py-3 text-hero-text">
             {lines.join("\n")}
           </pre>
         </div>

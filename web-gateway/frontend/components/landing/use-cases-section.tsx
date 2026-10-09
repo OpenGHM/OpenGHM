@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { SectionEyebrow, SectionTitle } from "./section-parts";
 
 interface UseCase {
   image: string;
@@ -29,39 +30,39 @@ const USE_CASES: UseCase[] = [
 
 export function UseCasesSection() {
   return (
-    <section className="bg-[#f0f4f8] py-16 lg:py-30">
-      <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-10">
-        <div className="text-center">
-          <span className="mb-4 block text-sm font-bold uppercase tracking-widest text-primary">
-            Who is it for?
-          </span>
-          <h2 className="text-3xl font-extrabold leading-tight sm:text-4xl lg:text-[42px] tracking-tight text-[#0f172a]">
-            Empowering the Research Community
-          </h2>
-        </div>
+    <section className="flex flex-col gap-9">
+      <div className="flex flex-col gap-3.5">
+        <SectionEyebrow>Who is it for?</SectionEyebrow>
+        <SectionTitle>Empowering the Research Community</SectionTitle>
+      </div>
 
-        <div className="mx-auto mt-10 grid max-w-md grid-cols-1 gap-10 md:max-w-none md:grid-cols-3 md:gap-8 lg:mt-16 lg:gap-12">
-          {USE_CASES.map((useCase) => (
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] gap-3.5">
+        {USE_CASES.map((useCase) => (
+          <article
+            key={useCase.title}
+            className="relative flex min-h-[400px] min-w-0 flex-col justify-end overflow-hidden rounded-[24px] bg-hero text-white"
+          >
+            <Image
+              src={useCase.image}
+              alt={useCase.title}
+              fill
+              sizes="(min-width: 1360px) 440px, (min-width: 768px) 33vw, 100vw"
+              className="object-cover"
+            />
             <div
-              key={useCase.title}
-              className="flex min-w-0 flex-col items-center gap-4 text-center lg:gap-6"
-            >
-              <Image
-                src={useCase.image}
-                alt={useCase.title}
-                width={400}
-                height={300}
-                className="aspect-[4/3] w-full rounded-lg bg-slate-200 object-cover shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)]"
-              />
-              <h3 className="text-xl font-bold text-[#0f172a] lg:text-2xl">
+              aria-hidden="true"
+              className="absolute inset-0 bg-gradient-to-b from-hero/0 from-30% to-hero/92"
+            />
+            <div className="relative flex flex-col gap-2.5 p-7">
+              <h3 className="text-[22px] font-[650] tracking-[-0.02em]">
                 {useCase.title}
               </h3>
-              <p className="text-base leading-relaxed text-slate-600">
+              <p className="text-[14.5px] leading-[1.6] text-pretty text-hero-text">
                 {useCase.description}
               </p>
             </div>
-          ))}
-        </div>
+          </article>
+        ))}
       </div>
     </section>
   );

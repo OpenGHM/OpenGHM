@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 const TONES = {
   success: "bg-success/10 text-success",
   primary: "bg-primary/10 text-primary",
-  /** On the dark detail-page hero. */
-  hero: "bg-white/20 text-white",
+  /** On the dark detail-page hero: the design's outlined mono pill. */
+  hero: "border border-white/20 px-[11px] py-[5px] font-mono text-[12.5px] font-normal text-hero-text",
   /** The catalogue card's own chip, outlined and square-cornered, for a card that only shows the tags. */
   outline: "rounded-md border border-border text-foreground",
 } as const;
@@ -37,7 +37,7 @@ export function TagChips({
       {tags.map((tag) => (
         <span
           key={tag}
-          className={cn("max-w-full rounded-full font-medium break-words", TONES[tone], SIZES[size])}
+          className={cn("max-w-full rounded-full font-medium break-words", SIZES[size], TONES[tone])}
         >
           {humanizeTag(tag)}
         </span>

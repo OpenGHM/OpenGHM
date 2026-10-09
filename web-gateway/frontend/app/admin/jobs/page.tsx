@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import { AdminPage, InlineError } from "@/components/admin/admin-page";
-import { SectionHeader } from "@/components/admin/section-header";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InlineError } from "@/components/admin/admin-states";
 import { AdminJobsTable } from "@/components/admin/admin-jobs-table";
 import { ServerPagination } from "@/components/shared/server-pagination";
 import { fetchJobs } from "@/lib/jobs/actions";
@@ -24,12 +24,10 @@ export default async function AdminJobsPage({
   const jobData = jobsResult ?? EMPTY_JOBS;
 
   return (
-    <AdminPage>
-      <SectionHeader title="Jobs" description="Snapshot drafts across every user." />
-
+    <AdminPage title="Jobs" description="Snapshot drafts across every user.">
       {userId && (
-        <div className="flex flex-wrap items-center gap-x-2 text-sm text-slate-600">
-          Filtered to user <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs break-all">{userId}</code>
+        <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          Filtered to user <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs break-all">{userId}</code>
           <Link href="/admin/jobs" className="inline-flex min-h-10 items-center text-primary hover:underline sm:min-h-0">
             Clear
           </Link>
@@ -48,10 +46,10 @@ export default async function AdminJobsPage({
               key={tab.label}
               href={href}
               aria-current={isActive ? "page" : undefined}
-              className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 ${
+              className={`inline-flex items-center rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 ${
                 isActive
                   ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-white text-muted-foreground border hover:bg-slate-50"
+                  : "border bg-card text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
               }`}
             >
               {tab.label}

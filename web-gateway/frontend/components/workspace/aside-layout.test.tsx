@@ -12,7 +12,7 @@ describe("AsideLayout, with the aside hidden below xl", () => {
       </AsideLayout>
     );
     const aside = screen.getByRole("complementary", { name: "Help", hidden: true });
-    for (const name of ["hidden", "xl:block", "xl:sticky", "xl:top-24", "xl:overflow-y-auto", "xl:self-start"]) {
+    for (const name of ["hidden", "xl:block", "xl:sticky", "xl:top-5", "xl:overflow-y-auto", "xl:self-start"]) {
       expect(aside.classList.contains(name)).toBe(true);
     }
     expect(screen.getByText("the page").parentElement?.parentElement?.className).toContain("xl:grid");

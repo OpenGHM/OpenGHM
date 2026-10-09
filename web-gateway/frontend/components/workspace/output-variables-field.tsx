@@ -36,11 +36,11 @@ function Option({
   return (
     <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm sm:min-h-8">
       <input type="checkbox" checked={checked} onChange={() => onToggle(option.name)} className={CHECKBOX} />
-      <span className="min-w-0 truncate" title={option.title ?? option.name}>
+      <span className="min-w-0 truncate font-mono text-[13px]" title={option.title ?? option.name}>
         {option.name}
       </span>{" "}
       {!option.listed && showUnlisted && (
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
           not in this snapshot
         </span>
       )}
@@ -214,7 +214,7 @@ export function OutputVariablesSection({
         {(long || options.length > 1) && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {long && (
-              <div className="flex h-10 min-w-0 flex-1 basis-60 items-center gap-2 rounded-lg border bg-background px-3 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:h-9">
+              <div className="flex h-10 min-w-0 flex-1 basis-60 items-center gap-2 rounded-xl border border-input bg-card px-3 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 sm:h-9">
                 <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                 <input
                   id={`${id}-search`}
@@ -272,8 +272,8 @@ export function OutputVariablesSection({
             {...(long ? {} : draftField("variables"))}
             className={
               long
-                ? "max-h-80 space-y-3 overflow-y-auto rounded-lg border p-3"
-                : "rounded-lg border px-3 py-1"
+                ? "max-h-80 space-y-3 overflow-y-auto rounded-xl border bg-muted/40 p-3.5"
+                : "rounded-xl border bg-muted/40 px-3.5 py-1"
             }
           >
             {groups.map((group) => {

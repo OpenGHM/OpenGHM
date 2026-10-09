@@ -3,20 +3,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { LinkPending } from "@/components/ui/link-pending";
-import { WIDE_CONTAINER, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { PageBody } from "@/components/layout/page-hero";
 import { DraftListSkeleton } from "@/components/workspace/draft-list-skeleton";
 import { DraftListTabs } from "@/components/workspace/draft-list-tabs";
 import { DraftSearchInput, DraftSearchProvider } from "@/components/workspace/draft-search";
 import { DraftTable } from "@/components/workspace/draft-table";
+import { ListToolbar } from "@/components/workspace/list-toolbar";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
 import { runNotes } from "@/lib/jobs/run-notes";
 import { listHref, tabForStatus } from "@/lib/jobs/filters";
-import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
 
 export default async function WorkspacePage({
@@ -34,20 +33,16 @@ export default async function WorkspacePage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
-      <main className={WORKSPACE_MAIN}>
-        <WorkspaceHeader section="drafts" />
-
-        <div className={cn(WIDE_CONTAINER, "flex-1 py-6 sm:py-8")}>
-          {/* Not keyed by the URL: a click on a tab or a page link is a
-              transition, so the list on screen stays until the next one is
-              ready, and the link that was clicked shows a spinner if that
-              takes a while. The skeleton is only for the first load. */}
-          <Suspense fallback={<DraftListSkeleton />}>
-            <DraftList here={here} page={page} statusFilter={statusFilter} />
-          </Suspense>
-        </div>
-      </main>
+      <WorkspaceHeader section="drafts" />
+      <PageBody className="flex-1">
+        {/* Not keyed by the URL: a click on a tab or a page link is a
+            transition, so the list on screen stays until the next one is
+            ready, and the link that was clicked shows a spinner if that
+            takes a while. The skeleton is only for the first load. */}
+        <Suspense fallback={<DraftListSkeleton />}>
+          <DraftList here={here} page={page} statusFilter={statusFilter} />
+        </Suspense>
+      </PageBody>
       <Footer />
     </div>
   );
@@ -93,15 +88,15 @@ async function DraftList({
 
   return (
     <DraftSearchProvider>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <ListToolbar>
         <DraftListTabs active={tab} stats={statsData} />
         {hasRows && <DraftSearchInput className="sm:w-72" />}
-      </div>
+      </ListToolbar>
 
       {!jobData ? (
         <div
           role="alert"
-          className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+          className="mt-4 flex items-start gap-3 rounded-card border border-destructive/25 bg-card p-5 text-sm text-destructive shadow-card"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="space-y-1">
@@ -115,7 +110,7 @@ async function DraftList({
           </div>
         </div>
       ) : !hasRows ? (
-        <div className="mt-4 rounded-xl border border-dashed bg-card px-4 py-16 text-center sm:py-20">
+        <div className="mt-4 rounded-card border border-dashed bg-card px-4 py-16 text-center shadow-card sm:py-20">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
             <Play className="size-6 text-muted-foreground" aria-hidden="true" />
           </div>

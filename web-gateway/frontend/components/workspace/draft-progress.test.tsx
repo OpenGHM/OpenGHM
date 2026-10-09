@@ -99,15 +99,14 @@ describe("DraftProgress", () => {
 });
 
 describe("the strip's look", () => {
-  it("is light: done steps are checked, the current one is filled, and nothing assumes a dark header", () => {
+  it("is the header's pill on the navy band: done steps are checked and the current one is the white segment", () => {
     const { container } = render(
       <DraftProgress jobId="job-1" current="run" problemSteps={[]} onSelectStep={vi.fn()} />
     );
     expect(container.querySelector("svg.lucide-check")).not.toBeNull();
-    expect(screen.getByRole("link", { name: /Run settings/ }).querySelector(".bg-primary")).not.toBeNull();
-    expect(screen.getByRole("link", { name: /Review & submit/ }).querySelector(".bg-primary")).toBeNull();
-    expect(container.innerHTML).not.toContain("text-white");
-    expect(container.innerHTML).not.toContain("bg-white");
+    expect(screen.getByRole("link", { name: /Run settings/ }).classList.contains("bg-white")).toBe(true);
+    expect(screen.getByRole("link", { name: /Review & submit/ }).classList.contains("bg-white")).toBe(false);
+    expect(container.querySelector("ol")?.className).toContain("rounded-full");
   });
 });
 

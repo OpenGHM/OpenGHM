@@ -8,6 +8,8 @@ const { pollJobStatus, refresh, push, duplicateDraft } = vi.hoisted(() => ({
   push: vi.fn(),
   duplicateDraft: vi.fn(),
 }));
+// The site header reads the session, which these tests have no provider for.
+vi.mock("@/components/landing/header", () => ({ Header: () => null }));
 vi.mock("@/lib/jobs/actions", () => ({
   pollJobStatus,
   cancelJob: vi.fn(),
@@ -103,7 +105,7 @@ describe("the header", () => {
     renderHeader("completed");
     const duplicate = button("Duplicate");
     expect(duplicate).not.toBeNull();
-    expect(duplicate?.getAttribute("data-variant")).toBe("outline");
+    expect(duplicate?.getAttribute("data-variant")).toBe("on-dark");
     expect(button("Try again with these settings")).toBeNull();
   });
 
@@ -148,18 +150,14 @@ describe("the header", () => {
     ]);
   });
 
-  it("is in the wide column, like the page's body", () => {
+  it("is the navy band, like the repository's, with its actions drawn for it", () => {
     const { container } = renderHeader("completed");
-    expect(container.querySelector("header")?.className).toContain("xl:max-w-[1456px]");
-  });
-
-  it("is a light header like the repository's: no dark gradient, nothing white, a normal Delete button", () => {
-    const { container } = renderHeader("completed");
-    expect(container.innerHTML).not.toContain("gradient");
-    expect(container.innerHTML).not.toContain("text-white");
+    expect((container.firstElementChild as HTMLElement).className).toContain("bg-hero");
+    // The status sits on a white pill, so its colour stays readable.
+    expect(screen.getByText("Completed").parentElement?.className).toContain("bg-white");
     const del = screen.getByRole("button", { name: "Delete snapshot draft" });
-    expect(del.className).toContain("text-destructive");
-    expect(screen.getByRole("link", { name: "New from this model snapshot" }).getAttribute("data-variant")).toBe("outline");
+    expect(del.className).toContain("text-hero-error");
+    expect(screen.getByRole("link", { name: "New from this model snapshot" }).getAttribute("data-variant")).toBe("on-dark");
   });
 
   it("has the breadcrumb in the header", () => {
@@ -169,12 +167,12 @@ describe("the header", () => {
     expect(screen.queryByText("Back to snapshot drafts")).toBeNull();
   });
 
-  it("keeps the breadcrumb's current page to one line, with the whole name on hover", () => {
+  it("keeps the breadcrumb's current page to one line, the whole name being the page's title", () => {
     renderHeader("completed");
     const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
-    const current = nav.querySelector("[aria-current='page']")!.firstElementChild!;
+    const current = nav.querySelector("[aria-current='page']")!;
     expect(current.className).toContain("truncate");
-    expect(current.getAttribute("title")).toBe(current.textContent);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(current.textContent);
   });
 });
 

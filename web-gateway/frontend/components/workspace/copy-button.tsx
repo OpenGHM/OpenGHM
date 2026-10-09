@@ -41,7 +41,7 @@ export function CopyButton({
       onClick={() => void copy()}
       disabled={disabled}
       aria-label={`Copy ${label}`}
-      className={`min-h-10 shrink-0 gap-1.5 px-3 text-xs text-muted-foreground hover:text-foreground sm:min-h-8 ${className ?? ""}`}
+      className={`min-h-10 shrink-0 gap-1.5 rounded-[9px] border-0 bg-muted px-3 text-[12.5px] font-semibold text-foreground shadow-none hover:bg-secondary hover:text-primary sm:min-h-8 ${className ?? ""}`}
     >
       {copied ? (
         <>

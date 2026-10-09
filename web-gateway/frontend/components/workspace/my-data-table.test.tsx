@@ -46,7 +46,7 @@ describe("the list", () => {
     render(<MyDataTable items={[SNAP]} />);
     expect(screen.queryByRole("table")).toBeNull();
     const card = screen.getByRole("list", { name: "Snapshots and inputs" }).parentElement!;
-    expect(card.className).toContain("rounded-xl");
+    expect(card.className).toContain("rounded-card");
     expect(card.className).toContain("bg-card");
     expect(within(card).getByText("Visibility").parentElement?.getAttribute("aria-hidden")).toBe("true");
   });

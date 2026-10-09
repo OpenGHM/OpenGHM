@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
+// The site header reads the session, which these tests have no provider for.
+vi.mock("@/components/landing/header", () => ({ Header: () => null }));
 vi.mock("@/lib/jobs/actions", () => ({
   pollJobStatus: vi.fn(),
   cancelJob: vi.fn(),
@@ -74,7 +76,7 @@ describe("the detail page", () => {
   it("puts the Run details in a sticky column from xl, beside the status, publish and logs", () => {
     const { container } = renderDetail("completed");
     const aside = screen.getByRole("complementary", { name: "Run details" });
-    for (const name of ["xl:sticky", "xl:top-24", "xl:overflow-y-auto", "xl:self-start", "xl:col-start-2"]) {
+    for (const name of ["xl:sticky", "xl:top-5", "xl:overflow-y-auto", "xl:self-start", "xl:col-start-2"]) {
       expect(aside.classList.contains(name)).toBe(true);
     }
     // Not hidden below xl: it is in the page's flow there.
@@ -86,9 +88,9 @@ describe("the detail page", () => {
     expect(grid.contains(screen.getByRole("region", { name: "Status" }))).toBe(true);
     expect(aside.contains(screen.getByRole("region", { name: "Status" }))).toBe(false);
     expect(aside.contains(screen.getByRole("heading", { name: "Logs" }))).toBe(false);
-    // The header and the body share the wide column.
-    expect(container.querySelector("header")?.className).toContain("xl:max-w-[1456px]");
-    expect(grid.parentElement?.className).toContain("xl:max-w-[1456px]");
+    // The body is the page's own column, under the navy band.
+    expect(grid.parentElement?.className).toContain("max-w-[1360px]");
+    expect((container.firstElementChild as HTMLElement).className).toContain("bg-hero");
   });
 
   it("says each fact once: the cores, the run period and the times are in the card, not in the main column", () => {

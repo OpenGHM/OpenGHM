@@ -15,7 +15,7 @@ export function DraftPanel({ children, className }: { children: ReactNode; class
   return (
     <div
       className={cn(
-        "divide-y overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm",
+        "divide-y overflow-hidden rounded-card border border-border/70 bg-card text-card-foreground shadow-card",
         className
       )}
     >
@@ -47,10 +47,10 @@ export function DraftSection({
 }) {
   const helpProps = useSectionHelp(help);
   return (
-    <section {...helpProps} className={cn("space-y-4 px-5 py-5 sm:px-7 sm:py-6", className)}>
+    <section {...helpProps} className={cn("space-y-4 px-6 py-6 sm:px-7", className)}>
       {(title || action) && (
         <div className="flex min-h-8 items-center justify-between gap-3">
-          {title && <h3 className="text-base font-semibold text-foreground">{title}</h3>}
+          {title && <h3 className="text-[17px] font-[650] tracking-[-0.02em] text-foreground">{title}</h3>}
           {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
@@ -115,7 +115,7 @@ export function DraftCollapsible({
             }
             onClick={() => setOpen((v) => !v)}
             {...revealsDraftField(...fields)}
-            className="inline-flex min-h-10 items-center rounded-md border bg-background px-3.5 text-sm font-medium text-foreground shadow-xs outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8"
+            className="inline-flex min-h-10 items-center rounded-[10px] bg-muted px-3.5 text-[13.5px] font-semibold text-foreground outline-none transition-colors hover:bg-secondary hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-9"
           >
             {expanded ? closeLabel : openLabel}
           </button>

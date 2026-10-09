@@ -60,11 +60,11 @@ export function PublishedAnswerNotice() {
     <section
       role="status"
       aria-labelledby="published-notice-title"
-      className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-warning sm:gap-4 sm:p-5"
+      className="flex items-start gap-3 rounded-card border border-warning/30 bg-warning/10 p-5 text-warning sm:gap-4 sm:px-7"
     >
       <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
       <div className="min-w-0 space-y-1">
-        <h3 id="published-notice-title" className="text-base font-semibold">
+        <h3 id="published-notice-title" className="text-base font-[650] tracking-[-0.01em]">
           This simulation has already been run
         </h3>
         <p className="break-words text-sm">
@@ -103,11 +103,11 @@ export function PublishedAnswerCard({
   const startsLater = !!answer.period && !!draftStart && draftStart > answer.period.start;
 
   return (
-    <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
+    <Card className="gap-0 overflow-hidden py-0">
       <CardHeader className="border-b !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
-            <Download className="size-4 text-muted-foreground" aria-hidden="true" />
+        <CardTitle className="flex items-center gap-2.5 text-[17px] font-[650] tracking-[-0.02em] text-foreground">
+          <div className="flex size-8 items-center justify-center rounded-[10px] bg-secondary">
+            <Download className="size-4 text-secondary-foreground" aria-hidden="true" />
           </div>
           <h3>Published results</h3>
         </CardTitle>
@@ -115,15 +115,15 @@ export function PublishedAnswerCard({
       <CardContent className="space-y-5 pt-5 pb-6">
         <dl className="grid gap-2 sm:grid-cols-2">
           {answer.period && (
-            <div className="rounded-lg bg-muted px-3 py-2.5">
+            <div className="rounded-xl bg-muted px-3.5 py-3">
               <dt className="text-xs text-muted-foreground">Published period</dt>
-              <dd className="font-medium text-foreground">
+              <dd className="font-mono text-sm font-medium text-foreground">
                 {answer.period.start} → {answer.period.end}
               </dd>
             </div>
           )}
           {answer.run_id && (
-            <div className="rounded-lg bg-muted px-3 py-2.5">
+            <div className="rounded-xl bg-muted px-3.5 py-3">
               <dt className="text-xs text-muted-foreground">Simulation</dt>
               <dd className="break-all font-mono text-sm font-medium text-foreground">{answer.run_id}</dd>
             </div>
@@ -147,7 +147,7 @@ export function PublishedAnswerCard({
                   {formatBytes(files.reduce((n, f) => n + f.size, 0))}
                 </span>
               </h4>
-              <div className="space-y-3 rounded-lg bg-muted px-3 py-1">
+              <div className="space-y-3 rounded-xl bg-muted px-3.5 py-1">
                 {blocksOf(files).map((block) => (
                   <div key={block.variable ?? "all"}>
                     {block.variable && (

@@ -56,6 +56,21 @@
   --color-hero-foreground: var(--hero-foreground);
   --color-hero-foreground-muted: var(--hero-foreground-muted);
   --color-hero-eyebrow: var(--hero-eyebrow);
+  --color-hero-text: var(--hero-text);
+  --color-hero-subtle: var(--hero-subtle);
+  --color-hero-faint: var(--hero-faint);
+  --color-hero-lit: var(--hero-lit);
+  --color-hero-glow: var(--hero-glow);
+  --color-hero-error: var(--hero-error);
+  --color-data-1: var(--data-1);
+  --color-data-2: var(--data-2);
+  --color-data-3: var(--data-3);
+  --color-data-4: var(--data-4);
+  --color-data-5: var(--data-5);
+  --color-data-6: var(--data-6);
+  --color-data-7: var(--data-7);
+  --color-data-8: var(--data-8);
+  --color-map-water: var(--map-water);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -73,6 +88,10 @@
   --shadow-card: 0 1px 2px rgba(16, 40, 58, 0.05);
   --shadow-raised:
     0 1px 2px rgba(16, 40, 58, 0.05), 0 32px 64px -40px rgba(16, 40, 58, 0.4);
+  /* shadow-lift: a card's hover. shadow-float: a button or search box standing
+     on the dark band. */
+  --shadow-lift: 0 28px 56px -32px rgba(16, 40, 58, 0.4);
+  --shadow-float: 0 20px 40px -20px rgba(0, 0, 0, 0.6);
 }
 
 :root {
@@ -136,6 +155,33 @@
   --hero-foreground: #ffffff;
   --hero-foreground-muted: #c3ccd4;
   --hero-eyebrow: #9fd3e6;
+  /* More text on the band and on the dark code blocks (log, citation, file
+     preview), all AA on --hero: --hero-text is read text (11.7:1),
+     --hero-subtle meta and breadcrumbs (6.9:1), --hero-faint line numbers and
+     axis ticks (5.9:1). */
+  --hero-text: #dbe6ec;
+  --hero-subtle: #9fb3c0;
+  --hero-faint: #8fa6b4;
+  /* Mint: a thing that is done or lit on the band (a copied check, the active
+     ticks of a timeline). Teal-blue glow: the soft light in the band's corner
+     and where a bar starts. */
+  --hero-lit: #9fe0d0;
+  --hero-glow: #38a0c8;
+  /* An error written on the band or a dark block (8.8:1 on --hero). */
+  --hero-error: #ffb4ab;
+  /* Categorical data colours: the swatch of an output variable, the dot of a
+     process chip. They tell items apart and carry no meaning, and are never
+     text; the chip tint is the colour at 12% (color-mix). */
+  --data-1: #1f5f8b;
+  --data-2: #3a8fd1;
+  --data-3: #5cbcb3;
+  --data-4: #4f8a3c;
+  --data-5: #6f8f2a;
+  --data-6: #8a6d3b;
+  --data-7: #c8553d;
+  --data-8: #a9c7e8;
+  /* The sea of an OpenStreetMap tile, behind the map where no tile covers. */
+  --map-water: #aad3df;
   --sidebar: #ffffff;
   --sidebar-foreground: #10283a;
   --sidebar-primary: #e3f0f6;
@@ -182,6 +228,13 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* The coverage box of the bounding-box map (react-leaflet's pathOptions take a
+   colour string, not a token, so the rectangle is styled here). */
+.bbox-rect {
+  stroke: var(--primary);
+  fill: var(--primary);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -194,7 +247,10 @@
 /* The dotted texture of the hero band: 1 px dots every 22 px, fading out
    downward. Put it on an absolutely positioned layer. */
 @utility hero-dots {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--hero-foreground) 8%, transparent) 1px,
+    transparent 1px
+  );
   background-size: 22px 22px;
   -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
@@ -202,7 +258,11 @@
 
 /* The soft light in the band's top-right corner. */
 @utility hero-glow {
-  background: radial-gradient(circle, rgba(56, 160, 200, 0.22), transparent 65%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--hero-glow) 22%, transparent),
+    transparent 65%
+  );
 }
 
 /* Loading feedback that waits to be needed. A skeleton or spinner that carries

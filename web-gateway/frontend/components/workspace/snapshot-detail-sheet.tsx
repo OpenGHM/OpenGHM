@@ -62,7 +62,7 @@ export function SnapshotDetailSheet({
         <SheetBody className="space-y-4">
           <SheetDescription className="leading-relaxed">{dataset.about.description}</SheetDescription>
 
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Calendar aria-hidden="true" className="size-3.5" />
               {start} – {end}

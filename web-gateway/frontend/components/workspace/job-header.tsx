@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { JobStatusBadge, STATUS_LABEL } from "@/components/jobs/job-status-badge";
 import { ActionError } from "@/components/workspace/action-error";
 import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
-import { PageHeader, DraftBreadcrumb } from "@/components/workspace/page-header";
+import { PageHeader, draftBreadcrumb } from "@/components/workspace/page-header";
 import { JobActionsMenu } from "@/components/workspace/job-actions-menu";
 import { JobDeleteButton } from "@/components/workspace/job-delete-button";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
@@ -40,11 +40,11 @@ function StatusAnnouncer({ status }: { status: DisplayStatus }) {
 }
 
 /**
- * The page's header, the same shape as the draft wizard's and the Data
- * Repository's, in the wide column: breadcrumb, the snapshot draft's own name
- * with its status and, once the job has ended, "Duplicate", "New from this model
- * snapshot" and Delete on the right (from `sm`; on a phone one "More actions"
- * menu holds the same, `JobActionsMenu`). What the job is based on, its run id
+ * The page's navy band, the same shape as the draft wizard's and the Data
+ * Repository's: breadcrumb, the snapshot draft's own name with its status and,
+ * once the job has ended, "Duplicate", "New from this model snapshot" and
+ * Delete under it (from `sm`; on a phone one "More actions" menu holds the
+ * same, `JobActionsMenu`). What the job is based on, its run id
  * and its Slurm job are in the "Run details" card, once.
  * Cancel and "Try again with these settings" live in the status summary, where
  * the job is: a failed or cancelled job has its copy action there, so the header
@@ -70,24 +70,23 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
 
   return (
     <PageHeader
-      wide
-      top={<DraftBreadcrumb current={name} />}
+      breadcrumb={draftBreadcrumb(name)}
       title={name}
       badge={<JobStatusBadge status={shown} />}
-      aside={
+      actions={
         ended ? (
           <>
-            <div className="hidden flex-wrap items-center gap-3 sm:flex sm:justify-end">
+            <div className="hidden flex-wrap items-center gap-3 sm:flex">
               {offersDuplicate && (
                 <DuplicateDraftButton
                   jobId={job.id}
                   label="Duplicate"
-                  variant="outline"
+                  variant="on-dark"
                   Icon={Copy}
                   className="shrink-0 font-medium"
                 />
               )}
-              <Button asChild variant="outline" className="min-h-10 shrink-0 gap-2">
+              <Button asChild variant="on-dark" className="min-h-10 shrink-0 gap-2">
                 <Link href={newStepHref(job.dataset_id, "run")}>
                   <FlaskConical aria-hidden="true" />
                   New from this model snapshot
@@ -122,14 +121,8 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
         ) : undefined
       }
     >
-      {deleteExpired && (
-        <SessionExpiredBanner className="mt-4 w-full sm:max-w-md" />
-      )}
-      {deleteError && (
-        <div className="mt-4">
-          <ActionError>{deleteError}</ActionError>
-        </div>
-      )}
+      {deleteExpired && <SessionExpiredBanner className="w-full sm:max-w-md" />}
+      {deleteError && <ActionError>{deleteError}</ActionError>}
       <StatusAnnouncer status={shown} />
     </PageHeader>
   );

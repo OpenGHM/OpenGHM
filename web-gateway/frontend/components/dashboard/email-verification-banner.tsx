@@ -18,17 +18,17 @@ export function EmailVerificationBanner() {
   }
 
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4 text-sm">
-      <span className="text-amber-800">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-card border border-warning/25 bg-warning/10 px-5 py-4 text-sm shadow-card">
+      <span className="text-warning">
         Please verify your email address to secure your account.
       </span>
       {status === "sent" ? (
-        <span className="text-amber-700 shrink-0">{message}</span>
+        <span className="shrink-0 text-warning">{message}</span>
       ) : (
         <button
           onClick={handleResend}
           disabled={status === "sending"}
-          className="shrink-0 font-medium text-amber-800 underline hover:text-amber-900 disabled:opacity-50"
+          className="inline-flex min-h-10 shrink-0 items-center font-medium text-warning underline hover:text-foreground disabled:opacity-50"
         >
           {status === "sending" ? "Sending..." : "Resend verification email"}
         </button>

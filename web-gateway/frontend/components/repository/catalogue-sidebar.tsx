@@ -36,15 +36,15 @@ export function CatalogueSidebar({
   const anyActive = hasActiveFilters(filters);
 
   return (
-    <aside aria-label="Filters" className="w-full lg:w-[260px] lg:shrink-0">
+    <aside aria-label="Filters" className="w-full lg:w-[268px] lg:shrink-0">
       <div className="flex flex-col gap-3">
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           aria-expanded={panelOpen}
           aria-controls="catalogue-filters-panel"
           onClick={() => setPanelOpen((o) => !o)}
-          className="h-11 w-full justify-between rounded-xl bg-card hover:bg-muted hover:text-foreground lg:hidden"
+          className="h-12 w-full justify-between rounded-2xl bg-card px-4 font-semibold shadow-raised hover:bg-card hover:text-foreground dark:hover:bg-card lg:hidden"
         >
           <span className="flex items-center gap-2">
             <SlidersHorizontal aria-hidden="true" />
@@ -65,17 +65,17 @@ export function CatalogueSidebar({
         <Card
           id="catalogue-filters-panel"
           className={cn(
-            "gap-0 overflow-hidden rounded-2xl border py-0 shadow-none lg:flex",
+            "gap-0 overflow-hidden rounded-card border-0 py-0 shadow-raised lg:flex",
             panelOpen ? "flex" : "hidden"
           )}
         >
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 sm:px-[18px]">
-            <h2 className="text-[15px] font-semibold text-foreground">Filters</h2>
+          <div className="flex shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-3.5">
+            <h2 className="text-[17px] font-bold tracking-[-0.02em] text-foreground">Filters</h2>
             {anyActive && (
               <button
                 type="button"
                 onClick={onClearAll}
-                className="inline-flex min-h-10 items-center rounded-md px-1 text-[13px] text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-h-8"
+                className="inline-flex min-h-10 items-center rounded-full bg-muted px-2.5 text-[12.5px] font-medium text-foreground/80 outline-none hover:bg-border focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:min-h-8"
               >
                 Reset
               </button>

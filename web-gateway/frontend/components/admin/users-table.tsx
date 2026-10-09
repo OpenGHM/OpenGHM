@@ -9,7 +9,7 @@ import {
   StackedRow,
   StackedTable,
 } from "@/components/admin/stacked-table";
-import { EmptyState } from "@/components/admin/admin-page";
+import { EmptyState } from "@/components/admin/admin-states";
 import { Badge } from "@/components/ui/badge";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AdminUser } from "@/lib/admin/types";
@@ -39,7 +39,7 @@ function AdminUserRow({
           {user.name}
         </Link>
       </StackedCell>
-      <StackedCell className="[overflow-wrap:anywhere] max-sm:-mt-2 max-sm:pb-2 max-sm:text-sm max-sm:text-slate-500">
+      <StackedCell className="[overflow-wrap:anywhere] max-sm:-mt-2 max-sm:pb-2 max-sm:text-sm max-sm:text-muted-foreground">
         {user.email}
       </StackedCell>
       <StackedCell label="Organization">{user.organization ?? "—"}</StackedCell>
@@ -48,14 +48,14 @@ function AdminUserRow({
           user={user}
           disabled={disabled}
           ariaLabel={`Role for ${user.name}`}
-          className="rounded border border-slate-200 bg-white px-2 py-1 text-sm disabled:opacity-50 max-sm:min-h-10"
+          className="rounded-lg border border-input bg-card px-2 py-1 text-sm disabled:opacity-50 max-sm:min-h-10"
         />
       </StackedCell>
       <StackedCell label="Status">
         <StatusControl
           user={user}
           disabled={disabled}
-          className="rounded border px-2 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 max-sm:min-h-10 max-sm:px-3"
+          className="rounded-full border px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 max-sm:min-h-10 max-sm:px-3"
         />
       </StackedCell>
       <StackedCell label="Verified">
@@ -63,7 +63,7 @@ function AdminUserRow({
           {user.email_verified ? "Verified" : "Unverified"}
         </Badge>
       </StackedCell>
-      <StackedCell label="Joined" className="text-xs text-slate-500">
+      <StackedCell label="Joined" className="text-xs text-muted-foreground">
         {user.created_at ? <TimeStamp value={user.created_at} format="date" /> : "—"}
       </StackedCell>
     </StackedRow>

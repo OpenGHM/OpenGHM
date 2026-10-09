@@ -7,7 +7,7 @@ import { DeleteDraftDialog } from "@/components/workspace/delete-draft-dialog";
 import type { FilesState } from "@/lib/jobs/types";
 
 /**
- * The header's Delete button (a draft, or a job that has ended; the backend
+ * The band's Delete button (a draft, or a job that has ended; the backend
  * refuses an active one). It opens `DeleteDraftDialog`, which says what
  * goes, and the dialog hands focus back to the button when it closes without
  * a delete.
@@ -53,13 +53,13 @@ export function JobDeleteButton({
       <Button
         ref={triggerRef}
         type="button"
-        variant="outline"
+        variant="on-dark"
         onClick={() => {
           onOpen?.();
           setOpen(true);
           onOpenChange?.(true);
         }}
-        className="min-h-10 shrink-0 gap-2 border-destructive/30 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+        className="min-h-10 shrink-0 gap-2 border-hero-error/40 bg-white/5 text-hero-error hover:border-hero-error/60 hover:bg-destructive/25 hover:text-white"
       >
         <Trash2 aria-hidden="true" />
         Delete snapshot draft

@@ -6,13 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 function ResetPasswordForm() {
   const [password, setPassword] = useState("");
@@ -63,7 +57,7 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-destructive">
         This link is missing a reset token.{" "}
         <Link href="/auth/forgot-password" className="underline">
           Request a new one
@@ -99,8 +93,8 @@ function ResetPasswordForm() {
           autoComplete="new-password"
         />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button type="submit" className="w-full" disabled={loading}>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" size="xl" className="w-full" disabled={loading}>
         {loading ? "Resetting..." : "Reset password"}
       </Button>
     </form>
@@ -109,21 +103,14 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Set a new password</CardTitle>
-          <CardDescription>
-            This will sign you out everywhere else — reset your password
-            below and sign in again.
-          </CardDescription>
-        </CardHeader>
-        <Suspense fallback={<CardContent><p className="text-sm text-muted-foreground">Loading…</p></CardContent>}>
-          <CardContent>
-            <ResetPasswordForm />
-          </CardContent>
-        </Suspense>
-      </Card>
-    </main>
+    <AuthShell
+      eyebrow="Password reset"
+      title="Set a new password"
+      description="This will sign you out everywhere else — reset your password below and sign in again."
+    >
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+        <ResetPasswordForm />
+      </Suspense>
+    </AuthShell>
   );
 }

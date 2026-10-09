@@ -1,15 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AdminPage, InlineError } from "@/components/admin/admin-page";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InlineError } from "@/components/admin/admin-states";
 import { AnvilScratchCard } from "@/components/admin/anvil-scratch-card";
-import { SectionHeader } from "@/components/admin/section-header";
+import { StatCard } from "@/components/admin/site-stats-cards";
 import { fetchSystemInfo } from "@/lib/admin/actions";
 import type { DependencyStatus } from "@/lib/admin/types";
 
 const STATUS_STYLE: Record<DependencyStatus, string> = {
   ok: "bg-success/10 text-success border-success/25",
   degraded: "bg-warning/10 text-warning border-warning/25",
-  unconfigured: "bg-slate-100 text-slate-600 border-slate-200",
+  unconfigured: "bg-muted text-muted-foreground border-border",
   error: "bg-destructive/10 text-destructive border-destructive/25",
 };
 
@@ -19,6 +20,8 @@ const STATUS_LABEL: Record<DependencyStatus, string> = {
   unconfigured: "Not configured",
   error: "Error",
 };
+
+const SYSTEM_DESCRIPTION = "How the gateway is running, and what the spool cache holds on Anvil scratch.";
 
 function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -32,8 +35,7 @@ export default async function AdminSystemPage() {
 
   if (!info) {
     return (
-      <AdminPage>
-        <SectionHeader title="System" description="How the gateway is running, and what the spool cache holds on Anvil scratch." />
+      <AdminPage title="System" description={SYSTEM_DESCRIPTION}>
         <InlineError title="Couldn't load the system information." />
         <AnvilScratchCard />
       </AdminPage>
@@ -41,36 +43,12 @@ export default async function AdminSystemPage() {
   }
 
   return (
-    <AdminPage>
-      <SectionHeader title="System" description="How the gateway is running, and what the spool cache holds on Anvil scratch." />
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-lg font-bold text-slate-900 capitalize">{info.environment}</p>
-            <p className="text-sm text-slate-500">Environment</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-lg font-bold text-slate-900">{info.version}</p>
-            <p className="text-sm text-slate-500">Version</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-lg font-bold text-slate-900">{formatUptime(info.uptime_seconds)}</p>
-            <p className="text-sm text-slate-500">Uptime</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-lg font-bold text-slate-900">
-              {new Date(info.server_time).toISOString().slice(11, 19)} UTC
-            </p>
-            <p className="text-sm text-slate-500">Server time</p>
-          </CardContent>
-        </Card>
+    <AdminPage title="System" description={SYSTEM_DESCRIPTION}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Environment" value={info.environment} valueClass="text-lg capitalize" />
+        <StatCard label="Version" value={info.version} valueClass="text-lg" />
+        <StatCard label="Uptime" value={formatUptime(info.uptime_seconds)} valueClass="text-lg" />
+        <StatCard label="Server time" value={`${new Date(info.server_time).toISOString().slice(11, 19)} UTC`} valueClass="text-lg" />
       </div>
 
       <Card>
@@ -79,14 +57,14 @@ export default async function AdminSystemPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {info.dependencies.map((dep) => (
-            <div key={dep.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-slate-100 px-3 py-2">
+            <div key={dep.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl border border-border px-3.5 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium capitalize text-slate-900">{dep.name}</p>
-                {dep.detail && <p className="text-xs break-words text-slate-500">{dep.detail}</p>}
+                <p className="text-sm font-medium capitalize text-foreground">{dep.name}</p>
+                {dep.detail && <p className="text-xs break-words text-muted-foreground">{dep.detail}</p>}
               </div>
               <div className="flex items-center gap-3">
                 {dep.latency_ms !== null && (
-                  <span className="text-xs text-slate-500">{dep.latency_ms}ms</span>
+                  <span className="text-xs text-muted-foreground">{dep.latency_ms}ms</span>
                 )}
                 <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[dep.status]}`}>
                   {STATUS_LABEL[dep.status] ?? dep.status}
@@ -105,10 +83,10 @@ export default async function AdminSystemPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {info.features.map((f) => (
-            <div key={f.name} className="flex items-start justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+            <div key={f.name} className="flex items-start justify-between gap-3 rounded-xl border border-border px-3.5 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium capitalize text-slate-900">{f.name.replace(/_/g, " ")}</p>
-                {f.note && <p className="text-xs text-slate-500">{f.note}</p>}
+                <p className="text-sm font-medium capitalize text-foreground">{f.name.replace(/_/g, " ")}</p>
+                {f.note && <p className="text-xs text-muted-foreground">{f.note}</p>}
               </div>
               <Badge variant={f.configured ? "secondary" : "outline"} className="shrink-0">
                 {f.configured ? "Configured" : "Not configured"}
@@ -125,9 +103,9 @@ export default async function AdminSystemPage() {
         <CardContent>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
             {Object.entries(info.settings).map(([key, value]) => (
-              <div key={key} className="flex items-center justify-between gap-3 border-b border-slate-50 py-1">
-                <dt className="text-slate-500">{key.replace(/_/g, " ")}</dt>
-                <dd className="min-w-0 break-words text-right font-medium text-slate-900">
+              <div key={key} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5">
+                <dt className="text-muted-foreground">{key.replace(/_/g, " ")}</dt>
+                <dd className="min-w-0 break-words text-right font-medium text-foreground">
                   {Array.isArray(value) ? value.join(", ") || "—" : String(value)}
                 </dd>
               </div>

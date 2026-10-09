@@ -16,6 +16,8 @@ const { deriveDraft, updateDraft, fetchJob, submitDraft, deleteDraft, push, repl
     refresh: vi.fn(),
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   }));
+// The site header reads the session, which these tests have no provider for.
+vi.mock("@/components/landing/header", () => ({ Header: () => null }));
 vi.mock("@/lib/jobs/actions", () => ({
   deriveDraft,
   updateDraft,

@@ -33,7 +33,7 @@ export function Pagination({
         aria-label="Previous page"
         disabled={page === 1}
         onClick={() => onPageChange(page - 1)}
-        className="size-10 rounded-lg bg-card sm:size-9"
+        className="size-10 rounded-[11px] border-transparent bg-card sm:size-9"
       >
         <ChevronLeft className="size-4" />
       </Button>
@@ -51,9 +51,9 @@ export function Pagination({
             aria-current={p === page ? "page" : undefined}
             onClick={() => onPageChange(p)}
             className={cn(
-              "h-10 min-w-10 rounded-lg bg-card font-mono text-[13px] sm:h-9 sm:min-w-9",
+              "h-10 min-w-10 rounded-[11px] border-transparent bg-card font-mono text-[13px] sm:h-9 sm:min-w-9",
               p === page &&
-                "border-foreground bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                "bg-hero text-white hover:bg-hero/85 hover:text-white"
             )}
           >
             {p}
@@ -66,7 +66,7 @@ export function Pagination({
         aria-label="Next page"
         disabled={page === totalPages}
         onClick={() => onPageChange(page + 1)}
-        className="size-10 rounded-lg bg-card sm:size-9"
+        className="size-10 rounded-[11px] border-transparent bg-card sm:size-9"
       >
         <ChevronRight className="size-4" />
       </Button>

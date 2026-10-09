@@ -25,6 +25,8 @@ export interface PageHeroProps {
   subtitle?: ReactNode;
   /** A trail above the title, e.g. [{ label: "Data Repository", href: "/repository" }, { label: title }]. */
   breadcrumb?: HeroBreadcrumbItem[];
+  /** Pills or a short row between the breadcrumb/eyebrow and the title (a kind and its tags). */
+  meta?: ReactNode;
   /** Buttons under the title. Use `<Button variant="on-dark">` for the secondary one. */
   actions?: ReactNode;
   /** Anything else in the band (a search box, chips, a timeline), under the actions. */
@@ -46,7 +48,7 @@ export interface PageHeroProps {
 
 /**
  * The navy band at the top of a page: the site `Header`, then an optional
- * breadcrumb, eyebrow, title, subtitle, actions and any children. It is
+ * breadcrumb, eyebrow, meta, title, subtitle, actions and any children. It is
  * a server component and carries its own Header, so a page using it does not
  * render `<Header />` itself.
  *
@@ -76,6 +78,7 @@ export function PageHero({
   eyebrow,
   subtitle,
   breadcrumb,
+  meta,
   actions,
   children,
   backgroundImage,
@@ -105,7 +108,7 @@ export function PageHero({
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,#0b2a3d_0%,rgba(11,42,61,0.85)_45%,rgba(11,42,61,0.35)_100%)]"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-hero via-hero/85 via-45% to-hero/35"
           />
         </>
       )}
@@ -131,11 +134,12 @@ export function PageHero({
           <p className="flex items-center gap-2.5 font-mono text-xs tracking-[0.06em] text-hero-eyebrow uppercase">
             <span
               aria-hidden="true"
-              className="size-2 shrink-0 rounded-full bg-hero-eyebrow shadow-[0_0_0_4px_rgba(159,211,230,0.2)]"
+              className="size-2 shrink-0 rounded-full bg-hero-eyebrow ring-4 ring-hero-eyebrow/20"
             />
             {eyebrow}
           </p>
         )}
+        {meta}
         <h1
           className={cn(
             "font-bold text-white",
@@ -163,31 +167,46 @@ export function PageHero({
   );
 }
 
+/** A first crumb up to this long keeps its width; a longer one gives way like the rest. */
+const SHORT_CRUMB = 24;
+
+/**
+ * The trail on one line. A short first crumb keeps its width; every other one
+ * shrinks and ends in an ellipsis (its full label in `title`), so a long name
+ * never runs into the next crumb on a phone. The crumbs before the last give
+ * way first, so the current page keeps most of its name.
+ */
 function HeroBreadcrumb({ items }: { items: HeroBreadcrumbItem[] }) {
   return (
     <nav aria-label="Breadcrumb" className="min-w-0 text-[13.5px]">
       <ol className="flex min-w-0 items-center gap-2">
         {items.map((item, i) => {
           const last = i === items.length - 1;
+          const keepsWidth = i === 0 && !last && item.label.length <= SHORT_CRUMB;
           return (
-            <li key={`${i}-${item.label}`} className={cn("flex items-center gap-2", last && "min-w-0")}>
+            <li
+              key={`${i}-${item.label}`}
+              className={cn("flex items-center gap-2", keepsWidth ? "shrink-0" : last ? "min-w-0" : "min-w-0 shrink-[4]")}
+            >
               {item.href && !last ? (
                 <Link
                   href={item.href}
-                  className="shrink-0 text-hero-foreground-muted transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow"
+                  title={item.label}
+                  className="min-w-0 truncate text-hero-foreground-muted transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow"
                 >
                   {item.label}
                 </Link>
               ) : (
                 <span
                   aria-current={last ? "page" : undefined}
-                  className="truncate text-[#9fb3c0]"
+                  title={item.label}
+                  className="min-w-0 truncate text-hero-subtle"
                 >
                   {item.label}
                 </span>
               )}
               {!last && (
-                <span aria-hidden="true" className="text-[#5f7a8b]">
+                <span aria-hidden="true" className="shrink-0 text-hero-faint/60">
                   /
                 </span>
               )}

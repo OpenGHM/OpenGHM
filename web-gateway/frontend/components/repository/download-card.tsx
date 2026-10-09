@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Copy, Check, FolderTree } from "lucide-react";
+import { DetailSection } from "@/components/repository/detail-section";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Check, FolderTree } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface DownloadItem {
   label: string;
@@ -13,7 +14,7 @@ export interface DownloadItem {
   isFile: boolean;
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyButton({ text, label, tone = "muted" }: { text: string; label: string; tone?: "muted" | "primary" }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -24,16 +25,20 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   };
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
+    <button
+      type="button"
       onClick={handleCopy}
       aria-label={`Copy ${label}`}
-      className="h-7 shrink-0 gap-1.5 px-3 text-xs text-muted-foreground hover:text-foreground"
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-[9px] px-3 py-[7px] text-[12.5px] font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        tone === "primary"
+          ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+          : "bg-muted text-foreground hover:bg-secondary",
+      )}
     >
       {copied ? (
         <>
-          <Check className="size-3.5 text-emerald-500" />
+          <Check className="size-3.5" />
           Copied
         </>
       ) : (
@@ -42,7 +47,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
           Copy
         </>
       )}
-    </Button>
+    </button>
   );
 }
 
@@ -62,61 +67,59 @@ export function DownloadCard({
   browseHref?: string;
 }) {
   return (
-    <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-      <CardHeader className="border-b bg-gradient-to-r from-cyan-500/5 to-transparent !py-4 !gap-0 grid-rows-1 items-center">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-cyan-500/10">
-            <Download className="size-4 text-cyan-600" />
+    <DetailSection title="Download">
+      <p className="-mt-2.5 text-sm leading-relaxed text-pretty text-muted-foreground">
+        {command
+          ? "The tree is many files, not one archive. The CLI fetches it and verifies every file against SHA256SUMS."
+          : "The tree is many files, not one archive. Verify a downloaded copy with sha256sum -c SHA256SUMS."}
+      </p>
+      {browseHref && (
+        <Button variant="outline" size="sm" asChild className="self-start">
+          <Link href={browseHref}>
+            <FolderTree className="size-4" />
+            Browse files
+          </Link>
+        </Button>
+      )}
+      {command && (
+        <div className="flex flex-col gap-1.5 rounded-[14px] bg-secondary p-4">
+          <span className="text-xs font-semibold text-primary-hover">CLI</span>
+          <div className="flex items-center gap-2.5">
+            <code className="min-w-0 flex-1 overflow-x-auto font-mono text-[13px] whitespace-nowrap text-hero [scrollbar-width:thin]">
+              <span aria-hidden="true" className="select-none">
+                ${" "}
+              </span>
+              {command}
+            </code>
+            <CopyButton text={command} label="command" tone="primary" />
           </div>
-          Download
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-5 pb-6 space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {command
-            ? "The tree is many files, not one archive. The CLI fetches it and verifies every file against SHA256SUMS."
-            : "The tree is many files, not one archive. Verify a downloaded copy with sha256sum -c SHA256SUMS."}
-        </p>
-        {browseHref && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href={browseHref}>
-              <FolderTree className="size-4" />
-              Browse files
-            </Link>
-          </Button>
-        )}
-        {command && (
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium uppercase tracking-wider text-slate-400">CLI</div>
-            <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
-              <code className="min-w-0 flex-1 break-all font-mono text-xs text-slate-700">{command}</code>
-              <CopyButton text={command} label="command" />
-            </div>
+        </div>
+      )}
+      <dl className="flex flex-col overflow-hidden rounded-[14px] border border-border/70">
+        {items.map((item) => (
+          <div key={item.label} className="flex flex-col gap-[3px] border-t border-border/60 px-4 py-[13px] first:border-t-0">
+            <dt className="text-[13px] font-semibold text-foreground/90">{item.label}</dt>
+            <dd className="flex items-center gap-3.5">
+              {item.isFile ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={item.url}
+                  className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground transition-colors hover:text-primary hover:underline"
+                >
+                  {item.url}
+                </a>
+              ) : (
+                <code title={item.url} className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                  {item.url}
+                </code>
+              )}
+              <CopyButton text={item.url} label={item.label} />
+            </dd>
           </div>
-        )}
-        <dl className="space-y-3">
-          {items.map((item) => (
-            <div key={item.label} className="space-y-1.5">
-              <dt className="text-xs font-medium uppercase tracking-wider text-slate-400">{item.label}</dt>
-              <dd className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
-                {item.isFile ? (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 flex-1 break-all font-mono text-xs text-[#006994] hover:underline"
-                  >
-                    {item.url}
-                  </a>
-                ) : (
-                  <code className="min-w-0 flex-1 break-all font-mono text-xs text-slate-700">{item.url}</code>
-                )}
-                <CopyButton text={item.url} label={item.label} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
+        ))}
+      </dl>
+    </DetailSection>
   );
 }

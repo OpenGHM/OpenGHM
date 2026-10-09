@@ -50,7 +50,7 @@ export function OutputFileList({
         <div
           id={regionId}
           tabIndex={0}
-          className="max-h-72 space-y-3 overflow-auto rounded-lg bg-muted p-3 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="max-h-72 space-y-3 overflow-auto rounded-xl bg-muted p-3.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           {shown.map((g) => (
             <section key={g.folder || "."} aria-label={g.folder || "Top level"}>

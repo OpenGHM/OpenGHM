@@ -45,7 +45,7 @@ function ResultCount({
       aria-live="polite"
       aria-atomic="true"
       className={cn(
-        "text-[13.5px] text-muted-foreground transition-opacity duration-200",
+        "text-sm text-foreground/80 transition-opacity duration-200",
         busy && "opacity-60"
       )}
     >
@@ -61,7 +61,7 @@ function ResultCount({
         "Results unavailable"
       ) : (
         <>
-          <strong className="font-semibold text-highlight">{totalCount}</strong>{" "}
+          <strong className="text-xl font-bold tracking-[-0.02em] text-foreground">{totalCount}</strong>{" "}
           {totalCount === 1 ? "result" : "results"}
           {q && (
             <>
@@ -77,9 +77,9 @@ function ResultCount({
 }
 
 /**
- * The right-hand side of the Data Repository: the toolbar (search, sort,
- * view), the result count with the active-filter chips, the cards as a list or
- * a grid (or the empty or error state) and the pagination.
+ * The right-hand side of the Data Repository: one bar with the result count,
+ * the active-filter chips, the sort and the list / grid switch, then the cards
+ * as a list or a grid (or the empty or error state) and the pagination.
  *
  * A refetch keeps what is on screen. Only if it is still pending after 300 ms
  * are the count and cards dimmed and marked busy; a response that comes sooner
@@ -122,28 +122,31 @@ export function CatalogueResults({
   const busy = useDelayedFlag(isLoading && !placeholder, BUSY_DELAY_MS);
 
   return (
-    <section aria-label="Results" className="flex min-w-0 flex-1 flex-col gap-4">
-      <CatalogueToolbar filters={filters} onChange={onChange} />
-
-      <div
-        id="catalogue-results"
-        ref={countRef}
-        tabIndex={-1}
-        className="flex min-h-7 scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-2 outline-none"
-      >
-        <ResultCount
-          totalCount={result.totalCount}
-          searchQuery={filters.searchQuery}
-          placeholder={placeholder}
-          busy={busy}
-          error={error}
-        />
-        <ActiveFilterChips
-          filters={filters}
-          facets={facets}
-          onChange={onChange}
-          onClearAll={onClearAll}
-        />
+    <section aria-label="Results" className="flex min-w-0 flex-1 flex-col gap-3.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-[18px] bg-card py-2.5 pr-2.5 pl-[18px] shadow-raised">
+        <div
+          id="catalogue-results"
+          ref={countRef}
+          tabIndex={-1}
+          className="min-h-7 scroll-mt-24 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <ResultCount
+            totalCount={result.totalCount}
+            searchQuery={filters.searchQuery}
+            placeholder={placeholder}
+            busy={busy}
+            error={error}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <ActiveFilterChips
+            filters={filters}
+            facets={facets}
+            onChange={onChange}
+            onClearAll={onClearAll}
+          />
+        </div>
+        <CatalogueToolbar filters={filters} onChange={onChange} />
       </div>
 
       <div
@@ -159,7 +162,7 @@ export function CatalogueResults({
         ) : error ? (
           <div
             role="alert"
-            className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-5 sm:flex-row sm:items-center"
+            className="flex flex-col items-start gap-3 rounded-card border border-destructive/30 bg-destructive/5 p-5 sm:flex-row sm:items-center"
           >
             <CircleAlert aria-hidden="true" className="size-5 shrink-0 text-destructive" />
             <div className="min-w-0 flex-1">
@@ -168,12 +171,12 @@ export function CatalogueResults({
                 Check your connection and try again. Your filters are kept.
               </p>
             </div>
-            <Button type="button" variant="outline" onClick={onRetry} className="h-10 rounded-lg sm:h-9">
+            <Button type="button" variant="outline" onClick={onRetry} className="h-10 rounded-[11px] sm:h-9">
               Retry
             </Button>
           </div>
         ) : result.items.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+          <div className="flex flex-col items-center gap-2 rounded-card bg-card px-6 py-14 text-center shadow-card">
             <SearchX aria-hidden="true" className="size-10 text-muted-foreground/60" />
             <h2 className="text-lg font-semibold text-foreground">
               {filtered ? "No results match these filters" : "Nothing has been published yet"}
@@ -184,7 +187,7 @@ export function CatalogueResults({
                 : "Published model snapshots and model inputs will appear here."}
             </p>
             {filtered && (
-              <Button type="button" variant="outline" onClick={onClearAll} className="mt-2 h-10 rounded-lg sm:h-9">
+              <Button type="button" onClick={onClearAll} className="mt-2 h-10 rounded-[11px] bg-hero px-4 font-semibold text-white hover:bg-hero/85 sm:h-9">
                 Clear filters
               </Button>
             )}

@@ -43,8 +43,8 @@ function PillButton({ onClick, children }: { onClick: () => void; children: Reac
  * `role="status"` speaks only when the draft first fails to save and when it is
  * saved again afterwards, once each, whatever the visible text does in between.
  *
- * It sits in the wizard's header: calm states are small muted text, and a
- * failure is a tinted box in the failed colour. `onRetry` is for
+ * It sits in the wizard's navy band: calm states are small muted text, and a
+ * failure is a white box in the failed colour. `onRetry` is for
  * "Couldn't save" and `onGoToField` for "fix <field>", which is a link to the
  * field that stopped the save.
  */
@@ -76,14 +76,14 @@ export function SaveStatus({
         <span className="inline-flex items-center gap-1.5">
           <Check className="size-3.5" aria-hidden="true" />
           Saved
-          {state.at && <TimeStamp value={state.at} format="relative" className="text-muted-foreground/80" />}
+          {state.at && <TimeStamp value={state.at} format="relative" className="text-hero-foreground-muted/80" />}
         </span>
       );
       break;
     case "unsaved":
       visible = (
-        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-warning" />
+        <span className="inline-flex items-center gap-1.5 font-medium text-white">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />
           Unsaved changes
         </span>
       );
@@ -101,7 +101,7 @@ export function SaveStatus({
       break;
     default:
       visible = (
-        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-destructive/25 bg-destructive/5 p-1.5 pl-2.5 text-xs text-status-failed">
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-white p-1.5 pl-2.5 text-xs text-status-failed">
           <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
           <FailureText state={state} onRetry={onRetry} onGoToField={onGoToField} />
         </span>
@@ -109,7 +109,7 @@ export function SaveStatus({
   }
 
   return (
-    <div className="text-xs text-muted-foreground">
+    <div className="text-xs text-hero-foreground-muted">
       <span>{visible}</span>
       <span role="status" className="sr-only">
         {announcement}

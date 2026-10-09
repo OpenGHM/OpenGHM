@@ -39,10 +39,10 @@ export function BoundingBoxMap({ north, south, east, west }: Props) {
       // No maxBounds — it prevents fitBounds from centering correctly when the
       // bbox center is near the antimeridian (world pixel < container half-width).
       style={{
-        height: "340px",
+        height: "280px",
         width: "100%",
-        borderRadius: "0.5rem",
-        background: "#aad3df", // OSM ocean color — fills any empty space gracefully
+        borderRadius: "0.75rem",
+        background: "var(--map-water)", // OSM ocean color — fills any empty space gracefully
       }}
       zoomControl={true}
     >
@@ -55,9 +55,9 @@ export function BoundingBoxMap({ north, south, east, west }: Props) {
       <Rectangle
         bounds={bounds}
         pathOptions={{
-          color: "#006994",
+          // Stroke and fill take --primary from the .bbox-rect rule in globals.css.
+          className: "bbox-rect",
           weight: 2,
-          fillColor: "#006994",
           fillOpacity: 0.18,
         }}
       />

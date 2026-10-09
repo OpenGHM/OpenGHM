@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AlertCircle, ChevronRight, FolderOpen, Home, Loader2, RotateCw } from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
@@ -85,10 +85,10 @@ export function TreeBrowser({
 
   return (
     <>
-      <Card className="overflow-hidden rounded-xl border-0 gap-0 py-0 shadow-sm">
-        <CardHeader className="border-b bg-gradient-to-r from-cyan-500/5 to-transparent !py-3 !gap-0 grid-rows-1 items-center">
+      <Card className="gap-0 overflow-hidden border-0 py-0 shadow-raised">
+        <div className="border-b border-border/70 px-5 py-3.5 sm:px-6">
           <nav aria-label={`Folders of ${name}`}>
-            <ol className="flex flex-wrap items-center gap-1 text-sm">
+            <ol className="flex flex-wrap items-center gap-1 font-mono text-[13px]">
               <Crumb
                 href={rootHref}
                 current={folder === ""}
@@ -110,8 +110,8 @@ export function TreeBrowser({
               ))}
             </ol>
           </nav>
-        </CardHeader>
-        <CardContent className="px-0 py-0">
+        </div>
+        <div>
           {view.status === "loading" && <ListingSkeleton />}
           {view.status === "error" && (
             <ListingError code={view.code} rootHref={rootHref} onRetry={listings.retry} />
@@ -155,7 +155,7 @@ export function TreeBrowser({
               )}
             </>
           )}
-        </CardContent>
+        </div>
       </Card>
 
       <TreePreviewSheet
@@ -183,7 +183,7 @@ function Crumb({
 }) {
   return (
     <li className="flex items-center gap-1">
-      {separator && <ChevronRight className="size-3.5 text-slate-400" aria-hidden="true" />}
+      {separator && <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />}
       {current ? (
         <span aria-current="page" className="inline-flex items-center gap-1 font-medium text-foreground">
           {label}
@@ -192,7 +192,7 @@ function Crumb({
         <a
           href={href}
           onClick={pushOnPlainClick(href)}
-          className="inline-flex items-center gap-1 text-[#006994] hover:underline"
+          className="inline-flex items-center gap-1 text-primary hover:text-primary-hover hover:underline"
         >
           {label}
         </a>
@@ -234,7 +234,7 @@ function ListingError({
         : "This folder is not in the tree.";
   return (
     <div role="alert" className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <AlertCircle className="size-8 text-amber-500" aria-hidden="true" />
+      <AlertCircle className="size-8 text-warning" aria-hidden="true" />
       <p className="text-sm text-muted-foreground">{message}</p>
       {retryable ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
@@ -245,7 +245,7 @@ function ListingError({
         <a
           href={rootHref}
           onClick={pushOnPlainClick(rootHref)}
-          className="text-sm text-[#006994] hover:underline"
+          className="text-sm text-primary hover:text-primary-hover hover:underline"
         >
           Back to the root of the tree
         </a>

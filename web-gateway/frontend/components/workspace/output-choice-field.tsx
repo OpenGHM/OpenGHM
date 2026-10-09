@@ -92,7 +92,7 @@ function InitSettingsList({ settings }: { settings: PostProcessingSettings }) {
   const noTemporal = !settings.temporalAggregation;
   const noClimatology = settings.temporalAggregation && !settings.climatology;
   return (
-    <div className="ml-[1.625rem] rounded-md border bg-muted/30 text-xs">
+    <div className="ml-[1.625rem] rounded-xl border bg-muted/30 text-xs">
       <p id={id} className="px-2.5 pt-2 pb-0.5 font-medium text-foreground">
         Set in this snapshot&apos;s init
       </p>

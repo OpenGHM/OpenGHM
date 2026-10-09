@@ -30,7 +30,7 @@ export function TreeBrowserTable({
   return (
     <Table>
       <TableHeader>
-        <TableRow className="bg-slate-50/60 hover:bg-slate-50/60">
+        <TableRow className="hover:bg-transparent">
           <TableHead className="pl-6">Name</TableHead>
           <TableHead className="w-28 text-right">Size</TableHead>
           <TableHead className="w-32">Modified</TableHead>
@@ -48,9 +48,9 @@ export function TreeBrowserTable({
                 <a
                   href={href}
                   onClick={pushOnPlainClick(href)}
-                  className="inline-flex items-center gap-2 break-all font-medium text-[#006994] hover:underline"
+                  className="inline-flex items-center gap-2 font-mono text-[13px] font-medium break-all text-primary hover:text-primary-hover hover:underline"
                 >
-                  <Folder className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
+                  <Folder className="size-4 shrink-0 text-primary" aria-hidden="true" />
                   {f.name}/
                 </a>
               </TableCell>
@@ -69,14 +69,14 @@ export function TreeBrowserTable({
                   <a
                     href={href}
                     onClick={pushOnPlainClick(href)}
-                    className="inline-flex items-center gap-2 break-all text-foreground hover:text-[#006994] hover:underline"
+                    className="inline-flex items-center gap-2 font-mono text-[13px] break-all text-foreground hover:text-primary hover:underline"
                   >
-                    <FileText className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+                    <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     {f.name}
                   </a>
                 ) : (
-                  <span className="inline-flex items-center gap-2 break-all text-foreground">
-                    <FileIcon className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+                  <span className="inline-flex items-center gap-2 font-mono text-[13px] break-all text-foreground">
+                    <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     {f.name}
                   </span>
                 )}

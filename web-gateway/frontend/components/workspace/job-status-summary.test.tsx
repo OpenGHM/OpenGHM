@@ -356,8 +356,8 @@ describe("a failed job", () => {
   });
 
   it("is an amber warning when a limit was hit, and red otherwise", () => {
-    expect(renderToString(summary(previewDraftJob("failed:timeout")))).toContain("border-l-status-running");
-    expect(renderToString(summary(previewDraftJob("failed:wbm_error")))).toContain("border-l-status-failed");
+    expect(renderToString(summary(previewDraftJob("failed:timeout")))).toContain("bg-status-running/10");
+    expect(renderToString(summary(previewDraftJob("failed:wbm_error")))).toContain("bg-status-failed/10");
   });
 });
 

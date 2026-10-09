@@ -27,7 +27,7 @@ export function CopyUrlButton({ url, label }: { url: string; label: string }) {
       title={copied ? "Copied" : "Copy URL"}
       className="text-muted-foreground hover:text-foreground"
     >
-      {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+      {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
     </Button>
   );
 }

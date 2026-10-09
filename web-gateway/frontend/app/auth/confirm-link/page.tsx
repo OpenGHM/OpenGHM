@@ -3,13 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 import { useTokenRequest } from "@/lib/use-token-request";
 
 function ConfirmLinkBody() {
@@ -25,18 +19,18 @@ function ConfirmLinkBody() {
 
   if (status === "success") {
     return (
-      <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-3">
+      <AuthNotice tone="success">
         Your sign-in methods have been linked.{" "}
         <Link href="/auth/signin" className="font-medium underline">
           Sign in
         </Link>{" "}
         to continue.
-      </p>
+      </AuthNotice>
     );
   }
 
   return (
-    <p className="text-sm text-red-600">
+    <p className="text-sm text-destructive">
       This confirmation link is invalid or has expired. Try registering or
       signing in again to send a new one.
     </p>
@@ -45,18 +39,14 @@ function ConfirmLinkBody() {
 
 export default function ConfirmLinkPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Link sign-in methods</CardTitle>
-          <CardDescription>OpenGHM Gateway account linking</CardDescription>
-        </CardHeader>
-        <Suspense fallback={<CardContent><p className="text-sm text-muted-foreground">Loading…</p></CardContent>}>
-          <CardContent>
-            <ConfirmLinkBody />
-          </CardContent>
-        </Suspense>
-      </Card>
-    </main>
+    <AuthShell
+      eyebrow="Account linking"
+      title="Link sign-in methods"
+      description="OpenGHM Gateway account linking"
+    >
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+        <ConfirmLinkBody />
+      </Suspense>
+    </AuthShell>
   );
 }

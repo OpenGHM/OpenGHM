@@ -1,30 +1,33 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ADMIN_PAGE_CLASS } from "@/components/admin/admin-page";
-import { cn } from "@/lib/utils";
+import { AdminPage } from "@/components/admin/admin-page";
 
-function HeaderSkeleton() {
+/**
+ * The band is shown at once with a bar where its title goes, so moving between
+ * admin pages keeps the header and the nav in place; only the content waits.
+ */
+function LoadingPage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
-      <Skeleton className="h-8 w-40" />
-      <Skeleton className="h-4 w-64 max-w-full" />
-    </div>
+    <AdminPage title={<Skeleton className="reveal-delayed h-[1em] w-48 max-w-full bg-white/15" />}>
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading"
+        className="reveal-delayed space-y-6"
+      >
+        {children}
+      </div>
+    </AdminPage>
   );
 }
 
 /**
  * Overview and system: a row of figures, then a few cards. Announced once.
- * Both skeletons are invisible for the first 300 ms, so a fast load shows none.
+ * Both skeletons' content is invisible for the first 300 ms, so a fast load shows none.
  */
 export function OverviewSkeleton() {
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Loading"
-      className={cn(ADMIN_PAGE_CLASS, "reveal-delayed")}
-    >
-      <HeaderSkeleton />
+    <LoadingPage>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {Array.from({ length: 5 }, (_, i) => (
           <Card key={i}>
@@ -47,20 +50,14 @@ export function OverviewSkeleton() {
           </Card>
         ))}
       </div>
-    </div>
+    </LoadingPage>
   );
 }
 
 /** Users, jobs, audit log and a user's page: a header, filters, then rows. */
 export function ListSkeleton() {
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Loading"
-      className={cn(ADMIN_PAGE_CLASS, "reveal-delayed")}
-    >
-      <HeaderSkeleton />
+    <LoadingPage>
       <Skeleton className="h-9 w-full max-w-sm" />
       <Card>
         <CardContent className="divide-y p-0">
@@ -76,6 +73,6 @@ export function ListSkeleton() {
           ))}
         </CardContent>
       </Card>
-    </div>
+    </LoadingPage>
   );
 }

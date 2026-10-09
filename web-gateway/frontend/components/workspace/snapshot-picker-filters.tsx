@@ -58,8 +58,8 @@ export function SnapshotPickerFilters({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border bg-card px-3.5 transition-shadow focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none">
+      <div className="flex items-center gap-2 rounded-[18px] bg-card p-2.5 shadow-card">
+        <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-[11px] bg-muted px-3.5 transition-shadow focus-within:ring-[3px] focus-within:ring-ring/50 motion-reduce:transition-none">
           <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           <input
             type="search"
@@ -90,7 +90,7 @@ export function SnapshotPickerFilters({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((o) => !o)}
-          className="h-11 shrink-0 gap-2 rounded-xl bg-card px-3.5 hover:bg-muted hover:text-foreground"
+          className="h-11 shrink-0 gap-2 rounded-[11px] border-0 bg-muted px-3.5 font-semibold shadow-none hover:bg-secondary hover:text-primary"
         >
           <SlidersHorizontal aria-hidden="true" />
           Filters
@@ -109,7 +109,7 @@ export function SnapshotPickerFilters({
 
       {/* `hidden` on a wrapper of its own: a display class on the card would beat it. */}
       <div id={panelId} hidden={!open}>
-        <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <div className="rounded-card border border-border/70 bg-card p-5 shadow-card sm:p-6">
           <div className={cn("grid gap-x-10 gap-y-6", groups.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2")}>
             {groups.map((group) => {
               const id = `${headingId}-${group.key}`;
@@ -118,7 +118,7 @@ export function SnapshotPickerFilters({
                   <h3
                     id={id}
                     className={cn(
-                      "text-[13.5px] font-semibold text-foreground",
+                      "font-mono text-xs font-medium tracking-[0.06em] text-primary uppercase",
                       group.kind === "facet" ? "mb-2" : "mb-3"
                     )}
                   >

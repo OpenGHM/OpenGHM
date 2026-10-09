@@ -147,10 +147,11 @@ const GRID = graticule();
 
 /**
  * Where a snapshot or a model input lies, as a small equirectangular panel:
- * land (Natural Earth 1:110m, see `world-land.ts`), a graticule and the
- * bounding box. An SVG with no map tiles and no network
- * request, so a list can show one on every card. The "Global" / "Regional"
- * label in the corner is derived from the box (see `coverageLabel`).
+ * white land (Natural Earth 1:110m, see `world-land.ts`) on a light blue
+ * ground, a graticule and the bounding box, as the design's map tile. An SVG
+ * with no map tiles and no network request, so a list can show one on every
+ * card. The "Global" / "Regional" pill in the corner is derived from the box
+ * (see `coverageLabel`).
  */
 export function CoverageThumbnail({
   box,
@@ -173,7 +174,7 @@ export function CoverageThumbnail({
   return (
     <div
       className={cn(
-        "relative aspect-[2/1] overflow-hidden rounded-md border border-border bg-slate-100",
+        "relative aspect-[2/1] overflow-hidden rounded-xl border border-primary/10 bg-accent",
         className
       )}
     >
@@ -187,12 +188,12 @@ export function CoverageThumbnail({
         <path
           data-testid="coverage-land"
           d={WORLD_LAND_PATH}
-          className="fill-white stroke-slate-400/70"
+          className="fill-white stroke-primary/30"
           strokeWidth={0.5}
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
-        <g className="stroke-slate-300/60" strokeWidth={1}>
+        <g className="stroke-primary/10" strokeWidth={1}>
           {GRID.vertical.map((x) => (
             <line
               key={`x${x}`}
@@ -222,7 +223,7 @@ export function CoverageThumbnail({
             y={r.y}
             width={r.width}
             height={r.height}
-            className="fill-highlight/[0.22] stroke-highlight"
+            className="fill-primary/[0.16] stroke-primary"
             strokeWidth={1.5}
             vectorEffect="non-scaling-stroke"
           />
@@ -231,9 +232,8 @@ export function CoverageThumbnail({
       {showLabel && (
         <span
           aria-hidden="true"
-          className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-card px-2 py-0.5 text-[11.5px] font-medium text-foreground shadow-sm"
+          className="absolute bottom-3 left-3 inline-flex items-center rounded-full bg-primary px-[9px] py-1 text-[11.5px] font-semibold text-primary-foreground"
         >
-          <span className="size-1.5 shrink-0 rounded-full bg-highlight" />
           {label}
         </span>
       )}

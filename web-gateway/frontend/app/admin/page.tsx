@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdminPage, InlineError } from "@/components/admin/admin-page";
-import { SectionHeader } from "@/components/admin/section-header";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InlineError } from "@/components/admin/admin-states";
 import { SiteStatsCards } from "@/components/admin/site-stats-cards";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -14,6 +14,9 @@ import {
   fetchJobStatusBreakdown,
 } from "@/lib/admin/actions";
 import type { AuditLogListResponse, TimeSeriesResponse, StatusBreakdownResponse } from "@/lib/admin/types";
+
+const SHORTCUT_LINK =
+  "block min-h-10 rounded-card focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 const EMPTY_AUDIT: AuditLogListResponse = { items: [], total_count: 0, page: 1, total_pages: 1 };
 const EMPTY_SERIES: TimeSeriesResponse = {
@@ -41,9 +44,7 @@ export default async function AdminOverviewPage() {
   const breakdown = breakdownResult.status === "fulfilled" ? breakdownResult.value : EMPTY_BREAKDOWN;
 
   return (
-    <AdminPage>
-      <SectionHeader title="Admin" description="Site-wide activity at a glance." />
-
+    <AdminPage title="Admin" description="Site-wide activity at a glance.">
       {(statsResult.status === "rejected" || usersResult.status === "rejected") && (
         <InlineError title="Some totals could not be loaded.">
           They show a dash for now. Reload the page to try again.
@@ -93,27 +94,27 @@ export default async function AdminOverviewPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Link href="/admin/users" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-          <Card className="transition-shadow hover:shadow-md">
+        <Link href="/admin/users" className={SHORTCUT_LINK}>
+          <Card className="transition-shadow hover:shadow-raised">
             <CardContent className="py-4">
-              <p className="font-medium text-slate-900">Manage users →</p>
-              <p className="text-sm text-slate-500">Roles, status, sessions.</p>
+              <p className="font-semibold text-foreground">Manage users →</p>
+              <p className="text-sm text-muted-foreground">Roles, status, sessions.</p>
             </CardContent>
           </Card>
         </Link>
-        <Link href="/admin/jobs" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-          <Card className="transition-shadow hover:shadow-md">
+        <Link href="/admin/jobs" className={SHORTCUT_LINK}>
+          <Card className="transition-shadow hover:shadow-raised">
             <CardContent className="py-4">
-              <p className="font-medium text-slate-900">Site-wide jobs →</p>
-              <p className="text-sm text-slate-500">All snapshot drafts across users.</p>
+              <p className="font-semibold text-foreground">Site-wide jobs →</p>
+              <p className="text-sm text-muted-foreground">All snapshot drafts across users.</p>
             </CardContent>
           </Card>
         </Link>
-        <Link href="/admin/audit" className="block min-h-10 rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-          <Card className="transition-shadow hover:shadow-md">
+        <Link href="/admin/audit" className={SHORTCUT_LINK}>
+          <Card className="transition-shadow hover:shadow-raised">
             <CardContent className="py-4">
-              <p className="font-medium text-slate-900">Audit log →</p>
-              <p className="text-sm text-slate-500">Auth and job event history.</p>
+              <p className="font-semibold text-foreground">Audit log →</p>
+              <p className="text-sm text-muted-foreground">Auth and job event history.</p>
             </CardContent>
           </Card>
         </Link>

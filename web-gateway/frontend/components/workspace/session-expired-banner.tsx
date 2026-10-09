@@ -15,7 +15,8 @@ function subscribeNever() {
  * Inline notice for a 401: the sign-in has expired. Show it wherever a server
  * action returns `{ ok: false, reason: "session_expired" }` (a toast alone
  * disappears before the person can act on it). Sign in returns to the page
- * they are on, query string included.
+ * they are on, query string included. The tint is mixed into a solid colour,
+ * because the banner also sits on the navy band and over the band's overlap.
  */
 export function SessionExpiredBanner({ className }: { className?: string }) {
   const pathname = usePathname();
@@ -32,7 +33,7 @@ export function SessionExpiredBanner({ className }: { className?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className={`flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/5 p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
+      className={`flex flex-col gap-3 rounded-lg border border-warning/25 bg-[color-mix(in_srgb,var(--warning)_5%,white)] p-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between ${className ?? ""}`}
     >
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />

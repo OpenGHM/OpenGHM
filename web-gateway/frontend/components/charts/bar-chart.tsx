@@ -18,7 +18,7 @@ export function BarChart({
 }) {
   if (points.length === 0 || points.every((p) => p.count === 0)) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
         Nothing in this period yet.
       </div>
     );
@@ -55,7 +55,7 @@ export function BarChart({
                 x={x + barWidth / 2}
                 y={HEIGHT - 4}
                 textAnchor="middle"
-                className="fill-slate-500"
+                className="fill-muted-foreground font-mono"
                 fontSize="9"
               >
                 {formatLabel ? formatLabel(p.bucket) : new Date(p.bucket).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
@@ -64,7 +64,7 @@ export function BarChart({
           </g>
         );
       })}
-      <line x1={0} y1={chartHeight} x2={WIDTH} y2={chartHeight} stroke="currentColor" className="text-slate-200" strokeWidth={1} />
+      <line x1={0} y1={chartHeight} x2={WIDTH} y2={chartHeight} stroke="currentColor" className="text-border" strokeWidth={1} />
     </svg>
   );
 }

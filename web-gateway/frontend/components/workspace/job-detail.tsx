@@ -1,6 +1,6 @@
 import { JobHeader } from "@/components/workspace/job-header";
+import { PageBody } from "@/components/layout/page-hero";
 import { AsideLayout } from "@/components/workspace/aside-layout";
-import { WORKSPACE_MAIN } from "@/components/workspace/page-header";
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
 import { PublishCard } from "@/components/workspace/publish-card";
 import { RunDetailsCard } from "@/components/workspace/run-details-card";
@@ -11,7 +11,7 @@ import type { Recommended } from "@/lib/jobs/compute";
 import type { Job, JobLive, LogStream, PartialAbout } from "@/lib/jobs/types";
 
 /**
- * The job detail page below the site header: the header (breadcrumb, the
+ * The job detail page below the site header: the navy band (breadcrumb, the
  * snapshot draft's name and status, the actions) and, in the order a person
  * reads it, the status summary (is it running, did it work, why not, where are
  * the results, how long it took), the publish card, the logs, and the About card.
@@ -82,12 +82,11 @@ export function JobDetail({
       }}
       preview={preview}
     >
-      <main className={WORKSPACE_MAIN}>
-        <JobHeader job={job} preview={preview} />
+      <JobHeader job={job} preview={preview} />
+      <PageBody className="flex-1">
         <AsideLayout
           label="Run details"
           below="flow"
-          className="py-6 sm:py-8"
           lead={<JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />}
           aside={<RunDetailsCard job={job} recommended={recommended} postProcessing={postProcessing} />}
         >
@@ -95,7 +94,7 @@ export function JobDetail({
           <LogViewer previewLogs={previewLogs} />
           <AboutSummaryCard about={job.about} />
         </AsideLayout>
-      </main>
+      </PageBody>
     </LiveJobProvider>
   );
 }

@@ -18,18 +18,15 @@ import type { HelpFacts, HelpStep } from "@/lib/workspace/wizard-help";
 export function WizardLayout({
   step,
   facts,
-  className,
   children,
 }: {
   step: HelpStep;
   facts: HelpFacts;
-  /** The vertical padding of the body. */
-  className?: string;
   children: ReactNode;
 }) {
   return (
     <WizardHelpProvider step={step} facts={facts}>
-      <AsideLayout aside={<WizardHelpPanel />} label="Help" below="hidden" className={className}>
+      <AsideLayout aside={<WizardHelpPanel />} label="Help" below="hidden">
         {children}
       </AsideLayout>
     </WizardHelpProvider>

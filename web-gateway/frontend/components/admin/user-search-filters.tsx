@@ -64,7 +64,7 @@ export function UserSearchFilters({
     <div className="space-y-3">
       <div className="relative sm:max-w-sm">
         <Search
-          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
         />
         <Input
@@ -85,7 +85,7 @@ export function UserSearchFilters({
             onClick={() => pushParams({ role: tab.value })}
           />
         ))}
-        <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" aria-hidden="true" />
+        <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
         {STATUS_TABS.map((tab) => (
           <FilterPill
             key={tab.label}
@@ -97,7 +97,7 @@ export function UserSearchFilters({
         {hasFilters && (
           <Link
             href="/admin/users"
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 max-sm:min-h-10 sm:ml-2"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground max-sm:min-h-10 sm:ml-2"
           >
             <X className="size-3" aria-hidden="true" />
             Clear filters
@@ -122,8 +122,10 @@ function FilterPill({
       type="button"
       onClick={onClick}
       aria-pressed={isActive}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 max-sm:px-4 ${
-        isActive ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 max-sm:px-4 ${
+        isActive
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "border bg-card text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
       }`}
     >
       {label}

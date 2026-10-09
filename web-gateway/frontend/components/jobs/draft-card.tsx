@@ -5,7 +5,6 @@ import { TimeStamp } from "@/components/common/time-stamp";
 import { ClampedName } from "@/components/common/clamped-name";
 import { JobStatusBadge } from "@/components/jobs/job-status-badge";
 import { displayStatus } from "@/lib/jobs/display-status";
-import { HUE } from "@/lib/jobs/status-hue";
 import type { Job } from "@/lib/jobs/types";
 
 function formatDuration(startedAt: string, completedAt: string): string {
@@ -21,13 +20,12 @@ function formatDuration(startedAt: string, completedAt: string): string {
 
 export function DraftCard({ job }: { job: Job }) {
   const shown = displayStatus(job);
-  const borderColor = HUE[shown].border;
   const displayId = job.sim_id || job.id.slice(0, 12);
 
   return (
     <Link href={`/workspace/${job.id}`} className="block">
       <Card
-        className={`gap-0 overflow-hidden border-l-4 py-0 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${borderColor}`}
+        className="gap-0 overflow-hidden py-0 transition-all hover:-translate-y-0.5 hover:shadow-raised"
       >
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-4">

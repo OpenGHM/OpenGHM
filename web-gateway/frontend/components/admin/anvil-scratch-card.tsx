@@ -6,7 +6,7 @@ import { HardDrive, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EmptyState, InlineError } from "@/components/admin/admin-page";
+import { EmptyState, InlineError } from "@/components/admin/admin-states";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { clearSpoolCache, fetchAnvilScratch } from "@/lib/admin/actions";

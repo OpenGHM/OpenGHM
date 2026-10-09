@@ -373,19 +373,18 @@ export function JobStatusSummary({
   return (
     <section
       aria-label="Status"
-      className={`rounded-xl border border-l-4 bg-card p-5 shadow-sm sm:p-6 ${hue.border}`}
+      className="rounded-card bg-card p-6 shadow-raised sm:p-7"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-2.5 text-xl font-semibold text-foreground">
-            <Icon
-              className={`size-5 shrink-0 ${hue.icon} ${spinning ? "motion-safe:animate-spin" : ""}`}
-              aria-hidden="true"
-            />
+          <h2 className="flex items-center gap-3 text-xl font-[650] tracking-[-0.02em] text-foreground">
+            <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-xl ${hue.tile}`}>
+              <Icon className={`size-5 ${hue.icon} ${spinning ? "motion-safe:animate-spin" : ""}`} />
+            </span>
             <span className="min-w-0 break-words">{headline.title}</span>
           </h2>
           {headline.sub && (
-            <p className="mt-1.5 min-w-0 break-words text-sm text-muted-foreground">{headline.sub}</p>
+            <p className="mt-2 min-w-0 break-words text-sm leading-relaxed text-muted-foreground">{headline.sub}</p>
           )}
         </div>
         {(cancellable || cancelPending) && !gone && (

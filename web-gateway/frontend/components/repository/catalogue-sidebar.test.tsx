@@ -79,8 +79,8 @@ describe("CatalogueSidebar groups", () => {
     expect(screen.queryByRole("button", { name: /^Active processes/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Tags/ })).toBeNull();
     expect(group(/^Type/)).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Model Snapshot" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Model Input" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Model Snapshot" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Model Input" })).toBeTruthy();
   });
 
   it("names a group's button by its title and shows + when closed, – when open", () => {
@@ -94,14 +94,25 @@ describe("CatalogueSidebar groups", () => {
     expect(group(/^Type/).querySelector("svg.lucide-minus")).not.toBeNull();
   });
 
-  it("shows each count as a plain number, right-aligned, without parentheses", () => {
+  it("shows each count as a plain number in a pill, right-aligned, without parentheses", () => {
     setup();
-    const box = screen.getByRole("checkbox", { name: "Model Snapshot 2" });
+    const box = screen.getByRole("checkbox", { name: "Publication 2" });
     const count = box.closest("label")!.lastElementChild as HTMLElement;
     expect(count.textContent).toBe("2");
     expect(count.className).toContain("font-mono");
+    expect(count.className).toContain("rounded-full");
     expect(box.closest("label")!.textContent).not.toContain("(");
-    expect(screen.getByRole("checkbox", { name: "Publication 2" })).toBeTruthy();
+  });
+
+  it("offers Type as a two-button segmented control, each kind with its count", () => {
+    setup(filters({ type: ["snapshot"] }));
+    const snapshot = screen.getByRole("button", { name: "Model Snapshot 2" });
+    const input = screen.getByRole("button", { name: "Model Input 1" });
+    expect(snapshot.getAttribute("aria-pressed")).toBe("true");
+    expect(input.getAttribute("aria-pressed")).toBe("false");
+    expect(snapshot.lastElementChild?.textContent).toBe("2");
+    expect(snapshot.parentElement).toBe(input.parentElement);
+    expect(screen.queryByRole("checkbox", { name: /^Model (Snapshot|Input)/ })).toBeNull();
   });
 
   it("humanises forcing roles", () => {
@@ -194,9 +205,17 @@ describe("CatalogueSidebar checkboxes", () => {
   });
 
   it("reports an unticked box without the value", () => {
-    const { onChange } = setup(filters({ type: ["snapshot", "model-input"] }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Model Snapshot 2" }));
-    expect(onChange).toHaveBeenCalledWith({ type: ["model-input"] });
+    const { onChange } = setup(filters({ tag: ["publication", "climate-forcing"] }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publication 2" }));
+    expect(onChange).toHaveBeenCalledWith({ tag: ["climate-forcing"] });
+  });
+
+  it("adds a kind to the Type filter, and takes it off again, with its segmented button", () => {
+    const { onChange } = setup(filters({ type: ["snapshot"] }));
+    fireEvent.click(screen.getByRole("button", { name: "Model Input 1" }));
+    expect(onChange).toHaveBeenLastCalledWith({ type: ["snapshot", "model-input"] });
+    fireEvent.click(screen.getByRole("button", { name: "Model Snapshot 2" }));
+    expect(onChange).toHaveBeenLastCalledWith({ type: [] });
   });
 
   it("keeps a selected value the facets no longer list, so it can be unticked", () => {
@@ -338,17 +357,17 @@ describe("CatalogueSidebar spatial resolution", () => {
   const resGroup = () => screen.getByRole("group", { name: "Spatial resolution" });
   const thumb = (name: string) => screen.getByRole("slider", { name });
 
-  it("offers All, a unit, the range slider and the preset chips, in that order", () => {
+  it("offers the preset chips, All, a unit and the range slider, in that order", () => {
     setup();
     const g = resGroup();
+    const chip = within(g).getByRole("button", { name: "30 arc-sec" });
     const all = within(g).getByRole("checkbox", { name: "All" });
     const unit = within(g).getByRole("button", { name: "Degrees" });
     const finest = thumb("Finest resolution");
-    const chip = within(g).getByRole("button", { name: "30 arc-sec" });
     const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(chip, all)).toBe(true);
     expect(before(all, unit)).toBe(true);
     expect(before(unit, finest)).toBe(true);
-    expect(before(finest, chip)).toBe(true);
     expect(thumb("Coarsest resolution")).toBeTruthy();
     for (const label of ["30 arc-sec", "5 arc-min", "15 arc-min", "0.5°", "1°"]) {
       const c = screen.getByRole("button", { name: label });
@@ -518,7 +537,7 @@ describe("CatalogueSidebar on a phone", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.textContent).toContain("2");
     expect(toggle.className).toContain("lg:hidden");
-    expect(toggle.className).toContain("h-11");
+    expect(toggle.className).toContain("h-12");
 
     const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
     expect(panel?.className).toContain("hidden");

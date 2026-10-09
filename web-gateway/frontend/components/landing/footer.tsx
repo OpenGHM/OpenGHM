@@ -33,7 +33,7 @@ export function Footer() {
               height={98}
               className="mb-4 h-12 w-auto"
             />
-            <p className="max-w-[380px] text-sm leading-relaxed text-pretty text-[#4a5a66]">
+            <p className="max-w-[380px] text-sm leading-relaxed text-pretty text-foreground/80">
               An open-source platform democratizing access to global hydrologic
               data and modeling capabilities. Built for the future of water
               science.
@@ -83,7 +83,7 @@ function FooterColumn({
           <li key={link}>
             <a
               href="#"
-              className="text-sm text-[#3a4a56] transition-colors hover:text-primary"
+              className="text-sm text-foreground/80 transition-colors hover:text-primary"
             >
               {link}
             </a>

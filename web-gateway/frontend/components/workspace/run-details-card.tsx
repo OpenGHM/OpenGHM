@@ -2,25 +2,6 @@
 
 import { useId, useState, type ReactNode } from "react";
 import Link from "next/link";
-import {
-  Ban,
-  Calendar,
-  Cpu,
-  Database,
-  FileOutput,
-  Flag,
-  Globe,
-  Hash,
-  HardDrive,
-  Info,
-  ListChecks,
-  Play,
-  Send,
-  Server,
-  Timer,
-  Wrench,
-} from "lucide-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { clampClass } from "@/components/common/clamped-name";
 import { CopyButton } from "@/components/workspace/copy-button";
@@ -36,28 +17,38 @@ import {
 import type { Job } from "@/lib/jobs/types";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import { useNow } from "@/lib/workspace/use-now";
+import { cn } from "@/lib/utils";
 
 /** Variables drawn before "Show all". */
 const VARIABLES_SHOWN = 6;
 
 /** One fact of the card, drawn as the Data Repository's "Dataset Info" draws
- *  one: a small icon, the label, the value. */
-function InfoRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+ *  one: the label small and muted, the value under it, a hairline between rows.
+ *  `mono` is for a value that is a date, a number or an id. */
+function InfoRow({ label, mono = false, children }: { label: string; mono?: boolean; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-start gap-3">
-      <div aria-hidden="true" className="mt-0.5 shrink-0 text-primary [&_svg]:size-4">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="mt-0.5 min-w-0 break-words text-sm font-medium text-foreground">{children}</dd>
-      </div>
+    <div className="flex min-w-0 flex-col gap-0.5 border-t py-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn("min-w-0 text-sm font-medium break-words text-foreground", mono && "font-mono text-[13px]")}>
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+/** A figure of the navy Execution card: a small light label over a mono value. */
+function Tile({ label, wide = false, children }: { label: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-xl bg-white/6 p-3", wide && "col-span-2")}>
+      <dt className="text-[11.5px] text-hero-eyebrow">{label}</dt>
+      <dd className="min-w-0 font-mono text-[15px] break-words text-white">{children}</dd>
     </div>
   );
 }
 
 const MONO = "font-mono text-xs font-normal break-all";
 const NOTE = "ml-1.5 text-xs font-normal text-muted-foreground";
+const TILE_NOTE = "block font-sans text-[11.5px] font-normal text-hero-foreground-muted";
 
 /** The output variables: how many, the first few, and the rest on request. */
 function Variables({ variables }: { variables: string[] }) {
@@ -66,9 +57,9 @@ function Variables({ variables }: { variables: string[] }) {
   const shown = all ? variables : variables.slice(0, VARIABLES_SHOWN);
   return (
     <div id={regionId} className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-sm font-medium">{variables.length}</span>
+      <span className="mr-1 font-mono text-[13px] font-medium">{variables.length}</span>
       {shown.map((v) => (
-        <span key={v} className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs font-normal text-foreground">
+        <span key={v} className="rounded-full border px-2.5 py-[3px] font-mono text-xs font-normal text-foreground/80">
           {v}
         </span>
       ))}
@@ -78,7 +69,7 @@ function Variables({ variables }: { variables: string[] }) {
           onClick={() => setAll((v) => !v)}
           aria-expanded={all}
           aria-controls={regionId}
-          className="min-h-10 rounded-md px-2 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8"
+          className="min-h-10 rounded-md px-2 text-xs font-semibold text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-8"
         >
           {all ? "Show fewer" : `Show all ${variables.length}`}
         </button>
@@ -114,23 +105,23 @@ function TimeRows({ job }: { job: Job }) {
 
   return (
     <>
-      <InfoRow icon={<Send />} label="Submitted">
+      <InfoRow mono label="Submitted">
         <TimeStamp value={submittedAt} />
         {waiting !== null && <span className={NOTE}>(waiting {shortDuration(waiting)})</span>}
       </InfoRow>
       {started && (
-        <InfoRow icon={<Play />} label="Started">
+        <InfoRow mono label="Started">
           <TimeStamp value={started} />
           {waited !== null && <span className={NOTE}>(waited {shortDuration(waited)})</span>}
         </InfoRow>
       )}
       {cancelRequested && ending && (
-        <InfoRow icon={<Ban />} label="Cancel requested">
+        <InfoRow mono label="Cancel requested">
           <TimeStamp value={cancelRequested} />
         </InfoRow>
       )}
       {ending && ended && (
-        <InfoRow icon={<Flag />} label="Ended">
+        <InfoRow mono label="Ended">
           <TimeStamp value={ended} />
           {ran !== null && <span className={NOTE}>(ran {shortDuration(ran)})</span>}
         </InfoRow>
@@ -140,12 +131,13 @@ function TimeRows({ job }: { job: Job }) {
 }
 
 /**
- * The facts of a simulation past DRAFT, in the card beside the page from `xl`
+ * The facts of a simulation past DRAFT, in the cards beside the page from `xl`
  * and after the status summary below it (`AsideLayout`), styled as the Data
- * Repository's "Dataset Info": what it is based on (a link to the snapshot),
- * the run period and domain, the output variables and output, the cores and
- * walltime, the run's identity (Slurm job, run id, toolkit commit), the times
- * and where it wrote. Read-only. Everything the page says in more than one
+ * Repository's detail page: "Run details", a white list like its "Dataset
+ * Info" (what it is based on, a link to the snapshot, the run period and
+ * domain, the output variables and output, the run id, the toolkit commit, the
+ * times and where it wrote), and "Execution", a navy card like its "Container
+ * & Execution" with the cores, the walltime and the Slurm job. Read-only. Everything the page says in more than one
  * place is said here only: the status summary has the path of a completed run's
  * results, so this card leaves it out then.
  *
@@ -193,17 +185,12 @@ export function RunDetailsCard({
   const slurmJobId = view.slurm_job_id ?? job.slurm_job_id;
 
   return (
-    <Card className="gap-0 overflow-hidden rounded-xl border-0 py-0 shadow-sm">
-      <CardHeader className="grid-rows-1 items-center bg-gradient-to-r from-hero to-primary !gap-0 !py-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-primary-foreground">
-          <Info className="size-5" aria-hidden="true" />
-          Run details
-        </h2>
-      </CardHeader>
-      <CardContent className="pt-5 pb-6">
+    <div className="space-y-4">
+      <section className="rounded-card bg-card px-6 pt-6 pb-3 shadow-raised">
+        <h2 className="text-[17px] font-[650] tracking-[-0.02em]">Run details</h2>
         {/* Two columns where the card is the width of the page (`sm` up, below `xl`), one in the aside. */}
-        <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-1 xl:gap-y-3">
-          <InfoRow icon={<Database />} label="Based on">
+        <dl className="mt-2 grid gap-x-8 sm:grid-cols-2 xl:grid-cols-1">
+          <InfoRow label="Based on">
             <Link
               href={`/repository/${job.dataset_id}`}
               title={job.dataset_title}
@@ -212,53 +199,38 @@ export function RunDetailsCard({
               {job.dataset_title}
             </Link>
           </InfoRow>
-          <InfoRow icon={<Calendar />} label="Run period">
+          <InfoRow mono label="Run period">
             {parameters.temporal_range_start} &rarr; {parameters.temporal_range_end}
           </InfoRow>
           {domain && (
-            <InfoRow icon={<Globe />} label="Spatial domain">
+            <InfoRow label="Spatial domain">
               <span className="font-mono text-xs font-normal">
                 N{domain.north}&deg; S{domain.south}&deg; E{domain.east}&deg; W{domain.west}&deg;
               </span>
             </InfoRow>
           )}
           {parameters.variables.length > 0 && (
-            <InfoRow icon={<ListChecks />} label="Output variables">
+            <InfoRow label="Output variables">
               <Variables variables={parameters.variables} />
             </InfoRow>
           )}
           {/* Only when the draft chose: the snapshot's own is not known here. */}
           {parameters.post_processing && (
-            <InfoRow icon={<FileOutput />} label="Post-processing">
-              {describeOutput(parameters.post_processing)}
-            </InfoRow>
-          )}
-          <InfoRow icon={<Cpu />} label="Cores">
-            {compute.cores ?? <span className="font-normal text-muted-foreground">—</span>}
-            {coresNote && <span className={NOTE}>{coresNote}</span>}
-          </InfoRow>
-          <InfoRow icon={<Timer />} label="Walltime">
-            {walltime ?? <span className="font-normal text-muted-foreground">—</span>}
-            {walltimeNote && <span className={NOTE}>{walltimeNote}</span>}
-          </InfoRow>
-          {slurmJobId && (
-            <InfoRow icon={<Server />} label="Slurm job">
-              <span className={MONO}>#{slurmJobId}</span>
-            </InfoRow>
+            <InfoRow label="Post-processing">{describeOutput(parameters.post_processing)}</InfoRow>
           )}
           {job.sim_id && (
-            <InfoRow icon={<Hash />} label="Run ID">
+            <InfoRow label="Run ID">
               <span className={MONO}>{job.sim_id}</span>
             </InfoRow>
           )}
           {job.toolkit?.commit && (
-            <InfoRow icon={<Wrench />} label="Toolkit commit">
+            <InfoRow label="Toolkit commit">
               <span className={MONO}>{job.toolkit.commit}</span>
             </InfoRow>
           )}
           <TimeRows job={job} />
           {workDir && !summaryHasPath && (
-            <InfoRow icon={<HardDrive />} label="Work directory">
+            <InfoRow label="Work directory">
               <span className="flex items-start gap-2">
                 <span className={`${MONO} min-w-0 flex-1`}>{workDir}</span>
                 <CopyButton text={workDir} label="path" />
@@ -266,7 +238,29 @@ export function RunDetailsCard({
             </InfoRow>
           )}
         </dl>
-      </CardContent>
-    </Card>
+      </section>
+
+      <section className="relative overflow-hidden rounded-card bg-hero p-6 text-white">
+        <div aria-hidden="true" className="hero-dots pointer-events-none absolute inset-0 opacity-70" />
+        <div className="relative space-y-4">
+          <h2 className="text-[17px] font-[650] tracking-[-0.02em]">Execution</h2>
+          <dl className="grid grid-cols-2 gap-2">
+            <Tile label="Cores">
+              {compute.cores ?? <span className="text-hero-foreground-muted">—</span>}
+              {coresNote && <span className={TILE_NOTE}>{coresNote}</span>}
+            </Tile>
+            <Tile label="Walltime">
+              {walltime ?? <span className="text-hero-foreground-muted">—</span>}
+              {walltimeNote && <span className={TILE_NOTE}>{walltimeNote}</span>}
+            </Tile>
+            {slurmJobId && (
+              <Tile label="Slurm job" wide>
+                #{slurmJobId}
+              </Tile>
+            )}
+          </dl>
+        </div>
+      </section>
+    </div>
   );
 }

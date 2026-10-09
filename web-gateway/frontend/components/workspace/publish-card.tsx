@@ -184,16 +184,18 @@ export function PublishCard({
       ref={sectionRef}
       tabIndex={-1}
       aria-labelledby="publish-heading"
-      className={`rounded-xl border border-l-4 bg-card p-5 shadow-sm outline-none sm:p-6 ${hue.border}`}
+      className="rounded-card border border-border/70 bg-card p-6 shadow-card outline-none sm:p-7"
     >
       <PublishAnnouncer state={state} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 id="publish-heading" className="flex items-center gap-2.5 text-lg font-semibold text-foreground">
-            <Icon
-              className={`size-5 shrink-0 ${hue.icon} ${state === "publishing" ? "motion-safe:animate-spin" : ""}`}
-              aria-hidden="true"
-            />
+          <h2
+            id="publish-heading"
+            className="flex items-center gap-3 text-[17px] font-[650] tracking-[-0.02em] text-foreground"
+          >
+            <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-[10px] ${hue.tile}`}>
+              <Icon className={`size-[18px] ${hue.icon} ${state === "publishing" ? "motion-safe:animate-spin" : ""}`} />
+            </span>
             <span className="min-w-0 break-words">{title}</span>
           </h2>
 
@@ -288,7 +290,7 @@ export function PublishCard({
           <div>
             <div className="mb-1.5 text-xs font-medium text-muted-foreground">Snapshot id</div>
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs text-foreground">
+              <code className="min-w-0 flex-1 break-all rounded-[10px] bg-muted px-3 py-2 font-mono text-xs text-foreground">
                 {publish.snapshot_id}
               </code>
               <CopyButton text={publish.snapshot_id} label="snapshot id" />

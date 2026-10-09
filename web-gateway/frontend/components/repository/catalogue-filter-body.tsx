@@ -10,6 +10,7 @@ import type { CatalogueFacets, CatalogueFilterState } from "@/lib/repository/typ
 import {
   COLLAPSED_OPTION_COUNT,
   FacetCheckboxList,
+  FacetSegmentedControl,
   RegionFilter,
   ResolutionFilter,
   YearRangeFilter,
@@ -64,15 +65,18 @@ export function CatalogueFilterBody({
           onChange={onChange}
         />
       );
-    case "facet":
+    case "facet": {
+      // Type has the two kinds only: a segmented control, not a list.
+      const Control = group.key === "type" ? FacetSegmentedControl : FacetCheckboxList;
       return (
-        <FacetCheckboxList
+        <Control
           facetKey={group.key}
           options={facetGroupOptions(group.key, facets)}
           selected={filters[group.key]}
           onChange={(next) => onChange({ [group.key]: next })}
         />
       );
+    }
   }
 }
 

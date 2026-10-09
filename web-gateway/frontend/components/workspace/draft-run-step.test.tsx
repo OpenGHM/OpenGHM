@@ -208,7 +208,7 @@ describe("the draft run step: the quiet path", () => {
     const { container } = step();
     const panel = container.querySelector(".divide-y") as HTMLElement;
     expect(panel.querySelectorAll(":scope > section")).toHaveLength(5);
-    expect(panel.className).toContain("rounded-xl");
+    expect(panel.className).toContain("rounded-card");
     expect(container.innerHTML).not.toContain("bg-muted/40");
   });
 

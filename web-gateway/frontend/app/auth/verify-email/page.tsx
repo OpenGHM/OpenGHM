@@ -3,13 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 import { useTokenRequest } from "@/lib/use-token-request";
 
 function VerifyEmailBody() {
@@ -25,18 +19,18 @@ function VerifyEmailBody() {
 
   if (status === "success") {
     return (
-      <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-3">
+      <AuthNotice tone="success">
         Your email has been verified.{" "}
         <Link href="/auth/signin" className="font-medium underline">
           Sign in
         </Link>{" "}
         to continue.
-      </p>
+      </AuthNotice>
     );
   }
 
   return (
-    <p className="text-sm text-red-600">
+    <p className="text-sm text-destructive">
       This verification link is invalid or has expired. You can request a
       new one from your{" "}
       <Link href="/dashboard/profile" className="underline">
@@ -49,18 +43,14 @@ function VerifyEmailBody() {
 
 export default function VerifyEmailPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Email verification</CardTitle>
-          <CardDescription>OpenGHM Gateway account verification</CardDescription>
-        </CardHeader>
-        <Suspense fallback={<CardContent><p className="text-sm text-muted-foreground">Loading…</p></CardContent>}>
-          <CardContent>
-            <VerifyEmailBody />
-          </CardContent>
-        </Suspense>
-      </Card>
-    </main>
+    <AuthShell
+      eyebrow="Verification"
+      title="Email verification"
+      description="OpenGHM Gateway account verification"
+    >
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+        <VerifyEmailBody />
+      </Suspense>
+    </AuthShell>
   );
 }

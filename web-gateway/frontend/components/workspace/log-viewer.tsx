@@ -91,9 +91,12 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
   };
 
   return (
-    <section aria-labelledby="logs-heading" className="space-y-3">
+    <section
+      aria-labelledby="logs-heading"
+      className="space-y-4 rounded-card border border-border/70 bg-card p-6 shadow-card sm:p-7"
+    >
       <div className="flex items-center justify-between gap-2">
-        <h2 id="logs-heading" className="text-lg font-semibold text-foreground">
+        <h2 id="logs-heading" className="text-xl font-[650] tracking-[-0.02em] text-foreground">
           Logs
         </h2>
         <div className="flex gap-2">
@@ -106,7 +109,7 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
                 size="sm"
                 disabled={downloading}
                 aria-label="Download a log"
-                className="min-h-10 shrink-0 gap-1.5 px-3 text-xs text-muted-foreground hover:text-foreground sm:min-h-8"
+                className="min-h-10 shrink-0 gap-1.5 rounded-[9px] border-0 bg-muted px-3 text-[12.5px] font-semibold text-foreground shadow-none hover:bg-secondary hover:text-primary sm:min-h-8"
               >
                 {downloading ? (
                   <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden="true" />
@@ -134,7 +137,7 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
 
         {box.kind === "loading" && <LogSkeleton />}
         {box.kind === "empty" && (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-muted/30 px-4 py-10 text-center">
+          <div className="flex flex-col items-center gap-2 rounded-[14px] border border-dashed bg-muted/40 px-4 py-10 text-center">
             <FileText className="size-5 text-muted-foreground" aria-hidden="true" />
             <p className="max-w-sm text-sm text-muted-foreground">{box.message}</p>
           </div>

@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { redirectToSignIn, requireSession } from "@/lib/auth-guard";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
@@ -54,8 +53,7 @@ export default async function JobDetailPage({
     const me = await fetchMe();
     return (
       <div className="flex min-h-screen flex-col">
-        <Header />
-        <DraftWizard
+          <DraftWizard
           key={job.id}
           job={job}
           ctx={ctx}
@@ -86,7 +84,6 @@ export default async function JobDetailPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
       <JobDetail
         job={job}
         viewerEmail={viewerEmail}

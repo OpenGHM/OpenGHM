@@ -51,12 +51,15 @@ describe("CatalogueResults header", () => {
     expect(count.textContent).toBe("1 result for ‘storage’");
   });
 
-  it("holds the toolbar above the count, in the results column", () => {
+  it("holds the count, the sort and the view switch in one bar at the top of the results column", () => {
     const { container } = setup(response([snapshotItem()]));
     const section = container.querySelector("section")!;
-    expect(section.querySelector("#catalogue-search")).not.toBeNull();
-    expect(section.querySelector("#catalogue-sort")).not.toBeNull();
-    expect(screen.getByRole("group", { name: "View" })).toBeTruthy();
+    const bar = section.firstElementChild!;
+    expect(bar.querySelector("#catalogue-results")).not.toBeNull();
+    expect(bar.querySelector("#catalogue-sort")).not.toBeNull();
+    expect(bar.contains(screen.getByRole("group", { name: "View" }))).toBe(true);
+    // The search box is in the page's band, not here.
+    expect(section.querySelector("#catalogue-search")).toBeNull();
   });
 
   it("shows the active-filter chips only when a filter is on", () => {
@@ -119,12 +122,11 @@ describe("CatalogueResults views", () => {
     expect(screen.getAllByText("Authors")).toHaveLength(2);
   });
 
-  it("lays them out as a grid, 1, 2 and 3 across, in the grid view", () => {
+  it("lays them out as an auto-fill grid in the grid view", () => {
     const { container } = setup(response([snapshotItem(), modelInputItem()]), filters({ view: "grid" }));
     const list = container.querySelector("ul")!;
     expect(list.className).toContain("grid");
-    expect(list.className).toContain("md:grid-cols-2");
-    expect(list.className).toContain("xl:grid-cols-3");
+    expect(list.className).toContain("sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]");
     expect(screen.queryByText("Authors")).toBeNull();
     expect(screen.getAllByRole("link")).toHaveLength(2);
   });
@@ -132,7 +134,7 @@ describe("CatalogueResults views", () => {
   it("shows grid-shaped skeletons when a retry has no results to keep", () => {
     const { container } = setup(EMPTY_CATALOGUE, filters({ view: "grid" }), { isLoading: true, error: true });
     expect(container.querySelectorAll('[data-slot="card"][aria-hidden="true"]')).toHaveLength(6);
-    expect(container.querySelector('[aria-busy="true"] .xl\\:grid-cols-3')).not.toBeNull();
+    expect(container.querySelector('[aria-busy="true"] .grid')).not.toBeNull();
   });
 });
 
@@ -186,13 +188,13 @@ describe("CatalogueResults states", () => {
     expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
   });
 
-  it("shows a dashed empty card with Clear filters when filters leave nothing", () => {
+  it("shows an empty card with Clear filters when filters leave nothing", () => {
     const { container, onClearAll } = setup(
       { ...EMPTY_CATALOGUE, facets: FACETS },
       filters({ tag: ["publication"] })
     );
     expect(screen.getByText("No results match these filters")).toBeTruthy();
-    expect(container.querySelector(".border-dashed")).not.toBeNull();
+    expect(container.querySelector(".rounded-card.bg-card")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClearAll).toHaveBeenCalled();
     expect(screen.getByText("0").closest("[aria-live]")?.textContent).toBe("0 results");

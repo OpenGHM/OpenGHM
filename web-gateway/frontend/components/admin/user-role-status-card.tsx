@@ -36,14 +36,14 @@ export function UserRoleStatusCard({
         <div className="flex min-w-0 items-center gap-3">
           <UserAvatar name={user.name} email={user.email} className="h-12 w-12 shrink-0 text-base" />
           <div className="min-w-0">
-            <p className="font-medium text-slate-900 [overflow-wrap:anywhere]">{user.name}</p>
-            <p className="text-sm text-slate-500 [overflow-wrap:anywhere]">{user.email}</p>
+            <p className="font-medium text-foreground [overflow-wrap:anywhere]">{user.name}</p>
+            <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{user.email}</p>
           </div>
         </div>
 
         <dl className="min-w-0 space-y-2 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <dt className="shrink-0 text-slate-500">Email</dt>
+            <dt className="shrink-0 text-muted-foreground">Email</dt>
             <dd>
               <Badge variant={user.email_verified ? "secondary" : "outline"}>
                 {user.email_verified ? "Verified" : "Unverified"}
@@ -51,50 +51,50 @@ export function UserRoleStatusCard({
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <dt className="shrink-0 text-slate-500">Organization</dt>
-            <dd className="min-w-0 text-right font-medium [overflow-wrap:anywhere] text-slate-900">{user.organization ?? "—"}</dd>
+            <dt className="shrink-0 text-muted-foreground">Organization</dt>
+            <dd className="min-w-0 text-right font-medium [overflow-wrap:anywhere] text-foreground">{user.organization ?? "—"}</dd>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <dt className="shrink-0 text-slate-500">Member since</dt>
-            <dd className="min-w-0 text-right font-medium text-slate-900">
+            <dt className="shrink-0 text-muted-foreground">Member since</dt>
+            <dd className="min-w-0 text-right font-medium text-foreground">
               {user.created_at ? <TimeStamp value={user.created_at} format="date" /> : "—"}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <dt className="shrink-0 text-slate-500">Last login</dt>
-            <dd className="min-w-0 text-right font-medium text-slate-900">
+            <dt className="shrink-0 text-muted-foreground">Last login</dt>
+            <dd className="min-w-0 text-right font-medium text-foreground">
               {user.last_login_at ? <TimeStamp value={user.last_login_at} format="relative" /> : "Never"}
             </dd>
           </div>
           {user.sso_provider && (
             <div className="flex items-center justify-between">
-              <dt className="shrink-0 text-slate-500">Sign-in method</dt>
-              <dd className="min-w-0 text-right font-medium text-slate-900 capitalize">{user.sso_provider}</dd>
+              <dt className="shrink-0 text-muted-foreground">Sign-in method</dt>
+              <dd className="min-w-0 text-right font-medium text-foreground capitalize">{user.sso_provider}</dd>
             </div>
           )}
         </dl>
 
-        <div className="border-t border-slate-100 pt-4 space-y-3">
+        <div className="border-t border-border pt-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-slate-500">Role</span>
+            <span className="text-sm text-muted-foreground">Role</span>
             <RoleControl
               user={user}
               disabled={disabled}
               ariaLabel="Role"
-              className="rounded border border-slate-200 bg-white px-2 py-1 text-sm disabled:opacity-50 max-sm:min-h-10"
+              className="rounded-lg border border-input bg-card px-2 py-1 text-sm disabled:opacity-50 max-sm:min-h-10"
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-500">Status</span>
+            <span className="text-sm text-muted-foreground">Status</span>
             <StatusControl
               user={user}
               disabled={disabled}
-              className="rounded border px-2 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 max-sm:min-h-10 max-sm:px-3"
+              className="rounded-full border px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 max-sm:min-h-10 max-sm:px-3"
             />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
-              <span id="run-permission-label" className="text-sm text-slate-500">
+              <span id="run-permission-label" className="text-sm text-muted-foreground">
                 Can run simulations
               </span>
               <RunPermissionControl
@@ -105,7 +105,7 @@ export function UserRoleStatusCard({
                 describedBy="run-permission-help"
               />
             </div>
-            <p id="run-permission-help" className="text-xs text-slate-500">
+            <p id="run-permission-help" className="text-xs text-muted-foreground">
               Admin and staff can always run simulations. A user needs this switch on. Each
               simulation spends the shared compute allocation.
               {runImplicit && " Always permitted for this role."}
@@ -113,7 +113,7 @@ export function UserRoleStatusCard({
             </p>
           </div>
           {isSelf && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               You can&apos;t change your own role, status or run permission.
             </p>
           )}

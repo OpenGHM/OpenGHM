@@ -17,8 +17,6 @@ export interface HueClasses {
   icon: string;
   /** A notice box in this hue. */
   box: string;
-  /** A card's left border in the list. */
-  border: string;
 }
 
 export const HUE: Record<DisplayStatus, HueClasses> = {
@@ -28,7 +26,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-draft/10",
     icon: "text-status-draft",
     box: "border-status-draft/25 bg-status-draft/5",
-    border: "border-l-status-draft/40",
   },
   PENDING: {
     badge: "border-status-pending/25 bg-status-pending/10 text-status-pending",
@@ -36,7 +33,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-pending/10",
     icon: "text-status-pending",
     box: "border-status-pending/25 bg-status-pending/5",
-    border: "border-l-status-pending/40",
   },
   SUBMITTED: {
     badge: "border-status-submitted/25 bg-status-submitted/10 text-status-submitted",
@@ -44,7 +40,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-submitted/10",
     icon: "text-status-submitted",
     box: "border-status-submitted/25 bg-status-submitted/5",
-    border: "border-l-status-submitted/50",
   },
   RUNNING: {
     badge: "border-status-running/25 bg-status-running/10 text-status-running",
@@ -52,7 +47,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-running/10",
     icon: "text-status-running",
     box: "border-status-running/25 bg-status-running/5",
-    border: "border-l-status-running/50",
   },
   COMPLETING: {
     badge: "border-status-running/25 bg-status-running/10 text-status-running",
@@ -60,7 +54,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-running/10",
     icon: "text-status-running",
     box: "border-status-running/25 bg-status-running/5",
-    border: "border-l-status-running/50",
   },
   CANCELLING: {
     badge: "border-status-cancelling/25 bg-status-cancelling/10 text-status-cancelling",
@@ -68,7 +61,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-cancelling/10",
     icon: "text-status-cancelling",
     box: "border-status-cancelling/25 bg-status-cancelling/5",
-    border: "border-l-status-cancelling/50",
   },
   COMPLETED: {
     badge: "border-status-completed/25 bg-status-completed/10 text-status-completed",
@@ -76,7 +68,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-completed/10",
     icon: "text-status-completed",
     box: "border-status-completed/25 bg-status-completed/5",
-    border: "border-l-status-completed/50",
   },
   FAILED: {
     badge: "border-status-failed/25 bg-status-failed/10 text-status-failed",
@@ -84,7 +75,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-failed/10",
     icon: "text-status-failed",
     box: "border-status-failed/25 bg-status-failed/5",
-    border: "border-l-status-failed/50",
   },
   CANCELLED: {
     badge: "border-status-cancelled/25 bg-status-cancelled/10 text-status-cancelled",
@@ -92,7 +82,6 @@ export const HUE: Record<DisplayStatus, HueClasses> = {
     tile: "bg-status-cancelled/10",
     icon: "text-status-cancelled",
     box: "border-status-cancelled/25 bg-status-cancelled/5",
-    border: "border-l-status-cancelled/40",
   },
 };
 

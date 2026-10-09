@@ -66,13 +66,13 @@ describe("the list's tab bar", () => {
     ]);
   });
 
-  it("is the quiet segmented control of the repository's List / Grid switch, with the selected segment on the card colour", () => {
+  it("is the quiet segmented control of the repository's List / Grid switch, with the selected segment filled navy", () => {
     render(<DraftListTabs active={tabForStatus("DRAFT")} stats={STATS} />);
     const nav = screen.getByRole("navigation", { name: "Filter snapshot drafts" });
     expect(nav.className).toContain("bg-muted");
     expect(nav.className).not.toContain("border");
     const selected = links().find((a) => a.getAttribute("aria-current") === "page")!;
-    expect(selected.className).toContain("bg-card");
+    expect(selected.className).toContain("bg-hero");
     expect(links().filter((a) => a !== selected).every((a) => !a.className.includes("bg-primary"))).toBe(true);
   });
 

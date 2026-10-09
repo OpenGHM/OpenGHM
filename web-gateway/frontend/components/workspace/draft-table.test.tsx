@@ -47,7 +47,7 @@ describe("the snapshot draft list", () => {
     expect(screen.queryByRole("table")).toBeNull();
     expect(items()).toHaveLength(1);
     const card = screen.getByRole("list", { name: "Snapshot drafts" }).parentElement!;
-    expect(card.className).toContain("rounded-xl");
+    expect(card.className).toContain("rounded-card");
     expect(card.className).toContain("bg-card");
     // The header is for the eye: every row names its own fields for a screen reader.
     expect(within(card).getByText("Name").parentElement?.getAttribute("aria-hidden")).toBe("true");

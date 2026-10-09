@@ -156,7 +156,7 @@ export function ComputeSection({
             min={1}
             max={MAX_CORES}
             step={1}
-            className="h-10 md:h-9"
+            className="h-10 font-mono md:h-9"
             placeholder={recommended ? String(recommended.cores) : "Recommended"}
             value={config.cores ?? ""}
             aria-invalid={coresError !== undefined}
@@ -183,7 +183,7 @@ export function ComputeSection({
             id={`${id}-walltime`}
             {...draftField("walltime")}
             inputMode="numeric"
-            className="h-10 md:h-9"
+            className="h-10 font-mono md:h-9"
             placeholder={automaticSeconds !== null ? secondsToHms(automaticSeconds) : "HH:MM:SS"}
             value={config.walltime ?? ""}
             aria-invalid={walltimeError !== undefined}

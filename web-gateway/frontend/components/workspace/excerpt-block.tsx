@@ -43,7 +43,7 @@ export function ExcerptBlock({
         <pre
           id={regionId}
           tabIndex={0}
-          className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[14px] bg-hero p-3.5 font-mono text-xs leading-relaxed text-hero-text outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           {excerpt}
         </pre>

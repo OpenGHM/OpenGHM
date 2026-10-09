@@ -7,13 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 
 /**
  * Reached only via a redirect from the CILogon sign-in flow, when the
@@ -67,7 +61,7 @@ function CompleteProfileForm() {
 
   if (linkPending) {
     return (
-      <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-3">
+      <AuthNotice tone="success">
         That email already has a password-based account. We&apos;ve sent a
         confirmation link to it — click it to link your sign-in methods
         together, then{" "}
@@ -75,13 +69,13 @@ function CompleteProfileForm() {
           sign in
         </Link>
         .
-      </p>
+      </AuthNotice>
     );
   }
 
   if (!token) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-destructive">
         This link is missing a completion token.{" "}
         <Link href="/auth/signin" className="underline">
           Sign in again
@@ -117,8 +111,8 @@ function CompleteProfileForm() {
           autoComplete="email"
         />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button type="submit" className="w-full" disabled={loading}>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" size="xl" className="w-full" disabled={loading}>
         {loading ? "Finishing sign-in..." : "Continue"}
       </Button>
     </form>
@@ -127,22 +121,14 @@ function CompleteProfileForm() {
 
 export default function CompleteProfilePage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>One more step</CardTitle>
-          <CardDescription>
-            Your identity provider didn&apos;t share an email address with
-            us. We&apos;ll send a verification link to whatever you enter
-            below.
-          </CardDescription>
-        </CardHeader>
-        <Suspense fallback={<CardContent><p className="text-sm text-muted-foreground">Loading…</p></CardContent>}>
-          <CardContent>
-            <CompleteProfileForm />
-          </CardContent>
-        </Suspense>
-      </Card>
-    </main>
+    <AuthShell
+      eyebrow="Complete profile"
+      title="One more step"
+      description="Your identity provider didn't share an email address with us. We'll send a verification link to whatever you enter below."
+    >
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+        <CompleteProfileForm />
+      </Suspense>
+    </AuthShell>
   );
 }

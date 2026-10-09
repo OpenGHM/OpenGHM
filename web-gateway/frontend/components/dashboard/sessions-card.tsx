@@ -70,14 +70,14 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length === 0 ? (
-          <p className="text-sm text-slate-500">No active sessions.</p>
+          <p className="text-sm text-muted-foreground">No active sessions.</p>
         ) : (
           items.map((s) => (
-            <div key={s.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2">
+            <div key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3.5 py-2.5">
               <div className="flex items-center gap-3 min-w-0">
-                <Monitor className="size-4 text-slate-400 shrink-0" />
+                <Monitor className="size-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">
+                  <p className="text-sm font-medium text-foreground truncate">
                     {describeDevice(s.user_agent)}
                     {s.current && (
                       <Badge variant="secondary" className="ml-2 align-middle">
@@ -89,7 +89,7 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
                       construction between the server render and the
                       client hydration pass — suppress the resulting text
                       mismatch rather than chase an exact-millisecond match. */}
-                  <p className="text-xs text-slate-500" suppressHydrationWarning>
+                  <p className="text-xs text-muted-foreground" suppressHydrationWarning>
                     Last used {relativeTime(s.last_used_at)}
                   </p>
                 </div>
@@ -100,7 +100,7 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
                   size="sm"
                   disabled={pending}
                   onClick={() => handleRevoke(s.id)}
-                  className="shrink-0 text-red-600 hover:text-red-700"
+                  className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                   Sign out
                 </Button>
@@ -109,7 +109,7 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
           ))
         )}
         {items.length === 1 && (
-          <p className="text-xs text-slate-400">You&apos;re only signed in on this device.</p>
+          <p className="text-xs text-muted-foreground">You&apos;re only signed in on this device.</p>
         )}
       </CardContent>
     </Card>

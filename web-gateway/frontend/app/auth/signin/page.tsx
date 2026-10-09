@@ -1,10 +1,4 @@
-import Link from "next/link";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { SignInForm } from "./signin-form";
 
 // These log in via real email/password against seeded DB accounts (see
@@ -26,24 +20,13 @@ export default function SignInPage() {
   const devAccounts = process.env.NODE_ENV === "development" ? DEV_ACCOUNTS : [];
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="w-full max-w-md space-y-3">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900"
-        >
-          ← Back to home
-        </Link>
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>Sign in to OpenGHM</CardTitle>
-            <CardDescription>
-              Enter your email and password to continue
-            </CardDescription>
-          </CardHeader>
-          <SignInForm devAccounts={devAccounts} />
-        </Card>
-      </div>
-    </main>
+    <AuthShell
+      eyebrow="Sign in"
+      title="Sign in to OpenGHM"
+      description="Enter your email and password to continue"
+      backToHome
+    >
+      <SignInForm devAccounts={devAccounts} />
+    </AuthShell>
   );
 }

@@ -1,9 +1,9 @@
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { StartProgress } from "@/components/workspace/draft-progress";
-import { PageHeader, DraftBreadcrumb, WORKSPACE_MAIN } from "@/components/workspace/page-header";
+import { PageBody } from "@/components/layout/page-hero";
+import { PageHeader, draftBreadcrumb } from "@/components/workspace/page-header";
 import { StartFrom } from "@/components/workspace/start-from";
 import { WizardLayout } from "@/components/workspace/wizard-layout";
 import { fetchJobs } from "@/lib/jobs/actions";
@@ -47,21 +47,19 @@ export default async function NewDraftPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
-      <main className={WORKSPACE_MAIN}>
-        <PageHeader
-          wide
-          top={<DraftBreadcrumb current="New snapshot" />}
-          title="New snapshot"
-          meta={<p className="mt-2.5 text-sm text-muted-foreground">Start from a published model snapshot</p>}
-        >
-          <StartProgress />
-        </PageHeader>
+      <PageHeader
+        breadcrumb={draftBreadcrumb("New snapshot")}
+        title="New snapshot"
+        meta="Start from a published model snapshot"
+      >
+        <StartProgress />
+      </PageHeader>
 
-        <WizardLayout step="start" facts={{}} className="py-8">
+      <PageBody className="flex-1">
+        <WizardLayout step="start" facts={{}}>
           <StartFrom usedIds={usedIds} picker={{ filters, data, modelInputIds }} />
         </WizardLayout>
-      </main>
+      </PageBody>
       <Footer />
     </div>
   );

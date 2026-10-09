@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import Image from "next/image";
-import { Header } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
-import { Mail, ArrowRight } from "lucide-react";
+import { PanelDots, SectionEyebrow, SectionTitle } from "@/components/landing/section-parts";
+import { PageBody, PageHero } from "@/components/layout/page-hero";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "About Us | OpenGHM Gateway",
@@ -90,190 +91,179 @@ const FUNDING_LOGOS = [
   { src: "/images/logos/unh.svg", alt: "University of New Hampshire" },
 ];
 
-const AVATAR_COLORS = [
-  "bg-sky-600",
-  "bg-teal-600",
-  "bg-indigo-600",
-  "bg-amber-600",
-  "bg-rose-600",
-  "bg-emerald-600",
-  "bg-violet-600",
-  "bg-cyan-600",
-  "bg-orange-600",
+const CONTACTS = [
+  { label: "General", email: "info@openghm.org" },
+  { label: "Support", email: "help@openghm.org" },
+  { label: "Press", email: "media@openghm.org" },
 ];
+
+/** The PI and Co-PI get the dark avatar and the filled role pill. */
+const LEAD_ROLES = ["PI", "Co-PI"];
 
 export default function AboutPage() {
   return (
     <>
-      <Header />
+      <PageHero
+        eyebrow="Our Mission"
+        title="Making global hydrologic science FAIR, reproducible, and accessible to all."
+        subtitle="We are building the next generation of open-source tools to help researchers, policymakers, and communities understand water systems at a planetary scale."
+        contentClassName="pt-16 lg:pt-24"
+        className="pb-[140px]"
+      />
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-b from-slate-50 to-white py-16 pb-12">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-10">
-          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
-            <div>
-              <p className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-primary">
-                Our Mission
-              </p>
-              <h1 className="mb-5 text-4xl font-bold leading-tight tracking-tight text-foreground">
-                Making global hydrologic science FAIR, reproducible, and
-                accessible to all.
-              </h1>
-              <p className="mb-6 text-lg text-muted-foreground">
-                We are building the next generation of open-source tools to help
-                researchers, policymakers, and communities understand water
-                systems at a planetary scale.
-              </p>
-              <blockquote className="border-l-4 border-secondary pl-4 text-[15px] italic text-foreground">
-                &ldquo;By democratizing access to models and data, we empower
-                communities worldwide to make better decisions about floods,
-                droughts, and water security.&rdquo;
-              </blockquote>
-            </div>
-            <div className="overflow-hidden rounded-xl shadow-xl">
-              <Image
-                src="/images/usecase-researchers.jpg"
-                alt="OpenGHM Team Collaboration"
-                width={600}
-                height={450}
-                className="h-auto w-full max-w-full object-cover"
-              />
-            </div>
+      <PageBody className="-mt-20 flex flex-col gap-24">
+        <section className="flex flex-wrap gap-3 rounded-panel bg-card p-3 shadow-raised">
+          <div className="flex-[1_1_380px] self-center overflow-hidden rounded-[20px] bg-accent">
+            <Image
+              src="/images/usecase-researchers.jpg"
+              alt="OpenGHM Team Collaboration"
+              width={600}
+              height={450}
+              sizes="(min-width: 1024px) 40vw, 100vw"
+              className="block h-auto w-full"
+            />
           </div>
-        </div>
-      </section>
+          <blockquote className="flex flex-[999_1_420px] flex-col justify-center gap-6 px-6 py-10 sm:px-11 sm:py-12">
+            <span
+              aria-hidden="true"
+              className="h-8 text-[72px] leading-[0.6] font-bold text-primary"
+            >
+              &ldquo;
+            </span>
+            <p className="text-[clamp(22px,2.4vw,30px)] leading-[1.35] font-medium tracking-[-0.02em] text-pretty">
+              By democratizing access to models and data, we empower
+              communities worldwide to make better decisions about floods,
+              droughts, and water security.
+            </p>
+          </blockquote>
+        </section>
 
-      {/* Main Content */}
-      <main className="py-16 pb-20">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-10">
-          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[3fr_1fr] lg:gap-16">
-            {/* Left Column */}
-            <div>
-              {/* Team Section */}
-              <section className="mb-16">
-                <h2 className="mb-3 text-2xl font-semibold text-foreground">
-                  Meet the Team
-                </h2>
-                <p className="mb-8 max-w-[600px] text-[15px] text-muted-foreground">
-                  A multidisciplinary group of hydrologists, software engineers,
-                  and data scientists dedicated to open science.
-                </p>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
-                  {TEAM_MEMBERS.map((member, i) => (
+        <section className="flex flex-col gap-9">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="flex flex-col gap-3.5">
+              <SectionEyebrow>Team</SectionEyebrow>
+              <SectionTitle>Meet the Team</SectionTitle>
+            </div>
+            <p className="max-w-[440px] text-base leading-[1.6] text-pretty text-muted-foreground">
+              A multidisciplinary group of hydrologists, software engineers,
+              and data scientists dedicated to open science.
+            </p>
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-3">
+            {TEAM_MEMBERS.map((member) => {
+              const lead = LEAD_ROLES.includes(member.role);
+              return (
+                <article
+                  key={member.name}
+                  className="flex min-w-0 flex-col gap-[18px] rounded-[20px] bg-card p-[22px] transition-[transform,box-shadow] duration-200 hover:shadow-lift motion-safe:hover:-translate-y-0.5"
+                >
+                  <div className="flex items-center justify-between gap-3">
                     <div
-                      key={member.name}
-                      className="flex flex-col gap-3 rounded-lg border border-border bg-card p-5 transition-all hover:border-primary hover:shadow-md"
+                      aria-hidden="true"
+                      className={cn(
+                        "grid size-[52px] shrink-0 place-items-center rounded-full text-base font-semibold tracking-[0.02em]",
+                        lead ? "bg-hero text-white" : "bg-secondary text-secondary-foreground",
+                      )}
                     >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
-                        >
-                          {member.initials}
-                        </div>
-                        <div>
-                          <h3 className="text-[15px] font-semibold">
-                            {member.name}
-                          </h3>
-                          <p className="text-[12px] font-medium text-primary">
-                            {member.role}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-auto flex items-center gap-3 border-t border-border pt-3">
-                        <div className="relative h-5 w-16">
-                          <Image
-                            src={member.affiliationLogo}
-                            alt={member.affiliation}
-                            fill
-                            style={{ objectFit: "contain", objectPosition: "left" }}
-                            className="opacity-60"
-                            unoptimized
-                          />
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {member.affiliation}
-                        </span>
-                      </div>
+                      {member.initials}
                     </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Funding Section */}
-              <section className="rounded-xl bg-slate-50 p-6 sm:p-10">
-                <h2 className="mb-3 text-2xl font-semibold text-foreground">
-                  Supported By
-                </h2>
-                <p className="max-w-[600px] text-[15px] text-muted-foreground">
-                  OpenGHM is made possible through generous support from the{" "}
-                  <a
-                    href="https://www.nsf.gov/funding/opportunities/cssi-cyberinfrastructure-sustained-scientific-innovation"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    National Science Foundation
-                  </a>{" "}
-                  (NSF Grant Elements: OpenGHM: Enhancing reproducibility in
-                  global hydrologic modeling, Grant OAC-2513891) and partner
-                  institutions.
-                </p>
-                <div className="mt-8 grid grid-cols-2 items-center justify-items-center gap-6 sm:grid-cols-4 sm:gap-8">
-                  {FUNDING_LOGOS.map((logo) => (
-                    <div
-                      key={logo.alt}
-                      className="relative h-[60px] w-full max-w-[160px]"
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs font-semibold",
+                        lead ? "bg-primary text-white" : "bg-muted text-foreground/80",
+                      )}
                     >
+                      {member.role}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-[650] tracking-[-0.02em]">
+                    {member.name}
+                  </h3>
+                  <div className="flex items-center gap-2.5 border-t border-border/70 pt-3.5">
+                    <div className="relative h-[22px] w-7 shrink-0">
                       <Image
-                        src={logo.src}
-                        alt={logo.alt}
+                        src={member.affiliationLogo}
+                        alt={member.affiliation}
                         fill
-                        style={{ objectFit: "contain" }}
-                        className="opacity-50 grayscale transition-all hover:opacity-100 hover:grayscale-0"
+                        className="object-contain object-left"
                         unoptimized
                       />
                     </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            {/* Right Sidebar */}
-            <aside className="flex flex-col gap-8 lg:sticky lg:top-24">
-              {/* Contact */}
-              <div className="rounded-lg border border-border bg-card p-6">
-                <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold">
-                  <Mail size={16} className="text-primary" />
-                  Contact
-                </h4>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
-                    <ArrowRight
-                      size={14}
-                      className="mt-0.5 shrink-0 text-primary"
-                    />
-                    <span className="min-w-0 break-words">General: info@openghm.org</span>
+                    <span className="text-[13px] text-muted-foreground">
+                      {member.affiliation}
+                    </span>
                   </div>
-                  <div className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
-                    <ArrowRight
-                      size={14}
-                      className="mt-0.5 shrink-0 text-primary"
-                    />
-                    <span className="min-w-0 break-words">Support: help@openghm.org</span>
-                  </div>
-                  <div className="flex items-start gap-2.5 text-[13px] text-muted-foreground">
-                    <ArrowRight
-                      size={14}
-                      className="mt-0.5 shrink-0 text-primary"
-                    />
-                    <span className="min-w-0 break-words">Press: media@openghm.org</span>
-                  </div>
-                </div>
-              </div>
-            </aside>
+                </article>
+              );
+            })}
           </div>
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          <section className="flex flex-[999_1_560px] flex-col gap-7 rounded-panel bg-card px-6 py-10 sm:px-11 sm:py-12">
+            <div className="flex flex-col gap-3.5">
+              <SectionEyebrow>Funding &amp; Partners</SectionEyebrow>
+              <SectionTitle className="text-[clamp(30px,3.6vw,42px)]">
+                Supported By
+              </SectionTitle>
+              <p className="max-w-[640px] text-base leading-[1.65] text-pretty text-muted-foreground">
+                OpenGHM is made possible through generous support from the{" "}
+                <a
+                  href="https://www.nsf.gov/funding/opportunities/cssi-cyberinfrastructure-sustained-scientific-innovation"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  National Science Foundation
+                </a>{" "}
+                (NSF Grant Elements: OpenGHM: Enhancing reproducibility in
+                global hydrologic modeling, Grant OAC-2513891) and partner
+                institutions.
+              </p>
+            </div>
+            <ul className="mt-auto grid grid-cols-[repeat(auto-fit,minmax(min(140px,100%),1fr))] gap-2.5">
+              {FUNDING_LOGOS.map((logo) => (
+                <li
+                  key={logo.alt}
+                  className="relative h-24 rounded-2xl bg-muted"
+                >
+                  <Image
+                    src={logo.src}
+                    alt={logo.alt}
+                    fill
+                    className="object-contain p-4"
+                    unoptimized
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="relative flex flex-[1_1_300px] flex-col gap-6 overflow-hidden rounded-panel bg-hero px-6 py-10 text-white sm:px-10 sm:py-12">
+            <PanelDots alpha={0.07} />
+            <h2 className="relative text-[28px] font-bold tracking-[-0.03em]">
+              Contact
+            </h2>
+            <ul className="relative flex flex-col">
+              {CONTACTS.map((contact) => (
+                <li key={contact.email}>
+                  <a
+                    href={`mailto:${contact.email}`}
+                    className="flex flex-col gap-1 border-t border-white/[0.14] py-4 transition-colors hover:text-hero-eyebrow focus-visible:text-hero-eyebrow focus-visible:outline-none"
+                  >
+                    <span className="font-mono text-[11.5px] tracking-[0.06em] text-hero-eyebrow uppercase">
+                      {contact.label}
+                    </span>
+                    <span className="text-[17px] font-medium break-words">
+                      {contact.email}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
-      </main>
+      </PageBody>
 
       <Footer />
     </>
