@@ -660,11 +660,11 @@ async def _refuse_unavailable_post_processing(
     choice (`standard` or `climatology`) of a snapshot whose init has no
     `PostProcessing` block with a `Run` to set, where the toolkit refuses the flag
     after a queue wait. `climatology_unavailable`: the draft asks for `climatology`
-    of a snapshot with no measured post-processing time
-    (`recommendedCompute.postProcessingWalltime`), so there is no walltime to ask
-    SLURM for. That gate only stops a draft from asking for it: a snapshot whose
-    own init already says `Run => 1` still post-processes when it is run with its
-    defaults. A choice the draft leaves unset (`None`, the snapshot's own) is never
+    while `CLIMATOLOGY_ENABLED` is off, or of a snapshot with no measured
+    post-processing time (`recommendedCompute.postProcessingWalltime`), so there is
+    no walltime to ask SLURM for. That gate only stops a draft from asking for it: a
+    snapshot whose own init already says `Run => 1` still post-processes when it is
+    run with its defaults. A choice the draft leaves unset (`None`, the snapshot's own) is never
     refused, and an init that cannot be read blocks nothing."""
     if value is None:
         return
@@ -675,6 +675,14 @@ async def _refuse_unavailable_post_processing(
             "post_processing_unavailable",
             "This snapshot's init has no post-processing setting to change, so its "
             "output choice cannot be set. Leave it as the snapshot's own.",
+        )
+    if value == "climatology" and not settings.CLIMATOLOGY_ENABLED:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "climatology_unavailable",
+            "Climatology is not available yet: WBM's post-processing time grows with a "
+            "snapshot's size and period and is not planned for yet. Choose the daily, "
+            "monthly and yearly output.",
         )
     if value == "climatology" and job_script.post_processing_walltime(snapshot) is None:
         raise _error(

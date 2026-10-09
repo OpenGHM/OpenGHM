@@ -925,7 +925,7 @@ describe("the draft run step: the Output choice", () => {
     expect(radio(STANDARD).checked).toBe(true);
     expect(
       screen.getByText(
-        "Not available yet: this snapshot has no measured post-processing time, so there is no walltime to ask for."
+        "Not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
       )
     ).toBeTruthy();
     expect(screen.queryByText(/files for this snapshot/)).toBeNull();

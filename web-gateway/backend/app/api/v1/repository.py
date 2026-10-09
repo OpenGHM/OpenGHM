@@ -281,10 +281,12 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
         detail.runStartAlignment = rules.alignment
         detail.aggregationStartYear = rules.aggregation_start_year
         detail.postProcessing = rules.post_processing
-        # Both: the init has a post-processing run to turn on, and the snapshot
-        # says how long that takes (what its walltime is sized by).
+        # All three: the gateway has climatology switched on, the init has a
+        # post-processing run to turn on, and the snapshot says how long that takes
+        # (what its walltime is sized by).
         detail.climatologyAvailable = (
-            rules.post_processing != "none"
+            settings.CLIMATOLOGY_ENABLED
+            and rules.post_processing != "none"
             and job_script.post_processing_walltime(doc["document"]) is not None
         )
     return detail

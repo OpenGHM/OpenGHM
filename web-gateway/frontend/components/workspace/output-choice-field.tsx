@@ -74,9 +74,10 @@ function Choice({
  * value, even when it is the snapshot's own, and the backend passes the flag
  * only when it differs. A snapshot whose init has no post-processing settings
  * (`postProcessing === "none"`) shows the group disabled, with a line saying so.
- * While the snapshot has no measured post-processing time (`climatologyAvailable`
- * is not true, absent included) the climatology radio is disabled and its note
- * says why; a stored draft that already asks for it shows it as it is, and the
+ * While climatology is not available (`climatologyAvailable` is not true, absent
+ * included: the backend has it switched off, or the snapshot has no measured
+ * post-processing time) the climatology radio is disabled and its note says why,
+ * which is the same line for both causes; a stored draft that already asks for it shows it as it is, and the
  * server's refusal (`climatology_unavailable`) lands on the field. Otherwise the
  * note gives the snapshot's own measured time (`postProcessingWalltime`), which
  * the walltime the draft asks for then includes.
@@ -136,8 +137,8 @@ export function OutputChoiceSection({
         >
           {climatologyOff && (
             <p id={noteId} className="ml-[1.625rem] text-xs text-muted-foreground">
-              Not available yet: this snapshot has no measured post-processing time, so there is no
-              walltime to ask for.
+              Not available yet: WBM&apos;s post-processing time grows with a snapshot&apos;s size and
+              period, and the gateway does not plan for it yet.
             </p>
           )}
           {!unsupported && !climatologyOff && (

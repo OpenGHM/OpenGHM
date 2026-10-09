@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from app.api.v1 import repository as repository_router
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.models.job import JobDB, JobParameters, read_stored_parameters
 from app.services import job_script, published_answer, run_start, slurm
 from app.services.job_script import SubmitInputError, render_job_body
@@ -36,11 +36,18 @@ MEASURED = "1:00:00"
 
 
 @pytest.fixture(autouse=True)
-def measured(db):
-    """The choice is tested as it behaves for a snapshot with a measured post-processing
-    time (ds-1, 15:00 for the run and an hour for the step); the tests of a snapshot
-    without one (`unmeasured`) take the field away again."""
+def measured(db, monkeypatch):
+    """The choice is tested as it behaves with `CLIMATOLOGY_ENABLED` on, for a snapshot
+    with a measured post-processing time (ds-1, 15:00 for the run and an hour for the
+    step); the tests of the switch itself (`climatology_off`) turn it off again, and
+    those of a snapshot without a measurement (`unmeasured`) take the field away."""
+    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", True)
     db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["postProcessingWalltime"] = MEASURED
+
+
+@pytest.fixture
+def climatology_off(db, monkeypatch):
+    monkeypatch.setattr(settings, "CLIMATOLOGY_ENABLED", False)
 
 
 @pytest.fixture
@@ -207,8 +214,18 @@ def test_climatology_is_not_available_without_a_run_to_turn_on_or_a_readable_ini
     assert asyncio.run(repository_router.get_dataset(envelope["_id"])).climatologyAvailable is False
 
 
-def test_climatology_has_no_setting_to_switch_it():
-    assert "CLIMATOLOGY_ENABLED" not in Settings.model_fields
+def test_climatology_is_available_only_when_the_setting_is_on_even_if_measured(db, monkeypatch, climatology_off):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    envelope = _envelope("0:05:00")
+    db.datasets.docs[envelope["_id"]] = envelope
+    monkeypatch.setattr(repository_router, "get_db", lambda: db)
+    answer = asyncio.run(repository_router.get_dataset(envelope["_id"]))
+    assert answer.climatologyAvailable is False
+    assert answer.model_dump(by_alias=True, mode="json")["climatologyAvailable"] is False
+
+
+def test_climatology_is_off_unless_the_setting_says_otherwise():
+    assert Settings.model_fields["CLIMATOLOGY_ENABLED"].default is False
 
 
 # ---- the parameter, stored and read ---------------------------------------------------
@@ -316,6 +333,41 @@ def test_a_choice_for_a_snapshot_without_a_block_is_refused_on_submit(client, db
     assert db.jobs.docs["job-1"]["status"] == "DRAFT"
     assert db.jobs.docs["job-1"]["last_submit_error"]["code"] == "post_processing_unavailable"
     assert sent == []
+
+
+def test_climatology_is_refused_on_patch_while_the_setting_is_off(client, db, draft, monkeypatch, climatology_off):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing="climatology")}, headers=HEADERS)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "climatology_unavailable"
+    assert "not available yet" in detail["message"]
+    assert "post_processing" not in db.jobs.docs["job-1"]["parameters"]
+
+
+@pytest.mark.parametrize("value", [None, "standard"])
+def test_standard_and_no_choice_are_unaffected_while_the_setting_is_off(client, db, draft, monkeypatch, climatology_off, value):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing=value)}, headers=HEADERS)
+    assert r.status_code == 200, r.text
+
+
+def test_climatology_is_refused_on_submit_and_kept_while_the_setting_is_off(client, db, draft, monkeypatch, sent, climatology_off):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
+    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "climatology_unavailable"
+    assert db.jobs.docs["job-1"]["status"] == "DRAFT"
+    assert db.jobs.docs["job-1"]["last_submit_error"]["code"] == "climatology_unavailable"
+    assert sent == []
+
+
+def test_the_setting_is_checked_before_the_measurement(client, db, draft, monkeypatch, climatology_off, unmeasured):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    r = client.patch("/api/v1/jobs/job-1", json={"parameters": _params(post_processing="climatology")}, headers=HEADERS)
+    assert r.status_code == 422
+    assert "not been measured" not in r.json()["detail"]["message"]
 
 
 def test_climatology_is_refused_on_patch_for_a_snapshot_without_a_measurement(client, db, draft, monkeypatch, unmeasured):

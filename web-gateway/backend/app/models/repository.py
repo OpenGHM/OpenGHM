@@ -158,10 +158,11 @@ class DatasetDetailResponse(DatasetResponse):
     #: ``"climatology"`` it also runs the climatologies (``Run`` true). ``null``
     #: when the init could not be read: nothing is known and nothing is blocked.
     postProcessing: Literal["none", "standard", "climatology"] | None = None
-    #: Whether a draft may ask for climatology: the init has a ``PostProcessing``
-    #: block with a ``Run`` (``postProcessing`` is not ``"none"``) and the snapshot
-    #: has a measured ``recommendedCompute.postProcessingWalltime``, which sizes the
-    #: walltime. False when the init could not be read. It does not say what the
+    #: Whether a draft may ask for climatology: the ``CLIMATOLOGY_ENABLED`` setting is
+    #: on, the init has a ``PostProcessing`` block with a ``Run`` (``postProcessing``
+    #: is not ``"none"``) and the snapshot has a measured
+    #: ``recommendedCompute.postProcessingWalltime``, which sizes the walltime. False
+    #: when the init could not be read. It does not say what the
     #: snapshot's own init does: one with ``Run => 1`` still post-processes when run
     #: with its defaults.
     climatologyAvailable: bool = False

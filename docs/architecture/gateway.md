@@ -266,20 +266,24 @@ nothing. A stored value that is neither choice reads as `null`, so an old draft 
 toolkit applies the flag to the staged init, and its post-processing step runs, checks and records the
 result ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
 
-**Climatology is available per snapshot, by measurement.** One flat percentage cannot cover both a
-tutorial snapshot (about two minutes of post-processing) and the Global one (hours), so the
-walltime of a climatology draft is sized by the snapshot's own measured `postProcessingWalltime`, and a
+**Climatology is switched off, and where on it needs a measurement.** One flat percentage cannot cover both a
+tutorial snapshot (about two minutes of post-processing) and the Global one (hours): post-processing time
+grows without bound with a snapshot's size and period (the Global snapshot needs about 15 core-hours per
+variable-year), and the gateway does not predict it per draft yet. So the backend setting
+`CLIMATOLOGY_ENABLED` defaults to false. The measurement stays in place beneath it: when the setting is on,
+the walltime of a climatology draft is sized by the snapshot's own measured `postProcessingWalltime`, and a
 snapshot without one cannot be asked for climatology. The dataset detail carries
-`climatologyAvailable`: true when the init has a `PostProcessing` block with a `Run`
+`climatologyAvailable`: true when the setting is on, the init has a `PostProcessing` block with a `Run`
 (`postProcessing` is `standard` or `climatology`) and `postProcessingWalltime` is a SLURM time; false
 otherwise, including when the init could not be read. `PATCH /jobs/{id}` and the submit refuse
-`parameters.post_processing == "climatology"` of a snapshot with no `postProcessingWalltime` with
-`422 climatology_unavailable` (on the submit it is kept as `last_submit_error`; `standard` and `null` are
-unaffected, and `post_processing_unavailable` keeps its precedence on a snapshot whose own choice is
-`none`). The wizard disables "Also climatology" with a line saying the post-processing time has not
-been measured when `climatologyAvailable` is not true, showing a stored climatology draft as it is with the
-422 on the field. The gate only stops a draft from asking for it: a snapshot whose own init says
-`Run => 1` still post-processes when it is run with its defaults.
+`parameters.post_processing == "climatology"` with `422 climatology_unavailable` while the setting is off, and,
+with it on, of a snapshot with no `postProcessingWalltime` (the setting is checked first; on the submit it is
+kept as `last_submit_error`; `standard` and `null` are unaffected, and `post_processing_unavailable` keeps its
+precedence on a snapshot whose own choice is `none`). The wizard disables "Also climatology" with a line
+saying it is not available yet, the same for both causes, when `climatologyAvailable` is not true, showing a
+stored climatology draft as it is with the 422 on the field. The gate only stops a draft from asking for it:
+a snapshot whose own init says `Run => 1` still post-processes when it is run with its defaults, and its
+walltime then includes `postProcessingWalltime` where the snapshot has one.
 
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it

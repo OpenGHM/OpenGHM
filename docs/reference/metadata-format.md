@@ -196,16 +196,7 @@ snapshot and the toolkit warns when a run post-processes. It is not scaled by
 the run period or the cores of a draft. A value that is not a measurement of
 the whole reference period at `cores` cores (scaled from a shorter period, say)
 is an estimate, and is recorded here as one, with what it was scaled from.
-The published snapshots were set on 2026-10-09:
-
-| Snapshot | `postProcessingWalltime` | From |
-|---|---|---|
-| v2 CONUS tutorial | `5:00` | measured: 185 s at 1 core, the whole 2000–2001 period, 9 files (SLURM 21186927) |
-| Wyoming | `2:15:00` | measured: 2:11:41 at 4 cores, the whole 2000–2009 period, 153 files, 5.1 GB (SLURM 21187172) |
-| Global | `60:00:00` | **estimate**: one year (2000) took 149.5 core-hours on 52 cores (SLURM 21181971), times 10 years, over 26 cores is 57.5 h |
-
-Global's `walltime` alone is over the 96 h one job may use, so the gateway
-refuses a Global draft without a walltime of its own, climatology or not.
+No published snapshot carries the field yet.
 
 Two gaps in the variable dictionary a generator has to handle: `Units` is a list
 per aggregation depth (`['mm/day','mm/month','mm/year']`) so the native
