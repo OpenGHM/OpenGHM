@@ -158,6 +158,9 @@ class DatasetDetailResponse(DatasetResponse):
     #: ``"climatology"`` it also runs the climatologies (``Run`` true). ``null``
     #: when the init could not be read: nothing is known and nothing is blocked.
     postProcessing: Literal["none", "standard", "climatology"] | None = None
+    #: What ``Run => 1`` of that init would make (``PostProcessingProducts``); ``null``
+    #: when ``postProcessing`` is ``"none"`` or ``null``.
+    postProcessingProducts: PostProcessingProducts | None = None
     #: Whether a draft may ask for climatology: the ``CLIMATOLOGY_ENABLED`` setting is
     #: on, the init has a ``PostProcessing`` block with a ``Run`` (``postProcessing``
     #: is not ``"none"``) and the snapshot has a measured
@@ -166,6 +169,30 @@ class DatasetDetailResponse(DatasetResponse):
     #: snapshot's own init does: one with ``Run => 1`` still post-processes when run
     #: with its defaults.
     climatologyAvailable: bool = False
+
+
+class MultiYearAggregation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: The first year of the first range.
+    start: int
+    #: Years in each range.
+    step: int
+
+
+class PostProcessingProducts(BaseModel):
+    """What WBM's post-processing (``Run => 1``) makes for a snapshot's init, read from
+    the init's ``PostProcessing`` block (``app.services.run_start``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Daily, monthly and yearly climatology files per output variable.
+    climatology: bool
+    #: Yearly climatologies over each ``step``-year range from ``start``; only with
+    #: ``climatology``.
+    multiYear: MultiYearAggregation | None = None
+    #: Aggregates over polygons, into ``spatial_agg/``.
+    polygonAggregation: bool
 
 
 class RepositoryListResponse(BaseModel):

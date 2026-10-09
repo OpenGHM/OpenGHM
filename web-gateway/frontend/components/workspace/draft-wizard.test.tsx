@@ -134,6 +134,10 @@ const settle = () => act(async () => {});
 /** Real time passing, with the renders it causes inside `act`. */
 const pause = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
+/** The output-variable checkboxes: every checkbox but the post-processing one. */
+const variableBoxes = () =>
+  screen.queryAllByRole("checkbox").filter((c) => c.getAttribute("data-draft-field") !== "postProcessing");
+
 describe("the header", () => {
   it("names the draft by the list's rule, with the live typed name first", () => {
     const { again } = wizard({ step: "run" });
@@ -430,12 +434,12 @@ describe("the step", () => {
     // Compute is a line and a button until asked for; the Edit link asks.
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Walltime/)));
     expect(screen.getByRole("button", { name: "Done with compute" }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(variableBoxes()).toHaveLength(0);
 
     fireEvent.click(button("Next")!);
     fireEvent.click(button("Edit output variables")!);
     await waitFor(() => expect(document.activeElement?.closest("[data-draft-field]")?.getAttribute("data-draft-field")).toBe("variables"));
-    expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+    expect(variableBoxes().length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Done with output variables" })).toBeTruthy();
   });
 
@@ -598,7 +602,7 @@ describe("saving is a button", () => {
 });
 
 describe("the Post-processing choice is saved like the run period", () => {
-  const climatology = () => screen.getByRole("radio", { name: /Also climatology/ });
+  const climatology = () => screen.getByRole("checkbox", { name: "Run post-processing after the simulation" });
 
   it("is Unsaved changes at once, sent by nothing until Save draft, and then sent inside parameters", async () => {
     wizard({ step: "run" });

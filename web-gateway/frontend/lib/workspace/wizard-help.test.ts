@@ -39,12 +39,19 @@ describe("helpTopic", () => {
     expect(helpTopic("start", "period").id).toBe("start");
   });
 
-  it("says climatology is not available unless the snapshot offers it", () => {
-    expect(words(helpTopic("run", "output"))).toContain("Also climatology is not available yet");
+  it("says post-processing is not available unless the snapshot offers it", () => {
+    expect(words(helpTopic("run", "output"))).toContain("Post-processing is not available yet");
     expect(words(helpTopic("run", "output", { climatologyAvailable: false }))).toContain("not available yet");
     const offered = words(helpTopic("run", "output", { climatologyAvailable: true }));
     expect(offered).not.toContain("not available");
-    expect(offered).toContain("three files per variable");
+    expect(offered).toContain("walltime then includes it");
+  });
+
+  it("explains the checkbox: output is always written, what post-processing makes depends on the init, and it is never published", () => {
+    const output = words(helpTopic("run", "output", { climatologyAvailable: true }));
+    expect(output).toContain("always writes daily, monthly and yearly output");
+    expect(output).toContain("depends on the snapshot's init");
+    expect(output).toContain("always means a new simulation");
   });
 
   it("reads its numbers from where the code keeps them", () => {

@@ -44,14 +44,26 @@ export interface Dataset extends OpenGHMSnapshotMetadata {
   aggregationStartYear?: number | null;
   /** What the snapshot's own init does after the simulation, read from it by the
    *  single snapshot route only: `none` the init has no post-processing settings,
-   *  `standard` daily, monthly and yearly output, `climatology` that and
-   *  the climatologies; `null` the init could not be read. Absent on a list row. */
+   *  `standard` its `Run` is false, `climatology` its `Run` is true (WBM's
+   *  post-processing runs after the simulation); `null` the init could not be read. Absent on a list row. */
   postProcessing?: "none" | "standard" | "climatology" | null;
+  /** What running that init's post-processing makes, read from the init's
+   *  `PostProcessing` block by the single snapshot route only: `climatology` the
+   *  daily, monthly and yearly climatologies, `multiYear` yearly climatologies
+   *  over each `step`-year range from `start`, `polygonAggregation` aggregates
+   *  over polygons. `null` when `postProcessing` is `none` or `null`. */
+  postProcessingProducts?: PostProcessingProducts | null;
   /** Whether a draft may ask for climatology: the backend has it switched on
    *  (`CLIMATOLOGY_ENABLED`, off by default), the init has a post-processing run
    *  to turn on and the snapshot has a measured `postProcessingWalltime` to size
    *  the walltime by. Single snapshot route only; absent counts as false. */
   climatologyAvailable?: boolean;
+}
+
+export interface PostProcessingProducts {
+  climatology: boolean;
+  multiYear: { start: number; step: number } | null;
+  polygonAggregation: boolean;
 }
 
 // ─── Model input ───────────────────────────────────────────────────────────────

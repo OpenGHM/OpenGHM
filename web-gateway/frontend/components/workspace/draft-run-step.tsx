@@ -45,7 +45,7 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
  * card whose first part is the snapshot draft's name and description (the first
  * thing a new draft asks for, so the Name takes focus when it has none and
  * `autoFocusName` is set), followed by the run period, the output variables,
- * the output (daily, monthly and yearly, or also climatology), and cores and
+ * whether post-processing runs after the simulation, and cores and
  * walltime. Most people keep the defaults, so the variables and compute are a line saying
  * what they hold and a button that opens them (`DraftCollapsible`); what is
  * wrong with them stays in view either way.

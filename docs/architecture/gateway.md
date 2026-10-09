@@ -240,24 +240,34 @@ announce. `openghm sim run` and `sim submit` check the same rule on a
 `--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
 stop before staging.
 
-A draft also chooses what WBM's post-processing adds to the daily, monthly and
-yearly output, which is all a published snapshot holds. The init's
-`PostProcessing => { Run => … }` block decides: with `Run` false the post-processing does not run,
-with `Run` true it adds the daily, monthly and yearly climatologies of the run's period for every output
-variable (variables × 3 files). The same init read as above gives the snapshot's own choice, which
-`GET /api/v1/repository/datasets/{id}` carries as `postProcessing`: `standard` (`Run` false in Perl's
-sense: `0`, `'0'`, `''`), `climatology` (`Run` true), `none` (no `PostProcessing` block, or none
-with a `Run` key of its own, directly in it, not `Run_Start`/`Run_End` or a `Run` in a nested hash), or `null` when the init could
-not be read. The backend reads the block brace-balanced with a reader of its own
-(`run_start.post_processing_from_init`, tested on the same real inits as the toolkit's
+WBM always writes the daily, monthly and yearly output, which is all a published snapshot holds, whenever
+the init has a `PostProcessing` block. A draft chooses whether WBM's post-processing also runs after the
+simulation, which is the block's `Run => …`: with `Run` true `PostProcessing.pl` runs, and what it
+writes depends on the rest of the block, as WBM reads it
+(`images/wbm-tools-lite/wbm/model/RIMS/WBM.pm`): climatology files (`_dc`, `_mc`, `_yc`, in the output's
+climatology directory) when `Temporal_Aggregation` and `Climatology` (true when absent) are true; yearly
+climatologies over each `TA_multi_year_timestep`-year range from `TA_multi_year_start` when both are set;
+and spatial aggregation into the output's spatial_agg directory when `Polygon_Aggregation` is set. The same init read as above
+gives the snapshot's own choice, which `GET /api/v1/repository/datasets/{id}` carries as `postProcessing`:
+`standard` (`Run` false in Perl's sense: `0`, `'0'`, `''`), `climatology` (`Run` true), `none` (no
+`PostProcessing` block, or none with a `Run` key of its own, directly in it, not `Run_Start`/`Run_End` or a
+`Run` in a nested hash), or `null` when the init could not be read. It also carries what `Run => 1` would
+write as `postProcessingProducts` (`{ climatology, multiYear: { start, step } | null, polygonAggregation }`,
+`null` where `postProcessing` is `none` or `null`; `multiYear` only with `climatology`). The backend reads
+the block brace-balanced, top-level keys only, with a reader of its own (`run_start.post_processing_from_init`
+and `post_processing_products_from_init`, tested on the same real inits as the toolkit's
 `openghm.post_processing`). A draft holds the choice as `parameters.post_processing`:
 `"standard"`, `"climatology"` or `null`, the snapshot's own, which a new draft starts at and a
-draft stored before the field has. Run settings shows it as a "Post-processing" choice
-between "Daily, monthly and yearly" and "Also climatology", defaulting to the snapshot's own. The note on the
-climatology option says how many files it writes (variables × 3) and gives the snapshot's own
+draft stored before the field has. Run settings shows it as one checkbox, "Run post-processing after the
+simulation" in the "Post-processing" section (checked is `"climatology"`, unchecked `"standard"`),
+showing the snapshot's own value until the draft has one. The line under it says what post-processing
+writes for this snapshot's init (from `postProcessingProducts`: climatologies of each output variable with
+their file count, variables × 3, yearly climatologies over N-year periods from a year, aggregates over
+polygons, or that the init sets nothing to write) and gives the snapshot's own
 measured post-processing time, `recommendedCompute.postProcessingWalltime`
-([metadata-format.md](../reference/metadata-format.md#where-simulation-comes-from)).
-A snapshot whose choice is `none` shows the control disabled. `PATCH /jobs/{id}` stores the value with
+([metadata-format.md](../reference/metadata-format.md#where-simulation-comes-from)). Review, the submit
+confirmation and the job page say "On" or "Off".
+A snapshot whose choice is `none` shows the checkbox disabled. `PATCH /jobs/{id}` stores the value with
 the rest of `parameters`, and the submit passes `--post-processing <value>` to `sim run` only when the
 value is set and differs from the snapshot's own (a snapshot whose init could not be read gets the flag
 for any set value, and the toolkit has the last word). A set value on a `none` snapshot is refused with
@@ -279,9 +289,9 @@ otherwise, including when the init could not be read. `PATCH /jobs/{id}` and the
 `parameters.post_processing == "climatology"` with `422 climatology_unavailable` while the setting is off, and,
 with it on, of a snapshot with no `postProcessingWalltime` (the setting is checked first; on the submit it is
 kept as `last_submit_error`; `standard` and `null` are unaffected, and `post_processing_unavailable` keeps its
-precedence on a snapshot whose own choice is `none`). The wizard disables "Also climatology" with a line
-saying it is not available yet, the same for both causes, when `climatologyAvailable` is not true, showing a
-stored climatology draft as it is with the 422 on the field. The gate only stops a draft from asking for it:
+precedence on a snapshot whose own choice is `none`). The wizard disables the checkbox while it is unchecked, with a line
+saying it is not available yet, the same for both causes, when `climatologyAvailable` is not true; a
+stored draft that asks for it shows checked, can still be unchecked, and has the 422 on the field. The gate only stops a draft from asking for it:
 a snapshot whose own init says `Run => 1` still post-processes when it is run with its defaults, and its
 walltime then includes `postProcessingWalltime` where the snapshot has one.
 

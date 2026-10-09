@@ -36,7 +36,7 @@ export interface HelpTopic {
 
 /** What the screen knows that changes what is true to say. */
 export interface HelpFacts {
-  /** The snapshot's `climatologyAvailable`: the "Also climatology" choice can be used. */
+  /** The snapshot's `climatologyAvailable`: the post-processing checkbox can be used. */
   climatologyAvailable?: boolean;
 }
 
@@ -128,11 +128,12 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
     title: "Post-processing",
     blocks: [
       text(
-        "Daily, monthly and yearly is the output every published snapshot has, and it is the default."
+        "WBM always writes daily, monthly and yearly output. The checkbox decides whether its post-processing also runs after the simulation."
       ),
       list(
+        "What post-processing writes depends on the snapshot's init: climatologies of each output variable, yearly climatologies over several years, or aggregates over polygons. The line under the checkbox says which, for this snapshot.",
         "A snapshot whose init has no post-processing settings cannot change this choice.",
-        "No published snapshot holds climatology, so asking for it always means a new simulation."
+        "No published snapshot holds the results of post-processing, so asking for it always means a new simulation."
       ),
     ],
   },
@@ -169,18 +170,16 @@ const REVIEW: HelpTopic = {
   ],
 };
 
-/** "Post-processing", with what is true of climatology on this snapshot: it is offered, or it is not yet. */
+/** "Post-processing", with what is true of it on this snapshot: it can be asked for, or not yet. */
 function outputTopic({ climatologyAvailable = false }: HelpFacts): HelpTopic {
   const base = SECTIONS.output;
   const [intro, ...rest] = base.blocks;
-  const climatology = climatologyAvailable
-    ? text(
-        "Also climatology adds daily, monthly and yearly climatologies of the run period for each output variable: three files per variable. WBM computes them after the simulation, which takes extra time."
-      )
+  const availability = climatologyAvailable
+    ? text("Running it takes extra time after the simulation, and the walltime then includes it.")
     : text(
-        "Also climatology is not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
+        "Post-processing is not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
       );
-  return { ...base, blocks: [intro, climatology, ...rest] };
+  return { ...base, blocks: [intro, availability, ...rest] };
 }
 
 /**

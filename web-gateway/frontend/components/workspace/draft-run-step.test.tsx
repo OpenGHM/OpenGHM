@@ -12,6 +12,7 @@ afterEach(cleanup);
 const dataset = fakeDataset({
   runStartAlignment: "year",
   climatologyAvailable: true,
+  postProcessingProducts: { climatology: true, multiYear: null, polygonAggregation: false },
   simulation: {
     ...fakeDataset().simulation,
     outputVariables: [
@@ -84,6 +85,10 @@ const checkbox = (name: string | RegExp) => screen.getByRole("checkbox", { name 
 /** Output variables and Compute are closed until asked for. */
 const openVariables = () => fireEvent.click(screen.getByRole("button", { name: "Choose output variables" }));
 const openCompute = () => fireEvent.click(screen.getByRole("button", { name: "Change compute" }));
+
+/** The output-variable checkboxes: every checkbox but the post-processing one. */
+const variableBoxes = () =>
+  screen.queryAllByRole("checkbox").filter((c) => c.getAttribute("data-draft-field") !== "postProcessing");
 
 describe("the draft run step: name and description", () => {
   it("starts the card with them, an empty Name that shows an example and no generated name", () => {
@@ -180,7 +185,7 @@ describe("the draft run step: the quiet path", () => {
     step();
     expect(start()).toBeTruthy();
     expect(end()).toBeTruthy();
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(variableBoxes()).toHaveLength(0);
     expect(screen.queryByLabelText("Cores")).toBeNull();
     expect(screen.queryByLabelText(/^Walltime/)).toBeNull();
     expect(screen.getByRole("button", { name: "Choose output variables" }).textContent).toBe("Choose…");
@@ -226,13 +231,13 @@ describe("the draft run step: the quiet path", () => {
     const toggle = screen.getByRole("button", { name: "Choose output variables" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
-    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(variableBoxes()).toHaveLength(3);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(toggle.textContent).toBe("Done");
     expect(document.getElementById(toggle.getAttribute("aria-controls")!)).toBeTruthy();
     expect(screen.getByText("All 3 variables")).toBeTruthy();
     fireEvent.click(toggle);
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(variableBoxes()).toHaveLength(0);
   });
 
   it("says what the compute is in one line: the recommendation, or the draft's own values", () => {
@@ -250,16 +255,16 @@ describe("the draft run step: the quiet path", () => {
     const { unmount } = step({ parameters: { ...PARAMETERS, variables: [] } });
     expect(screen.getByText("None selected")).toBeTruthy();
     expect(screen.getByText(/Choose at least one output variable/)).toBeTruthy();
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(variableBoxes()).toHaveLength(0);
     unmount();
     step({ serverErrors: { variables: "Unknown variable." } });
     expect(screen.getByText("Unknown variable.")).toBeTruthy();
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(variableBoxes()).toHaveLength(0);
   });
 
   it("keeps the list open, with no way to close it, while a variable is not in the snapshot", () => {
     step({ parameters: { ...PARAMETERS, variables: ["discharge", "legacyVar"] } });
-    expect(screen.getAllByRole("checkbox")).toHaveLength(4);
+    expect(variableBoxes()).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /output variables/ })).toBeNull();
   });
 
@@ -463,7 +468,7 @@ describe("the draft run step: without a snapshot", () => {
     expect(screen.getByText(/own list isn't\s+available/)).toBeTruthy();
     expect(screen.getByText("Recommended: set by the model snapshot")).toBeTruthy();
     openVariables();
-    expect(screen.getAllByRole("checkbox").map((c) => (c as HTMLInputElement).checked)).toEqual([true]);
+    expect(variableBoxes().map((c) => (c as HTMLInputElement).checked)).toEqual([true]);
     expect(screen.getByRole("checkbox", { name: "discharge" })).toBeTruthy();
     expect(screen.queryByText("not in this snapshot")).toBeNull();
     // The compute fields have no recommendation to show.
@@ -732,7 +737,7 @@ describe("the draft run step: a long list of output variables", () => {
     openVariables();
     expect(screen.queryByRole("searchbox")).toBeNull();
     expect(screen.queryByText("Other variables")).toBeNull();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(variableBoxes()).toHaveLength(3);
   });
 
   it("groups the names that share a base, and the rest follow as other variables", () => {
@@ -840,34 +845,31 @@ describe("the draft run step: what the draft is based on", () => {
 });
 
 describe("the draft run step: the Post-processing choice", () => {
-  const radio = (name: string | RegExp) => screen.getByRole("radio", { name }) as HTMLInputElement;
-  const STANDARD = /Daily, monthly and yearly/;
-  const CLIMATOLOGY = /Also climatology/;
+  const CHECKBOX = "Run post-processing after the simulation";
+  const box = () => screen.getByRole("checkbox", { name: CHECKBOX }) as HTMLInputElement;
   const climatologyDataset = fakeDataset({
     ...dataset,
     postProcessing: "climatology",
   });
 
-  it("is two radios in a group named Post-processing, the snapshot's own choice ticked when the draft has none", () => {
+  it("is one checkbox, unchecked when the snapshot's own is standard and the draft has none", () => {
     step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "standard" }), snapshotState: "found" } });
-    expect(screen.getByRole("radiogroup", { name: "Post-processing" })).toBeTruthy();
-    expect(screen.getAllByRole("radio")).toHaveLength(2);
-    expect(radio(STANDARD).checked).toBe(true);
-    expect(radio(CLIMATOLOGY).checked).toBe(false);
-    expect(screen.getByText(/as the published simulation/)).toBeTruthy();
+    expect(screen.getAllByRole("checkbox", { name: CHECKBOX })).toHaveLength(1);
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(box().checked).toBe(false);
   });
 
-  it("defaults to the snapshot's climatology, and to standard when the init could not be read", () => {
+  it("is checked for the snapshot's climatology, and unchecked when the init could not be read", () => {
     const { unmount } = step({ ctx: { dataset: climatologyDataset, snapshotState: "found" } });
-    expect(radio(CLIMATOLOGY).checked).toBe(true);
+    expect(box().checked).toBe(true);
     unmount();
-    const unread = step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null }), snapshotState: "found" } });
-    expect(radio(STANDARD).checked).toBe(true);
-    expect(radio(STANDARD).disabled).toBe(false);
-    expect(radio(CLIMATOLOGY).disabled).toBe(false);
+    const unread = step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: null, postProcessingProducts: null }), snapshotState: "found" } });
+    expect(box().checked).toBe(false);
+    expect(box().disabled).toBe(false);
+    expect(screen.getByText("What it writes depends on the snapshot's init, which could not be read just now.")).toBeTruthy();
     unread.unmount();
     step({ ctx: NO_SNAPSHOT });
-    expect(radio(STANDARD).checked).toBe(true);
+    expect(box().checked).toBe(false);
   });
 
   it("shows the draft's own choice over the snapshot's", () => {
@@ -875,97 +877,136 @@ describe("the draft run step: the Post-processing choice", () => {
       ctx: { dataset: climatologyDataset, snapshotState: "found" },
       parameters: { ...PARAMETERS, post_processing: "standard" },
     });
-    expect(radio(STANDARD).checked).toBe(true);
-    expect(radio(CLIMATOLOGY).checked).toBe(false);
+    expect(box().checked).toBe(false);
+    cleanup();
+    step({ parameters: { ...PARAMETERS, post_processing: "climatology" } });
+    expect(box().checked).toBe(true);
   });
 
-  it("reports the picked value whole, even the snapshot's own, and changes nothing else", () => {
+  it("reports the toggled value whole, even the snapshot's own, and changes nothing else", () => {
     const first = step();
-    fireEvent.click(radio(CLIMATOLOGY));
+    fireEvent.click(box());
     expect(first.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "climatology" });
     first.unmount();
-    // On a climatology snapshot, standard is the one that is not ticked.
+    // On a climatology snapshot, unchecking stores standard.
     const second = step({ ctx: { dataset: climatologyDataset, snapshotState: "found" } });
-    fireEvent.click(radio(STANDARD));
+    fireEvent.click(box());
     expect(second.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "standard" });
   });
 
-  it("notes, under Also climatology, the file count (variables chosen x 3) and the measurement", () => {
+  it("says what post-processing writes: the file count (variables chosen x 3) and the measurement", () => {
     const { unmount } = step();
-    expect(screen.getByText(/9 files for this snapshot/)).toBeTruthy();
+    expect(
+      screen.getByText("Writes daily, monthly and yearly climatologies of each output variable (9 files).")
+    ).toBeTruthy();
     expect(
       screen.getByText(/Measured on this snapshot's reference period at 16 cores: about 45 min on top of the run time/)
     ).toBeTruthy();
     expect(screen.queryByText(/CONUS/)).toBeNull();
     unmount();
     step({ parameters: { ...PARAMETERS, variables: ["runoff"] } });
-    expect(screen.getByText(/3 files for this snapshot/)).toBeTruthy();
+    expect(screen.getByText(/\(3 files\)/)).toBeTruthy();
   });
 
   it("leaves the count out when no variable is chosen", () => {
     step({ parameters: { ...PARAMETERS, variables: [] } });
-    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+    expect(screen.getByText("Writes daily, monthly and yearly climatologies of each output variable.")).toBeTruthy();
+  });
+
+  it.each([
+    [
+      "multi-year climatologies",
+      { climatology: true, multiYear: { start: 2001, step: 2 }, polygonAggregation: false },
+      "Writes daily, monthly and yearly climatologies of each output variable (9 files) and yearly climatologies over 2-year periods from 2001.",
+    ],
+    [
+      "polygon aggregates",
+      { climatology: true, multiYear: null, polygonAggregation: true },
+      "Writes daily, monthly and yearly climatologies of each output variable (9 files) and aggregates over polygons.",
+    ],
+    [
+      "all three",
+      { climatology: true, multiYear: { start: 1990, step: 5 }, polygonAggregation: true },
+      "Writes daily, monthly and yearly climatologies of each output variable (9 files), yearly climatologies over 5-year periods from 1990 and aggregates over polygons.",
+    ],
+    [
+      "polygons only",
+      { climatology: false, multiYear: null, polygonAggregation: true },
+      "Writes aggregates over polygons.",
+    ],
+    [
+      "nothing",
+      { climatology: false, multiYear: null, polygonAggregation: false },
+      "This snapshot's init sets nothing for post-processing to write, so running it produces nothing.",
+    ],
+  ])("describes %s from the snapshot's init", (_label, products, line) => {
+    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessingProducts: products }), snapshotState: "found" } });
+    expect(screen.getByText(line)).toBeTruthy();
   });
 
   it("is disabled, with one line, for a snapshot whose init has no post-processing settings", () => {
-    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "none" }), snapshotState: "found" } });
-    expect(radio(STANDARD).disabled).toBe(true);
-    expect(radio(CLIMATOLOGY).disabled).toBe(true);
+    step({
+      ctx: {
+        dataset: fakeDataset({ ...dataset, postProcessing: "none", postProcessingProducts: null }),
+        snapshotState: "found",
+      },
+    });
+    expect(box().disabled).toBe(true);
+    expect(box().checked).toBe(false);
     expect(screen.getByText("This snapshot's init has no post-processing settings.")).toBeTruthy();
-    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+    expect(screen.queryByText(/^Writes /)).toBeNull();
   });
 
   it.each([
     ["false", false],
     ["absent", undefined],
-  ])("disables Also climatology with one muted line while climatologyAvailable is %s", (_label, available) => {
+  ])("disables the checkbox, still saying what it would write, while climatologyAvailable is %s", (_label, available) => {
     step({ ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: available }), snapshotState: "found" } });
-    expect(radio(CLIMATOLOGY).disabled).toBe(true);
-    expect(radio(STANDARD).disabled).toBe(false);
-    expect(radio(STANDARD).checked).toBe(true);
+    expect(box().disabled).toBe(true);
+    expect(box().checked).toBe(false);
     expect(
       screen.getByText(
         "Not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
       )
     ).toBeTruthy();
-    expect(screen.queryByText(/files for this snapshot/)).toBeNull();
+    expect(screen.getByText(/^Writes /)).toBeTruthy();
     expect(screen.queryByText(/Measured on this snapshot/)).toBeNull();
-    const note = screen.getByText(/Not available yet/);
-    expect(screen.getByRole("radiogroup", { name: "Post-processing" }).getAttribute("aria-describedby")).toContain(note.id);
+    const note = screen.getByText(/Not available yet/).parentElement!;
+    expect(box().getAttribute("aria-describedby")).toContain(note.id);
   });
 
-  it("keeps the standard option selectable while climatology is off", () => {
+  it("lets a stored climatology be unchecked while it is off", () => {
     const view = step({
       ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: false }), snapshotState: "found" },
       parameters: { ...PARAMETERS, post_processing: "climatology" },
     });
-    fireEvent.click(radio(STANDARD));
+    expect(box().disabled).toBe(false);
+    fireEvent.click(box());
     expect(view.onParametersChange).toHaveBeenLastCalledWith({ ...PARAMETERS, post_processing: "standard" });
   });
 
-  it("shows a stored climatology as it is while it is off, with the server's refusal on the field", () => {
+  it("shows a stored climatology checked while it is off, with the server's refusal on the field", () => {
     step({
       ctx: { dataset: fakeDataset({ ...dataset, climatologyAvailable: false }), snapshotState: "found" },
       parameters: { ...PARAMETERS, post_processing: "climatology" },
       serverErrors: { postProcessing: "Climatology is not available yet." },
     });
-    expect(radio(CLIMATOLOGY).checked).toBe(true);
-    expect(radio(CLIMATOLOGY).disabled).toBe(true);
-    expect(screen.getByText("Climatology is not available yet.")).toBeTruthy();
+    expect(box().checked).toBe(true);
+    const error = screen.getByText("Climatology is not available yet.");
+    expect(box().getAttribute("aria-describedby")).toContain(error.id);
   });
 
-  it("shows what the server said about it, tied to the group", () => {
+  it("shows what the server said about it, tied to the checkbox", () => {
     step({ serverErrors: { postProcessing: "Not for this snapshot." } });
-    const group = screen.getByRole("radiogroup", { name: "Post-processing" });
-    expect(group.getAttribute("aria-describedby")).toContain(screen.getByText("Not for this snapshot.").id);
+    expect(box().getAttribute("aria-describedby")).toContain(screen.getByText("Not for this snapshot.").id);
   });
 
   it("is marked for the wizard's focus, and switched off while a submit is under way", () => {
     const { unmount } = step();
-    expect(screen.getByRole("radiogroup", { name: "Post-processing" }).getAttribute("data-draft-field")).toBe("postProcessing");
+    expect(box().getAttribute("data-draft-field")).toBe("postProcessing");
     unmount();
     step({ disabled: true });
-    expect(radio(STANDARD).matches(":disabled")).toBe(true);
+    expect(box().matches(":disabled")).toBe(true);
   });
 });
 

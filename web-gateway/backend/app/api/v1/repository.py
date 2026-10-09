@@ -21,8 +21,10 @@ from app.models.repository import (
     ModelInputLinks,
     ModelInputListResponse,
     ModelInputResponse,
+    MultiYearAggregation,
     OwnedModelInputItem,
     OwnedSnapshotItem,
+    PostProcessingProducts,
     PublishedAnswerRequest,
     PublishedAnswerResponse,
     RepositoryListResponse,
@@ -281,6 +283,17 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
         detail.runStartAlignment = rules.alignment
         detail.aggregationStartYear = rules.aggregation_start_year
         detail.postProcessing = rules.post_processing
+        products = rules.post_processing_products
+        if products is not None:
+            detail.postProcessingProducts = PostProcessingProducts(
+                climatology=products.climatology,
+                multiYear=(
+                    MultiYearAggregation(start=products.multi_year[0], step=products.multi_year[1])
+                    if products.multi_year
+                    else None
+                ),
+                polygonAggregation=products.polygon_aggregation,
+            )
         # All three: the gateway has climatology switched on, the init has a
         # post-processing run to turn on, and the snapshot says how long that takes
         # (what its walltime is sized by).

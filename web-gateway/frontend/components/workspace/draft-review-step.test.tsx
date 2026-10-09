@@ -382,20 +382,20 @@ describe("DraftReviewStep: output", () => {
     parameters: { ...LOCAL.parameters, post_processing },
   });
 
-  it("says daily, monthly and yearly for a draft with no choice on a standard snapshot", () => {
+  it("says Off for a draft with no choice on a standard snapshot", () => {
     review();
-    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Off")).toBeTruthy();
   });
 
-  it("adds climatology when the draft chose it, or has none and the snapshot's own is climatology", () => {
+  it("says On when the draft chose it, or has none and the snapshot's own is climatology", () => {
     review({ local: withOutput("climatology") });
-    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("On")).toBeTruthy();
     cleanup();
     review({
       local: withOutput(null),
       ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
     });
-    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("On")).toBeTruthy();
   });
 
   it("takes the draft's standard over the snapshot's climatology", () => {
@@ -403,7 +403,7 @@ describe("DraftReviewStep: output", () => {
       local: withOutput("standard"),
       ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
     });
-    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Off")).toBeTruthy();
   });
 
   it("sends Edit to the Post-processing control on Run settings", () => {

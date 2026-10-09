@@ -589,26 +589,26 @@ describe("DraftSubmitCard: the Post-processing row of the confirmation", () => {
     flush.mockResolvedValueOnce({ ok: true, job: withOutput("climatology"), withheld: [] });
     card();
     await openDialog();
-    expect(outputRow()).toBe("Daily, monthly and yearly, and climatology");
+    expect(outputRow()).toBe("On");
   });
 
   it("shows standard when the draft chose standard, whatever the snapshot has", async () => {
     flush.mockResolvedValueOnce({ ok: true, job: withOutput("standard"), withheld: [] });
     card({ snapshotOutput: "climatology" });
     await openDialog();
-    expect(outputRow()).toBe("Daily, monthly and yearly");
+    expect(outputRow()).toBe("Off");
   });
 
   it("shows the snapshot's own output when the draft has no choice", async () => {
     flush.mockResolvedValueOnce({ ok: true, job: withOutput(null), withheld: [] });
     card({ snapshotOutput: "climatology" });
     await openDialog();
-    expect(outputRow()).toBe("Daily, monthly and yearly, and climatology");
+    expect(outputRow()).toBe("On");
   });
 
   it("is standard for a draft and a snapshot that say nothing", async () => {
     card();
     await openDialog();
-    expect(outputRow()).toBe("Daily, monthly and yearly");
+    expect(outputRow()).toBe("Off");
   });
 });

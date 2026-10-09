@@ -574,7 +574,7 @@ describe("submitProblems", () => {
           field: "walltime",
           step: "run",
           message:
-            "The reference simulation and its post-processing took about 100 h together, more than the 96 h one job may use. Shorten the run period, choose the standard output or set a walltime.",
+            "The reference simulation and its post-processing took about 100 h together, more than the 96 h one job may use. Shorten the run period, turn post-processing off or set a walltime.",
         },
       ]);
     });

@@ -167,10 +167,10 @@ describe("WizardHelpPanel", () => {
     }
     const view = render(<Output available={false} />);
     fireEvent.focus(screen.getByLabelText("Daily"));
-    expect(screen.getByText(/Also climatology is not available yet/)).toBeTruthy();
+    expect(screen.getByText(/Post-processing is not available yet/)).toBeTruthy();
     view.rerender(<Output available />);
     expect(screen.queryByText(/not available yet/)).toBeNull();
-    expect(screen.getByText(/three files per variable/)).toBeTruthy();
+    expect(screen.getByText(/walltime then includes it/)).toBeTruthy();
   });
 
   it("draws nothing, and breaks nothing, outside a provider", () => {
@@ -366,9 +366,9 @@ describe("the sections of Run settings", () => {
     fireEvent.focus(screen.getByRole("button", { name: "Choose output variables" }));
     expect(shown()).toBe("Output variables");
 
-    fireEvent.focus(screen.getByRole("radio", { name: /Daily, monthly and yearly/ }));
+    fireEvent.focus(screen.getByRole("checkbox", { name: "Run post-processing after the simulation" }));
     expect(shown()).toBe("Post-processing");
-    expect(screen.getByText(/Also climatology is not available yet/)).toBeTruthy();
+    expect(screen.getByText(/Post-processing is not available yet/)).toBeTruthy();
 
     fireEvent.focus(screen.getByRole("button", { name: "Change compute" }));
     expect(shown()).toBe("Compute");

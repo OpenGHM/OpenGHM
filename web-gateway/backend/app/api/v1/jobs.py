@@ -898,7 +898,7 @@ async def submit_simulation(
                 "This model snapshot's reference simulation took about "
                 f"{took}, and one job may use at most "
                 f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, "
-                + ("choose the daily, monthly and yearly output instead of climatology, " if extra else "")
+                + ("turn post-processing off, " if extra else "")
                 + "or set a walltime yourself (a simulation that needs longer may be "
                 "stopped when time runs out).",
                 recommended_seconds=over,

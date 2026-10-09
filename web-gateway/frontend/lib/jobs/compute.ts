@@ -164,7 +164,7 @@ export function postProcessingShare(recommended: Recommended | null, postProcess
 export function describeWalltimeOverLimit(seconds: number, postProcessing = 0): string {
   const limit = MAX_WALLTIME_SECONDS / 3600;
   if (postProcessing > 0) {
-    return `This model snapshot's reference simulation took about ${describeHours(seconds - postProcessing)}, and its post-processing about ${describeHours(postProcessing)} more: more than the ${limit} h one job may use. Shorten the run period, choose the daily, monthly and yearly output instead of climatology, or set a walltime yourself (the simulation may be stopped when time runs out).`;
+    return `This model snapshot's reference simulation took about ${describeHours(seconds - postProcessing)}, and its post-processing about ${describeHours(postProcessing)} more: more than the ${limit} h one job may use. Shorten the run period, turn post-processing off, or set a walltime yourself (the simulation may be stopped when time runs out).`;
   }
   return `This model snapshot's reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out).`;
 }
@@ -175,7 +175,7 @@ export function describeWalltimeOverLimit(seconds: number, postProcessing = 0): 
 export function describeWalltimeOverLimitShort(seconds: number, postProcessing = 0): string {
   const limit = MAX_WALLTIME_SECONDS / 3600;
   if (postProcessing > 0) {
-    return `The reference simulation and its post-processing took about ${describeHours(seconds)} together, more than the ${limit} h one job may use. Shorten the run period, choose the standard output or set a walltime.`;
+    return `The reference simulation and its post-processing took about ${describeHours(seconds)} together, more than the ${limit} h one job may use. Shorten the run period, turn post-processing off or set a walltime.`;
   }
   return `The reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period or set a walltime.`;
 }

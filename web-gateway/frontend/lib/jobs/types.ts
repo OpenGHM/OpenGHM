@@ -186,9 +186,9 @@ export interface JobParameters {
   spatial_domain: SpatialDomain | null;
   variables: string[];
   custom_params: Record<string, string> | null;
-  /** What to compute after the simulation: `standard` is the daily, monthly and
-   *  yearly output every published snapshot has, `climatology` adds WBM's
-   *  climatologies. `null` or absent is the snapshot's own; a draft nobody
+  /** Whether WBM's post-processing runs after the simulation: `climatology` runs
+   *  it (the checkbox is checked), `standard` does not (daily, monthly and yearly
+   *  output is written either way). `null` or absent is the snapshot's own; a draft nobody
    *  has chosen for never sends the key. */
   post_processing?: PostProcessingChoice | null;
 }

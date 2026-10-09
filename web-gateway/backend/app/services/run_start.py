@@ -49,8 +49,10 @@ init's `PostProcessing => { Run => … }` block asks WBM for: `"none"` when the 
 has no such block or the block has no `Run` of its own (a toolkit flag cannot
 change what is not there), `"standard"` when `Run` is false in Perl's sense (`0`,
 `'0'`, `''`), `"climatology"` when it is true. Only the block's own top-level
-`Run` counts, never `Run_Start`/`Run_End` or a `Run` in a nested hash. The
-backend does not import the toolkit, so `post_processing_from_init` is a compact
+`Run` counts, never `Run_Start`/`Run_End` or a `Run` in a nested hash. The same
+block gives `post_processing_products`, what `Run => 1` would make (climatology
+files, multi-year climatologies, spatial aggregation), from its other top-level
+keys as `PostProcessing.pl` reads them. The backend does not import the toolkit, so `post_processing_from_init` is a compact
 reader of its own; `openghm.post_processing.requested_run_value` is the toolkit's,
 and both are tested on the same real inits (tests/test_post_processing.py).
 
@@ -134,7 +136,6 @@ def aggregation_start_year_from_init(content: str) -> int | None:
 
 
 _PP_BLOCK_RE = re.compile(r"""(?<!\w)(?:(['"])PostProcessing\1|PostProcessing)\s*=>\s*\{""")
-_PP_RUN_KEY_RE = re.compile(r"""(?:(['"])Run\1|(?<![\w$@%])Run(?!\w))\s*=>\s*""")
 # A Perl scalar: quoted, or bare up to `,`, `}`, `#` or the end of the line (possibly empty).
 _PP_VALUE_RE = re.compile(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|[^,}\n#]*""")
 
@@ -152,16 +153,30 @@ def _is_perl_true(literal: str) -> bool:
         return True
 
 
-def post_processing_from_init(content: str) -> PostProcessing:
-    """What the init's `PostProcessing` block asks for. The block is read
-    brace-balanced, skipping quoted strings and `#` comments, and only a `Run` key
-    at the block's own depth counts. Total: an unbalanced block, or any text at all,
-    answers `"none"` rather than raising."""
+_PP_KEYS = (
+    "Run",
+    "Temporal_Aggregation",
+    "Climatology",
+    "TA_multi_year_start",
+    "TA_multi_year_timestep",
+    "Polygon_Aggregation",
+)
+_PP_KEY_RES = {
+    key: re.compile(rf"""(?:(['"]){key}\1|(?<![\w$@%]){key}(?!\w))\s*=>\s*""") for key in _PP_KEYS
+}
+
+
+def _pp_block(content: str) -> dict[str, str] | None:
+    """The first uncommented `PostProcessing => { … }` block of the init, as the
+    raw literal of each of its own top-level keys in `_PP_KEYS` (the first of each; a
+    hash value reads as `{…`). The block is read brace-balanced, skipping quoted
+    strings and `#` comments, and only a key at the block's own depth counts. None
+    when there is no block or its braces do not balance. Total: any text answers."""
     for block in _PP_BLOCK_RE.finditer(content):
         line_start = content.rfind("\n", 0, block.start()) + 1
         if content[line_start:block.start()].lstrip().startswith("#"):
             continue
-        depth, quote, i, n, found = 0, None, block.end(), len(content), None
+        depth, quote, i, n, found = 0, None, block.end(), len(content), {}
         while i < n:
             c = content[i]
             if quote:
@@ -175,10 +190,14 @@ def post_processing_from_init(content: str) -> PostProcessing:
                 i = n if j == -1 else j
                 continue
             elif c == "}" and depth == 0:
-                return found or "none"  # the block's own closing brace
+                return found  # the block's own closing brace
             else:
-                if depth == 0 and found is None and (key := _PP_RUN_KEY_RE.match(content, i)):
-                    found = _run_literal(content, key.end())
+                if depth == 0:
+                    for name, pattern in _PP_KEY_RES.items():
+                        if name not in found and (key := pattern.match(content, i)):
+                            value = _PP_VALUE_RE.match(content, key.end())
+                            found[name] = value.group(0) if value else ""
+                            break
                 if c in "'\"":
                     quote = c
                 elif c == "{":
@@ -186,13 +205,72 @@ def post_processing_from_init(content: str) -> PostProcessing:
                 elif c == "}":
                     depth -= 1
             i += 1
-        return "none"  # the braces do not balance
-    return "none"
+        return None  # the braces do not balance
+    return None
 
 
-def _run_literal(content: str, value_start: int) -> PostProcessing:
-    value = _PP_VALUE_RE.match(content, value_start)
-    return "climatology" if _is_perl_true(value.group(0) if value else "") else "standard"
+def post_processing_from_init(content: str) -> PostProcessing:
+    """What the init's `PostProcessing` block asks for: `"none"` without a block
+    or a `Run` of its own in it (or with unbalanced braces), else `"climatology"`
+    when `Run` is true in Perl's sense and `"standard"` when it is not. Total: any
+    text at all answers rather than raising."""
+    block = _pp_block(content)
+    if block is None or "Run" not in block:
+        return "none"
+    return "climatology" if _is_perl_true(block["Run"]) else "standard"
+
+
+@dataclass(frozen=True)
+class PostProcessingProducts:
+    """What WBM's `PostProcessing.pl` makes when the init's block is run with `Run => 1`."""
+
+    #: Climatology files (`_dc`, `_mc`, `_yc` in `climatology/`): `Temporal_Aggregation`
+    #: is true and `Climatology` is (1 when the init does not say).
+    climatology: bool
+    #: `(start year, step in years)`: yearly climatologies over each `step`-year range
+    #: from `start`; set only with climatology and when both `TA_multi_year_start`
+    #: and `TA_multi_year_timestep` are set.
+    multi_year: tuple[int, int] | None
+    #: Aggregation into `spatial_agg/` over the polygons: `Polygon_Aggregation` is set.
+    polygon_aggregation: bool
+
+
+def _perl_int(literal: str) -> int:
+    """Perl's `int` of a scalar literal: its leading number, else 0."""
+    s = literal.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        s = s[1:-1].strip()
+    m = re.match(r"[-+]?(?:\d+\.?\d*|\.\d+)", s)
+    return int(float(m.group(0))) if m else 0
+
+
+def _unquoted(literal: str) -> str:
+    s = literal.strip()
+    return s[1:-1].strip() if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"" else s
+
+
+def post_processing_products_from_init(content: str) -> PostProcessingProducts | None:
+    """What a `Run => 1` of this init would produce, from the block's own keys as
+    `PostProcessing.pl` reads them (images/wbm-tools-lite/wbm/model/RIMS/WBM.pm,
+    `PostProcessing`). None when `post_processing_from_init` says `"none"`: no
+    block, no `Run`, or an unreadable init."""
+    block = _pp_block(content)
+    if block is None or "Run" not in block:
+        return None
+    temporal = _is_perl_true(block.get("Temporal_Aggregation", ""))
+    clim = block.get("Climatology", "")
+    # WBM's `set_default`: an absent or empty value is the default, 1.
+    climatology = temporal and (not _unquoted(clim) or _perl_int(clim) != 0)
+    first = _unquoted(block.get("TA_multi_year_start", ""))
+    step = _unquoted(block.get("TA_multi_year_timestep", ""))
+    multi_year = None
+    if climatology and re.fullmatch(r"\d{4}", first) and re.fullmatch(r"\d+", step) and int(step) > 0:
+        multi_year = (int(first), int(step))
+    return PostProcessingProducts(
+        climatology=climatology,
+        multi_year=multi_year,
+        polygon_aggregation=_is_perl_true(block.get("Polygon_Aggregation", "")),
+    )
 
 
 @dataclass(frozen=True)
@@ -204,6 +282,8 @@ class InitRules:
     aggregation_start_year: int | None
     #: What the init's `PostProcessing => { Run => … }` asks for.
     post_processing: PostProcessing = "none"
+    #: What `Run => 1` of the init would produce; None when `post_processing` is `"none"`.
+    post_processing_products: PostProcessingProducts | None = None
 
 
 def rules_from_init(content: str) -> InitRules:
@@ -211,6 +291,7 @@ def rules_from_init(content: str) -> InitRules:
         alignment_from_init(content),
         aggregation_start_year_from_init(content),
         post_processing_from_init(content),
+        post_processing_products_from_init(content),
     )
 
 
