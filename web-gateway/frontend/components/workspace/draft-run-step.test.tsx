@@ -839,7 +839,7 @@ describe("the draft run step: what the draft is based on", () => {
   });
 });
 
-describe("the draft run step: the Output choice", () => {
+describe("the draft run step: the Post-processing choice", () => {
   const radio = (name: string | RegExp) => screen.getByRole("radio", { name }) as HTMLInputElement;
   const STANDARD = /Daily, monthly and yearly/;
   const CLIMATOLOGY = /Also climatology/;
@@ -848,9 +848,9 @@ describe("the draft run step: the Output choice", () => {
     postProcessing: "climatology",
   });
 
-  it("is two radios in a group named Output, the snapshot's own choice ticked when the draft has none", () => {
+  it("is two radios in a group named Post-processing, the snapshot's own choice ticked when the draft has none", () => {
     step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "standard" }), snapshotState: "found" } });
-    expect(screen.getByRole("radiogroup", { name: "Output" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Post-processing" })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(2);
     expect(radio(STANDARD).checked).toBe(true);
     expect(radio(CLIMATOLOGY).checked).toBe(false);
@@ -931,7 +931,7 @@ describe("the draft run step: the Output choice", () => {
     expect(screen.queryByText(/files for this snapshot/)).toBeNull();
     expect(screen.queryByText(/Measured on this snapshot/)).toBeNull();
     const note = screen.getByText(/Not available yet/);
-    expect(screen.getByRole("radiogroup", { name: "Output" }).getAttribute("aria-describedby")).toContain(note.id);
+    expect(screen.getByRole("radiogroup", { name: "Post-processing" }).getAttribute("aria-describedby")).toContain(note.id);
   });
 
   it("keeps the standard option selectable while climatology is off", () => {
@@ -956,13 +956,13 @@ describe("the draft run step: the Output choice", () => {
 
   it("shows what the server said about it, tied to the group", () => {
     step({ serverErrors: { postProcessing: "Not for this snapshot." } });
-    const group = screen.getByRole("radiogroup", { name: "Output" });
+    const group = screen.getByRole("radiogroup", { name: "Post-processing" });
     expect(group.getAttribute("aria-describedby")).toContain(screen.getByText("Not for this snapshot.").id);
   });
 
   it("is marked for the wizard's focus, and switched off while a submit is under way", () => {
     const { unmount } = step();
-    expect(screen.getByRole("radiogroup", { name: "Output" }).getAttribute("data-draft-field")).toBe("postProcessing");
+    expect(screen.getByRole("radiogroup", { name: "Post-processing" }).getAttribute("data-draft-field")).toBe("postProcessing");
     unmount();
     step({ disabled: true });
     expect(radio(STANDARD).matches(":disabled")).toBe(true);

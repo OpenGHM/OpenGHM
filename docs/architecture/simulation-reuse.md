@@ -29,7 +29,7 @@ from the snapshot's list, and a submit naming a model input, a spatial domain or
 custom parameters is refused (`unsupported_fields`, open item 9). So **every run
 the gateway can submit today asks for output the snapshot already carries**, with
 one exception: a draft can ask for WBM's climatology, which no published snapshot
-holds (the output choice, [gateway.md](gateway.md)). Apart from that, a draft
+holds (the post-processing choice, [gateway.md](gateway.md)). Apart from that, a draft
 asks for a period inside the published one and variables among the published
 ones. Such a draft is now answered from that output instead of run (section 3),
 unless the person asks for a rerun. A draft that asks for climatology is not

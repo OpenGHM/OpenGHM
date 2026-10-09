@@ -108,7 +108,7 @@ describe("DraftReviewStep: the summary", () => {
       "Based on",
       "Run period",
       "Output variables",
-      "Output",
+      "Post-processing",
       "Cores",
       "Walltime",
     ]);
@@ -384,18 +384,18 @@ describe("DraftReviewStep: output", () => {
 
   it("says daily, monthly and yearly for a draft with no choice on a standard snapshot", () => {
     review();
-    expect(within(row("Output")).getByText("Daily, monthly and yearly")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly")).toBeTruthy();
   });
 
   it("adds climatology when the draft chose it, or has none and the snapshot's own is climatology", () => {
     review({ local: withOutput("climatology") });
-    expect(within(row("Output")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
     cleanup();
     review({
       local: withOutput(null),
       ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
     });
-    expect(within(row("Output")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly, and climatology")).toBeTruthy();
   });
 
   it("takes the draft's standard over the snapshot's climatology", () => {
@@ -403,12 +403,12 @@ describe("DraftReviewStep: output", () => {
       local: withOutput("standard"),
       ctx: { dataset: fakeDataset({ id: "snap-1", postProcessing: "climatology" }), snapshotState: "found" },
     });
-    expect(within(row("Output")).getByText("Daily, monthly and yearly")).toBeTruthy();
+    expect(within(row("Post-processing")).getByText("Daily, monthly and yearly")).toBeTruthy();
   });
 
-  it("sends Edit to the Output control on Run settings", () => {
+  it("sends Edit to the Post-processing control on Run settings", () => {
     const { onEditStep } = review();
-    fireEvent.click(screen.getByRole("button", { name: "Edit output" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit post-processing" }));
     expect(onEditStep).toHaveBeenLastCalledWith("run", "postProcessing");
   });
 });

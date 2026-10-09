@@ -229,7 +229,7 @@ export function RunDetailsCard({
           )}
           {/* Only when the draft chose: the snapshot's own is not known here. */}
           {parameters.post_processing && (
-            <InfoRow icon={<FileOutput />} label="Output">
+            <InfoRow icon={<FileOutput />} label="Post-processing">
               {describeOutput(parameters.post_processing)}
             </InfoRow>
           )}

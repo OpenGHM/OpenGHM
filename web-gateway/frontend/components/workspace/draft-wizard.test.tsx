@@ -597,7 +597,7 @@ describe("saving is a button", () => {
   });
 });
 
-describe("the Output choice is saved like the run period", () => {
+describe("the Post-processing choice is saved like the run period", () => {
   const climatology = () => screen.getByRole("radio", { name: /Also climatology/ });
 
   it("is Unsaved changes at once, sent by nothing until Save draft, and then sent inside parameters", async () => {

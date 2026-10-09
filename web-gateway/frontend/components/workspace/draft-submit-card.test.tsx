@@ -576,14 +576,14 @@ describe("DraftSubmitCard: a rerun of published results", () => {
   });
 });
 
-describe("DraftSubmitCard: the Output row of the confirmation", () => {
+describe("DraftSubmitCard: the Post-processing row of the confirmation", () => {
   const withOutput = (post_processing?: "standard" | "climatology" | null) =>
     fakeDraft("DRAFT", {
       ...SAVED,
       parameters: { ...SAVED.parameters, ...(post_processing === undefined ? {} : { post_processing }) },
     });
 
-  const outputRow = () => within(dialog()).getByText("Output").nextElementSibling?.textContent;
+  const outputRow = () => within(dialog()).getByText("Post-processing").nextElementSibling?.textContent;
 
   it("shows the draft's own choice", async () => {
     flush.mockResolvedValueOnce({ ok: true, job: withOutput("climatology"), withheld: [] });

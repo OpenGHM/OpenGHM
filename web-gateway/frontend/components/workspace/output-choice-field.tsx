@@ -66,7 +66,7 @@ function Choice({
 }
 
 /**
- * The "Output" part of Run settings: what WBM writes. Two choices, as a radio
+ * The "Post-processing" part of Run settings: what WBM writes. Two choices, as a radio
  * group: the daily, monthly and yearly output every published snapshot has, or
  * that and WBM's climatologies (`post_processing`, which `sim run` passes as
  * `--post-processing`). It shows the draft's own choice, and the snapshot's
@@ -108,10 +108,10 @@ export function OutputChoiceSection({
   const errorId = `${id}-error`;
 
   return (
-    <DraftSection title="Output" help="output">
+    <DraftSection title="Post-processing" help="output">
       <div
         role="radiogroup"
-        aria-label="Output"
+        aria-label="Post-processing"
         aria-describedby={[unsupported || climatologyOff || shown === "climatology" ? noteId : null, error ? errorId : null]
           .filter(Boolean)
           .join(" ") || undefined}

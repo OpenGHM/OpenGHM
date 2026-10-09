@@ -109,7 +109,7 @@ export function SubmitSummary({
         <SummaryRow label={`Output variables (${variables.length})`}>
           {variables.length > 0 ? variables.join(", ") : "None chosen"}
         </SummaryRow>
-        <SummaryRow label="Output">{describeOutput(output)}</SummaryRow>
+        <SummaryRow label="Post-processing">{describeOutput(output)}</SummaryRow>
         <SummaryRow label="Cores">
           {cores ?? "Not known"}
           <Recommendation show={cores !== null && coresFromSnapshot}>

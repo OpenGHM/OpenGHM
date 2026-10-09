@@ -793,7 +793,7 @@ describe("unsavedFields", () => {
   });
 });
 
-describe("post_processing: the Output choice", () => {
+describe("post_processing: the Post-processing choice", () => {
   const job = draft();
 
   it("is not sent while nobody chose: the parameters carry no post_processing key", () => {

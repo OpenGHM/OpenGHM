@@ -159,7 +159,7 @@ describe("WizardHelpPanel", () => {
           <aside aria-label="Help">
             <WizardHelpPanel />
           </aside>
-          <DraftSection title="Output" help="output">
+          <DraftSection title="Post-processing" help="output">
             <input aria-label="Daily" />
           </DraftSection>
         </WizardHelpProvider>
@@ -206,7 +206,7 @@ describe("the help topics index", () => {
       "Name and description",
       "Run period",
       "Output variables",
-      "Output",
+      "Post-processing",
       "Compute",
     ]);
     rerender(<Sections step="start" />);
@@ -367,7 +367,7 @@ describe("the sections of Run settings", () => {
     expect(shown()).toBe("Output variables");
 
     fireEvent.focus(screen.getByRole("radio", { name: /Daily, monthly and yearly/ }));
-    expect(shown()).toBe("Output");
+    expect(shown()).toBe("Post-processing");
     expect(screen.getByText(/Also climatology is not available yet/)).toBeTruthy();
 
     fireEvent.focus(screen.getByRole("button", { name: "Change compute" }));

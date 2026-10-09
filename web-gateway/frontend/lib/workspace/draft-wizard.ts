@@ -110,7 +110,7 @@ export const FIELD_LABELS: Record<DraftField, string> = {
   variables: "Output variables",
   spatial: "Spatial subset",
   custom: "Custom parameters",
-  postProcessing: "Output",
+  postProcessing: "Post-processing",
   cores: "Cores",
   walltime: "Walltime",
   name: "Name",

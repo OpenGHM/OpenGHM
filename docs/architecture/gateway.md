@@ -252,7 +252,7 @@ not be read. The backend reads the block brace-balanced with a reader of its own
 (`run_start.post_processing_from_init`, tested on the same real inits as the toolkit's
 `openghm.post_processing`). A draft holds the choice as `parameters.post_processing`:
 `"standard"`, `"climatology"` or `null`, the snapshot's own, which a new draft starts at and a
-draft stored before the field has. Run settings shows it as an "Output" choice
+draft stored before the field has. Run settings shows it as a "Post-processing" choice
 between "Daily, monthly and yearly" and "Also climatology", defaulting to the snapshot's own. The note on the
 climatology option says how many files it writes (variables × 3) and gives the snapshot's own
 measured post-processing time, `recommendedCompute.postProcessingWalltime`
@@ -621,7 +621,7 @@ submitting.
 - A draft that overrides its model input, subsets the snapshot's spatial
   domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
   has no option for these yet (open item 9).
-- A set output choice on a snapshot whose init has no post-processing setting
+- A set post-processing choice on a snapshot whose init has no post-processing setting
   to change: 422 `post_processing_unavailable`. An init that cannot be read
   blocks nothing, and the toolkit refuses the flag there as the last line.
 - A start date the snapshot's model cannot start a simulation on: 422

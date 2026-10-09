@@ -28,7 +28,7 @@ describe("helpTopic", () => {
       about: "Name and description",
       period: "Run period",
       variables: "Output variables",
-      output: "Output",
+      output: "Post-processing",
       compute: "Compute",
     });
     expect(new Set(HELP_SECTIONS.map((s) => helpTopic("run", s).id)).size).toBe(HELP_SECTIONS.length);

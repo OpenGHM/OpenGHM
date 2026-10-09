@@ -674,7 +674,7 @@ async def _refuse_unavailable_post_processing(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "post_processing_unavailable",
             "This snapshot's init has no post-processing setting to change, so its "
-            "output choice cannot be set. Leave it as the snapshot's own.",
+            "post-processing choice cannot be set. Leave it as the snapshot's own.",
         )
     if value == "climatology" and not settings.CLIMATOLOGY_ENABLED:
         raise _error(

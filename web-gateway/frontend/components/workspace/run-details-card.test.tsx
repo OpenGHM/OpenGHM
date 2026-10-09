@@ -103,14 +103,14 @@ describe("the run details card", () => {
       overrides: { parameters: { ...base, post_processing: "climatology" } },
     });
     const first = details(climatology, null);
-    expect(first.container.textContent).toContain("OutputDaily, monthly and yearly, and climatology");
+    expect(first.container.textContent).toContain("Post-processingDaily, monthly and yearly, and climatology");
     cleanup();
 
     const standard = previewDraftJob("completed", {
       overrides: { parameters: { ...base, post_processing: "standard" } },
     });
     const second = details(standard, null);
-    expect(second.container.textContent).toContain("OutputDaily, monthly and yearly");
+    expect(second.container.textContent).toContain("Post-processingDaily, monthly and yearly");
     expect(second.container.textContent).not.toContain("climatology");
   });
 

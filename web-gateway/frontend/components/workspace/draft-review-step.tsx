@@ -250,8 +250,8 @@ export function DraftReviewStep({
               <VariablesValue names={parameters.variables} />
             </Row>
             <Row
-              label="Output"
-              edit={<EditLink step="run" field="postProcessing" label="output" onEditStep={onEditStep} />}
+              label="Post-processing"
+              edit={<EditLink step="run" field="postProcessing" label="post-processing" onEditStep={onEditStep} />}
             >
               {describeOutput(parameters.post_processing ?? snapshotOutput(ctx.dataset))}
             </Row>

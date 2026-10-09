@@ -125,7 +125,7 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
   },
   output: {
     id: "run.output",
-    title: "Output",
+    title: "Post-processing",
     blocks: [
       text(
         "Daily, monthly and yearly is the output every published snapshot has, and it is the default."
@@ -169,7 +169,7 @@ const REVIEW: HelpTopic = {
   ],
 };
 
-/** "Output", with what is true of climatology on this snapshot: it is offered, or it is not yet. */
+/** "Post-processing", with what is true of climatology on this snapshot: it is offered, or it is not yet. */
 function outputTopic({ climatologyAvailable = false }: HelpFacts): HelpTopic {
   const base = SECTIONS.output;
   const [intro, ...rest] = base.blocks;
