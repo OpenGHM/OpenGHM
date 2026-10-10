@@ -27,8 +27,8 @@ export function CtaSection() {
             <ArrowRight aria-hidden="true" />
           </Link>
         </Button>
-        <Button variant="on-dark" size="xl">
-          View Documentation
+        <Button asChild variant="on-dark" size="xl">
+          <Link href="/community?tab=tutorials">Browse Tutorials</Link>
         </Button>
       </div>
     </section>

@@ -32,7 +32,7 @@ export function Hero() {
             </Link>
           </Button>
           <Button asChild variant="on-dark" size="xl">
-            <Link href="/community">Join a Workshop</Link>
+            <Link href="/workspace">Open Workspace</Link>
           </Button>
         </>
       }
