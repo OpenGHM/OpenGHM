@@ -78,15 +78,12 @@ export function splitWorkshops<T extends Pick<WorkshopCard, "status" | "date" | 
   };
 }
 
-/** "Photos", "Materials": what a past workshop has to look at, from its counts. */
-export function workshopHints(w: Pick<WorkshopCard, "photo_count" | "material_count">): string[] {
-  const hints: string[] = [];
-  if (w.photo_count > 0) hints.push("Photos");
-  if (w.material_count > 0) hints.push("Materials");
-  return hints;
+/** "Materials": what a past workshop has to download, from its count. */
+export function workshopHints(w: Pick<WorkshopCard, "material_count">): string[] {
+  return w.material_count > 0 ? ["Materials"] : [];
 }
 
-/** "1 photo", "12 photos". */
+/** "1 file", "12 files". */
 export function countLabel(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }

@@ -51,24 +51,21 @@ describe("a workshop's page", () => {
     expect(screen.getByRole("link", { name: /Sign up for updates here!/ })).toBeTruthy();
   });
 
-  it("shows the cover with its caption, the photos and the materials when there are some", async () => {
+  it("shows the cover with its caption and the materials when there are some", async () => {
     getWorkshop.mockResolvedValue(
       workshop({
         cover: { url: "https://example.org/cover.jpg", alt: "The room", caption: "Day one" },
-        photos: [{ url: "https://example.org/1.jpg", caption: "A" }],
         materials: [{ name: "Slides.pdf", url: "https://example.org/slides.pdf", note: null }],
       }),
     );
     render(await WorkshopPage(params()));
     expect(screen.getByRole("img", { name: "The room" }).getAttribute("src")).toBe("https://example.org/cover.jpg");
     expect(screen.getByText("Day one")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Photos" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Materials" })).toBeTruthy();
   });
 
-  it("shows neither Photos nor Materials when there are none", async () => {
+  it("shows no Materials when there are none", async () => {
     render(await WorkshopPage(params()));
-    expect(screen.queryByRole("heading", { name: "Photos" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Materials" })).toBeNull();
   });
 

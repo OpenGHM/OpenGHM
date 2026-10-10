@@ -66,14 +66,6 @@ class WorkshopDetail(BaseModel):
     value: str = Field(min_length=1, max_length=300)
 
 
-class WorkshopPhoto(BaseModel):
-    model_config = _written()
-    url: ImageUrl
-    caption: str | None = Field(None, max_length=300)
-
-    _blank = field_validator("caption", mode="before")(_blank_to_none)
-
-
 class WorkshopMaterial(BaseModel):
     model_config = _written()
     name: str = Field(min_length=1, max_length=200)
@@ -111,7 +103,6 @@ class WorkshopInput(BaseModel):
     cover: WorkshopCover | None = None
     signup: WorkshopLink | None = None
     details: list[WorkshopDetail] = Field(default_factory=list, max_length=20)
-    photos: list[WorkshopPhoto] = Field(default_factory=list, max_length=60)
     materials: list[WorkshopMaterial] = Field(default_factory=list, max_length=40)
     body: dict | None = None
 
@@ -143,7 +134,6 @@ class Workshop(_Meta):
     cover: WorkshopCover | None = None
     signup: WorkshopLink | None = None
     details: list[WorkshopDetail] = []
-    photos: list[WorkshopPhoto] = []
     materials: list[WorkshopMaterial] = []
     body: dict | None = None
     #: Derived, not stored: "past" once the last day is before today (UTC).
@@ -151,8 +141,8 @@ class Workshop(_Meta):
 
 
 class WorkshopCard(_Meta):
-    """A workshop as the Community page lists it: no body, photos, materials or
-    details, but how many of the last two there are."""
+    """A workshop as the Community page lists it: no body, materials or details,
+    but how many materials there are."""
 
     slug: str
     title: str
@@ -165,7 +155,6 @@ class WorkshopCard(_Meta):
     cover: WorkshopCover | None = None
     signup: WorkshopLink | None = None
     status: Literal["upcoming", "past"]
-    photo_count: int
     material_count: int
 
 

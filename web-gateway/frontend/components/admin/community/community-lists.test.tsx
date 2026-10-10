@@ -42,7 +42,6 @@ const workshop = (over: Partial<Workshop>): Workshop => ({
   cover: null,
   signup: null,
   details: [],
-  photos: [],
   materials: [],
   body: null,
   ...meta,

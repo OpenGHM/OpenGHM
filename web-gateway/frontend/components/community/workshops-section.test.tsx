@@ -77,16 +77,15 @@ describe("WorkshopsSection", () => {
     expect(date?.textContent).toBe("DEC102024");
     expect(within(row).getByText("In person")).toBeTruthy();
     expect(within(row).getByText("San Francisco")).toBeTruthy();
-    expect(within(row).getByText("Photos · Materials")).toBeTruthy();
+    expect(within(row).getByText("Materials")).toBeTruthy();
   });
 
   it("names only the hints a past workshop has", () => {
-    render(<WorkshopsSection workshops={[pastWorkshopCard({ photo_count: 0, material_count: 3 })]} />);
+    render(<WorkshopsSection workshops={[pastWorkshopCard({ material_count: 3 })]} />);
     expect(screen.getByText("Materials")).toBeTruthy();
-    expect(screen.queryByText(/Photos/)).toBeNull();
     cleanup();
-    render(<WorkshopsSection workshops={[pastWorkshopCard({ photo_count: 0, material_count: 0 })]} />);
-    expect(screen.queryByText(/Photos|Materials/)).toBeNull();
+    render(<WorkshopsSection workshops={[pastWorkshopCard({ material_count: 0 })]} />);
+    expect(screen.queryByText("Materials")).toBeNull();
   });
 
   it("sorts past workshops newest first", () => {

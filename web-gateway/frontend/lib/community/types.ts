@@ -48,11 +48,6 @@ export interface WorkshopDetail {
   value: string;
 }
 
-export interface WorkshopPhoto {
-  url: string;
-  caption: string | null;
-}
-
 export interface WorkshopMaterial {
   name: string;
   url: string;
@@ -75,7 +70,6 @@ export interface WorkshopInput {
   cover: WorkshopCover | null;
   signup: WorkshopLink | null;
   details: WorkshopDetail[];
-  photos: WorkshopPhoto[];
   materials: WorkshopMaterial[];
   body: RichTextDoc | null;
 }
@@ -86,8 +80,7 @@ export interface Workshop extends WorkshopInput, ContentMeta {
 }
 
 /** A workshop as the Community page lists it. */
-export type WorkshopCard = Omit<Workshop, "body" | "photos" | "materials" | "details"> & {
-  photo_count: number;
+export type WorkshopCard = Omit<Workshop, "body" | "materials" | "details"> & {
   material_count: number;
 };
 

@@ -93,15 +93,13 @@ describe("splitWorkshops", () => {
 
 describe("workshopHints and countLabel", () => {
   it("names what a workshop has from its counts", () => {
-    expect(workshopHints({ photo_count: 3, material_count: 2 })).toEqual(["Photos", "Materials"]);
-    expect(workshopHints({ photo_count: 0, material_count: 2 })).toEqual(["Materials"]);
-    expect(workshopHints({ photo_count: 3, material_count: 0 })).toEqual(["Photos"]);
-    expect(workshopHints({ photo_count: 0, material_count: 0 })).toEqual([]);
+    expect(workshopHints({ material_count: 2 })).toEqual(["Materials"]);
+    expect(workshopHints({ material_count: 0 })).toEqual([]);
   });
 
   it("counts in the singular and the plural", () => {
-    expect(countLabel(1, "photo")).toBe("1 photo");
-    expect(countLabel(12, "photo")).toBe("12 photos");
+    expect(countLabel(1, "file")).toBe("1 file");
+    expect(countLabel(12, "file")).toBe("12 files");
     expect(countLabel(0, "file")).toBe("0 files");
   });
 });

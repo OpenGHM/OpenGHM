@@ -31,7 +31,6 @@ export function workshopCard(over: Partial<WorkshopCard> = {}): WorkshopCard {
     cover: { url: "https://example.org/workshop.jpg", alt: "A workshop", caption: null },
     signup: null,
     status: "upcoming",
-    photo_count: 0,
     material_count: 0,
     ...over,
   };
@@ -49,7 +48,6 @@ export function pastWorkshopCard(over: Partial<WorkshopCard> = {}): WorkshopCard
     location: "San Francisco",
     cover: null,
     status: "past",
-    photo_count: 6,
     material_count: 2,
     ...over,
   });
@@ -59,7 +57,6 @@ export function workshop(over: Partial<Workshop> = {}): Workshop {
   return {
     ...workshopCard(),
     details: [{ label: "Computing", value: "NSF ACCESS resource Anvil" }],
-    photos: [],
     materials: [],
     body: {
       type: "doc",

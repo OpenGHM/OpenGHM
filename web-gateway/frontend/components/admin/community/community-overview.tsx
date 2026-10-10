@@ -74,7 +74,7 @@ export function CommunityOverview({
       <SectionCard
         href="/admin/community/workshops"
         title="Workshops"
-        description="Announcements and past events, with photos and materials."
+        description="Announcements and past events, with their materials."
         icon={CalendarDays}
         figures={workshops}
         unit="workshops"

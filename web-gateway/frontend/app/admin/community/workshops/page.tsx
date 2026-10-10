@@ -14,7 +14,7 @@ export default async function AdminWorkshopsPage() {
   return (
     <CommunityAdminPage
       title="Workshops"
-      description="Announce a workshop, then add its photos and materials once it has happened."
+      description="Announce a workshop, then add its materials once it has happened."
       actions={
         <Button asChild className="min-h-10 sm:min-h-9">
           <Link href="/admin/community/workshops/new">

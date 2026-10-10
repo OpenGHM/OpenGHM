@@ -107,7 +107,7 @@ export function ReorderButtons({
 }: {
   index: number;
   count: number;
-  /** What the row is, for the buttons' names ("photo", "detail"). */
+  /** What the row is, for the buttons' names ("detail", "material"). */
   noun: string;
   onMove: (from: number, to: number) => void;
   disabled?: boolean;

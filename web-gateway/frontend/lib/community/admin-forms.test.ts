@@ -96,10 +96,6 @@ describe("workshop form", () => {
         { key: "a", label: "", value: "" },
         { key: "b", label: " Computing ", value: " Anvil " },
       ],
-      photos: [
-        { key: "p1", url: "", caption: "" },
-        { key: "p2", url: " https://a.org/p.png ", caption: "" },
-      ],
       materials: [{ key: "m", name: "Slides", url: "/api/community/files/0123456789abcdef01234567", note: "PDF · 1 MB" }],
     });
     expect(input).toMatchObject({
@@ -113,7 +109,6 @@ describe("workshop form", () => {
       cover: null,
       signup: null,
       details: [{ label: "Computing", value: "Anvil" }],
-      photos: [{ url: "https://a.org/p.png", caption: null }],
       materials: [{ name: "Slides", url: "/api/community/files/0123456789abcdef01234567", note: "PDF · 1 MB" }],
       body: null,
     });
@@ -138,7 +133,6 @@ describe("workshop form", () => {
       cover: { url: "https://a.org/p.png", alt: "A", caption: null },
       signup: { label: "Sign up", url: "https://a.org/s" },
       details: [{ label: "Computing", value: "Anvil" }],
-      photos: [{ url: "https://a.org/1.png", caption: "One" }],
       materials: [{ name: "Slides", url: "https://a.org/s.pdf", note: null }],
       body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hi" }] }] },
     };
@@ -159,7 +153,6 @@ describe("workshop form", () => {
         { key: "a", label: "", value: "" },
         { key: "b", label: "Computing", value: "" },
       ],
-      photos: [],
       materials: [],
     };
     expect(sentPathToFormPath("details.0.value", f)).toBe("details.1.value");

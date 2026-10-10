@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CmsImage } from "@/components/community/cms-image";
-import { PhotoGallery } from "@/components/community/photo-gallery";
 import { RichText, isRichTextEmpty } from "@/components/community/rich-text";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { MaterialsList, WorkshopDetails } from "@/components/community/workshop-parts";
@@ -77,7 +76,6 @@ export default async function WorkshopPage({ params }: Params) {
               )}
             </article>
 
-            <PhotoGallery photos={workshop.photos} />
             <MaterialsList materials={workshop.materials} />
           </div>
 

@@ -12,7 +12,7 @@ import { Field, SELECT_CLASS, TEXTAREA_CLASS } from "@/components/admin/communit
 import { ImageField } from "@/components/admin/community/image-field";
 import { RichTextEditor } from "@/components/admin/community/rich-text-editor";
 import { useContentEditor } from "@/components/admin/community/use-content-editor";
-import { DetailsEditor, MaterialsEditor, PhotosEditor } from "@/components/admin/community/workshop-sections";
+import { DetailsEditor, MaterialsEditor } from "@/components/admin/community/workshop-sections";
 import { createWorkshop, deleteWorkshop, updateWorkshop } from "@/lib/community/admin-actions";
 import { slugify } from "@/lib/community/admin-format";
 import {
@@ -32,7 +32,7 @@ const FORMATS = ["Online", "In person", "Hybrid"];
 /**
  * The workshop editor, for a new workshop (`workshop` null) and a stored one.
  * Every field of the public workshop page is here: the card text, the dates,
- * the side panel's rows, the cover and gallery photos, materials to download,
+ * the side panel's rows, the cover photo, materials to download,
  * and the article. Nothing saves by itself; Save (or Ctrl or Cmd + S) writes it,
  * and leaving with unsaved changes asks first. A new workshop opens its own
  * page after the first save.
@@ -204,7 +204,7 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         </div>
       </EditorSection>
 
-      <EditorSection icon={ImageIcon} title="Cover photo" description="Shown at the top of the workshop page and on its card.">
+      <EditorSection icon={ImageIcon} title="Cover photo" description="Shown at the top of the workshop page and on its card. Other photos go in the page text.">
         <ImageField
           id={id("cover")}
           value={form.cover}
@@ -249,15 +249,11 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         <DetailsEditor id={id("details")} rows={form.details} onChange={(details) => set({ details })} errors={errors} />
       </EditorSection>
 
-      <EditorSection icon={ImageIcon} title="Photos" description="A gallery, mostly for a workshop that has happened.">
-        <PhotosEditor id={id("photos")} rows={form.photos} onChange={(photos) => set({ photos })} errors={errors} />
-      </EditorSection>
-
       <EditorSection icon={Paperclip} title="Materials" description="Slides, recordings and files people can download or open.">
         <MaterialsEditor id={id("materials")} rows={form.materials} onChange={(materials) => set({ materials })} errors={errors} />
       </EditorSection>
 
-      <EditorSection icon={FileText} title="Page text" description="The article. Its first paragraph shows larger, as the lead.">
+      <EditorSection icon={FileText} title="Page text" description="The article. Its first paragraph shows larger, as the lead. Add photos with the Image button.">
         <div className="space-y-1.5">
           <span id={id("body-label")} className="sr-only">
             Page text

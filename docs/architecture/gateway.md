@@ -486,9 +486,10 @@ A workshop's `status` (`upcoming` or `past`) is derived at read time: past once
 its last day, `end_date` or else `date`, is before today in UTC. Rich text is
 stored as ProseMirror JSON limited to a whitelist of nodes and marks, with links
 and image addresses checked on write, at most 512 KiB; the frontend draws it
-with its own renderer and never sets raw HTML. An upload is at most 25 MiB, read
-as it arrives, and its extension, declared type and first bytes must agree; SVG
-is not accepted. A file is addressed `/api/community/files/<24-hex id>`, the
+with its own renderer and never sets raw HTML. A workshop has a cover image;
+any other photo is an image node in its body, so there is no gallery. An upload
+is at most 25 MiB, read as it arrives, and its extension, declared type and
+first bytes must agree; SVG is not accepted. A file is addressed `/api/community/files/<24-hex id>`, the
 Next.js route that proxies the backend.
 
 ## 5. The two paths that leave the cluster

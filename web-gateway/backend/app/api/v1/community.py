@@ -78,7 +78,6 @@ def _workshop_card(doc: dict) -> WorkshopCard:
         {
             **_with_id(doc),
             "status": status,
-            "photo_count": len(doc.get("photos") or []),
             "material_count": len(doc.get("materials") or []),
         }
     )

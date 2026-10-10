@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileUploadButton } from "@/components/admin/community/file-upload-button";
 import { Field, ReorderButtons } from "@/components/admin/community/form-bits";
-import { ImagePreview } from "@/components/admin/community/image-field";
 import { moveItem, uploadNote } from "@/lib/community/admin-format";
 import { LIMITS, newRowKey, type FormErrors, type WorkshopForm } from "@/lib/community/admin-forms";
 
@@ -102,97 +100,6 @@ export function DetailsEditor({
         Add row
       </Button>
       {errors.details && <p className="text-xs text-destructive">{errors.details}</p>}
-    </div>
-  );
-}
-
-/** The photo grid: upload several at once, caption, reorder, remove. */
-export function PhotosEditor({
-  id,
-  rows,
-  onChange,
-  errors,
-}: {
-  id: string;
-  rows: WorkshopForm["photos"];
-  onChange: (rows: WorkshopForm["photos"]) => void;
-  errors: FormErrors;
-}) {
-  const [address, setAddress] = useState("");
-  const full = rows.length >= LIMITS.maxPhotos;
-
-  const add = (url: string) => onChange([...rows, { key: newRowKey(), url, caption: "" }]);
-  const addAddress = () => {
-    if (!address.trim() || full) return;
-    add(address.trim());
-    setAddress("");
-  };
-
-  return (
-    <div className="space-y-4">
-      {rows.length === 0 ? (
-        <p className={EMPTY_LIST}>No photos yet. They show as a gallery on the workshop page, and open larger when clicked.</p>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map((row, i) => (
-            <li key={row.key} className="space-y-2 rounded-xl border bg-card p-2.5">
-              <ImagePreview src={row.url} className="aspect-[4/3] w-full" />
-              <Field
-                id={`${id}-${row.key}-caption`}
-                label={`Caption for photo ${i + 1}`}
-                optional
-                error={errors[`photos.${i}.url`]}
-              >
-                {(p) => (
-                  <Input
-                    {...p}
-                    value={row.caption}
-                    autoComplete="off"
-                    onChange={(e) => onChange(patchRow(rows, i, { caption: e.target.value }))}
-                  />
-                )}
-              </Field>
-              <div className="flex items-center justify-between">
-                <ReorderButtons index={i} count={rows.length} noun="photo" onMove={(from, to) => onChange(moveItem(rows, from, to))} />
-                <RemoveRowButton label={`Remove photo ${i + 1}`} onClick={() => onChange(withoutRow(rows, i))} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="flex flex-wrap items-start gap-3">
-        <FileUploadButton kind="image" label="Upload photos" multiple disabled={full} onUploaded={(file) => add(file.url)} />
-        <div className="flex min-w-0 flex-1 gap-2 sm:max-w-md">
-          <Input
-            value={address}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="Or an image address, https://"
-            aria-label="Photo address"
-            onChange={(e) => setAddress(e.target.value)}
-            onKeyDown={(e) => {
-              // Enter adds the address here; it does not save the whole form.
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addAddress();
-              }
-            }}
-            className="h-10 sm:h-8"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-10 sm:min-h-8"
-            disabled={!address.trim() || full}
-            onClick={addAddress}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
-      {full && <p className="text-xs text-muted-foreground">A workshop holds at most {LIMITS.maxPhotos} photos.</p>}
-      {errors.photos && <p className="text-xs text-destructive">{errors.photos}</p>}
     </div>
   );
 }

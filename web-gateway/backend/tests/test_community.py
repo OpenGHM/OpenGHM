@@ -67,7 +67,7 @@ def workshop(slug: str = "first-workshop", **over) -> dict:
     body = {
         "state": "published", "slug": slug, "title": "A workshop", "summary": "About it.",
         "date": "2026-12-01", "end_date": None, "when_label": None, "format": "Online",
-        "location": None, "cover": None, "signup": None, "details": [], "photos": [],
+        "location": None, "cover": None, "signup": None, "details": [],
         "materials": [], "body": None,
     }
     return {**body, **over}
@@ -146,7 +146,6 @@ def test_a_draft_has_no_public_detail_page_but_a_published_one_does(http):
 def test_the_list_sends_cards_without_bodies_and_says_what_is_there(http):
     create(http, "workshops", workshop(
         "w", body=doc(paragraph("Long text")),
-        photos=[{"url": "https://example.org/a.jpg", "caption": None}] * 2,
         materials=[{"name": "Slides", "url": "https://example.org/s.pdf", "note": None}],
         details=[{"label": "Computing", "value": "Anvil"}],
     ))
@@ -154,8 +153,8 @@ def test_the_list_sends_cards_without_bodies_and_says_what_is_there(http):
     create(http, "tutorials", tutorial("without"))
     page = http.get(PUBLIC).json()
     card = page["workshops"][0]
-    assert card["photo_count"] == 2 and card["material_count"] == 1
-    assert not {"body", "photos", "materials", "details"} & card.keys()
+    assert card["material_count"] == 1
+    assert not {"body", "materials", "details"} & card.keys()
     by_slug = {t["slug"]: t for t in page["tutorials"]}
     assert by_slug["with"]["has_body"] is True and by_slug["without"]["has_body"] is False
     assert "body" not in by_slug["with"]
@@ -379,8 +378,6 @@ def test_the_admin_list_has_every_state_newest_date_first(http):
         {"cover": {"url": "http://example.org/a.jpg", "alt": "", "caption": None}},
         {"cover": {"url": "javascript:alert(1)", "alt": "", "caption": None}},
         {"cover": {"url": "/images/a.jpg", "alt": "", "caption": None}},
-        {"photos": [{"url": "https://example.org/a\n.svg", "caption": None}]},
-        {"photos": [{"url": "https://example.org/a.jpg", "caption": None}] * 61},
         {"signup": {"label": "Sign up", "url": "javascript:alert(1)"}},
         {"signup": {"label": "Sign up", "url": "//evil.example/x"}},
         {"signup": {"label": "", "url": "https://example.org"}},
@@ -399,7 +396,6 @@ def test_good_links_and_images_are_accepted(http):
     w = create(http, "workshops", workshop(
         cover={"url": "https://dev.openghm.org/images/x.jpg", "alt": "A", "caption": None},
         signup={"label": "Sign up", "url": "mailto:team@example.org"},
-        photos=[{"url": f"/api/community/files/{FILE_ID}", "caption": "Caption"}],
         materials=[
             {"name": "Slides", "url": f"/api/community/files/{FILE_ID}", "note": "PDF"},
             {"name": "Video", "url": "http://example.org/v", "note": None},
@@ -408,6 +404,12 @@ def test_good_links_and_images_are_accepted(http):
         end_date="2026-12-03",
     ))
     assert w["end_date"] == "2026-12-03" and len(w["materials"]) == 3
+
+
+def test_a_field_the_model_no_longer_has_is_ignored_and_not_stored(http, mongo):
+    w = create(http, "workshops", workshop(photos=[{"url": "https://example.org/a.jpg", "caption": None}]))
+    assert "photos" not in w
+    assert "photos" not in mongo.community_workshops.docs[w["id"]]
 
 
 def test_an_emptied_optional_text_box_means_not_set(http):

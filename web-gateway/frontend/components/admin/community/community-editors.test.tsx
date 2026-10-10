@@ -74,7 +74,6 @@ const stored: Workshop = {
   cover: null,
   signup: null,
   details: [],
-  photos: [],
   materials: [],
   body: null,
   ...meta,

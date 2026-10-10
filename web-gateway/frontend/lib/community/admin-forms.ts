@@ -38,7 +38,6 @@ export const LIMITS = {
   workshopTitle: 200,
   workshopSummary: 500,
   maxDetails: 20,
-  maxPhotos: 60,
   maxMaterials: 40,
   tutorialSummary: 400,
   tutorialSnippet: 600,
@@ -54,7 +53,6 @@ export const LIMITS = {
   signupLabel: 80,
   detailLabel: 80,
   detailValue: 300,
-  photoCaption: 300,
   materialName: 200,
   materialNote: 300,
   actionLabel: 60,
@@ -105,7 +103,6 @@ export interface WorkshopForm {
   cover: { url: string; alt: string; caption: string };
   signup: { label: string; url: string };
   details: { key: string; label: string; value: string }[];
-  photos: { key: string; url: string; caption: string }[];
   materials: { key: string; name: string; url: string; note: string }[];
   body: RichTextDoc | null;
 }
@@ -125,7 +122,6 @@ export function emptyWorkshopForm(): WorkshopForm {
     cover: { url: "", alt: "", caption: "" },
     signup: { label: "", url: "" },
     details: [],
-    photos: [],
     materials: [],
     body: null,
   };
@@ -146,7 +142,6 @@ export function workshopToForm(w: Workshop): WorkshopForm {
     cover: { url: w.cover?.url ?? "", alt: w.cover?.alt ?? "", caption: w.cover?.caption ?? "" },
     signup: { label: w.signup?.label ?? "", url: w.signup?.url ?? "" },
     details: w.details.map((d) => ({ key: newRowKey(), label: d.label, value: d.value })),
-    photos: w.photos.map((p) => ({ key: newRowKey(), url: p.url, caption: p.caption ?? "" })),
     materials: w.materials.map((m) => ({ key: newRowKey(), name: m.name, url: m.url, note: m.note ?? "" })),
     body: w.body,
   };
@@ -175,7 +170,6 @@ export function workshopToInput(f: WorkshopForm): WorkshopInput {
     details: f.details
       .filter((d) => d.label.trim() || d.value.trim())
       .map((d) => ({ label: d.label.trim(), value: d.value.trim() })),
-    photos: f.photos.filter((p) => p.url.trim()).map((p) => ({ url: p.url.trim(), caption: orNull(p.caption) })),
     materials: f.materials
       .filter((m) => m.name.trim() || m.url.trim())
       .map((m) => ({ name: m.name.trim(), url: m.url.trim(), note: orNull(m.note) })),
@@ -250,15 +244,6 @@ export function validateWorkshop(f: WorkshopForm): FormErrors {
   });
   if (f.details.length > LIMITS.maxDetails) e.details = `At most ${LIMITS.maxDetails} rows.`;
 
-  f.photos.forEach((p, i) => {
-    if (p.url.trim() && !isValidImageUrl(p.url.trim())) e[`photos.${i}.url`] = "Upload an image, or paste an https:// address.";
-    else {
-      const caption = over(p.caption, LIMITS.photoCaption, "the caption");
-      if (caption) e[`photos.${i}.url`] = caption;
-    }
-  });
-  if (f.photos.length > LIMITS.maxPhotos) e.photos = `At most ${LIMITS.maxPhotos} photos.`;
-
   f.materials.forEach((m, i) => {
     if (!m.name.trim() && !m.url.trim()) return;
     if (!m.name.trim()) e[`materials.${i}.name`] = "Name this material.";
@@ -280,12 +265,12 @@ export function validateWorkshop(f: WorkshopForm): FormErrors {
 /** A form path (`details.2.label`) as the path of the row actually sent, when blank rows are skipped. */
 export function sentPathToFormPath(
   path: string,
-  f: Pick<WorkshopForm, "details" | "photos" | "materials">
+  f: Pick<WorkshopForm, "details" | "materials">
 ): string {
-  const m = /^(details|photos|materials)\.(\d+)(\..*)?$/.exec(path);
+  const m = /^(details|materials)\.(\d+)(\..*)?$/.exec(path);
   if (!m) return path;
   const [, list, index, rest = ""] = m;
-  const rows: { [key: string]: string }[] = f[list as "details" | "photos" | "materials"];
+  const rows: { [key: string]: string }[] = f[list as "details" | "materials"];
   const kept = rows
     .map((row, i) => ({ row, i }))
     .filter(({ row }) => Object.entries(row).some(([k, v]) => k !== "key" && v.trim()));
