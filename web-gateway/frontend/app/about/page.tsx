@@ -132,8 +132,8 @@ export default function AboutPage() {
             </span>
             <p className="text-[clamp(22px,2.4vw,30px)] leading-[1.35] font-medium tracking-[-0.02em] text-pretty">
               By democratizing access to models and data, we empower
-              communities worldwide to make better decisions about floods,
-              droughts, and water security.
+              communities worldwide to make better decisions about water
+              resources.
             </p>
           </blockquote>
         </section>
