@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CmsImage } from "@/components/community/cms-image";
+import { CoverImage } from "@/components/community/cms-image";
 import { RichText, isRichTextEmpty } from "@/components/community/rich-text";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { MaterialsList, WorkshopDetails } from "@/components/community/workshop-parts";
@@ -52,9 +52,7 @@ export default async function WorkshopPage({ params }: Params) {
           <div className="flex min-w-0 flex-col gap-4">
             {cover && workshop.cover && (
               <figure className="flex flex-col rounded-card bg-card p-2 shadow-raised">
-                <div className="aspect-video overflow-hidden rounded-[18px] bg-accent">
-                  <CmsImage src={cover.url} alt={cover.alt} loading="eager" className="block size-full object-cover" />
-                </div>
+                <CoverImage src={cover.url} alt={cover.alt} loading="eager" imgClassName="max-h-[640px]" />
                 {workshop.cover.caption && (
                   <figcaption className="px-3.5 pt-3 pb-1.5 text-[13px] leading-normal text-muted-foreground">
                     {workshop.cover.caption}

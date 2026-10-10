@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { CmsImage } from "@/components/community/cms-image";
+import { CoverImage } from "@/components/community/cms-image";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { dateBadge, formatLongDate, splitWorkshops, whenLabel, workshopHints } from "@/lib/community/format";
 import { safeImageSrc } from "@/lib/community/links";
@@ -86,13 +86,13 @@ function FeaturedWorkshop({ workshop: w }: { workshop: WorkshopCard }) {
   const cover = w.cover && safeImageSrc(w.cover.url) ? w.cover : null;
   const where = w.location?.trim() || w.format?.trim() || null;
   return (
-    <article className="group relative flex flex-wrap gap-2.5 rounded-card border border-transparent bg-card p-2.5 shadow-raised transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
+    <article className="group relative flex flex-col gap-2.5 rounded-card border border-transparent bg-card p-2.5 shadow-raised transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
       {cover && (
-        <div className="min-h-[260px] flex-[1_1_380px] overflow-hidden rounded-[18px] bg-accent">
-          <CmsImage src={cover.url} alt={cover.alt} className="block size-full object-cover" />
-        </div>
+        // Above the text, never cropped: a cover is often a wide banner,
+        // which a side column would cut to its middle.
+        <CoverImage src={cover.url} alt={cover.alt} imgClassName="max-h-[420px]" />
       )}
-      <div className="flex flex-[999_1_420px] flex-col justify-center gap-4 px-5 py-6 sm:px-[30px] sm:py-7">
+      <div className="flex flex-col justify-center gap-4 px-5 py-6 sm:px-[30px] sm:py-7">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status="upcoming" label="Next workshop" />
           {w.format && <FormatPill>{w.format}</FormatPill>}
