@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { InlineError } from "@/components/admin/admin-states";
-import { CommunityAdminPage } from "@/components/admin/community/community-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { WorkshopEditor } from "@/components/admin/community/workshop-editor";
 import { fetchAdminWorkshop } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
@@ -18,7 +18,7 @@ export default async function EditWorkshopPage({ params }: { params: Promise<{ i
   ];
 
   return (
-    <CommunityAdminPage
+    <AdminPage
       title={loaded.ok ? loaded.data.title : "Workshop"}
       description={loaded.ok ? `/community/workshops/${loaded.data.slug}` : undefined}
       breadcrumb={breadcrumb}
@@ -29,6 +29,6 @@ export default async function EditWorkshopPage({ params }: { params: Promise<{ i
       ) : (
         <InlineError title="Couldn't load this workshop.">{loaded.message}</InlineError>
       )}
-    </CommunityAdminPage>
+    </AdminPage>
   );
 }

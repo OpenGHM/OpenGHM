@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InlineError } from "@/components/admin/admin-states";
-import { CommunityAdminPage } from "@/components/admin/community/community-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { WorkshopList } from "@/components/admin/community/workshop-list";
 import { fetchAdminWorkshops } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
@@ -12,7 +12,7 @@ export default async function AdminWorkshopsPage() {
   const loaded = settle(await fetchAdminWorkshops(), "/admin/community/workshops");
 
   return (
-    <CommunityAdminPage
+    <AdminPage
       title="Workshops"
       description="Announce a workshop, then add its materials once it has happened."
       actions={
@@ -32,6 +32,6 @@ export default async function AdminWorkshopsPage() {
           {loaded.ok ? <WorkshopList workshops={loaded.data} /> : <InlineError title="Couldn't load workshops.">{loaded.message}</InlineError>}
         </CardContent>
       </Card>
-    </CommunityAdminPage>
+    </AdminPage>
   );
 }

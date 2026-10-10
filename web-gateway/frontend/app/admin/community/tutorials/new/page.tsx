@@ -1,9 +1,9 @@
-import { CommunityAdminPage } from "@/components/admin/community/community-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { TutorialEditor } from "@/components/admin/community/tutorial-editor";
 
 export default function NewTutorialPage() {
   return (
-    <CommunityAdminPage
+    <AdminPage
       title="New tutorial"
       description="It stays a draft until you set it to Published, and joins the end of the list."
       breadcrumb={[
@@ -14,6 +14,6 @@ export default function NewTutorialPage() {
       ]}
     >
       <TutorialEditor tutorial={null} />
-    </CommunityAdminPage>
+    </AdminPage>
   );
 }

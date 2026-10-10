@@ -13,9 +13,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/community/workshops/w1",
 }));
 
-import { AdminRoleProvider, AdminNav } from "@/components/admin/admin-nav";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
-import { CommunitySubNav } from "@/components/admin/community/community-sub-nav";
 import { TutorialList } from "@/components/admin/community/tutorial-list";
 import { WorkshopList } from "@/components/admin/community/workshop-list";
 import type { Tutorial, Workshop } from "@/lib/community/types";
@@ -143,35 +141,6 @@ describe("the tutorial list", () => {
   it("shows the empty state", () => {
     render(<TutorialList tutorials={[]} />);
     expect(screen.getByText("No tutorials yet.")).toBeTruthy();
-  });
-});
-
-describe("the navigation", () => {
-  it("shows Community in the admin nav to an admin and not to staff", () => {
-    const { unmount } = render(
-      <AdminRoleProvider role="admin">
-        <AdminNav />
-      </AdminRoleProvider>
-    );
-    expect(screen.getByRole("link", { name: "Community" }).getAttribute("href")).toBe("/admin/community");
-    unmount();
-    render(
-      <AdminRoleProvider role="staff">
-        <AdminNav />
-      </AdminRoleProvider>
-    );
-    expect(screen.queryByRole("link", { name: "Community" })).toBeNull();
-  });
-
-  it("links the six sections and marks the one in view", () => {
-    render(<CommunitySubNav />);
-    const nav = screen.getByRole("navigation", { name: "Community sections" });
-    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Overview", "Workshops", "Tutorials", "Publications", "Page settings", "Files",
-    ]);
-    // The mocked path is a workshop's editor: Workshops is current, Overview is not.
-    expect(within(nav).getByRole("link", { name: "Workshops" }).getAttribute("aria-current")).toBe("page");
-    expect(within(nav).getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBeNull();
   });
 });
 

@@ -76,7 +76,7 @@ A page is a navy band and, overlapping its bottom edge, the content
   it does not render `<Header />`. It takes an eyebrow, a breadcrumb, `meta`, the
   h1, a subtitle, `actions` and `children` (a search box, a section switch). Its
   `size` is `display` for Home, About and the Repository, `page` (a smaller h1)
-  for a detail, Workspace or admin page. Workspace pages go through
+  for a detail or Workspace page. Workspace pages go through
   [`PageHeader`](components/workspace/page-header.tsx), a `PageHero` at
   `size="page"` that adds a status chip.
 - `PageBody` is the content: a `<main>` at most 1360 px wide, pulled 72 px up
@@ -93,6 +93,22 @@ A page is a navy band and, overlapping its bottom edge, the content
   20 rem aside from `xl`. With `below="hidden"` it is `sticky` from `xl` and
   gone below it; with `below="flow"` it scrolls with the page and, below `xl`,
   sits in the page after `lead`.
+
+### The admin console
+
+`/admin/**` is not a band-and-body page. [`app/admin/layout.tsx`](app/admin/layout.tsx)
+puts [`AdminShell`](components/admin/admin-shell.tsx) around every admin page,
+so the frame stays mounted as pages change: a navy sidebar from `lg` (logo,
+grouped nav from [`admin-nav.tsx`](components/admin/admin-nav.tsx), back to the
+site, the signed-in user, Sign out), and below `lg` a slim navy top bar whose
+menu button opens the same sidebar in a left sheet. There is no site header and
+no footer inside it. A page is [`AdminPage`](components/admin/admin-page.tsx): a
+breadcrumb, the h1, a description and an `actions` slot, then the content on the
+light ground, so cards sit on `bg-background` and nothing overlaps a band. A
+route's `loading.tsx`, `error.tsx` and `not-found.tsx` render inside the same
+frame, so a skeleton stands in for the page header and body only
+([`LoadingPage`](components/admin/admin-skeletons.tsx)). Admin-only items and
+the whole Community group are left out of the nav for staff.
 
 ### The card
 

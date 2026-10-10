@@ -1,83 +1,178 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useId } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Cpu, ScrollText, ServerCog, Newspaper } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  Cpu,
+  FileStack,
+  Globe,
+  LayoutDashboard,
+  Newspaper,
+  ScrollText,
+  ServerCog,
+  Settings2,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { UserRole } from "@/lib/auth.types";
+import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: LucideIcon;
+  /** Current only on this exact path; otherwise it is current on every path below it too. */
   exact?: boolean;
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/jobs", label: "Jobs", icon: Cpu },
-  { href: "/admin/community", label: "Community", icon: Newspaper, adminOnly: true },
-  { href: "/admin/audit", label: "Audit log", icon: ScrollText },
-  { href: "/admin/system", label: "System", icon: ServerCog, adminOnly: true },
+interface NavGroup {
+  label: string;
+  /** A group staff must not see at all (the Community admin needs `content:manage`). */
+  adminOnly?: boolean;
+  items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Console",
+    items: [
+      { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
+      { href: "/admin/users", label: "Users", icon: Users },
+      { href: "/admin/jobs", label: "Jobs", icon: Cpu },
+      { href: "/admin/audit", label: "Audit log", icon: ScrollText },
+      { href: "/admin/system", label: "System", icon: ServerCog, adminOnly: true },
+    ],
+  },
+  {
+    label: "Community",
+    adminOnly: true,
+    items: [
+      { href: "/admin/community", label: "Overview", icon: Globe, exact: true },
+      { href: "/admin/community/workshops", label: "Workshops", icon: CalendarDays },
+      { href: "/admin/community/tutorials", label: "Tutorials", icon: BookOpen },
+      { href: "/admin/community/publications", label: "Publications", icon: Newspaper },
+      { href: "/admin/community/settings", label: "Page settings", icon: Settings2 },
+      { href: "/admin/community/files", label: "Files", icon: FileStack },
+    ],
+  },
 ];
 
-const RoleContext = createContext<UserRole | null>(null);
+function isCurrent(item: NavItem, pathname: string): boolean {
+  return item.exact
+    ? pathname === item.href
+    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
 
-/**
- * Hands the signed-in role (read by the admin layout on the server) to the nav
- * inside every page's band, so the nav needs no session fetch of its own and
- * does not flash the admin-only items in or out.
- */
-export function AdminRoleProvider({ role, children }: { role: UserRole; children: React.ReactNode }) {
-  return <RoleContext.Provider value={role}>{children}</RoleContext.Provider>;
+/** The groups and items a role may see; an empty group is dropped. */
+function visibleGroups(role: UserRole | null): NavGroup[] {
+  const isAdmin = role === "admin";
+  return NAV_GROUPS.filter((group) => !group.adminOnly || isAdmin)
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.adminOnly || isAdmin) }))
+    .filter((group) => group.items.length > 0);
 }
 
 /**
- * The admin sections as a pill row for the navy band, in the header's pill
- * language. It scrolls inside its own strip, never the page, so six items
- * fit a phone.
+ * The name of the section a path belongs to ("Users", "Community · Workshops"),
+ * for the phone top bar. A path that is in no group (the console's own error or
+ * not-found page) is just "Admin console".
  */
-export function AdminNav() {
+export function currentSectionLabel(pathname: string): string {
+  for (const group of NAV_GROUPS) {
+    const item = group.items.find((candidate) => isCurrent(candidate, pathname));
+    if (item) return group.label === "Console" ? item.label : `${group.label} · ${item.label}`;
+  }
+  return "Admin console";
+}
+
+/** Who is signed in, read by the admin layout on the server. */
+export interface AdminUser {
+  role: UserRole;
+  name?: string | null;
+  email?: string | null;
+}
+
+const UserContext = createContext<AdminUser | null>(null);
+
+/**
+ * Hands the signed-in user (read by the admin layout on the server) to the
+ * sidebar, so it needs no session fetch of its own and does not flash the
+ * admin-only items in or out.
+ */
+export function AdminRoleProvider({
+  role,
+  name,
+  email,
+  children,
+}: AdminUser & { children: React.ReactNode }) {
+  return <UserContext.Provider value={{ role, name, email }}>{children}</UserContext.Provider>;
+}
+
+/** The signed-in user, or null outside the provider (a test). */
+export function useAdminUser(): AdminUser | null {
+  return useContext(UserContext);
+}
+
+const ITEM_BASE =
+  "relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow";
+
+/**
+ * The console's sections in groups, for the navy sidebar (and the sheet that
+ * holds it on a phone). The current item has a lighter fill and a teal edge;
+ * `onNavigate` lets the sheet close when a link is followed.
+ */
+export function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
   // usePathname() is null outside the app router (a test, a pages-router render).
   const pathname = usePathname() ?? "";
-  const role = useContext(RoleContext);
-  const items = NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin");
+  const role = useAdminUser()?.role ?? null;
+  const labelPrefix = useId();
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-3">
-      <nav
-        aria-label="Admin"
-        className="flex max-w-full gap-0.5 overflow-x-auto rounded-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border border-white/10 bg-white/6 p-[5px] backdrop-blur-sm"
-      >
-        {items.map((item) => {
-          const isActive = item.exact
-            ? pathname === item.href
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow ${
-                isActive
-                  ? "bg-white font-[550] text-foreground"
-                  : "text-hero-foreground-muted hover:bg-white/8 hover:text-white"
-              }`}
+    <nav aria-label="Admin" className="space-y-6">
+      {visibleGroups(role).map((group) => {
+        const labelId = `${labelPrefix}-${group.label}`;
+        return (
+          <div key={group.label} role="group" aria-labelledby={labelId}>
+            <p
+              id={labelId}
+              className="mb-2 px-3 font-mono text-[11px] tracking-[0.08em] text-hero-faint uppercase"
             >
-              <Icon size={15} aria-hidden="true" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      {role === "staff" && (
-        <span className="font-mono text-xs tracking-[0.06em] text-hero-eyebrow uppercase">
-          Staff (read-only)
-        </span>
-      )}
-    </div>
+              {group.label}
+            </p>
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = isCurrent(item, pathname);
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        ITEM_BASE,
+                        active
+                          ? "bg-white/10 font-[550] text-white before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-hero-eyebrow"
+                          : "text-hero-foreground-muted hover:bg-white/8 hover:text-white"
+                      )}
+                    >
+                      <Icon
+                        size={16}
+                        aria-hidden="true"
+                        className={cn("shrink-0", active && "text-hero-eyebrow")}
+                      />
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </nav>
   );
 }

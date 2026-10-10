@@ -1,5 +1,5 @@
 import { InlineError } from "@/components/admin/admin-states";
-import { CommunityAdminPage } from "@/components/admin/community/community-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { CommunityOverview, type SectionFigures } from "@/components/admin/community/community-overview";
 import {
   fetchAdminPublications,
@@ -34,7 +34,7 @@ export default async function CommunityAdminOverviewPage() {
   const failed = Object.values(loaded).some((r) => !r.ok);
 
   return (
-    <CommunityAdminPage title="Community" description="Everything on the Community page is written here.">
+    <AdminPage title="Community" description="Everything on the Community page is written here.">
       {failed && (
         <InlineError title="Some counts could not be loaded.">They show a dash for now. Reload the page to try again.</InlineError>
       )}
@@ -44,6 +44,6 @@ export default async function CommunityAdminOverviewPage() {
         publications={figures(loaded.publications)}
         files={loaded.files.ok ? loaded.files.data.length : null}
       />
-    </CommunityAdminPage>
+    </AdminPage>
   );
 }

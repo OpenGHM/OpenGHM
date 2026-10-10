@@ -2,22 +2,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingPage } from "@/components/admin/admin-skeletons";
 
-/** The section pills, which are on every Community page. */
-function SubNavBar() {
-  return (
-    <div className="flex gap-2 overflow-hidden">
-      {Array.from({ length: 5 }, (_, i) => (
-        <Skeleton key={i} className="h-8 w-24 shrink-0 rounded-full" />
-      ))}
-    </div>
-  );
-}
-
 /** The overview: a row of figure cards. */
 export function CommunityOverviewSkeleton() {
   return (
     <LoadingPage>
-      <SubNavBar />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <Card key={i}>
@@ -33,11 +21,10 @@ export function CommunityOverviewSkeleton() {
   );
 }
 
-/** A list page: the pills, then rows. */
+/** A list page: rows in a card. */
 export function CommunityListSkeleton() {
   return (
     <LoadingPage>
-      <SubNavBar />
       <Card>
         <CardContent className="divide-y p-0">
           {Array.from({ length: 6 }, (_, i) => (
@@ -56,11 +43,10 @@ export function CommunityListSkeleton() {
   );
 }
 
-/** An editor: the pills, then cards of fields. */
+/** An editor: cards of fields. */
 export function CommunityEditorSkeleton() {
   return (
     <LoadingPage>
-      <SubNavBar />
       {Array.from({ length: 3 }, (_, i) => (
         <Card key={i}>
           <CardHeader>
@@ -81,7 +67,6 @@ export function CommunityEditorSkeleton() {
 export function CommunityFilesSkeleton() {
   return (
     <LoadingPage>
-      <SubNavBar />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 8 }, (_, i) => (
           <Card key={i} className="gap-3 py-3">

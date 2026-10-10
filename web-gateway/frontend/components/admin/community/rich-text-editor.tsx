@@ -222,7 +222,7 @@ function Toolbar({
       aria-label="Text formatting"
       aria-orientation="horizontal"
       onKeyDown={onKeyDown}
-      className="sticky top-0 z-10 flex flex-wrap items-center gap-y-1 rounded-t-xl border-b bg-card px-1.5 py-1.5"
+      className="sticky top-14 z-10 flex flex-wrap items-center gap-y-1 rounded-t-xl lg:top-0 border-b bg-card px-1.5 py-1.5"
     >
       {items.map((item) => {
         const s = state?.[item.key];

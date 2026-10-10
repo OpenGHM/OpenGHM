@@ -44,7 +44,7 @@ export default async function AdminOverviewPage() {
   const breakdown = breakdownResult.status === "fulfilled" ? breakdownResult.value : EMPTY_BREAKDOWN;
 
   return (
-    <AdminPage title="Admin" description="Site-wide activity at a glance.">
+    <AdminPage title="Overview" description="Site-wide activity at a glance.">
       {(statsResult.status === "rejected" || usersResult.status === "rejected") && (
         <InlineError title="Some totals could not be loaded.">
           They show a dash for now. Reload the page to try again.

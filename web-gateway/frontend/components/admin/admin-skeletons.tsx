@@ -1,30 +1,25 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdminPage } from "@/components/admin/admin-page";
 
 /**
- * The band is shown at once with a bar where its title goes, so moving between
- * admin pages keeps the header and the nav in place; only the content waits.
+ * A page header's worth of bars (a title and a line under it), then the content.
+ * The console's frame is already on screen, so a page that is still loading
+ * only has to stand in for its own header and body. Announced once; all of it
+ * is invisible for the first 300 ms, so a fast load shows none.
  */
 export function LoadingPage({ children }: { children: React.ReactNode }) {
   return (
-    <AdminPage title={<Skeleton tone="hero" className="reveal-delayed h-[1em] w-48 max-w-full" />}>
-      <div
-        role="status"
-        aria-busy="true"
-        aria-label="Loading"
-        className="reveal-delayed space-y-6"
-      >
-        {children}
+    <div role="status" aria-busy="true" aria-label="Loading" className="reveal-delayed space-y-6">
+      <div className="space-y-2.5">
+        <Skeleton className="h-8 w-48 max-w-full" />
+        <Skeleton className="h-4 w-80 max-w-full" />
       </div>
-    </AdminPage>
+      {children}
+    </div>
   );
 }
 
-/**
- * Overview and system: a row of figures, then a few cards. Announced once.
- * Both skeletons' content is invisible for the first 300 ms, so a fast load shows none.
- */
+/** Overview and system: a row of figures, then a few cards. */
 export function OverviewSkeleton() {
   return (
     <LoadingPage>

@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Footer } from "@/components/landing/footer";
 import { AdminRoleProvider } from "@/components/admin/admin-nav";
+import { AdminShell } from "@/components/admin/admin-shell";
 
 export default async function AdminLayout({
   children,
@@ -19,12 +19,12 @@ export default async function AdminLayout({
     redirect("/");
   }
 
+  // The frame (sidebar, phone top bar) lives here, so it stays mounted while
+  // the pages inside it change and a loading.tsx only has to cover the page.
+  // The console has no site header and no marketing footer.
   return (
-    <AdminRoleProvider role={session.user.role}>
-      <div className="flex min-h-screen flex-col">
-        <div className="flex-1">{children}</div>
-        <Footer />
-      </div>
+    <AdminRoleProvider role={session.user.role} name={session.user.name} email={session.user.email}>
+      <AdminShell>{children}</AdminShell>
     </AdminRoleProvider>
   );
 }

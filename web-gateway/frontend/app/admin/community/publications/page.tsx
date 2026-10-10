@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InlineError } from "@/components/admin/admin-states";
-import { CommunityAdminPage } from "@/components/admin/community/community-page";
+import { AdminPage } from "@/components/admin/admin-page";
 import { PublicationManager } from "@/components/admin/community/publication-manager";
 import { fetchAdminPublications } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
@@ -17,7 +17,7 @@ export default async function AdminPublicationsPage({
   const loaded = settle(await fetchAdminPublications(), "/admin/community/publications");
 
   return (
-    <CommunityAdminPage
+    <AdminPage
       title="Publications"
       description="Papers, datasets, software and talks, newest year first."
       actions={
@@ -43,6 +43,6 @@ export default async function AdminPublicationsPage({
           )}
         </CardContent>
       </Card>
-    </CommunityAdminPage>
+    </AdminPage>
   );
 }

@@ -46,7 +46,8 @@ function SheetOverlay({
 
 /**
  * A panel that slides in from the right edge (full width on a phone), over a
- * dimmed page. It is a Radix Dialog: focus is trapped inside while it is open,
+ * dimmed page. `side="left"` slides it in from the left instead, as a narrow
+ * panel of its own width (the admin console's menu). It is a Radix Dialog: focus is trapped inside while it is open,
  * Escape and a click on the overlay close it, and focus returns to what opened
  * it. The close button is built in; a sheet with a footer puts it in
  * `SheetFooter`, which stays in view while the body scrolls.
@@ -54,15 +55,21 @@ function SheetOverlay({
 function SheetContent({
   className,
   children,
+  side = "right",
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Content>) {
+}: React.ComponentProps<typeof SheetPrimitive.Content> & {
+  side?: "right" | "left"
+}) {
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col gap-0 border-l bg-background shadow-lg outline-none duration-300 ease-in-out data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:animate-in data-[state=open]:slide-in-from-right motion-reduce:animate-none sm:max-w-lg",
+          "fixed inset-y-0 z-50 flex h-full w-full flex-col gap-0 bg-background shadow-lg outline-none duration-300 ease-in-out data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none sm:max-w-lg",
+          side === "right"
+            ? "right-0 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right"
+            : "left-0 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
           className
         )}
         {...props}

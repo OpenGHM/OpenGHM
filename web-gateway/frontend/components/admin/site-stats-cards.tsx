@@ -39,7 +39,8 @@ export function SiteStatsCards({
   userCount: number | null;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+    // Five figures in two columns would leave one alone, so the last takes the full row on a phone.
+    <div className="grid grid-cols-2 gap-3 max-sm:[&>:last-child]:col-span-2 sm:grid-cols-5">
       <StatCard label="Total users" value={userCount ?? "—"} />
       <StatCard label="Total jobs" value={stats?.total ?? "—"} />
       <StatCard label="Running" value={stats?.running ?? "—"} valueClass={HUE.RUNNING.icon} />
