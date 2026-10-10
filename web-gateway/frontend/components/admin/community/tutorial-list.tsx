@@ -23,12 +23,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { EyeOff, ExternalLink, GripVertical, Pencil, Trash2, Upload } from "lucide-react";
+import { EyeOff, ExternalLink, GripVertical, Trash2, Upload } from "lucide-react";
 import { TableHead, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
   CHECK_CELL,
-  MENU_CELL,
+  ACTIONS_CELL,
   StackedBody,
   StackedCell,
   StackedHeader,
@@ -37,7 +37,7 @@ import {
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
 import { StatePill } from "@/components/admin/community/form-bits";
-import { RowMenu } from "@/components/admin/community/row-menu";
+import { RowActions } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { reorderTutorials } from "@/lib/community/admin-actions";
@@ -50,8 +50,8 @@ import type { Tutorial } from "@/lib/community/types";
 const kindLabel = (kind: Tutorial["kind"]) => TUTORIAL_KINDS.find((k) => k.value === kind)?.label ?? kind;
 const levelLabel = (level: Tutorial["level"]) => TUTORIAL_LEVELS.find((l) => l.value === level)?.label ?? level;
 
-/** The handle's column, and the card's top-right corner beside the menu on a phone. */
-const GRIP_CELL = "w-10 px-0 max-sm:absolute max-sm:top-1.5 max-sm:right-12 max-sm:w-auto max-sm:p-0";
+/** The handle's column, and the card's top-right corner in the corner on a phone. */
+const GRIP_CELL = "w-10 px-0 max-sm:absolute max-sm:top-1.5 max-sm:right-1.5 max-sm:w-auto max-sm:p-0";
 
 const CSS_ESCAPE = (value: string) => value.replace(/["\\]/g, "\\$&");
 
@@ -63,7 +63,7 @@ const INSTRUCTIONS: ScreenReaderInstructions = {
 /**
  * The tutorials in the order they appear on the Community page. Each row has
  * a grip to drag it by (or to focus and move with the keyboard: Space, arrows,
- * Space) and a checkbox and a "⋯" menu like the other lists. A move shows at
+ * Space) and a checkbox and action buttons like the other lists. A move shows at
  * once and is sent to the backend as the whole new order (`reorder`); if the
  * backend refuses, the list goes back and says so. dnd-kit announces the
  * pick-up, each step and the drop to a screen reader, in these words.
@@ -196,8 +196,8 @@ export function TutorialList({ tutorials }: { tutorials: Tutorial[] }) {
                 <TableHead>Title</TableHead>
                 <TableHead>Kind</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className={MENU_CELL}>
+                <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+                <TableHead className={ACTIONS_CELL}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -282,7 +282,7 @@ function TutorialRow({
       <StackedCell label="Position" className="w-12 font-mono text-xs text-muted-foreground">
         {String(position).padStart(2, "0")}
       </StackedCell>
-      <StackedCell className="min-w-0 whitespace-normal max-sm:order-first max-sm:pr-24 max-sm:pl-8">
+      <StackedCell className="min-w-0 whitespace-normal max-sm:order-first max-sm:pr-12 max-sm:pl-8">
         <Link
           href={href}
           className="font-medium text-foreground underline-offset-4 outline-none hover:text-primary hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -298,22 +298,20 @@ function TutorialRow({
       <StackedCell label="State">
         <StatePill state={t.state} />
       </StackedCell>
-      <StackedCell label="Updated" className="text-xs text-muted-foreground">
+      <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
         <TimeStamp value={t.updated_at} format="relative" />
       </StackedCell>
-      <StackedCell className={MENU_CELL}>
-        <RowMenu
-          title={t.title}
+      <StackedCell className={ACTIONS_CELL}>
+        <RowActions
           actions={[
-            { key: "edit", label: "Edit", icon: Pencil, href },
             // As in the editor, a tutorial has a page of its own only when it has page text.
             ...(t.state === "published" && !isEmptyDoc(t.body)
-              ? [{ key: "view", label: "View on site", icon: ExternalLink, href: `/community/tutorials/${encodeURIComponent(t.slug)}`, external: true }]
+              ? [{ key: "view", label: "View on site", name: `View ${t.title} on site`, icon: ExternalLink, href: `/community/tutorials/${encodeURIComponent(t.slug)}` }]
               : []),
             t.state === "published"
-              ? { key: "draft", label: "Move to draft", icon: EyeOff, disabled: busy, onSelect: () => onSetState("draft") }
-              : { key: "publish", label: "Publish", icon: Upload, disabled: busy, onSelect: () => onSetState("published") },
-            { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: onDelete },
+              ? { key: "draft", label: "Move to draft", name: `Move to draft: ${t.title}`, icon: EyeOff, disabled: busy, onSelect: () => onSetState("draft") }
+              : { key: "publish", label: "Publish", name: `Publish ${t.title}`, icon: Upload, disabled: busy, onSelect: () => onSetState("published") },
+            { key: "delete", label: "Delete", name: `Delete ${t.title}`, icon: Trash2, destructive: true, onSelect: onDelete },
           ]}
         />
       </StackedCell>

@@ -220,16 +220,10 @@ describe("the tutorial list", () => {
   });
 });
 
-describe("a tutorial's menu", () => {
-  const open = async (title: string) => {
-    const trigger = screen.getByRole("button", { name: `Actions for ${title}` });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "Enter" });
-    return screen.findByRole("menu");
-  };
+describe("a tutorial's actions", () => {
   const withText = { type: "doc" as const, content: [{ type: "paragraph", content: [{ type: "text", text: "Steps" }] }] };
 
-  it("offers View on site only for a published tutorial that has page text", async () => {
+  it("offers View on site only for a published tutorial that has page text", () => {
     render(
       <TutorialList
         tutorials={[
@@ -238,11 +232,26 @@ describe("a tutorial's menu", () => {
         ]}
       />
     );
-    const menu = await open("With page");
-    expect(within(menu).getByRole("menuitem", { name: "View on site" }).getAttribute("href")).toBe("/community/tutorials/with-page");
-    fireEvent.keyDown(menu, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    expect(within(await open("No page")).queryByRole("menuitem", { name: "View on site" })).toBeNull();
+    const view = screen.getByRole("link", { name: "View With page on site" });
+    expect(view.getAttribute("href")).toBe("/community/tutorials/with-page");
+    expect(view.getAttribute("target")).toBe("_blank");
+    expect(screen.queryByRole("link", { name: "View No page on site" })).toBeNull();
+  });
+
+  it("has no Edit action and no menu, and the state button follows the row's state", () => {
+    render(
+      <TutorialList
+        tutorials={[tutorial({ id: "a", title: "Live", slug: "live", state: "published" }), tutorial({ id: "b", title: "Hidden", slug: "hidden", state: "draft" })]}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Edit/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Actions for/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Move to draft: Live" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Publish Live" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Publish Hidden" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Move to draft: Hidden" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete Live" })).toBeTruthy();
   });
 });
 
@@ -373,42 +382,48 @@ describe("selecting rows", () => {
   });
 });
 
-describe("a row's menu", () => {
+describe("a workshop's actions", () => {
   const items = [
     workshop({ id: "w1", title: "Live one", slug: "live-one", state: "published" }),
     workshop({ id: "w2", title: "Hidden one", slug: "hidden-one", state: "draft" }),
   ];
-  const open = async (title: string) => {
-    const trigger = screen.getByRole("button", { name: `Actions for ${title}` });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "Enter" });
-    return screen.findByRole("menu");
-  };
 
-  it("has Edit, View on site, Move to draft and Delete for a published workshop", async () => {
+  it("has View on site, Move to draft and Delete for a published workshop, and no Edit", () => {
     render(<WorkshopList workshops={items} />);
-    const menu = await open("Live one");
-    expect(within(menu).getByRole("menuitem", { name: "Edit" }).getAttribute("href")).toBe("/admin/community/workshops/w1");
-    const view = within(menu).getByRole("menuitem", { name: "View on site" });
+    const view = screen.getByRole("link", { name: "View Live one on site" });
     expect(view.getAttribute("href")).toBe("/community/workshops/live-one");
     expect(view.getAttribute("target")).toBe("_blank");
-    expect(within(menu).getByRole("menuitem", { name: "Move to draft" })).toBeTruthy();
-    expect(within(menu).queryByRole("menuitem", { name: "Publish" })).toBeNull();
-    expect(within(menu).getByRole("menuitem", { name: "Delete" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move to draft: Live one" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Publish Live one" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete Live one" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();
+    // The title is the way into the editor.
+    expect(screen.getByRole("link", { name: "Live one" }).getAttribute("href")).toBe("/admin/community/workshops/w1");
   });
 
-  it("has Publish and no View on site for a draft", async () => {
+  it("has Publish and no View on site for a draft", () => {
     render(<WorkshopList workshops={items} />);
-    const menu = await open("Hidden one");
-    expect(within(menu).getByRole("menuitem", { name: "Publish" })).toBeTruthy();
-    expect(within(menu).queryByRole("menuitem", { name: "View on site" })).toBeNull();
-    expect(within(menu).queryByRole("menuitem", { name: "Move to draft" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Publish Hidden one" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "View Hidden one on site" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move to draft: Hidden one" })).toBeNull();
+  });
+
+  it("holds the buttons of a row while a request for it is on its way", async () => {
+    let answer: (value: unknown) => void = () => {};
+    bulkContent.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(<WorkshopList workshops={items} />);
+    fireEvent.click(screen.getByRole("button", { name: "Publish Hidden one" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish Hidden one" }).hasAttribute("disabled")).toBe(true));
+    expect(screen.getByRole("button", { name: "Move to draft: Live one" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => answer({ ok: true, data: { done: ["w2"], missing: [] } }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish Hidden one" }).hasAttribute("disabled")).toBe(false));
   });
 
   it("publishes just that row", async () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: ["w2"], missing: [] } });
     render(<WorkshopList workshops={items} />);
-    fireEvent.click(within(await open("Hidden one")).getByRole("menuitem", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publish Hidden one" }));
     await waitFor(() => expect(bulkContent).toHaveBeenCalledWith("workshops", "publish", ["w2"]));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Published 1 workshop."));
   });
@@ -416,7 +431,7 @@ describe("a row's menu", () => {
   it("asks before it deletes that row, naming it", async () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: ["w1"], missing: [] } });
     render(<WorkshopList workshops={items} />);
-    fireEvent.click(within(await open("Live one")).getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Live one" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Delete this workshop?")).toBeTruthy();
     expect(within(dialog).getByText("“Live one”")).toBeTruthy();
@@ -429,7 +444,7 @@ describe("a row's menu", () => {
   it("treats a row that is already gone as deleted", async () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: [], missing: ["w1"] } });
     render(<WorkshopList workshops={items} />);
-    fireEvent.click(within(await open("Live one")).getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Live one" }));
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete workshop" }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Workshop deleted."));
   });

@@ -7,6 +7,7 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { PublicationManager } from "@/components/admin/community/publication-manager";
 import { fetchAdminPublications } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
+import { countLabel } from "@/lib/community/format";
 
 export default async function AdminPublicationsPage({
   searchParams,
@@ -31,7 +32,7 @@ export default async function AdminPublicationsPage({
     >
       <Card>
         <CardHeader>
-          <CardTitle>{loaded.ok ? `${loaded.data.length} publications` : "Publications"}</CardTitle>
+          <CardTitle>{loaded.ok ? countLabel(loaded.data.length, "publication") : "Publications"}</CardTitle>
         </CardHeader>
         <CardContent>
           {loaded.ok ? (

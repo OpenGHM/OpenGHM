@@ -59,16 +59,19 @@ export function StackedCell({
 
 /*
  * The cells a list with row controls adds. Each is a column of its own from
- * `sm`; on a phone, where the row is a card, it sits in a corner of the card
- * (the row is `relative`) and `TITLE_CELL` leaves room for them.
+ * `sm`; on a phone, where the row is a card, the checkbox sits in a corner of
+ * the card (the row is `relative`), `TITLE_CELL` leaves room for it, and the
+ * buttons run along the bottom of the card.
  */
 
 /** The row's checkbox: the first column; the card's top-left corner. */
 export const CHECK_CELL = "w-10 pr-0 max-sm:absolute max-sm:top-[1.0625rem] max-sm:left-3 max-sm:w-auto max-sm:p-0";
 
-/** The row's "⋯" menu: the last column; the card's top-right corner. */
-export const MENU_CELL = "w-12 pr-2 pl-0 text-right max-sm:absolute max-sm:top-1.5 max-sm:right-1.5 max-sm:w-auto max-sm:p-0";
+/** The row's action buttons: the last column, as wide as they are (`w-px` and
+ *  no wrapping), so the title keeps the room; the bottom of the card on a phone. */
+export const ACTIONS_CELL =
+  "w-px pr-3 pl-0 text-right whitespace-nowrap max-sm:mt-2 max-sm:block max-sm:w-full max-sm:border-t max-sm:px-0 max-sm:pt-3 max-sm:pb-0";
 
 /** The row's title, which may wrap so a long one does not widen the table, with
- *  the corners left free for the checkbox and the menu. */
-export const TITLE_CELL = "min-w-0 whitespace-normal max-sm:pr-12 max-sm:pl-8";
+ *  the corner left free for the checkbox. */
+export const TITLE_CELL = "min-w-0 whitespace-normal max-sm:pl-8";

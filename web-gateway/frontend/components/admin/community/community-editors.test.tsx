@@ -424,17 +424,16 @@ describe("publications", () => {
     expect(replace).toHaveBeenCalledWith("/admin/community/publications", { scroll: false });
   });
 
-  it("has a checkbox per row, a select-all and a menu whose Edit opens the sheet", async () => {
+  it("has a checkbox per row, a select-all, and the title opens the sheet", async () => {
     render(<PublicationManager publications={[publication]} />);
     expect(screen.getAllByRole("checkbox", { name: "Select all publications" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("checkbox", { name: "Select A paper" })).toBeTruthy();
-    const trigger = screen.getByRole("button", { name: "Actions for A paper" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "Enter" });
-    const menu = await screen.findByRole("menu");
-    // A publication has no page of its own on the site.
-    expect(within(menu).queryByRole("menuitem", { name: "View on site" })).toBeNull();
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+    // A publication has no page of its own on the site, and no Edit button: its title opens the sheet.
+    expect(screen.queryByRole("link", { name: /on site/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
+    expect(screen.getByRole("button", { name: `Move to draft: ${publication.title}` })).toBeTruthy();
+    expect(screen.getByRole("button", { name: `Delete ${publication.title}` })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: publication.title }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
@@ -556,13 +555,6 @@ describe("the media library", () => {
     { id: "a".repeat(24), url: `/api/community/files/${"a".repeat(24)}`, filename: "photo.jpg", content_type: "image/jpeg", size: 340 * 1024, uploaded_at: "2026-10-05T00:00:00Z" },
     { id: "b".repeat(24), url: `/api/community/files/${"b".repeat(24)}`, filename: "slides.pdf", content_type: "application/pdf", size: 6.1 * 1024 * 1024, uploaded_at: "2026-10-04T00:00:00Z" },
   ];
-  const openMenu = async (name: string) => {
-    const trigger = screen.getByRole("button", { name: `Actions for ${name}` });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "Enter" });
-    return screen.findByRole("menu");
-  };
-
   it("shows an image as a thumbnail and another file by its type, with sizes", () => {
     render(<FilesLibrary files={files} />);
     expect(document.querySelector(`img[src="${files[0].url}"]`)).toBeTruthy();
@@ -571,11 +563,11 @@ describe("the media library", () => {
     expect(screen.getByText(/6\.1 MB/)).toBeTruthy();
   });
 
-  it("copies the address content stores, from the tile's menu", async () => {
+  it("copies the address content stores, from the tile's Copy button", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     render(<FilesLibrary files={files} />);
-    fireEvent.click(within(await openMenu("photo.jpg")).getByRole("menuitem", { name: "Copy address" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy address of photo.jpg" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(files[0].url));
     expect(toast.success).toHaveBeenCalledWith("Copied the address of photo.jpg.");
   });
@@ -583,7 +575,7 @@ describe("the media library", () => {
   it("warns that content may use a file before it deletes it", async () => {
     actions.bulkDeleteFiles.mockResolvedValue({ ok: true, data: { done: ["b".repeat(24)], missing: [] } });
     render(<FilesLibrary files={files} />);
-    fireEvent.click(within(await openMenu("slides.pdf")).getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete slides.pdf" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/broken image or link/)).toBeTruthy();
     expect(within(dialog).getByText("“slides.pdf”")).toBeTruthy();

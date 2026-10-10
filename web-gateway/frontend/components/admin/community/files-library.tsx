@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/admin/admin-states";
 import { DeleteButton, DeleteItemsDialog, type Item } from "@/components/admin/community/content-actions";
 import { FileUploadButton } from "@/components/admin/community/file-upload-button";
 import { ImagePreview } from "@/components/admin/community/image-field";
-import { RowMenu } from "@/components/admin/community/row-menu";
+import { RowActions } from "@/components/admin/community/row-actions";
 import { SelectionBar, useSelection } from "@/components/admin/community/selection";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { fileExtension, formatFileSize, isImageType } from "@/lib/community/admin-format";
@@ -30,7 +30,7 @@ async function copyAddress(file: CommunityFile) {
 /**
  * The media library: every file uploaded for Community content, newest first.
  * Images show as thumbnails and other files by their type. A tile's checkbox
- * selects it for the Delete in the bar above, and its "⋯" has Copy address
+ * selects it for the Delete in the bar above, and the buttons under it are Copy
  * (the address content stores on the clipboard, `/api/community/files/<id>`)
  * and Delete. Deleting asks first, because a page that uses the file would
  * show a broken link or image; the library cannot tell which pages those are.
@@ -89,14 +89,6 @@ export function FilesLibrary({ files }: { files: CommunityFile[] }) {
                               onCheckedChange={(value) => selection.toggle(file.id, value === true)}
                             />
                           </span>
-                          <RowMenu
-                            title={file.filename}
-                            className="absolute top-2 right-2 bg-card/90 shadow-xs hover:bg-card"
-                            actions={[
-                              { key: "copy", label: "Copy address", icon: Copy, onSelect: () => void copyAddress(file) },
-                              { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setDeleting(asItems([file])) },
-                            ]}
-                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium break-words text-foreground [overflow-wrap:anywhere]">{file.filename}</p>
@@ -104,6 +96,13 @@ export function FilesLibrary({ files }: { files: CommunityFile[] }) {
                             {formatFileSize(file.size)} · <TimeStamp value={file.uploaded_at} format="date" />
                           </p>
                         </div>
+                        <RowActions
+                          className="[&>button]:flex-1"
+                          actions={[
+                            { key: "copy", label: "Copy", name: `Copy address of ${file.filename}`, icon: Copy, onSelect: () => void copyAddress(file) },
+                            { key: "delete", label: "Delete", name: `Delete ${file.filename}`, icon: Trash2, destructive: true, onSelect: () => setDeleting(asItems([file])) },
+                          ]}
+                        />
                       </div>
                     </div>
                   </li>

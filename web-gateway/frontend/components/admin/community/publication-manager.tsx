@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { EyeOff, Pencil, Trash2, Upload } from "lucide-react";
+import { EyeOff, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +19,7 @@ import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
   CHECK_CELL,
-  MENU_CELL,
+  ACTIONS_CELL,
   StackedBody,
   StackedCell,
   StackedHeader,
@@ -28,7 +28,7 @@ import {
   TITLE_CELL,
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
-import { RowMenu } from "@/components/admin/community/row-menu";
+import { RowActions } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { SaveNotices, StateSelect } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, StatePill, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
@@ -54,8 +54,9 @@ type Editing = { kind: "none" } | { kind: "new" } | { kind: "edit"; publication:
 /**
  * The publications list, with the editor in a sheet over the right edge so the
  * list keeps its place. Year first, as the site orders them. A checkbox on
- * each row selects it for Publish, Move to draft and Delete, and the "⋯" at the
- * end of a row holds Edit, the state change and Delete for that row. A sheet
+ * each row selects it for Publish, Move to draft and Delete, and the buttons at
+ * the end of a row do the state change and Delete for that row (the title opens
+ * the editor). A sheet
  * with unsaved changes asks before it closes. `startNew` opens it on a new
  * publication: the page's New publication link is `?new=1`, in the band like
  * every other section's New button, and the page keys this component on it.
@@ -109,8 +110,8 @@ export function PublicationManager({ publications, startNew = false }: { publica
                 <TableHead>Title</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className={MENU_CELL}>
+                <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+                <TableHead className={ACTIONS_CELL}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -141,18 +142,16 @@ export function PublicationManager({ publications, startNew = false }: { publica
                   <StackedCell label="State">
                     <StatePill state={p.state} />
                   </StackedCell>
-                  <StackedCell label="Updated" className="text-xs text-muted-foreground">
+                  <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
                     <TimeStamp value={p.updated_at} format="relative" />
                   </StackedCell>
-                  <StackedCell className={MENU_CELL}>
-                    <RowMenu
-                      title={p.title}
+                  <StackedCell className={ACTIONS_CELL}>
+                    <RowActions
                       actions={[
-                        { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setEditing({ kind: "edit", publication: p }) },
                         p.state === "published"
-                          ? { key: "draft", label: "Move to draft", icon: EyeOff, disabled: busy, onSelect: () => void setState([p], "draft") }
-                          : { key: "publish", label: "Publish", icon: Upload, disabled: busy, onSelect: () => void setState([p], "published") },
-                        { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => askDelete([p]) },
+                          ? { key: "draft", label: "Move to draft", name: `Move to draft: ${p.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([p], "draft") }
+                          : { key: "publish", label: "Publish", name: `Publish ${p.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([p], "published") },
+                        { key: "delete", label: "Delete", name: `Delete ${p.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([p]) },
                       ]}
                     />
                   </StackedCell>

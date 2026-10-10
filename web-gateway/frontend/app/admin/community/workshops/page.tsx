@@ -7,6 +7,7 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { WorkshopList } from "@/components/admin/community/workshop-list";
 import { fetchAdminWorkshops } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
+import { countLabel } from "@/lib/community/format";
 
 export default async function AdminWorkshopsPage() {
   const loaded = settle(await fetchAdminWorkshops(), "/admin/community/workshops");
@@ -26,7 +27,7 @@ export default async function AdminWorkshopsPage() {
     >
       <Card>
         <CardHeader>
-          <CardTitle>{loaded.ok ? `${loaded.data.length} workshops` : "Workshops"}</CardTitle>
+          <CardTitle>{loaded.ok ? countLabel(loaded.data.length, "workshop") : "Workshops"}</CardTitle>
         </CardHeader>
         <CardContent>
           {loaded.ok ? <WorkshopList workshops={loaded.data} /> : <InlineError title="Couldn't load workshops.">{loaded.message}</InlineError>}

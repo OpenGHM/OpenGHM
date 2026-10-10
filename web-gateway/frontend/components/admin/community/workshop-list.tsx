@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { EyeOff, ExternalLink, Pencil, Trash2, Upload } from "lucide-react";
+import { EyeOff, ExternalLink, Trash2, Upload } from "lucide-react";
 import { TableHead, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
   CHECK_CELL,
-  MENU_CELL,
+  ACTIONS_CELL,
   StackedBody,
   StackedCell,
   StackedHeader,
@@ -16,7 +16,7 @@ import {
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
 import { StatePill, WorkshopStatusPill } from "@/components/admin/community/form-bits";
-import { RowMenu } from "@/components/admin/community/row-menu";
+import { RowActions } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { Workshop } from "@/lib/community/types";
@@ -39,7 +39,7 @@ function DateRange({ workshop }: { workshop: Workshop }) {
 /**
  * Every workshop, newest first as the backend sends them, each a link to its
  * editor. A checkbox on each row selects it for Publish, Move to draft and
- * Delete, and the "⋯" at the end of a row holds the same for that row alone.
+ * Delete, and the buttons at the end of a row do the same for that row alone.
  */
 export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
   const { selection, selectedItems, busy, setState, deleting, askDelete, closeDelete } = useContentActions("workshops", workshops);
@@ -72,8 +72,8 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
             <TableHead>Date</TableHead>
             <TableHead>When</TableHead>
             <TableHead>State</TableHead>
-            <TableHead>Updated</TableHead>
-            <TableHead className={MENU_CELL}>
+            <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+            <TableHead className={ACTIONS_CELL}>
               <span className="sr-only">Actions</span>
             </TableHead>
           </TableRow>
@@ -104,21 +104,19 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
                 <StackedCell label="State">
                   <StatePill state={w.state} />
                 </StackedCell>
-                <StackedCell label="Updated" className="text-xs text-muted-foreground">
+                <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
                   <TimeStamp value={w.updated_at} format="relative" />
                 </StackedCell>
-                <StackedCell className={MENU_CELL}>
-                  <RowMenu
-                    title={w.title}
+                <StackedCell className={ACTIONS_CELL}>
+                  <RowActions
                     actions={[
-                      { key: "edit", label: "Edit", icon: Pencil, href },
                       ...(w.state === "published"
                         ? [
-                            { key: "view", label: "View on site", icon: ExternalLink, href: `/community/workshops/${encodeURIComponent(w.slug)}`, external: true },
-                            { key: "draft", label: "Move to draft", icon: EyeOff, disabled: busy, onSelect: () => void setState([w], "draft") },
+                            { key: "view", label: "View on site", name: `View ${w.title} on site`, icon: ExternalLink, href: `/community/workshops/${encodeURIComponent(w.slug)}` },
+                            { key: "draft", label: "Move to draft", name: `Move to draft: ${w.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([w], "draft") },
                           ]
-                        : [{ key: "publish", label: "Publish", icon: Upload, disabled: busy, onSelect: () => void setState([w], "published") }]),
-                      { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => askDelete([w]) },
+                        : [{ key: "publish", label: "Publish", name: `Publish ${w.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([w], "published") }]),
+                      { key: "delete", label: "Delete", name: `Delete ${w.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([w]) },
                     ]}
                   />
                 </StackedCell>

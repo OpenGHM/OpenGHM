@@ -7,6 +7,7 @@ import { AdminPage } from "@/components/admin/admin-page";
 import { TutorialList } from "@/components/admin/community/tutorial-list";
 import { fetchAdminTutorials } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
+import { countLabel } from "@/lib/community/format";
 
 export default async function AdminTutorialsPage() {
   const loaded = settle(await fetchAdminTutorials(), "/admin/community/tutorials");
@@ -26,7 +27,7 @@ export default async function AdminTutorialsPage() {
     >
       <Card>
         <CardHeader>
-          <CardTitle>{loaded.ok ? `${loaded.data.length} tutorials` : "Tutorials"}</CardTitle>
+          <CardTitle>{loaded.ok ? countLabel(loaded.data.length, "tutorial") : "Tutorials"}</CardTitle>
         </CardHeader>
         <CardContent>
           {loaded.ok ? <TutorialList tutorials={loaded.data} /> : <InlineError title="Couldn't load tutorials.">{loaded.message}</InlineError>}
