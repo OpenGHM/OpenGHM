@@ -1,8 +1,10 @@
 import { Metadata } from "next";
 import Image from "next/image";
+import { ArrowUpRight, Mail } from "lucide-react";
 import { Footer } from "@/components/landing/footer";
 import { PanelDots, SectionEyebrow, SectionTitle } from "@/components/landing/section-parts";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -91,9 +93,7 @@ const FUNDING_LOGOS = [
   { src: "/images/logos/unh.svg", alt: "University of New Hampshire" },
 ];
 
-const CONTACTS = [
-  { label: "General", email: "info@openghm.org" },
-];
+const CONTACT_EMAIL = "info@openghm.org";
 
 /** The PI and Co-PI get the dark avatar and the filled role pill. */
 const LEAD_ROLES = ["PI", "Co-PI"];
@@ -237,28 +237,48 @@ export default function AboutPage() {
             </ul>
           </section>
 
-          <section className="relative flex flex-[1_1_300px] flex-col gap-6 overflow-hidden rounded-panel bg-hero px-6 py-10 text-white sm:px-10 sm:py-12">
+          {/* One address, so the panel is a call to action rather than a
+              list: the copy sits at the top and the address and its button
+              at the bottom, matching the height of Supported By. */}
+          <section
+            aria-labelledby="contact-heading"
+            className="relative flex flex-[1_1_300px] flex-col gap-10 overflow-hidden rounded-panel bg-hero px-6 py-10 text-white sm:px-10 sm:py-12"
+          >
             <PanelDots alpha={0.07} />
-            <h2 className="relative text-[28px] font-bold tracking-[-0.03em]">
-              Contact
-            </h2>
-            <ul className="relative flex flex-col">
-              {CONTACTS.map((contact) => (
-                <li key={contact.email}>
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="flex flex-col gap-1 border-t border-white/[0.14] py-4 transition-colors hover:text-hero-eyebrow focus-visible:text-hero-eyebrow focus-visible:outline-none"
-                  >
-                    <span className="font-mono text-[11.5px] tracking-[0.06em] text-hero-eyebrow uppercase">
-                      {contact.label}
-                    </span>
-                    <span className="text-[17px] font-medium break-words">
-                      {contact.email}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <div className="relative flex flex-col gap-5">
+              <span className="flex size-12 items-center justify-center rounded-2xl border border-white/[0.14] bg-white/10">
+                <Mail className="size-5 text-hero-eyebrow" aria-hidden="true" />
+              </span>
+              <div className="flex flex-col gap-3">
+                <h2
+                  id="contact-heading"
+                  className="text-[28px] font-bold tracking-[-0.03em]"
+                >
+                  Get in touch
+                </h2>
+                <p className="text-base leading-[1.6] text-pretty text-white/70">
+                  Questions about the data, the workspace, a workshop or
+                  working with us? Write to the team and we will get back to
+                  you.
+                </p>
+              </div>
+            </div>
+            <div className="relative mt-auto flex flex-col gap-5 border-t border-white/[0.14] pt-6">
+              <div className="flex flex-col gap-1">
+                <span className="font-mono text-[11.5px] tracking-[0.06em] text-hero-eyebrow uppercase">
+                  Email
+                </span>
+                <span className="text-[19px] font-medium break-words">
+                  {CONTACT_EMAIL}
+                </span>
+              </div>
+              <Button asChild variant="on-dark" size="xl" className="w-full">
+                <a href={`mailto:${CONTACT_EMAIL}`}>
+                  Email us
+                  <ArrowUpRight aria-hidden="true" />
+                </a>
+              </Button>
+            </div>
           </section>
         </div>
       </PageBody>
