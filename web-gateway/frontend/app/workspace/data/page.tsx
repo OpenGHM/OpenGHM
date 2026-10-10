@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { requireSession } from "@/lib/auth-guard";
+import { workspaceSession } from "@/lib/auth-guard";
+import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
 import { MyDataSection } from "@/components/workspace/my-data-section";
 import { MyDataSkeleton } from "@/components/workspace/my-data-states";
@@ -10,7 +11,8 @@ import { MY_DATA_PATH } from "@/lib/workspace/my-data";
 const HERE = MY_DATA_PATH;
 
 export default async function MyDataPage() {
-  await requireSession(HERE);
+  const access = await workspaceSession();
+  if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={HERE} />;
 
   return (
     <div className="flex min-h-screen flex-col">

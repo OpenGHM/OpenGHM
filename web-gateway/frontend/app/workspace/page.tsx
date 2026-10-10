@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
-import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
+import { isUnauthorizedError, redirectToSignIn, workspaceSession } from "@/lib/auth-guard";
+import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
 import { LinkPending } from "@/components/ui/link-pending";
@@ -34,7 +35,8 @@ export default async function WorkspacePage({
 }) {
   const params = await searchParams;
   const here = pathWithQuery("/workspace", params);
-  await requireSession(here);
+  const access = await workspaceSession();
+  if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={here} />;
 
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const page = Math.max(1, Number(first(params.page)) || 1);

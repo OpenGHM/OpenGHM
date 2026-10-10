@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
-import { redirectToSignIn, requireSession } from "@/lib/auth-guard";
+import { workspaceSession } from "@/lib/auth-guard";
+import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
@@ -28,11 +29,12 @@ export default async function JobDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const here = pathWithQuery(`/workspace/${encodeURIComponent(id)}`, query);
-  await requireSession(here);
+  const access = await workspaceSession();
+  if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={here} />;
 
   const result = await fetchJob(id);
   if (!result.ok) {
-    if (result.reason === "session_expired") redirectToSignIn(here);
+    if (result.reason === "session_expired") return <SignInRequired reason="expired" here={here} />;
     if (result.reason === "not_found") notFound();
     throw new Error(result.message);
   }

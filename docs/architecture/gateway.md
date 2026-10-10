@@ -70,9 +70,12 @@ environment.
 
 `proxy.ts` at the frontend root is the NextAuth middleware — Next.js 16 renamed
 `middleware.ts` to `proxy.ts`. It redirects unauthenticated requests for
-`/dashboard`, `/workspace` and `/admin` to the sign-in page, with the path
-and query as `callbackUrl`. It is a
-redirect, not the authorization check; that happens in FastAPI
+`/dashboard` and `/admin` to the sign-in page, with the path and query as
+`callbackUrl`. `/workspace` is not redirected: each Workspace page asks
+`workspaceSession()` (`web-gateway/frontend/lib/auth-guard.ts`) and, with no
+session or an ended one, renders `SignInRequired` in place of its content: the
+page's band and one card with a link to sign in and back. Both are
+conveniences, not the authorization check; that happens in FastAPI
 ([authentication.md](authentication.md)).
 
 ## 3. The stack, as built

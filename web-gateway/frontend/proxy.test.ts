@@ -22,20 +22,36 @@ const call = (req: ReturnType<typeof request>) => (proxy as unknown as Handler)(
 
 describe("proxy", () => {
   it("redirects a signed-out visit to a protected page to sign in, keeping the query", () => {
-    const res = call(request({ path: "/workspace?status=FAILED", auth: null }));
+    const res = call(request({ path: "/admin/jobs?status=FAILED", auth: null }));
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe(
-      "http://localhost:3100/auth/signin?callbackUrl=%2Fworkspace%3Fstatus%3DFAILED"
+      "http://localhost:3100/auth/signin?callbackUrl=%2Fadmin%2Fjobs%3Fstatus%3DFAILED"
     );
   });
 
+  it("redirects a signed-out visit to /dashboard/profile", () => {
+    const res = call(request({ path: "/dashboard/profile", auth: null }));
+    expect(res.headers.get("location")).toContain("/auth/signin");
+  });
+
+  it.each(["/workspace", "/workspace?status=FAILED", "/workspace/new", "/workspace/data", "/workspace/j1"])(
+    "lets a signed-out visit to %s through: the page shows its own sign-in prompt",
+    (path) => {
+      for (const auth of [null, { error: "RefreshTokenError" }]) {
+        const res = call(request({ path, auth }));
+        expect(res.status).toBe(200);
+        expect(res.headers.get("location")).toBeNull();
+      }
+    }
+  );
+
   it("lets a server action through when there is no session at all (signed out in another tab)", () => {
-    const res = call(request({ path: "/workspace/jobs/j1", auth: null, action: true }));
+    const res = call(request({ path: "/admin/jobs/j1", auth: null, action: true }));
     expect(res.headers.get("location")).toBeNull();
   });
 
   it("lets a server action through when the session's token could not be refreshed", () => {
-    const res = call(request({ path: "/workspace/jobs/j1", auth: { error: "RefreshTokenError" }, action: true }));
+    const res = call(request({ path: "/admin/jobs/j1", auth: { error: "RefreshTokenError" }, action: true }));
     expect(res.headers.get("location")).toBeNull();
   });
 

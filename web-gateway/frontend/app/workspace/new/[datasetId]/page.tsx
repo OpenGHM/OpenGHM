@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
-import { redirectToSignIn, requireSession } from "@/lib/auth-guard";
+import { workspaceSession } from "@/lib/auth-guard";
+import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { fetchMe } from "@/lib/account/actions";
@@ -29,11 +30,12 @@ export default async function NewDraftFromSnapshotPage({
   const { datasetId } = await params;
   const query = await searchParams;
   const here = pathWithQuery(`/workspace/new/${encodeURIComponent(datasetId)}`, query);
-  await requireSession(here);
+  const access = await workspaceSession();
+  if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={here} />;
 
   const preview = await previewDraft(datasetId);
   if (!preview.ok) {
-    if (preview.reason === "session_expired") redirectToSignIn(here);
+    if (preview.reason === "session_expired") return <SignInRequired reason="expired" here={here} />;
     if (preview.reason === "not_found") notFound();
     throw new Error(preview.message);
   }

@@ -62,12 +62,19 @@ not trust the token. They read the user's document at call time, through
   as a missing one. Staff and admin see and cancel through `job:view:any` and
   `job:cancel:any`.
 
-The frontend's `proxy.ts` also gates `/dashboard`, `/workspace` and `/admin`,
-but that is a redirect for the user's benefit. Nothing is authorized there.
-It keeps the query in `callbackUrl`, and treats a session whose refresh failed
-(`session.error`) as signed out. The one exception is a server action from a
-page that is already open, which is let through so it can return "session
-expired" as data. A job page then shows a sign-in banner instead of an error.
+The frontend's `proxy.ts` also gates `/dashboard` and `/admin`, but that is a
+redirect for the user's benefit. Nothing is authorized there. It keeps the query
+in `callbackUrl`, and treats a session whose refresh failed (`session.error`) as
+signed out. The one exception is a server action from a page that is already
+open, which is let through so it can return "session expired" as data. A job
+page then shows a sign-in banner instead of an error.
+
+`/workspace` is not redirected. A signed-out visitor, or one whose session
+ended, gets the Workspace page with a "Sign in to use the Workspace" (or "Your
+session has ended") card in place of its content, whose Sign in button returns
+to the same page and query. Each Workspace page decides this itself
+(`workspaceSession()` in `web-gateway/frontend/lib/auth-guard.ts`). A job or
+draft page shows the same card when the backend answers 401 to its first read.
 
 ## 2. Three ways to become a request identity
 

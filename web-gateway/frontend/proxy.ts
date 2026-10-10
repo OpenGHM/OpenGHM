@@ -4,7 +4,12 @@ import { signInPath } from "@/lib/auth-redirect";
 
 // "/dashboard" has no index page anymore — only its "/dashboard/profile"
 // child route exists — but the prefix match below still protects it.
-const PROTECTED_PATHS = ["/dashboard", "/workspace", "/admin"];
+//
+// "/workspace" is not here on purpose: a signed-out visitor opening it gets the
+// Workspace's own "Sign in to use the Workspace" page rather than a redirect
+// (components/workspace/sign-in-required.tsx, decided per page by
+// `workspaceSession()` in lib/auth-guard.ts).
+const PROTECTED_PATHS = ["/dashboard", "/admin"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -22,11 +27,12 @@ export default auth((req) => {
   // or is gone altogether (signed out in another tab): the action answers 401
   // as data and the page shows SessionExpiredBanner. Redirecting it would hand
   // the client an HTML sign-in page it cannot parse. The backend still
-  // authorises every call, and the next page navigation redirects as usual.
+  // authorises every call, and the next page navigation redirects as usual
+  // (or, under /workspace, shows the sign-in page).
   const isServerAction = req.headers.has("next-action");
 
   if (isProtected && signedOut && !isServerAction) {
-    // Keep the query string: /workspace?status=FAILED returns there.
+    // Keep the query string: /admin/jobs?status=FAILED returns there.
     const target = pathname + req.nextUrl.search;
     return NextResponse.redirect(new URL(signInPath(target), req.nextUrl.origin));
   }

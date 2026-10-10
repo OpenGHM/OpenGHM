@@ -1,5 +1,6 @@
 import { pathWithQuery } from "@/lib/auth-redirect";
-import { isUnauthorizedError, redirectToSignIn, requireSession } from "@/lib/auth-guard";
+import { isUnauthorizedError, redirectToSignIn, workspaceSession } from "@/lib/auth-guard";
+import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
 import { StartProgress } from "@/components/workspace/draft-progress";
 import { PageBody } from "@/components/layout/page-hero";
@@ -25,7 +26,8 @@ export default async function NewDraftPage({
 }) {
   const rawParams = await searchParams;
   const here = pathWithQuery("/workspace/new", rawParams);
-  await requireSession(here);
+  const access = await workspaceSession();
+  if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={here} />;
 
   const filters = parsePickerFilters(toURLSearchParams(rawParams));
 
