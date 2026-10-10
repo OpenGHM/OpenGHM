@@ -72,7 +72,7 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
             <TableHead>Date</TableHead>
             <TableHead>When</TableHead>
             <TableHead>State</TableHead>
-            <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+            <TableHead>Updated</TableHead>
             <TableHead className={ACTIONS_CELL}>
               <span className="sr-only">Actions</span>
             </TableHead>
@@ -104,7 +104,7 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
                 <StackedCell label="State">
                   <StatePill state={w.state} />
                 </StackedCell>
-                <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
+                <StackedCell label="Updated" className="text-xs text-muted-foreground">
                   <TimeStamp value={w.updated_at} format="relative" />
                 </StackedCell>
                 <StackedCell className={ACTIONS_CELL}>

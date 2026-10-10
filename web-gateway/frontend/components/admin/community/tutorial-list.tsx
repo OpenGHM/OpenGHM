@@ -196,7 +196,7 @@ export function TutorialList({ tutorials }: { tutorials: Tutorial[] }) {
                 <TableHead>Title</TableHead>
                 <TableHead>Kind</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+                <TableHead>Updated</TableHead>
                 <TableHead className={ACTIONS_CELL}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -298,7 +298,7 @@ function TutorialRow({
       <StackedCell label="State">
         <StatePill state={t.state} />
       </StackedCell>
-      <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
+      <StackedCell label="Updated" className="text-xs text-muted-foreground">
         <TimeStamp value={t.updated_at} format="relative" />
       </StackedCell>
       <StackedCell className={ACTIONS_CELL}>

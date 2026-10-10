@@ -110,7 +110,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
                 <TableHead>Title</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead className="sm:max-[1359px]:hidden">Updated</TableHead>
+                <TableHead>Updated</TableHead>
                 <TableHead className={ACTIONS_CELL}>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -142,7 +142,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
                   <StackedCell label="State">
                     <StatePill state={p.state} />
                   </StackedCell>
-                  <StackedCell label="Updated" className="text-xs text-muted-foreground sm:max-[1359px]:hidden">
+                  <StackedCell label="Updated" className="text-xs text-muted-foreground">
                     <TimeStamp value={p.updated_at} format="relative" />
                   </StackedCell>
                   <StackedCell className={ACTIONS_CELL}>
