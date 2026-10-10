@@ -16,10 +16,9 @@ vi.mock("next/navigation", () => ({
 import { AdminRoleProvider, AdminNav } from "@/components/admin/admin-nav";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { CommunitySubNav } from "@/components/admin/community/community-sub-nav";
-import { InterestTable, emailList } from "@/components/admin/community/interest-table";
 import { TutorialList } from "@/components/admin/community/tutorial-list";
 import { WorkshopList } from "@/components/admin/community/workshop-list";
-import type { GroupInterest, Tutorial, Workshop } from "@/lib/community/types";
+import type { Tutorial, Workshop } from "@/lib/community/types";
 
 afterEach(() => {
   cleanup();
@@ -148,34 +147,6 @@ describe("the tutorial list", () => {
   });
 });
 
-describe("the group interest table", () => {
-  const entries: GroupInterest[] = [
-    { user_id: "u1", email: "ada@example.org", created_at: "2026-10-03T12:00:00Z" },
-    { user_id: "u2", email: "grace@example.org", created_at: "2026-10-04T12:00:00Z" },
-  ];
-
-  it("lists the addresses and counts them", () => {
-    render(<InterestTable entries={entries} />);
-    expect(screen.getByText("ada@example.org")).toBeTruthy();
-    expect(screen.getByText("grace@example.org")).toBeTruthy();
-    expect(screen.getByText("2 people")).toBeTruthy();
-  });
-
-  it("copies every address, comma-separated", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<InterestTable entries={entries} />);
-    fireEvent.click(screen.getByRole("button", { name: "Copy all email addresses" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("ada@example.org, grace@example.org"));
-    expect(emailList(entries)).toBe("ada@example.org, grace@example.org");
-  });
-
-  it("says nobody has asked yet", () => {
-    render(<InterestTable entries={[]} />);
-    expect(screen.getByText("Nobody has asked yet.")).toBeTruthy();
-  });
-});
-
 describe("the navigation", () => {
   it("shows Community in the admin nav to an admin and not to staff", () => {
     const { unmount } = render(
@@ -193,11 +164,11 @@ describe("the navigation", () => {
     expect(screen.queryByRole("link", { name: "Community" })).toBeNull();
   });
 
-  it("links the seven sections and marks the one in view", () => {
+  it("links the six sections and marks the one in view", () => {
     render(<CommunitySubNav />);
     const nav = screen.getByRole("navigation", { name: "Community sections" });
     expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Overview", "Workshops", "Tutorials", "Publications", "Page settings", "Files", "Group interest",
+      "Overview", "Workshops", "Tutorials", "Publications", "Page settings", "Files",
     ]);
     // The mocked path is a workshop's editor: Workshops is current, Overview is not.
     expect(within(nav).getByRole("link", { name: "Workshops" }).getAttribute("aria-current")).toBe("page");

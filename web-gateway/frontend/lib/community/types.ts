@@ -152,8 +152,6 @@ export interface CommunityPage {
   workshops: WorkshopCard[];
   tutorials: TutorialCard[];
   publications: Publication[];
-  /** Whether the signed-in visitor asked to hear when groups open. */
-  group_interest: boolean;
 }
 
 export interface CommunityFile {
@@ -164,10 +162,4 @@ export interface CommunityFile {
   content_type: string;
   size: number;
   uploaded_at: string;
-}
-
-export interface GroupInterest {
-  user_id: string;
-  email: string;
-  created_at: string;
 }

@@ -8,14 +8,14 @@ GridFS bucket (tests/gridfs_fake.py), through the app's own JWTs.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from gridfs_fake import FakeBucket
-from route_helpers import FakeDB, make_user, token_for
+from route_helpers import FakeDB, token_for
 
 from app.api.v1 import community as community_router
 from app.core import audit, authz
@@ -111,7 +111,6 @@ def test_the_page_is_public_and_empty_gives_the_default_settings(http):
     assert r.status_code == 200
     page = r.json()
     assert page["workshops"] == page["tutorials"] == page["publications"] == []
-    assert page["group_interest"] is False
     assert page["settings"]["hero_title"] == "Learn, publish and work together"
     assert page["settings"]["show_groups"] is True
     assert page["settings"]["groups_title"] == "Discussion groups"
@@ -235,7 +234,6 @@ ADMIN_ROUTES = [
     ("put", "/settings", {}),
     ("get", "/files", None),
     ("delete", f"/files/{FILE_ID}", None),
-    ("get", "/group-interest", None),
 ]
 
 
@@ -682,80 +680,6 @@ def test_saving_settings_twice_keeps_one_document(http, mongo):
 
 def test_settings_with_an_empty_title_are_422(http):
     assert http.put(f"{ADMIN_URL}/settings", headers=ADMIN, json={"hero_title": ""}).status_code == 422
-
-
-# ---- group interest ------------------------------------------------------------------
-
-
-@pytest.fixture
-def accounts(mongo):
-    for sub, role in [("u1", Role.USER), ("g1", Role.GUEST), ("admin-1", Role.ADMIN)]:
-        mongo.users.docs[sub] = make_user(sub, role)
-    mongo.users.docs["off"] = make_user("off", Role.USER, is_active=False)
-    return mongo
-
-
-def test_group_interest_is_added_once_removed_and_reported(http, accounts):
-    me = token_for("u1", Role.USER)
-    assert http.get(PUBLIC, headers=me).json()["group_interest"] is False
-    for _ in range(2):  # the second is a no-op
-        assert http.post(f"{PUBLIC}/group-interest", headers=me).status_code == 204
-    assert http.get(PUBLIC, headers=me).json()["group_interest"] is True
-    stored = accounts.community_group_interest.docs["u1"]
-    assert stored["email"] == "u1@example.org" and "created_at" in stored
-    assert len(accounts.community_group_interest.docs) == 1
-    assert http.delete(f"{PUBLIC}/group-interest", headers=me).status_code == 204
-    assert http.delete(f"{PUBLIC}/group-interest", headers=me).status_code == 204
-    assert http.get(PUBLIC, headers=me).json()["group_interest"] is False
-    assert accounts.community_group_interest.docs == {}
-
-
-def test_a_guest_may_ask_too(http, accounts):
-    assert http.post(f"{PUBLIC}/group-interest", headers=token_for("g1", Role.GUEST)).status_code == 204
-
-
-def test_group_interest_needs_a_signed_in_active_account(http, accounts):
-    assert http.post(f"{PUBLIC}/group-interest").status_code == 401
-    assert http.delete(f"{PUBLIC}/group-interest").status_code == 401
-    r = http.post(f"{PUBLIC}/group-interest", headers=token_for("off", Role.USER))
-    assert r.status_code == 403 and r.json()["detail"]["code"] == "account_inactive"
-    r = http.post(f"{PUBLIC}/group-interest", headers=token_for("ghost", Role.USER))
-    assert r.status_code == 403 and r.json()["detail"]["code"] == "account_not_found"
-    assert accounts.community_group_interest.docs == {}
-
-
-def test_a_bad_token_on_the_page_means_false_not_401(http, accounts):
-    accounts.community_group_interest.docs["u1"] = {"_id": "u1", "email": "u1@example.org"}
-    for headers in (
-        {}, {"Authorization": "Bearer nonsense"}, {"Authorization": "Basic abc"},
-        {"Authorization": "Bearer "},
-    ):
-        r = http.get(PUBLIC, headers=headers)
-        assert r.status_code == 200 and r.json()["group_interest"] is False, headers
-    assert http.get(PUBLIC, headers=token_for("u1")).json()["group_interest"] is True
-
-
-def test_an_anonymous_visitor_is_not_the_mock_user_even_with_mock_auth_on(http, accounts, monkeypatch):
-    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
-    monkeypatch.setattr(settings, "ALLOW_MOCK_AUTH", True)
-    accounts.community_group_interest.docs["mock-user-001"] = {"_id": "mock-user-001", "email": None}
-    for headers in ({}, {"X-Mock-Role": "user"}, {"X-Mock-Role": "bogus"}):
-        r = http.get(PUBLIC, headers=headers)
-        assert r.status_code == 200 and r.json()["group_interest"] is False, headers
-
-
-def test_the_admin_sees_who_asked_newest_first(http, accounts, monkeypatch):
-    # `_now` keeps milliseconds only, so two requests can share a timestamp; a
-    # clock that ticks a second per call makes "newest" unambiguous.
-    ticks = iter(range(60))
-    monkeypatch.setattr(
-        community_router, "_now", lambda: datetime(2026, 10, 1, 12, 0, next(ticks), tzinfo=timezone.utc)
-    )
-    for sub in ("u1", "g1"):
-        http.post(f"{PUBLIC}/group-interest", headers=token_for(sub, Role.USER))
-    got = http.get(f"{ADMIN_URL}/group-interest", headers=ADMIN).json()
-    assert [g["user_id"] for g in got] == ["g1", "u1"]
-    assert got[0]["email"] == "g1@example.org" and got[0]["created_at"].endswith("Z")
 
 
 # ---- files ------------------------------------------------------------------------------

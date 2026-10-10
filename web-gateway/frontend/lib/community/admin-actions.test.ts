@@ -15,7 +15,6 @@ import {
   deleteCommunityFile,
   deleteWorkshop,
   fetchAdminWorkshops,
-  fetchGroupInterest,
   reorderTutorials,
   saveAdminSettings,
   updateWorkshop,
@@ -39,7 +38,7 @@ describe("reads", () => {
 
   it("answers session_expired when there is no session", async () => {
     getApiClient.mockRejectedValue(refused(401, "Not signed in."));
-    expect(await fetchGroupInterest()).toEqual({ ok: false, reason: "session_expired" });
+    expect(await fetchAdminWorkshops()).toEqual({ ok: false, reason: "session_expired" });
   });
 
   it("answers a 403 as an error with its status, for a page to tell from an outage", async () => {

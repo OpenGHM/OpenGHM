@@ -131,7 +131,6 @@ export function communityPage(over: Partial<CommunityPage> = {}): CommunityPage 
       publication(),
       publication({ id: "p-2", year: 2025, type: "software", title: "OpenGHM Toolkit", link_label: null, link_url: null, citation: "OpenGHM Project (2025). Toolkit." }),
     ],
-    group_interest: false,
     ...over,
   };
 }

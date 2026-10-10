@@ -263,7 +263,7 @@ class Publication(_Meta):
     citation: str | None = None
 
 
-# ---- settings, files, group interest -----------------------------------------
+# ---- settings and files ------------------------------------------------------
 
 DEFAULT_HERO_TITLE = "Learn, publish and work together"
 DEFAULT_HERO_INTRO = (
@@ -309,16 +309,8 @@ class CommunityFile(BaseModel):
     uploaded_at: datetime
 
 
-class GroupInterest(BaseModel):
-    user_id: str
-    email: str | None = None
-    created_at: datetime
-
-
 class CommunityPage(BaseModel):
     settings: CommunitySettings
     workshops: list[WorkshopCard]
     tutorials: list[TutorialCard]
     publications: list[Publication]
-    #: Whether the signed-in visitor asked to hear when groups open.
-    group_interest: bool

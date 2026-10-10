@@ -26,7 +26,6 @@ describe("withDefaults", () => {
     expect(page.workshops).toEqual([]);
     expect(page.tutorials).toEqual([]);
     expect(page.publications).toEqual([]);
-    expect(page.group_interest).toBe(false);
   });
 
   it("keeps an admin's words, including turning groups off and clearing the intro", () => {
@@ -40,24 +39,21 @@ describe("withDefaults", () => {
         updated_at: "2026-10-01T00:00:00Z",
         updated_by: "u1",
       },
-      group_interest: true,
     });
     expect(page.settings.hero_title).toBe("Our community");
     expect(page.settings.hero_intro).toBe("");
     expect(page.settings.show_groups).toBe(false);
     expect(page.settings.groups_title).toBe("Discussion groups");
     expect(page.settings.groups_intro).toBe("Soon.");
-    expect(page.group_interest).toBe(true);
   });
 });
 
 describe("fetchCommunityPage", () => {
   it("reads /community anonymously", async () => {
-    get.mockResolvedValue({ data: { settings: DEFAULT_COMMUNITY_SETTINGS, workshops: [], tutorials: [], publications: [], group_interest: true } });
-    const page = await fetchCommunityPage();
+    get.mockResolvedValue({ data: { settings: DEFAULT_COMMUNITY_SETTINGS, workshops: [], tutorials: [], publications: [] } });
+    await fetchCommunityPage();
     expect(getApiClient).toHaveBeenCalledWith({ allowAnonymous: true });
     expect(get).toHaveBeenCalledWith("/api/v1/community");
-    expect(page.group_interest).toBe(true);
   });
 
   it("lets a backend failure through, for the page to show its error box", async () => {

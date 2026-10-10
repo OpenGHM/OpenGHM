@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, CalendarDays, FileStack, Settings2, Users, Newspaper } from "lucide-react";
+import { BookOpen, CalendarDays, FileStack, Settings2, Newspaper } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -63,13 +63,11 @@ export function CommunityOverview({
   tutorials,
   publications,
   files,
-  interest,
 }: {
   workshops: SectionFigures;
   tutorials: SectionFigures;
   publications: SectionFigures;
   files: number | null;
-  interest: number | null;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -110,14 +108,6 @@ export function CommunityOverview({
         icon={FileStack}
         figures={{ total: files, drafts: 0 }}
         unit="files"
-      />
-      <SectionCard
-        href="/admin/community/interest"
-        title="Group interest"
-        description="People who asked to be told when discussion groups open."
-        icon={Users}
-        figures={{ total: interest, drafts: 0 }}
-        unit="people"
       />
     </div>
   );

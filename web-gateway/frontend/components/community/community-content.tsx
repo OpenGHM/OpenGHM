@@ -56,13 +56,11 @@ export function CommunityContent({
   page,
   tab,
   failed = false,
-  signedIn,
   here,
 }: {
   page: CommunityPage;
   tab: CommunityTab;
   failed?: boolean;
-  signedIn: boolean;
   here: string;
 }) {
   const show = communityLayout(page, tab, failed);
@@ -95,12 +93,7 @@ export function CommunityContent({
           <EmptySection title="Publications">No publications are listed yet.</EmptySection>
         ))}
       {show.groups && (
-        <GroupsSection
-          settings={page.settings}
-          signedIn={signedIn}
-          interested={page.group_interest}
-          here={here}
-        />
+        <GroupsSection settings={page.settings} />
       )}
     </>
   );

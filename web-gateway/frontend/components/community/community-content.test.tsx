@@ -1,8 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
-
-vi.mock("@/lib/community/actions", () => ({ setGroupInterest: vi.fn() }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 import { CommunityContent, communityLayout } from "./community-content";
 import { communityPage } from "./community.fixtures";
@@ -11,7 +8,7 @@ import { DEFAULT_COMMUNITY_SETTINGS } from "@/lib/community/settings";
 afterEach(cleanup);
 
 const render_ = (over: Partial<Parameters<typeof CommunityContent>[0]> = {}) =>
-  render(<CommunityContent page={communityPage()} tab="all" signedIn={false} here="/community" {...over} />);
+  render(<CommunityContent page={communityPage()} tab="all" here="/community" {...over} />);
 
 const headings = () => screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
 
@@ -90,26 +87,10 @@ describe("the groups band", () => {
     const preview = container.querySelector("[aria-hidden='true'][inert]");
     expect(preview).not.toBeNull();
     expect(preview?.textContent).toContain("WBM CONUS");
-    // The only control that is not inside the illustration is the notify link.
-    const outside = screen
-      .getAllByRole("link")
-      .filter((el) => !preview?.contains(el));
-    expect(outside.map((a) => a.textContent)).toEqual(["Notify me when groups open"]);
+    // Nothing outside the illustration can be pressed or typed into.
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
-  });
-
-  it("links a signed-out visitor to sign in and back", () => {
-    render_({ tab: "groups", here: "/community?tab=groups" });
-    expect(screen.getByRole("link", { name: "Notify me when groups open" }).getAttribute("href")).toBe(
-      "/auth/signin?callbackUrl=%2Fcommunity%3Ftab%3Dgroups",
-    );
-    expect(screen.getByText("You will be asked to sign in.")).toBeTruthy();
-  });
-
-  it("shows a signed-in visitor a button, already confirmed when they asked before", () => {
-    render_({ tab: "groups", signedIn: true, page: communityPage({ group_interest: true }) });
-    expect(screen.getByRole("button", { name: "We will email you ✓" })).toBeTruthy();
-    expect(screen.queryByText("You will be asked to sign in.")).toBeNull();
   });
 });
 

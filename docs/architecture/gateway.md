@@ -115,7 +115,6 @@ that file is the schema, in the sense that nothing else declares one.
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 | `community_workshops`, `community_tutorials`, `community_publications` | the Community page's items; `slug` is unique on the first two ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
 | `community_settings` | one document, `_id: "community"`: the page's hero and groups text |
-| `community_group_interest` | one document per signed-in user who asked to hear when discussion groups open; `_id` is the user id |
 | GridFS bucket `community_files` | files an admin uploads for the Community page: collections `community_files.files` and `community_files.chunks` |
 
 Each `datasets` document is an **envelope**
@@ -467,19 +466,17 @@ one module; what content may contain is checked in
 handled in `web-gateway/backend/app/services/community_files.py`.
 
 **Public**, anonymous, under `/api/v1/community`: `GET /` (published settings,
-workshop cards, tutorial cards and publications in one response, plus
-`group_interest` for a signed-in caller; a missing or bad token only means
-`false`), `GET /workshops/{slug}`, `GET /tutorials/{slug}` (published only, else
-404), `GET /files/{file_id}` (streams the bytes: `Cache-Control: public,
+workshop cards, tutorial cards and publications in one response),
+`GET /workshops/{slug}`, `GET /tutorials/{slug}` (published only, else 404) and
+`GET /files/{file_id}` (streams the bytes: `Cache-Control: public,
 max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `inline` for
-images and PDFs and `attachment` for the rest), and `POST` / `DELETE
-/group-interest` (any signed-in, active account, a guest included; `204`).
+images and PDFs and `attachment` for the rest).
 
 **Admin**, under `/api/v1/admin/community`, all needing `content:manage`, which
 only the `admin` role holds: `GET`, `POST`, `GET|PUT|DELETE /{id}` for
 `workshops`, `tutorials` and `publications`; `POST /tutorials/reorder`;
 `GET|PUT /settings`; `POST` (multipart field `file`), `GET` and `DELETE /{id}`
-on `/files`; `GET /group-interest`. A slug already in use is `409 slug_taken`.
+on `/files`. A slug already in use is `409 slug_taken`.
 Every write is an audit event in the `content` category, `community.<kind>.create`,
 `.update` or `.delete`, `community.tutorial.reorder`, `community.settings.update`,
 `community.file.upload` and `community.file.delete`, with the item's id as its

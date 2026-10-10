@@ -2,14 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { communityPage } from "@/components/community/community.fixtures";
 
-const { auth, fetchCommunityPage } = vi.hoisted(() => ({ auth: vi.fn(), fetchCommunityPage: vi.fn() }));
-vi.mock("@/lib/auth", () => ({ auth }));
+const { fetchCommunityPage } = vi.hoisted(() => ({ fetchCommunityPage: vi.fn() }));
+// lib/community/data reaches next-auth through the API client; the page itself no longer reads the session.
+vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/community/data", async () => ({
   ...(await vi.importActual<typeof import("@/lib/community/data")>("@/lib/community/data")),
   fetchCommunityPage,
 }));
-vi.mock("@/lib/community/actions", () => ({ setGroupInterest: vi.fn() }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 // The Header reads the session through next-auth/react; the page test is about the page.
 vi.mock("@/components/landing/header", () => ({ Header: () => <header data-testid="header" /> }));
 vi.mock("@/components/landing/footer", () => ({ Footer: () => <footer data-testid="footer" /> }));
@@ -18,7 +17,6 @@ import CommunityPage from "./page";
 import { DEFAULT_COMMUNITY_SETTINGS } from "@/lib/community/settings";
 
 beforeEach(() => {
-  auth.mockResolvedValue(null);
   fetchCommunityPage.mockResolvedValue(communityPage());
 });
 afterEach(() => {
@@ -62,24 +60,6 @@ describe("the Community page", () => {
     await renderPage({ tab: "groups" });
     expect(screen.getByRole("link", { name: "All" }).getAttribute("aria-current")).toBe("page");
     expect(screen.queryByRole("link", { name: "Groups" })).toBeNull();
-  });
-
-  it("sends a signed-out visitor to sign in and back to this very tab", async () => {
-    await renderPage({ tab: "groups" });
-    expect(screen.getByRole("link", { name: "Notify me when groups open" }).getAttribute("href")).toBe(
-      "/auth/signin?callbackUrl=%2Fcommunity%3Ftab%3Dgroups",
-    );
-  });
-
-  it("gives a signed-in visitor the button, and an expired session counts as signed out", async () => {
-    auth.mockResolvedValue({ user: { id: "u1" } });
-    fetchCommunityPage.mockResolvedValue(communityPage({ group_interest: true }));
-    await renderPage({ tab: "groups" });
-    expect(screen.getByRole("button", { name: "We will email you ✓" })).toBeTruthy();
-    cleanup();
-    auth.mockResolvedValue({ user: { id: "u1" }, error: "RefreshAccessTokenError" });
-    await renderPage({ tab: "groups" });
-    expect(screen.getByRole("link", { name: "Notify me when groups open" })).toBeTruthy();
   });
 
   it("still opens, on the default heading, with an error box when the backend is down", async () => {

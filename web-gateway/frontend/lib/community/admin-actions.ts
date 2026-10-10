@@ -8,7 +8,6 @@ import type {
   CommunityFile,
   CommunitySettings,
   CommunitySettingsInput,
-  GroupInterest,
   Publication,
   PublicationInput,
   Tutorial,
@@ -130,7 +129,7 @@ export async function deletePublication(id: string): Promise<ActionResult<null>>
   return write<null>("delete", `/publications/${encodeURIComponent(id)}`);
 }
 
-// ─── Page settings, files, group interest ────────────────────────────────────
+// ─── Page settings and files ─────────────────────────────────────────────────
 
 export async function fetchAdminSettings(): Promise<ActionResult<CommunitySettings>> {
   return read<CommunitySettings>("/settings");
@@ -146,8 +145,4 @@ export async function fetchCommunityFiles(): Promise<ActionResult<CommunityFile[
 
 export async function deleteCommunityFile(id: string): Promise<ActionResult<null>> {
   return write<null>("delete", `/files/${encodeURIComponent(id)}`);
-}
-
-export async function fetchGroupInterest(): Promise<ActionResult<GroupInterest[]>> {
-  return read<GroupInterest[]>("/group-interest");
 }

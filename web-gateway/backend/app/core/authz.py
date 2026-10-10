@@ -127,16 +127,6 @@ async def require_active_user(user: CurrentUser) -> TokenPayload:
     return user.model_copy(update={"role": role})
 
 
-async def require_active_account(user: CurrentUser) -> TokenPayload:
-    """Gate for what any signed-in person may do, a guest included: the user's
-    document exists and is active. No permission check; the role in the
-    returned caller is the database's. Refusals are 403 with `detail =
-    {"code", "message"}` (see `_refuse`).
-    """
-    _, role = await _load_account(user)
-    return user.model_copy(update={"role": role})
-
-
 async def require_submitter(user: CurrentUser) -> TokenPayload:
     """Gate for submitting a job: everything ADR 0024 asks, read from the
     database at call time, never from token claims.

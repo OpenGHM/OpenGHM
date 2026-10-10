@@ -3,7 +3,6 @@ import { CommunityContent, communityLayout } from "@/components/community/commun
 import { CommunityTabs } from "@/components/community/community-tabs";
 import { Footer } from "@/components/landing/footer";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
-import { auth } from "@/lib/auth";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { fetchCommunityPage, withDefaults } from "@/lib/community/data";
 import { DEFAULT_COMMUNITY_SETTINGS } from "@/lib/community/settings";
@@ -37,8 +36,6 @@ export default async function CommunityPage({
 
   const tab = parseTab(params.tab, settings.show_groups);
   const here = pathWithQuery("/community", params);
-  const session = await auth();
-  const signedIn = Boolean(session?.user) && !session?.error;
   const overlap = communityLayout(data, tab, failed).startsWithCard;
 
   return (
@@ -53,7 +50,7 @@ export default async function CommunityPage({
         <CommunityTabs active={tab} showGroups={settings.show_groups} />
       </PageHero>
       <PageBody overlap={overlap} className="flex flex-1 flex-col gap-16">
-        <CommunityContent page={data} tab={tab} failed={failed} signedIn={signedIn} here={here} />
+        <CommunityContent page={data} tab={tab} failed={failed} here={here} />
       </PageBody>
       <Footer />
     </div>

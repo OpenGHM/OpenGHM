@@ -6,7 +6,6 @@ import {
   fetchAdminTutorials,
   fetchAdminWorkshops,
   fetchCommunityFiles,
-  fetchGroupInterest,
 } from "@/lib/community/admin-actions";
 import { settle, type Loaded } from "@/lib/community/admin-load";
 
@@ -20,19 +19,17 @@ function figures(result: Loaded<{ state: string }[]>): SectionFigures {
 }
 
 export default async function CommunityAdminOverviewPage() {
-  const [workshops, tutorials, publications, files, interest] = await Promise.all([
+  const [workshops, tutorials, publications, files] = await Promise.all([
     fetchAdminWorkshops(),
     fetchAdminTutorials(),
     fetchAdminPublications(),
     fetchCommunityFiles(),
-    fetchGroupInterest(),
   ]);
   const loaded = {
     workshops: settle(workshops, HERE),
     tutorials: settle(tutorials, HERE),
     publications: settle(publications, HERE),
     files: settle(files, HERE),
-    interest: settle(interest, HERE),
   };
   const failed = Object.values(loaded).some((r) => !r.ok);
 
@@ -46,7 +43,6 @@ export default async function CommunityAdminOverviewPage() {
         tutorials={figures(loaded.tutorials)}
         publications={figures(loaded.publications)}
         files={loaded.files.ok ? loaded.files.data.length : null}
-        interest={loaded.interest.ok ? loaded.interest.data.length : null}
       />
     </CommunityAdminPage>
   );

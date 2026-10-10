@@ -5,10 +5,8 @@ import type { CommunityPage, Tutorial, Workshop } from "@/lib/community/types";
 
 /**
  * Reads of the public Community content, for the server components of
- * `/community`. They are open to anonymous visitors; a signed-in visitor's
- * token rides along only so `/community` can say whether they asked to hear
- * when groups open. Not a server-action module: nothing here is callable from
- * the browser.
+ * `/community`. They are open to anonymous visitors. Not a server-action
+ * module: nothing here is callable from the browser.
  */
 
 /** A slug the backend could hold: anything else is a 404 without asking. */
@@ -33,7 +31,6 @@ export function withDefaults(data: Partial<CommunityPage> | null | undefined): C
     workshops: data?.workshops ?? [],
     tutorials: data?.tutorials ?? [],
     publications: data?.publications ?? [],
-    group_interest: data?.group_interest === true,
   };
 }
 

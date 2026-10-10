@@ -33,10 +33,10 @@ and the files they carry (cover photos, slides, notebooks).
 **Content is in MongoDB, files are in a GridFS bucket in the same database, and
 rich text is whitelisted ProseMirror JSON that is rendered without raw HTML.**
 
-- **Items.** Five collections: `community_workshops`, `community_tutorials`,
-  `community_publications`, `community_settings` (one document) and
-  `community_group_interest`. Each item has a `state` of `draft` or
-  `published`; the public routes return published items only.
+- **Items.** Four collections: `community_workshops`, `community_tutorials`,
+  `community_publications` and `community_settings` (one document). Each item
+  has a `state` of `draft` or `published`; the public routes return published
+  items only.
 - **Files.** A GridFS bucket named `community_files`, through motor's
   `AsyncIOMotorGridFSBucket`. Not Anvil S3, for the reason above, and not
   `snapshots/`, `raw_data/` or any other published prefix: these are editable

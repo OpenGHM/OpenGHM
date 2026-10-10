@@ -11,12 +11,11 @@ export const COMMUNITY_SECTIONS: { href: string; label: string; exact?: boolean 
   { href: "/admin/community/publications", label: "Publications" },
   { href: "/admin/community/settings", label: "Page settings" },
   { href: "/admin/community/files", label: "Files" },
-  { href: "/admin/community/interest", label: "Group interest" },
 ];
 
 /**
  * The sections of the Community admin as a row of pills, in the language of the
- * audit log's category tabs. The row scrolls inside its own strip, so seven
+ * audit log's category tabs. The row scrolls inside its own strip, so six
  * items fit a phone without the page scrolling sideways.
  */
 export function CommunitySubNav() {

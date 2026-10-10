@@ -2,8 +2,7 @@
 (ADR 0034).
 
 Two routers in one module. `router` (`/community`) is anonymous: published
-content, uploaded files, and the one thing that asks who is calling, "did I
-ask to hear when discussion groups open". `admin_router` (`/admin/community`)
+content and uploaded files. `admin_router` (`/admin/community`)
 needs `content:manage` (admin only) and audit-logs every write under the
 `content` category, with the item's id as the target.
 """
@@ -19,16 +18,14 @@ from fastapi.responses import StreamingResponse
 from pymongo.errors import DuplicateKeyError
 
 from app.core.audit import AuditCategory, log_event
-from app.core.authz import require_active_account, require_permission
+from app.core.authz import require_permission
 from app.core.database import get_db
 from app.core.roles import Permission
-from app.core.security import get_optional_user
 from app.models.community import (
     CommunityFile,
     CommunityPage,
     CommunitySettings,
     CommunitySettingsInput,
-    GroupInterest,
     Publication,
     PublicationInput,
     ReorderRequest,
@@ -49,7 +46,6 @@ WORKSHOPS = "community_workshops"
 TUTORIALS = "community_tutorials"
 PUBLICATIONS = "community_publications"
 SETTINGS = "community_settings"
-GROUP_INTEREST = "community_group_interest"
 SETTINGS_ID = "community"
 
 _content_manager = require_permission(Permission.CONTENT_MANAGE)
@@ -126,12 +122,11 @@ async def _audit(user: TokenPayload, action: str, target_id: str | None, **detai
 
 
 @router.get("", response_model=CommunityPage)
-async def get_community(user: TokenPayload | None = Depends(get_optional_user)):
+async def get_community():
     """Everything the page shows: published items only, bodies left out.
 
     Workshops come upcoming first (soonest first), then past (latest first);
-    the client splits them by `status`. The one thing it asks of the caller is
-    `group_interest`, and a missing or bad token only means false.
+    the client splits them by `status`.
     """
     db = get_db()
     no_body = {"body": 0}
@@ -152,16 +147,11 @@ async def get_community(user: TokenPayload | None = Depends(get_optional_user)):
     )
     publications.sort(key=lambda p: p.year, reverse=True)
 
-    interested = False
-    if user is not None:
-        interested = await db[GROUP_INTEREST].find_one({"_id": user.sub}) is not None
-
     return CommunityPage(
         settings=_settings(await db[SETTINGS].find_one({"_id": SETTINGS_ID})),
         workshops=upcoming + past,
         tutorials=[_tutorial_card(d) for d in tutorial_docs],
         publications=publications,
-        group_interest=interested,
     )
 
 
@@ -202,25 +192,6 @@ async def download_file(file_id: str):
             "X-Content-Type-Options": "nosniff",
         },
     )
-
-
-@router.post("/group-interest", status_code=204)
-async def add_group_interest(user: TokenPayload = Depends(require_active_account)):
-    """Ask to be told when discussion groups open. Idempotent."""
-    doc = await get_db().users.find_one({"_id": user.sub})
-    try:
-        await get_db()[GROUP_INTEREST].insert_one(
-            {"_id": user.sub, "email": (doc or {}).get("email"), "created_at": _now()}
-        )
-    except DuplicateKeyError:
-        pass
-    return Response(status_code=204)
-
-
-@router.delete("/group-interest", status_code=204)
-async def remove_group_interest(user: TokenPayload = Depends(require_active_account)):
-    await get_db()[GROUP_INTEREST].delete_one({"_id": user.sub})
-    return Response(status_code=204)
 
 
 # ---- admin: workshops and tutorials (both have a unique slug) ----------------
@@ -518,15 +489,3 @@ async def delete_file(file_id: str, user: TokenPayload = Depends(_content_manage
     await community_files.delete_file(file_id)
     await _audit(user, "community.file.delete", file_id, filename=info["filename"])
     return Response(status_code=204)
-
-
-# ---- admin: who asked to hear about groups ---------------------------------------
-
-
-@admin_router.get("/group-interest", response_model=list[GroupInterest])
-async def list_group_interest(_user: TokenPayload = Depends(_content_manager)):
-    docs = await get_db()[GROUP_INTEREST].find({}).sort("created_at", -1).to_list(None)
-    return [
-        GroupInterest(user_id=d["_id"], email=d.get("email"), created_at=d["created_at"])
-        for d in docs
-    ]
