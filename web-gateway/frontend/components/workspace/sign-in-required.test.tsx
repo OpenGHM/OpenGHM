@@ -40,9 +40,9 @@ describe("SignInRequired, signed out", () => {
     expect(href("Sign in")).toBe("/auth/signin?callbackUrl=%2Fworkspace%3Fstatus%3DFAILED%26page%3D2");
   });
 
-  it("links Create an account to the register page, which takes no callback", () => {
+  it("offers no account creation", () => {
     render(<SignInRequired reason="none" here="/workspace/new" />);
-    expect(href("Create an account")).toBe("/auth/register");
+    expect(screen.queryByRole("link", { name: "Create an account" })).toBeNull();
   });
 
   it("offers the Data Repository, which needs no account", () => {

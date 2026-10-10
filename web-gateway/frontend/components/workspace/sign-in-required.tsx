@@ -28,9 +28,8 @@ const COPY: Record<SignedOutReason, { title: string; body: string }> = {
  *
  * `here` is the page's own path with its query (`pathWithQuery()` in
  * lib/auth-redirect.ts), so signing in returns the visitor to the same page.
- * The register page takes no callback, so "Create an account" does not carry
- * one. "Browse the Data Repository" is offered only to a visitor who never
- * signed in; the repository needs no account.
+ * "Browse the Data Repository" is offered only to a visitor who never signed
+ * in; the repository needs no account.
  */
 export function SignInRequired({ reason, here }: { reason: SignedOutReason; here: string }) {
   const { title, body } = COPY[reason];
@@ -51,16 +50,9 @@ export function SignInRequired({ reason, here }: { reason: SignedOutReason; here
               {title}
             </h2>
             <p className="max-w-md text-sm text-muted-foreground text-pretty">{body}</p>
-            <div className="mt-2 flex flex-col items-center justify-center gap-2 sm:flex-row">
-              <Button asChild size="lg">
-                <Link href={signInPath(here)}>{signedOutBefore ? "Sign in again" : "Sign in"}</Link>
-              </Button>
-              {!signedOutBefore && (
-                <Button asChild size="lg" variant="outline">
-                  <Link href="/auth/register">Create an account</Link>
-                </Button>
-              )}
-            </div>
+            <Button asChild size="lg" className="mt-2">
+              <Link href={signInPath(here)}>{signedOutBefore ? "Sign in again" : "Sign in"}</Link>
+            </Button>
             {!signedOutBefore && (
               <Button asChild variant="link" size="sm" className="min-h-10 text-muted-foreground">
                 <Link href="/repository">Browse the Data Repository</Link>
