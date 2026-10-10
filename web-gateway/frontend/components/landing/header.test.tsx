@@ -67,6 +67,7 @@ describe("the header's phone menu", () => {
       "Home", "Data Repository", "Workspace", "Models", "Toolkit", "Community", "About", "Sign In",
     ]);
     expect(menu.getByRole("menuitem", { name: "Workspace" }).getAttribute("href")).toBe("/workspace");
+    expect(menu.getByRole("menuitem", { name: "Community" }).getAttribute("href")).toBe("/community");
     expect(menu.getByRole("menuitem", { name: "Sign In" }).getAttribute("href")).toBe("/auth/signin");
     expect(menu.getByText("Resources")).toBeTruthy();
   });
@@ -117,6 +118,9 @@ describe("the header's current-page highlight", () => {
     ["/workspace/data", "Workspace"],
     ["/", "Home"],
     ["/about", "About"],
+    ["/community", "Community"],
+    ["/community/workshops/first-workshop", "Community"],
+    ["/community/tutorials/run-your-first-snapshot", "Community"],
   ])("lights only the right tab on %s", (path, label) => {
     usePathname.mockReturnValue(path);
     useSession.mockReturnValue({ data: null });
@@ -128,6 +132,15 @@ describe("the header's current-page highlight", () => {
     usePathname.mockReturnValue("/dashboard/profile");
     useSession.mockReturnValue({ data: null });
     render(<Header />);
+    expect(current()).toEqual([]);
+  });
+
+  it("points Community at /community, and does not light it for /communityx", () => {
+    usePathname.mockReturnValue("/communityx");
+    useSession.mockReturnValue({ data: null });
+    render(<Header />);
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    expect(nav.getByRole("link", { name: "Community" }).getAttribute("href")).toBe("/community");
     expect(current()).toEqual([]);
   });
 

@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Cpu, ScrollText, ServerCog } from "lucide-react";
+import { LayoutDashboard, Users, Cpu, ScrollText, ServerCog, Newspaper } from "lucide-react";
 import type { UserRole } from "@/lib/auth.types";
 
 interface NavItem {
@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Cpu },
+  { href: "/admin/community", label: "Community", icon: Newspaper, adminOnly: true },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText },
   { href: "/admin/system", label: "System", icon: ServerCog, adminOnly: true },
 ];
@@ -35,7 +36,7 @@ export function AdminRoleProvider({ role, children }: { role: UserRole; children
 
 /**
  * The admin sections as a pill row for the navy band, in the header's pill
- * language. It scrolls inside its own strip, never the page, so five items
+ * language. It scrolls inside its own strip, never the page, so six items
  * fit a phone.
  */
 export function AdminNav() {

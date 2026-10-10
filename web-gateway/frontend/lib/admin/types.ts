@@ -22,7 +22,7 @@ export interface UserListResponse {
 }
 
 /** Mirrors web-gateway/backend/app/core/audit.py:AuditCategory. */
-export type AuditCategory = "auth" | "job" | "system";
+export type AuditCategory = "auth" | "job" | "system" | "content";
 
 export interface AuditLogEntry {
   id: string;

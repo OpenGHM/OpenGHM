@@ -46,6 +46,8 @@ class Permission(StrEnum):
     # system
     SYSTEM_VIEW = "system:view"  # read-only infra/health/config surface
     SYSTEM_MANAGE = "system:manage"  # changes shared system state (clearing the Anvil spool cache)
+    # site content
+    CONTENT_MANAGE = "content:manage"  # write the Community page: workshops, tutorials, publications, files
 
 
 _GUEST: frozenset[Permission] = frozenset({Permission.REPO_VIEW})
@@ -70,6 +72,7 @@ _ADMIN: frozenset[Permission] = _STAFF | {
     Permission.REPO_MANAGE,
     Permission.SYSTEM_VIEW,
     Permission.SYSTEM_MANAGE,
+    Permission.CONTENT_MANAGE,
 }
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {

@@ -1,6 +1,6 @@
 """Audit logging for events an admin would want to review after the fact.
 
-Three categories, kept separately queryable because they have very different
+Four categories, kept separately queryable because they have very different
 volumes and audiences:
 
 - "auth": logins, registrations, password resets, role/status changes.
@@ -9,6 +9,8 @@ volumes and audiences:
   Higher volume (a few events per job), operational rather than security.
 - "system": an admin changing shared infrastructure state (clearing the
   Anvil spool cache). Rare, written once per action.
+- "content": an admin writing the Community page's content (workshops,
+  tutorials, publications, settings, uploaded files). Rare, one event per write.
 
 The job events are recorded only at genuine state *transitions* — never on
 a status poll. app.services.slurm.update_job_status runs on every
@@ -37,6 +39,7 @@ class AuditCategory(StrEnum):
     AUTH = "auth"
     JOB = "job"
     SYSTEM = "system"
+    CONTENT = "content"
 
 
 async def log_event(

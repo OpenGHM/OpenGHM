@@ -33,7 +33,7 @@ const NAV_ITEMS_BEFORE = [
 ];
 
 const NAV_ITEMS_AFTER = [
-  { label: "Community", href: "#" },
+  { label: "Community", href: "/community" },
   { label: "About", href: "/about" },
 ];
 

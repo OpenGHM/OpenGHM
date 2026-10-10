@@ -85,9 +85,10 @@ expects are deliberately absent, and §6 says which.
 
 | Layer | What is actually there |
 |---|---|
-| Frontend | Next.js 16.1.6, React 19.2.3, App Router |
+| Frontend | Next.js 16.3.8, React 19.2.3, App Router |
 | UI | Tailwind CSS 4, shadcn/ui on radix-ui, `sonner` toasts, `next-themes` |
 | Client state | Zustand |
+| Rich text | Tiptap 3 (`@tiptap/react`, StarterKit, Image, Placeholder), in the admin CMS only; the public pages render its JSON with their own components ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
 | Maps and charts | Leaflet + react-leaflet for bounding boxes. **No chart library** — `web-gateway/frontend/components/charts/` holds two hand-written components that render on the server with zero client JS |
 | Frontend auth | NextAuth v5 (Auth.js) |
 | Frontend → backend | axios, server-side only |
@@ -99,10 +100,9 @@ expects are deliberately absent, and §6 says which.
 
 ## 4. Where state lives
 
-One MongoDB database, `openghm`. Seven collections, and every index on them is
-created at startup in `web-gateway/backend/main.py` — that file is the
-schema, in the sense
-that nothing else declares one.
+One MongoDB database, `openghm`. Twelve collections and one GridFS bucket, and
+every index on them is created at startup in `web-gateway/backend/main.py` —
+that file is the schema, in the sense that nothing else declares one.
 
 | Collection | Holds |
 |---|---|
@@ -110,9 +110,13 @@ that nothing else declares one.
 | `jobs` | one document per **snapshot draft** — editing or submitted, including the SLURM ids once it runs |
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
 | `pending_sso_signups` | half-finished SSO sign-ups, 30-minute TTL |
-| `audit_events` | append-only, `auth` and `job` categories |
+| `audit_events` | append-only, `auth`, `job`, `system` and `content` categories |
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
+| `community_workshops`, `community_tutorials`, `community_publications` | the Community page's items; `slug` is unique on the first two ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
+| `community_settings` | one document, `_id: "community"`: the page's hero and groups text |
+| `community_group_interest` | one document per signed-in user who asked to hear when discussion groups open; `_id` is the user id |
+| GridFS bucket `community_files` | files an admin uploads for the Community page: collections `community_files.files` and `community_files.chunks` |
 
 Each `datasets` document is an **envelope**
 (mission `2026-09-23-catalogue-envelope`):
@@ -451,6 +455,44 @@ to the definition is in the picker without a second edit
 `GET /repository/mine` (signed in) is the one catalogue read that needs a
 session: the same two item shapes, with `kind`, for what the caller owns, plus
 each item's `visibility` and `registeredAt`. No paging, no facets.
+
+### The Community page
+
+Everything on `/community` and its detail pages except the labels is written by
+admins in `/admin/community` and stored in the gateway's own database, in the
+collections above ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)).
+The routes are in `web-gateway/backend/app/api/v1/community.py`, two routers in
+one module; what content may contain is checked in
+`web-gateway/backend/app/services/community_content.py`, and uploads are
+handled in `web-gateway/backend/app/services/community_files.py`.
+
+**Public**, anonymous, under `/api/v1/community`: `GET /` (published settings,
+workshop cards, tutorial cards and publications in one response, plus
+`group_interest` for a signed-in caller; a missing or bad token only means
+`false`), `GET /workshops/{slug}`, `GET /tutorials/{slug}` (published only, else
+404), `GET /files/{file_id}` (streams the bytes: `Cache-Control: public,
+max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `inline` for
+images and PDFs and `attachment` for the rest), and `POST` / `DELETE
+/group-interest` (any signed-in, active account, a guest included; `204`).
+
+**Admin**, under `/api/v1/admin/community`, all needing `content:manage`, which
+only the `admin` role holds: `GET`, `POST`, `GET|PUT|DELETE /{id}` for
+`workshops`, `tutorials` and `publications`; `POST /tutorials/reorder`;
+`GET|PUT /settings`; `POST` (multipart field `file`), `GET` and `DELETE /{id}`
+on `/files`; `GET /group-interest`. A slug already in use is `409 slug_taken`.
+Every write is an audit event in the `content` category, `community.<kind>.create`,
+`.update` or `.delete`, `community.tutorial.reorder`, `community.settings.update`,
+`community.file.upload` and `community.file.delete`, with the item's id as its
+target.
+
+A workshop's `status` (`upcoming` or `past`) is derived at read time: past once
+its last day, `end_date` or else `date`, is before today in UTC. Rich text is
+stored as ProseMirror JSON limited to a whitelist of nodes and marks, with links
+and image addresses checked on write, at most 512 KiB; the frontend draws it
+with its own renderer and never sets raw HTML. An upload is at most 25 MiB, read
+as it arrives, and its extension, declared type and first bytes must agree; SVG
+is not accepted. A file is addressed `/api/community/files/<24-hex id>`, the
+Next.js route that proxies the backend.
 
 ## 5. The two paths that leave the cluster
 
@@ -1066,7 +1108,9 @@ success and failure, registration, password reset, role and status changes, SSO
 account creation and linking), `job` is operational (a snapshot draft created as
 `simulation_derived` or `simulation_duplicated` (the event ids keep the old word), submission, cancellation, SLURM
 transitions, deletion), `system` is an admin changing shared infrastructure
-(`spool_cache_cleared`, with the counts; a dry run writes nothing).
+(`spool_cache_cleared`, with the counts; a dry run writes nothing), `content` is
+an admin writing the Community page (`community.workshop.create`, the other
+`community.*` actions, listed in §4).
 
 Job-status events are written **only at genuine transitions**. The sweep runs
 on every background tick and every status-page load, so the audit call lives

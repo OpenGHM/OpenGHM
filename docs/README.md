@@ -131,6 +131,7 @@ and 0012 were folded into 0010.
 | [0031](decisions/0031-a-snapshot-draft-is-published-by-a-job.md) | A snapshot draft is published by a job on Anvil, under an id the gateway minted first | accepted |
 | [0032](decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md) | WBM code is published under `wbm-code/` and pinned by its tree hash | accepted |
 | [0033](decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md) | WBM output is read on Anvil by the toolkit, and the gateway asks for subsets | accepted |
+| [0034](decisions/0034-community-content-lives-in-the-gateway-database.md) | Community-page content lives in the gateway's database, and its files in GridFS | accepted |
 
 ## Missions
 

@@ -3,7 +3,7 @@ touch, plus document and token builders for route-level tests.
 
 The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`
 (a second document with the same `_id` raises `DuplicateKeyError`),
-`update_one` (`$set`, `$unset`, `$addToSet`, `$pull`), `delete_one`,
+`update_one` (`$set`, `$unset`, `$addToSet`, `$pull`; `upsert=True` creates the document from the query's equalities and the `$set`), `delete_one`,
 `count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching,
 on a dotted path (`publish.state`) as well as a plain key. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
@@ -157,7 +157,7 @@ class FakeCollection:
             raise DuplicateKeyError(f"E11000 duplicate key error: {{ _id: {doc['_id']!r} }}")
         self.docs[doc["_id"]] = bson_roundtrip(doc)
 
-    async def update_one(self, query: dict, update: dict):
+    async def update_one(self, query: dict, update: dict, upsert: bool = False):
         assert set(update) <= {"$set", "$unset", "$addToSet", "$pull"}, (
             "fake Mongo: only $set, $unset, $addToSet and $pull are supported"
         )
@@ -175,6 +175,11 @@ class FakeCollection:
                 for key, item in update.get("$pull", {}).items():
                     doc[key] = [i for i in doc.get(key, []) if i != bson_roundtrip(item)]
                 return type("R", (), {"matched_count": 1})()
+        if upsert:
+            doc: dict = {k: v for k, v in query.items() if not isinstance(v, dict)}
+            for key, value in update.get("$set", {}).items():
+                _assign(doc, key, bson_roundtrip(value))
+            self.docs[doc["_id"]] = doc
         return type("R", (), {"matched_count": 0})()
 
     async def delete_one(self, query: dict):

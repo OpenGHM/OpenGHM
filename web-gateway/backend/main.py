@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import admin as admin_router
 from app.api.v1 import auth as auth_router
+from app.api.v1 import community as community_router
 from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
 from app.api.v1 import users as users_router
@@ -143,6 +144,14 @@ async def lifespan(app: FastAPI):
     # Registrations-per-day time series.
     await db.users.create_index([("created_at", -1)])
 
+    # The Community page's content (ADR 0034). A workshop and a tutorial are
+    # found by slug on the public detail pages, and the slug must be unique;
+    # tutorials are listed in their manual order; publications by year then title.
+    await db.community_workshops.create_index("slug", unique=True)
+    await db.community_tutorials.create_index("slug", unique=True)
+    await db.community_tutorials.create_index("position")
+    await db.community_publications.create_index([("year", -1), ("title", 1)])
+
     # Startup: warm slurmly client (non-fatal — first job submission will retry)
     try:
         await get_slurm_client()
@@ -195,6 +204,8 @@ app.include_router(repository_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(wbm_output_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(community_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(community_router.admin_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

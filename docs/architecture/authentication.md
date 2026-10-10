@@ -26,14 +26,15 @@ permissions are their own enum in `web-gateway/backend/app/core/roles.py`:
 guest  repository:view
 user   + job:submit, job:view:own, job:cancel:own
 staff  + job:view:any, job:cancel:any, user:view:any
-admin  + user:manage, repository:manage, system:view, system:manage
+admin  + user:manage, repository:manage, system:view, system:manage, content:manage
 ```
 
 `ROLE_PERMISSIONS` is the whole policy, in one file, as frozensets. "Who can
 view any job" and "who can manage users" stay independent axes instead of an
 org-chart rank baked into every call site. `repository:manage` is defined and
 no endpoint uses it — the catalogue is seed data
-([gateway.md §4](gateway.md#4-where-state-lives)).
+([gateway.md §4](gateway.md#4-where-state-lives)). `content:manage` gates every
+write to the Community page (`/admin/community`).
 
 **Running a simulation needs more than a role**
 ([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every simulation spends

@@ -148,3 +148,27 @@ async def get_current_user(
         detail="Missing or invalid Authorization header",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+async def get_optional_user(
+    authorization: str | None = Header(default=None),
+) -> TokenPayload | None:
+    """The caller named by a valid Bearer JWT, or None. For public routes that
+    add one thing for a signed-in visitor (GET /community's `group_interest`).
+
+    A missing, malformed or expired token is just "nobody", never a 401, and
+    this never falls back to the X-Mock-Role identity: with ALLOW_MOCK_AUTH on,
+    `get_current_user` turns an anonymous request into the mock user, which would
+    give every anonymous visitor that account's answers.
+    """
+    if not (authorization and authorization.startswith("Bearer ")):
+        return None
+    try:
+        payload = jwt.decode(
+            authorization.split(" ", 1)[1],
+            settings.SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+        return TokenPayload(**payload)
+    except (JWTError, ValidationError):
+        return None

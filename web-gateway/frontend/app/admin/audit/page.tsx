@@ -15,13 +15,19 @@ export default async function AdminAuditPage({
 }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
-  const category = params.category === "auth" || params.category === "job" || params.category === "system" ? params.category : undefined;
+  const category =
+    params.category === "auth" ||
+    params.category === "job" ||
+    params.category === "system" ||
+    params.category === "content"
+      ? params.category
+      : undefined;
 
   const auditResult = await fetchAuditLog(page, category).catch(() => null);
   const auditLog = auditResult ?? EMPTY_AUDIT;
 
   return (
-    <AdminPage title="Audit log" description="Authentication and job activity across the site.">
+    <AdminPage title="Audit log" description="Authentication, job and content activity across the site.">
       <Card>
         <CardHeader>
           <CardTitle>{auditResult === null ? "Events" : `${auditLog.total_count} events`}</CardTitle>

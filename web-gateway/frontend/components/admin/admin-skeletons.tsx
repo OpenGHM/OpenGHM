@@ -6,7 +6,7 @@ import { AdminPage } from "@/components/admin/admin-page";
  * The band is shown at once with a bar where its title goes, so moving between
  * admin pages keeps the header and the nav in place; only the content waits.
  */
-function LoadingPage({ children }: { children: React.ReactNode }) {
+export function LoadingPage({ children }: { children: React.ReactNode }) {
   return (
     <AdminPage title={<Skeleton tone="hero" className="reveal-delayed h-[1em] w-48 max-w-full" />}>
       <div

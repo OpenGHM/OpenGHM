@@ -21,6 +21,9 @@ httpx==0.27.2
 # [async] extra pulls in httpx>=0.24.0, satisfied by the httpx pin above
 resend[async]==2.35.0
 
+# Reading the Community page's file uploads as multipart (app.services.community_files)
+python-multipart==0.0.20
+
 # HPC / Slurm — install from GitHub (local dev version, not published to PyPI)
 git+https://github.com/yirugi/slurmly.git@6c80af1125efc14c9eb5aec021edce0b69418b28
 
