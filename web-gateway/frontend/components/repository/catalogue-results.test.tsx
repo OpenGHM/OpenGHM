@@ -185,7 +185,7 @@ describe("CatalogueResults states", () => {
     expect(screen.getByText("Loading results")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Pagination" })).toBeNull();
-    expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
+    expect(container.querySelector("[data-slot=skeleton]")).not.toBeNull();
   });
 
   it("shows an empty card with Clear filters when filters leave nothing", () => {

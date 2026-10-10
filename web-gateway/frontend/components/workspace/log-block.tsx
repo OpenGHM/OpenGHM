@@ -166,7 +166,7 @@ export function LogSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading the log" className="reveal-delayed space-y-2.5 rounded-[14px] bg-hero p-4">
       {["w-4/5", "w-3/5", "w-11/12", "w-2/5", "w-3/4", "w-1/2"].map((w, i) => (
-        <Skeleton key={i} className={`h-3 ${w} animate-none bg-white/15 motion-safe:animate-pulse`} />
+        <Skeleton key={i} tone="hero" className={`h-3 ${w}`} />
       ))}
     </div>
   );

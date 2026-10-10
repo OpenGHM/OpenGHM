@@ -8,7 +8,7 @@ import { AdminPage } from "@/components/admin/admin-page";
  */
 function LoadingPage({ children }: { children: React.ReactNode }) {
   return (
-    <AdminPage title={<Skeleton className="reveal-delayed h-[1em] w-48 max-w-full bg-white/15" />}>
+    <AdminPage title={<Skeleton tone="hero" className="reveal-delayed h-[1em] w-48 max-w-full" />}>
       <div
         role="status"
         aria-busy="true"

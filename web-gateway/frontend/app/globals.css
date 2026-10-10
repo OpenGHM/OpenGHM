@@ -29,6 +29,7 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-skeleton: var(--skeleton);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -118,6 +119,11 @@
      not a brand colour: for emphasis use --primary. */
   --accent: #e6eff4;
   --accent-foreground: #10283a;
+  /* A skeleton bar and the light that sweeps across it; on the dark band the
+     bar is white/15 and the light is fainter (Skeleton tone="hero"). */
+  --skeleton: #e1e9ee;
+  --skeleton-shine: rgb(255 255 255 / 0.75);
+  --skeleton-shine-hero: rgb(255 255 255 / 0.14);
   --destructive: oklch(0.577 0.245 27.325);
   --border: #e3e7ea;
   /* The edge of a form field (Input, Textarea); a fill is bg-muted. */
@@ -221,6 +227,8 @@
   --muted-foreground: oklch(0.708 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
+  --skeleton: oklch(0.269 0 0);
+  --skeleton-shine: rgb(255 255 255 / 0.08);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -296,6 +304,47 @@
 
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 0s;
+  }
+}
+
+/* A skeleton's light sweep (components/ui/skeleton.tsx): a band of light
+   crosses each bar every 1.6 s, so a placeholder reads as working rather than
+   as content that failed to draw. It lives on ::after, which leaves the bar's
+   own `animation` free for reveal-delayed. Under reduced motion nothing
+   sweeps and the bar stays still. */
+@keyframes skeleton-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@utility skeleton-sweep {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--skeleton-shine),
+      transparent
+    );
+    animation: skeleton-sweep 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      animation: none;
+      opacity: 0;
+    }
   }
 }
 

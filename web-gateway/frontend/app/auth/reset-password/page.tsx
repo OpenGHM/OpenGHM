@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import { AuthFormSkeleton } from "@/components/auth/auth-loading";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -108,7 +109,7 @@ export default function ResetPasswordPage() {
       title="Set a new password"
       description="This will sign you out everywhere else — reset your password below and sign in again."
     >
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<AuthFormSkeleton />}>
         <ResetPasswordForm />
       </Suspense>
     </AuthShell>

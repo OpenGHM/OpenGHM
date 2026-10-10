@@ -380,7 +380,7 @@ describe("CatalogueCardSkeleton", () => {
       const { container } = render(<CatalogueCardSkeleton view={view} />);
       expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
       expect(container.querySelectorAll("a, button")).toHaveLength(0);
-      expect(container.querySelector(".motion-safe\\:animate-pulse")).not.toBeNull();
+      expect(container.querySelector("[data-slot=skeleton]")).not.toBeNull();
     }
   );
 });

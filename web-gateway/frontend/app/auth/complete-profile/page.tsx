@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import { AuthFormSkeleton } from "@/components/auth/auth-loading";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -126,7 +127,7 @@ export default function CompleteProfilePage() {
       title="One more step"
       description="Your identity provider didn't share an email address with us. We'll send a verification link to whatever you enter below."
     >
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<AuthFormSkeleton />}>
         <CompleteProfileForm />
       </Suspense>
     </AuthShell>

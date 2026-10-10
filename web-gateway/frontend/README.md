@@ -190,8 +190,11 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
 
 - **Loading:** a skeleton shaped like the content
   ([`components/ui/skeleton.tsx`](components/ui/skeleton.tsx)), through a
-  route's `loading.tsx` or a `<Suspense>` fallback. Spinners are only for a
-  button whose request is in flight.
+  route's `loading.tsx` or a `<Suspense>` fallback. A band of light sweeps
+  across every bar (`skeleton-sweep` in `globals.css`), so a placeholder
+  reads as working; on the dark band use `tone="hero"`. Spinners are for a
+  request in flight with nothing to shape: a button, or a page that only
+  checks a link.
 - **Empty:** a dashed card that says what is missing and what to do next.
 - **Error:** an inline box in `destructive` that says what failed and what to
   try, or the route's `error.tsx`.
@@ -280,7 +283,8 @@ Every UI change passes this list, on every screen and dialog it touches, at
 5. **Accessible:**
    - every control is reachable by keyboard, with a visible focus ring;
    - status changes are announced through `aria-live`;
-   - `prefers-reduced-motion` stops every pulse and spin (`motion-safe:`);
+   - `prefers-reduced-motion` stops every pulse, spin and sweep (`motion-safe:`,
+     and a media query in the `skeleton-sweep` utility);
    - contrast is at least AA.
 6. **Time is honest:** relative time has an absolute tooltip, and nothing
    renders differently on the server and the client.

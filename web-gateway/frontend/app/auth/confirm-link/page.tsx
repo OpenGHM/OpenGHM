@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import { AuthPending } from "@/components/auth/auth-loading";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
@@ -14,7 +15,7 @@ function ConfirmLinkBody() {
   );
 
   if (status === "pending") {
-    return <p className="text-sm text-muted-foreground">Confirming the link…</p>;
+    return <AuthPending>Confirming the link…</AuthPending>;
   }
 
   if (status === "success") {
@@ -44,7 +45,7 @@ export default function ConfirmLinkPage() {
       title="Link sign-in methods"
       description="OpenGHM Gateway account linking"
     >
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<AuthPending>Loading…</AuthPending>}>
         <ConfirmLinkBody />
       </Suspense>
     </AuthShell>

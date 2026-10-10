@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { AuthFormSkeleton } from "@/components/auth/auth-loading";
 import { signIn, getProviders } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -188,7 +189,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
 // "use client" itself, and useSearchParams() gets the Suspense boundary it requires.
 export function SignInForm({ devAccounts }: { devAccounts: DevAccount[] }) {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+    <Suspense fallback={<AuthFormSkeleton />}>
       <SignInFormInner devAccounts={devAccounts} />
     </Suspense>
   );

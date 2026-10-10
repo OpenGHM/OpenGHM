@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import { AuthPending } from "@/components/auth/auth-loading";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
@@ -14,7 +15,7 @@ function VerifyEmailBody() {
   );
 
   if (status === "pending") {
-    return <p className="text-sm text-muted-foreground">Verifying your email…</p>;
+    return <AuthPending>Verifying your email…</AuthPending>;
   }
 
   if (status === "success") {
@@ -48,7 +49,7 @@ export default function VerifyEmailPage() {
       title="Email verification"
       description="OpenGHM Gateway account verification"
     >
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <Suspense fallback={<AuthPending>Loading…</AuthPending>}>
         <VerifyEmailBody />
       </Suspense>
     </AuthShell>
