@@ -249,6 +249,7 @@ export function TutorialEditor({ tutorial }: { tutorial: Tutorial | null }) {
         dirty={dirty}
         saving={saving}
         saveLabel={stored ? "Save changes" : "Create tutorial"}
+        cancelHref="/admin/community/tutorials"
         extra={
           <>
             {stored?.state === "published" && hasPage && (

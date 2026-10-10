@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -81,7 +82,8 @@ export function StateSelect({
 /**
  * The bar that stays at the foot of an editor: the state, where saving stands
  * and the Save button. `extra` holds the actions beside Save (Delete, View on
- * site). The words beside the button are the one place the save status is read
+ * site); `cancelHref` is where Cancel leaves to, the list the editor was opened
+ * from (the unsaved-changes guard asks first when there is anything to lose). The words beside the button are the one place the save status is read
  * out (`role="status"`), only when it changes.
  */
 export function SaveBar({
@@ -92,6 +94,7 @@ export function SaveBar({
   saving,
   saveLabel = "Save",
   extra,
+  cancelHref,
 }: {
   /** Omit `state` for a form that has none (the page settings). */
   stateId?: string;
@@ -101,6 +104,7 @@ export function SaveBar({
   saving: boolean;
   saveLabel?: string;
   extra?: React.ReactNode;
+  cancelHref?: string;
 }) {
   return (
     <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-border/70 bg-card p-3 shadow-raised sm:px-4">
@@ -132,6 +136,11 @@ export function SaveBar({
       </p>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {extra}
+        {cancelHref && (
+          <Button asChild variant="ghost" className="min-h-10 sm:min-h-9">
+            <Link href={cancelHref}>Cancel</Link>
+          </Button>
+        )}
         <Button type="submit" disabled={saving} className="min-h-10 sm:min-h-9">
           {saving ? "Saving…" : saveLabel}
         </Button>

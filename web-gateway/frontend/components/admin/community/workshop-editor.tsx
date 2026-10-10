@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
 import { EditorSection, SaveBar, SaveNotices } from "@/components/admin/community/editor-chrome";
-import { Field, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
+import { Field, SELECT_CLASS, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
 import { ImageField } from "@/components/admin/community/image-field";
 import { RichTextEditor } from "@/components/admin/community/rich-text-editor";
 import { useContentEditor } from "@/components/admin/community/use-content-editor";
@@ -26,7 +26,8 @@ import {
 } from "@/lib/community/admin-forms";
 import type { Workshop } from "@/lib/community/types";
 
-const FORMAT_SUGGESTIONS = ["Online", "In person", "Hybrid"];
+/** The formats offered in the Format select; anything else is written under Other. */
+const FORMATS = ["Online", "In person", "Hybrid"];
 
 /**
  * The workshop editor, for a new workshop (`workshop` null) and a stored one.
@@ -42,6 +43,9 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
   const [initial] = useState(() => (workshop ? workshopToForm(workshop) : emptyWorkshopForm()));
   const [stored, setStored] = useState<Workshop | null>(workshop);
   const [deleting, setDeleting] = useState(false);
+  // Other… was picked, or the stored format is not one of FORMATS: a text box
+  // beside the select holds it.
+  const [otherFormat, setOtherFormat] = useState(() => initial.format !== "" && !FORMATS.includes(initial.format));
 
   const { form, setForm, errors, general, expired, saving, dirty, save, root } = useContentEditor<
     WorkshopForm,
@@ -161,21 +165,35 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id={id("format")} label="Format" optional error={errors.format}>
             {(p) => (
-              <>
-                <Input
+              <div className="space-y-2">
+                <select
                   {...p}
-                  list={id("format-list")}
-                  value={form.format}
-                  autoComplete="off"
-                  placeholder="Online"
-                  onChange={(e) => set({ format: e.target.value })}
-                />
-                <datalist id={id("format-list")}>
-                  {FORMAT_SUGGESTIONS.map((option) => (
-                    <option key={option} value={option} />
+                  className={SELECT_CLASS}
+                  value={otherFormat ? "other" : form.format}
+                  onChange={(e) => {
+                    const other = e.target.value === "other";
+                    setOtherFormat(other);
+                    set({ format: other ? "" : e.target.value });
+                  }}
+                >
+                  <option value="">Not given</option>
+                  {FORMATS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
                   ))}
-                </datalist>
-              </>
+                  <option value="other">Other…</option>
+                </select>
+                {otherFormat && (
+                  <Input
+                    aria-label="Format, in your words"
+                    value={form.format}
+                    autoComplete="off"
+                    placeholder="For example Webinar"
+                    onChange={(e) => set({ format: e.target.value })}
+                  />
+                )}
+              </div>
             )}
           </Field>
           <Field id={id("location")} label="Location" optional error={errors.location}>
@@ -269,6 +287,7 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         dirty={dirty}
         saving={saving}
         saveLabel={stored ? "Save changes" : "Create workshop"}
+        cancelHref="/admin/community/workshops"
         extra={
           <>
             {published && stored && (

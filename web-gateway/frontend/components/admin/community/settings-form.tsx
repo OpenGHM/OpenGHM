@@ -115,7 +115,7 @@ export function SettingsForm({ settings }: { settings: CommunitySettings }) {
         </Field>
       </EditorSection>
 
-      <SaveBar dirty={dirty} saving={saving} saveLabel="Save settings" />
+      <SaveBar dirty={dirty} saving={saving} saveLabel="Save settings" cancelHref="/admin/community" />
     </form>
   );
 }

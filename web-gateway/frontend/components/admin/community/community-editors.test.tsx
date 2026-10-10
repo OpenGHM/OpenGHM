@@ -244,6 +244,29 @@ describe("a stored workshop", () => {
     expect(screen.queryByRole("link", { name: /View on site/ })).toBeNull();
   });
 
+  it("offers Cancel back to the list", () => {
+    render(<WorkshopEditor workshop={stored} />);
+    expect(screen.getByRole("link", { name: "Cancel" }).getAttribute("href")).toBe("/admin/community/workshops");
+  });
+
+  it("picks the format from a list, and takes any other in words", async () => {
+    actions.updateWorkshop.mockResolvedValue({ ok: true, data: stored });
+    render(<WorkshopEditor workshop={stored} />);
+    const select = screen.getByRole("combobox", { name: /^Format/ }) as HTMLSelectElement;
+    expect(select.value).toBe("Online");
+    expect([...select.options].map((o) => o.text)).toEqual(["Not given", "Online", "In person", "Hybrid", "Other…"]);
+    fireEvent.change(select, { target: { value: "other" } });
+    fireEvent.change(screen.getByLabelText("Format, in your words"), { target: { value: "Webinar" } });
+    save();
+    await waitFor(() => expect(actions.updateWorkshop).toHaveBeenCalledWith("w1", expect.objectContaining({ format: "Webinar" })));
+  });
+
+  it("opens a format that is not in the list under Other", () => {
+    render(<WorkshopEditor workshop={{ ...stored, format: "Webinar" }} />);
+    expect((screen.getByRole("combobox", { name: /^Format/ }) as HTMLSelectElement).value).toBe("other");
+    expect((screen.getByLabelText("Format, in your words") as HTMLInputElement).value).toBe("Webinar");
+  });
+
   it("sends the body written in the editor", async () => {
     actions.updateWorkshop.mockResolvedValue({ ok: true, data: stored });
     render(<WorkshopEditor workshop={stored} />);
@@ -398,6 +421,20 @@ describe("publications", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     await waitFor(() => expect(screen.queryByText("Discard your changes?")).toBeNull());
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("Changed");
+  });
+
+  it("closes with Cancel, asking first only when something was typed", async () => {
+    render(<PublicationManager publications={[publication]} />);
+    fireEvent.click(screen.getByRole("button", { name: "A paper" }));
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "A paper" }));
+    dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Changed" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Discard your changes?")).toBeTruthy();
   });
 });
 

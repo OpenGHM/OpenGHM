@@ -124,6 +124,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
               publication={editing.kind === "edit" ? editing.publication : null}
               onDirtyChange={markDirty}
               onClose={close}
+              onCancel={requestClose}
             />
           )}
         </SheetContent>
@@ -149,10 +150,13 @@ function PublicationForm({
   publication,
   onDirtyChange,
   onClose,
+  onCancel,
 }: {
   publication: Publication | null;
   onDirtyChange: (dirty: boolean) => void;
   onClose: () => void;
+  /** Closes the sheet, asking first when there is unsaved input. */
+  onCancel: () => void;
 }) {
   const router = useRouter();
   const uid = useId();
@@ -281,6 +285,9 @@ function PublicationForm({
               Delete
             </Button>
           )}
+          <Button type="button" variant="ghost" className="min-h-10 sm:min-h-9" onClick={onCancel}>
+            Cancel
+          </Button>
           <Button type="submit" disabled={saving} className="min-h-10 sm:min-h-9">
             {saving ? "Saving…" : "Save"}
           </Button>
