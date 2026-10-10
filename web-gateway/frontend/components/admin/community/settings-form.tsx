@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { Layers, LayoutTemplate } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EditorSection, SaveBar, SaveNotices } from "@/components/admin/community/editor-chrome";
-import { Field, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
+import { Field, TEXTAREA_CLASS, ToggleRow } from "@/components/admin/community/form-bits";
 import { useContentEditor } from "@/components/admin/community/use-content-editor";
 import { saveAdminSettings } from "@/lib/community/admin-actions";
 import { settingsToForm, settingsToInput, validateSettings } from "@/lib/community/admin-forms";
-import { cn } from "@/lib/utils";
 import type { CommunitySettings, CommunitySettingsInput } from "@/lib/community/types";
 
 /**
@@ -60,36 +59,13 @@ export function SettingsForm({ settings }: { settings: CommunitySettings }) {
       </EditorSection>
 
       <EditorSection icon={Layers} title="Discussion groups" description="The section about groups that are not open yet, with its “tell me when they open” button.">
-        <div className="flex items-start justify-between gap-4 rounded-xl bg-muted px-4 py-3">
-          <div className="min-w-0">
-            <p id={id("show-label")} className="text-sm font-medium text-foreground">
-              Show this section
-            </p>
-            <p id={id("show-hint")} className="text-xs text-muted-foreground">
-              Off, the page has no Discussion groups section and nobody can ask to be told when groups open.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={form.show_groups}
-            aria-labelledby={id("show-label")}
-            aria-describedby={id("show-hint")}
-            onClick={() => set({ show_groups: !form.show_groups })}
-            className={cn(
-              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full outline-none transition-colors after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              form.show_groups ? "bg-primary" : "bg-input"
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "inline-block size-5 rounded-full bg-white shadow transition-transform",
-                form.show_groups ? "translate-x-5" : "translate-x-0.5"
-              )}
-            />
-          </button>
-        </div>
+        <ToggleRow
+          id={id("show")}
+          label="Show this section"
+          hint="Off, the page has no Discussion groups section and nobody can ask to be told when groups open."
+          checked={form.show_groups}
+          onChange={(show_groups) => set({ show_groups })}
+        />
         <Field id={id("groups-title")} label="Section title" error={errors.groups_title}>
           {(p) => (
             <Input

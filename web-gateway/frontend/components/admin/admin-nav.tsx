@@ -10,10 +10,12 @@ import {
   FileStack,
   Globe,
   LayoutDashboard,
+  Megaphone,
   Newspaper,
   ScrollText,
   ServerCog,
   Settings2,
+  Sparkles,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +47,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/jobs", label: "Jobs", icon: Cpu },
       { href: "/admin/audit", label: "Audit log", icon: ScrollText },
       { href: "/admin/system", label: "System", icon: ServerCog, adminOnly: true },
+    ],
+  },
+  {
+    label: "Home",
+    adminOnly: true,
+    items: [
+      { href: "/admin/home/updates", label: "Latest updates", icon: Sparkles },
+      { href: "/admin/home/news", label: "News", icon: Megaphone },
     ],
   },
   {

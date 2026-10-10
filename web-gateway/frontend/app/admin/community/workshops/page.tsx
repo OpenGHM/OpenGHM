@@ -8,9 +8,13 @@ import { WorkshopList } from "@/components/admin/community/workshop-list";
 import { fetchAdminWorkshops } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
 import { countLabel } from "@/lib/community/format";
+import { fetchHomeSettings } from "@/lib/home/admin-actions";
 
 export default async function AdminWorkshopsPage() {
   const loaded = settle(await fetchAdminWorkshops(), "/admin/community/workshops");
+  // Which workshops are pinned to the home page; without it the rows simply have no pin button.
+  const settings = await fetchHomeSettings();
+  const pinned = settings.ok ? settings.data.pins.filter((p) => p.kind === "workshop").map((p) => p.id) : null;
 
   return (
     <AdminPage
@@ -30,7 +34,7 @@ export default async function AdminWorkshopsPage() {
           <CardTitle>{loaded.ok ? countLabel(loaded.data.length, "workshop") : "Workshops"}</CardTitle>
         </CardHeader>
         <CardContent>
-          {loaded.ok ? <WorkshopList workshops={loaded.data} /> : <InlineError title="Couldn't load workshops.">{loaded.message}</InlineError>}
+          {loaded.ok ? <WorkshopList workshops={loaded.data} pinned={pinned} /> : <InlineError title="Couldn't load workshops.">{loaded.message}</InlineError>}
         </CardContent>
       </Card>
     </AdminPage>

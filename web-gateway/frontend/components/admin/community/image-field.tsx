@@ -46,18 +46,21 @@ export interface ImageValue {
 /**
  * One image with what a page needs to show it: the picture (uploaded, or an
  * address), a description for screen readers and an optional caption. The
- * workshop's cover uses it. `error` is by field (`url`, `alt`, `caption`).
+ * workshop's and a news post's cover use it. `error` is by field (`url`, `alt`, `caption`).
  */
 export function ImageField({
   id,
   value,
   onChange,
   errors = {},
+  withCaption = true,
 }: {
   id: string;
   value: ImageValue;
   onChange: (next: ImageValue) => void;
   errors?: { url?: string; alt?: string; caption?: string };
+  /** False for an image that has no caption (a news post's cover). */
+  withCaption?: boolean;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_1fr]">
@@ -99,9 +102,11 @@ export function ImageField({
         <Field id={`${id}-alt`} label="Description for screen readers" error={errors.alt}>
           {(p) => <Input {...p} value={value.alt} autoComplete="off" onChange={(e) => onChange({ ...value, alt: e.target.value })} />}
         </Field>
-        <Field id={`${id}-caption`} label="Caption" optional error={errors.caption}>
-          {(p) => <Input {...p} value={value.caption} autoComplete="off" onChange={(e) => onChange({ ...value, caption: e.target.value })} />}
-        </Field>
+        {withCaption && (
+          <Field id={`${id}-caption`} label="Caption" optional error={errors.caption}>
+            {(p) => <Input {...p} value={value.caption} autoComplete="off" onChange={(e) => onChange({ ...value, caption: e.target.value })} />}
+          </Field>
+        )}
       </div>
     </div>
   );

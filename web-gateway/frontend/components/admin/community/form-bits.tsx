@@ -65,6 +65,57 @@ export function Field({
   );
 }
 
+/**
+ * An on/off switch in a grey panel, with what it does underneath. `children`
+ * is the switch's own label; `hint` says what each position means.
+ */
+export function ToggleRow({
+  id,
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl bg-muted px-4 py-3">
+      <div className="min-w-0">
+        <p id={`${id}-label`} className="text-sm font-medium text-foreground">
+          {label}
+        </p>
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-hint`}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full outline-none transition-colors after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          checked ? "bg-primary" : "bg-input"
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "inline-block size-5 rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-5" : "translate-x-0.5"
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
 /** Draft or Published, as a pill. Published is the one that is on the site. */
 export function StatePill({ state }: { state: ContentState }) {
   return (

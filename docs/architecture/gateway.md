@@ -114,6 +114,8 @@ that file is the schema, in the sense that nothing else declares one.
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 | `community_workshops`, `community_tutorials`, `community_publications` | the Community page's items; `slug` is unique on the first two ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
+| `community_news` | news posts for the home page's "Latest Datasets & News" and `/news`; `slug` is unique |
+| `site_settings` | one document, `_id: "home_updates"`: that section's title, label, card count, sources and pins |
 | `community_settings` | one document, `_id: "community"`: the page's hero and groups text |
 | GridFS bucket `community_files` | files an admin uploads for the Community page: collections `community_files.files` and `community_files.chunks` |
 
@@ -467,17 +469,17 @@ handled in `web-gateway/backend/app/services/community_files.py`.
 
 **Public**, anonymous, under `/api/v1/community`: `GET /` (published settings,
 workshop cards, tutorial cards and publications in one response),
-`GET /workshops/{slug}`, `GET /tutorials/{slug}` (published only, else 404) and
+`GET /workshops/{slug}`, `GET /tutorials/{slug}`, `GET /news/{slug}` (published only, else 404; a news post without a body has no page, so 404 too) and
 `GET /files/{file_id}` (streams the bytes: `Cache-Control: public,
 max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `inline` for
 images and PDFs and `attachment` for the rest).
 
 **Admin**, under `/api/v1/admin/community`, all needing `content:manage`, which
 only the `admin` role holds: `GET`, `POST`, `GET|PUT|DELETE /{id}` for
-`workshops`, `tutorials` and `publications`; `POST /tutorials/reorder`;
+`workshops`, `tutorials`, `publications` and `news`; `POST /tutorials/reorder`;
 `GET|PUT /settings`; `POST` (multipart field `file`), `GET` and `DELETE /{id}`
 on `/files`. A slug already in use is `409 slug_taken`.
-The lists act on several rows at once: `POST /{workshops|tutorials|publications}/bulk`
+The lists act on several rows at once: `POST /{workshops|tutorials|publications|news}/bulk`
 with `{"action": "delete" | "publish" | "draft", "ids": [...]}` and
 `POST /files/bulk-delete` with `{"ids": [...]}`, 1 to 200 unique ids each.
 They answer `{"done": [...], "missing": [...]}`: an id with no item is
@@ -488,6 +490,38 @@ Every write is an audit event in the `content` category, `community.<kind>.creat
 `community.file.upload` and `community.file.delete`, with the item's id as its
 target. A bulk action writes one event per item, named as the single-item
 route names it (a state change is `.update`).
+
+### The home page's "Latest Datasets & News"
+
+The cards on `/` are a feed over three sources, set up by admins in
+`/admin/home/updates` and `/admin/home/news` (ADR 0034). The routes are in
+`web-gateway/backend/app/api/v1/home.py` and the composition in
+`web-gateway/backend/app/services/home_feed.py`.
+
+- **Sources.** Published news posts (by their own `date`), published workshops
+  (by when they were announced, `created_at`, tag Community Event) and datasets
+  whose envelope `visibility` is not `private` (by `registered_at`; title and
+  summary are `document.about.name` and `.description`, the link is
+  `/repository/<id>`). A news post's tag is one of `announcement`, `platform`,
+  `dataset`, `event`, `other`. A post with a body has a page `/news/<slug>`;
+  without, its card links to `link_url`; without that, it is not a link.
+- **Settings**, one document in `site_settings`: `title`, `eyebrow`, `count`
+  (1 to 12, default 3), `sources` `{news, workshops, datasets}` and `pins`
+  (ordered `{kind, id}`, at most 12). A pin shows first, in order, while its
+  item exists and is published or public, whether or not its source is on; a pin
+  whose item is gone or hidden is skipped, and the admin page flags it. The rest
+  is the newest of the enabled sources, `count` cards in all.
+- **Public**, anonymous, `/api/v1/home`: `GET /updates` returns `{settings, items}`;
+  `GET /updates/all` is the `/news` page, the enabled sources newest first, at
+  most 60, pins not special.
+- **Admin**, `/api/v1/admin/home`, `content:manage`: `GET|PUT /settings` (a pin
+  must exist, else `422 unknown_pin`; the response lists each pin with whether it
+  shows), `GET /candidates?q=&kind=` (what can be pinned, newest first, at most
+  50), `POST /pins` and `DELETE /pins/{kind}/{id}` (used by the pin buttons in the
+  News and Workshops lists; `409 pins_full`). Audit events `home.settings.update`,
+  `home.pin.add`, `home.pin.remove` and `community.news.*`.
+
+If the backend does not answer, the home page leaves the section out.
 
 A workshop's `status` (`upcoming` or `past`) is derived at read time: past once
 its last day, `end_date` or else `date`, is before today in UTC. Rich text is

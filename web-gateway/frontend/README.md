@@ -108,7 +108,7 @@ light ground, so cards sit on `bg-background` and nothing overlaps a band. A
 route's `loading.tsx`, `error.tsx` and `not-found.tsx` render inside the same
 frame, so a skeleton stands in for the page header and body only
 ([`LoadingPage`](components/admin/admin-skeletons.tsx)). Admin-only items and
-the whole Community group are left out of the nav for staff.
+the whole Community and Home groups are left out of the nav for staff.
 
 ### The card
 

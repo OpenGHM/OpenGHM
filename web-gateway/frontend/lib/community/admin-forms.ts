@@ -18,6 +18,9 @@ import type {
   CommunitySettings,
   CommunitySettingsInput,
   ContentState,
+  NewsInput,
+  NewsPost,
+  NewsTag,
   Publication,
   PublicationInput,
   PublicationType,
@@ -39,6 +42,9 @@ export const LIMITS = {
   workshopSummary: 500,
   maxDetails: 20,
   maxMaterials: 40,
+  newsTitle: 200,
+  newsSummary: 400,
+  newsLinkLabel: 80,
   tutorialSummary: 400,
   tutorialSnippet: 600,
   publicationTitle: 400,
@@ -378,6 +384,108 @@ export function validateTutorial(f: TutorialForm): FormErrors {
   if (f.title.trim().length > LIMITS.workshopTitle) e.title = `Keep the title under ${LIMITS.workshopTitle} characters.`;
   if (f.snippet.length > LIMITS.tutorialSnippet) e.snippet = `Keep the snippet under ${LIMITS.tutorialSnippet} characters.`;
   if (f.url.trim() && !isValidLinkUrl(f.url.trim())) e.url = "Use an https:// address or a path on this site, like /workspace.";
+  checkBody(f.body, e);
+  return e;
+}
+
+// ─── News post ───────────────────────────────────────────────────────────────
+
+export interface NewsForm {
+  state: ContentState;
+  slug: string;
+  slugTouched: boolean;
+  title: string;
+  tag: NewsTag;
+  summary: string;
+  cover: { url: string; alt: string };
+  date: string;
+  linkLabel: string;
+  linkUrl: string;
+  body: RichTextDoc | null;
+}
+
+/** Today in UTC, as the backend takes a post's date; a new post starts on it. */
+export function todayIso(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+export function emptyNewsForm(today: string = todayIso()): NewsForm {
+  return {
+    state: "draft",
+    slug: "",
+    slugTouched: false,
+    title: "",
+    tag: "announcement",
+    summary: "",
+    cover: { url: "", alt: "" },
+    date: today,
+    linkLabel: "",
+    linkUrl: "",
+    body: null,
+  };
+}
+
+export function newsToForm(n: NewsPost): NewsForm {
+  return {
+    state: n.state,
+    slug: n.slug,
+    slugTouched: true,
+    title: n.title,
+    tag: n.tag,
+    summary: n.summary,
+    cover: { url: n.cover?.url ?? "", alt: n.cover?.alt ?? "" },
+    date: n.date,
+    linkLabel: n.link_label ?? "",
+    linkUrl: n.link_url ?? "",
+    body: n.body,
+  };
+}
+
+export function newsToInput(f: NewsForm): NewsInput {
+  return {
+    state: f.state,
+    slug: f.slug.trim(),
+    title: f.title.trim(),
+    tag: f.tag,
+    summary: f.summary.trim(),
+    cover: f.cover.url.trim() ? { url: f.cover.url.trim(), alt: f.cover.alt.trim() } : null,
+    date: f.date.trim(),
+    link_label: orNull(f.linkLabel),
+    link_url: orNull(f.linkUrl),
+    body: normalizeDoc(f.body),
+  };
+}
+
+export function validateNews(f: NewsForm): FormErrors {
+  const e: FormErrors = {};
+  if (!f.title.trim()) e.title = "Give the post a title.";
+  else if (f.title.trim().length > LIMITS.newsTitle) e.title = `Keep the title under ${LIMITS.newsTitle} characters.`;
+  const slug = f.slug.trim();
+  if (!slug) e.slug = "A post needs a slug: the last part of its web address.";
+  else if (!isValidSlug(slug)) {
+    e.slug = `Use lower-case letters, numbers and single hyphens, at most ${MAX_SLUG_LENGTH} characters.`;
+  }
+  if (f.summary.trim().length > LIMITS.newsSummary) e.summary = `Keep the summary under ${LIMITS.newsSummary} characters.`;
+  if (!f.date.trim()) e.date = "Choose the post's date.";
+  else if (!isDate(f.date.trim())) e.date = "Use a date like 2026-10-10.";
+
+  if (f.cover.url.trim()) {
+    if (!isValidImageUrl(f.cover.url.trim())) e["cover.url"] = "Upload an image, or paste an https:// address.";
+    if (!f.cover.alt.trim()) e["cover.alt"] = "Describe the image for people who can't see it.";
+    else {
+      const alt = over(f.cover.alt, LIMITS.coverText, "the description");
+      if (alt) e["cover.alt"] = alt;
+    }
+  } else if (f.cover.alt.trim()) {
+    e["cover.url"] = "Add the image, or clear its description.";
+  }
+
+  const label = over(f.linkLabel, LIMITS.newsLinkLabel, "the link text");
+  if (label) e.link_label = label;
+  const url = f.linkUrl.trim();
+  if (url && (!isValidLinkUrl(url) || /^mailto:/i.test(url))) {
+    e.link_url = "Use an https:// address or a path on this site, like /repository.";
+  }
   checkBody(f.body, e);
   return e;
 }

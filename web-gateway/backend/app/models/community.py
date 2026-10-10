@@ -220,6 +220,70 @@ class ReorderRequest(BaseModel):
     ids: list[str] = Field(max_length=500)
 
 
+# ---- news posts -------------------------------------------------------------
+
+NewsTag = Literal["announcement", "platform", "dataset", "event", "other"]
+DEFAULT_NEWS_LINK_LABEL = "Read more"
+
+
+def _news_link(value: str) -> str:
+    """A news card's link: http(s):// or a path on this site, not mailto:."""
+    value = content.check_link_url(value)
+    if value.lower().startswith("mailto:"):
+        raise ValueError("Use an http(s):// address or a path that starts with a single '/'.")
+    return value
+
+
+NewsLinkUrl = Annotated[str, AfterValidator(_news_link)]
+
+
+def _today() -> str:
+    return content.utc_today().isoformat()
+
+
+class NewsCover(BaseModel):
+    model_config = _written()
+    url: ImageUrl
+    alt: str = Field("", max_length=300)
+
+
+class NewsInput(BaseModel):
+    model_config = _written()
+
+    state: ContentState
+    slug: Slug
+    title: str = Field(min_length=1, max_length=200)
+    tag: NewsTag = "other"
+    summary: str = Field("", max_length=400)
+    cover: NewsCover | None = None
+    #: The post's own date, shown on the card; defaults to today (UTC).
+    date: IsoDate = Field(default_factory=_today)
+    #: The text of the card's link, when it has one.
+    link_label: str | None = Field(DEFAULT_NEWS_LINK_LABEL, max_length=80)
+    #: Where the card leads when the post has no body of its own.
+    link_url: NewsLinkUrl | None = None
+    body: dict | None = None
+
+    _blank = field_validator("link_label", "link_url", mode="before")(_blank_to_none)
+
+    @field_validator("body")
+    @classmethod
+    def _body(cls, value: dict | None) -> dict | None:
+        return None if value is None else content.validate_rich_text(value)
+
+
+class NewsPost(_Meta):
+    slug: str
+    title: str
+    tag: NewsTag = "other"
+    summary: str = ""
+    cover: NewsCover | None = None
+    date: str
+    link_label: str | None = None
+    link_url: str | None = None
+    body: dict | None = None
+
+
 # ---- bulk actions -----------------------------------------------------------
 
 #: At most this many items in one bulk request.

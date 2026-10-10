@@ -16,8 +16,9 @@ import {
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
 import { StatePill, WorkshopStatusPill } from "@/components/admin/community/form-bits";
-import { RowActions } from "@/components/admin/community/row-actions";
+import { RowActions, type RowAction } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
+import { usePinToggle } from "@/components/admin/home/use-pin-toggle";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { Workshop } from "@/lib/community/types";
 
@@ -39,10 +40,13 @@ function DateRange({ workshop }: { workshop: Workshop }) {
 /**
  * Every workshop, newest first as the backend sends them, each a link to its
  * editor. A checkbox on each row selects it for Publish, Move to draft and
- * Delete, and the buttons at the end of a row do the same for that row alone.
+ * Delete, and the buttons at the end of a row do the same for that row alone,
+ * plus pinning it to the home page. `pinned` is the ids pinned now, or null
+ * when they could not be read.
  */
-export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
+export function WorkshopList({ workshops, pinned = null }: { workshops: Workshop[]; pinned?: readonly string[] | null }) {
   const { selection, selectedItems, busy, setState, deleting, askDelete, closeDelete } = useContentActions("workshops", workshops);
+  const pins = usePinToggle("workshop", pinned);
 
   if (workshops.length === 0) {
     return (
@@ -94,6 +98,7 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
                     {w.title}
                   </Link>
                   <p className="font-mono text-xs break-all text-muted-foreground">/{w.slug}</p>
+                  {pinned?.includes(w.id) && <p className="mt-1 text-xs font-medium text-primary">Pinned to the home page</p>}
                 </StackedCell>
                 <StackedCell label="Date" className="text-sm">
                   <DateRange workshop={w} />
@@ -116,8 +121,9 @@ export function WorkshopList({ workshops }: { workshops: Workshop[] }) {
                             { key: "draft", label: "Move to draft", name: `Move to draft: ${w.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([w], "draft") },
                           ]
                         : [{ key: "publish", label: "Publish", name: `Publish ${w.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([w], "published") }]),
+                      pins.action({ id: w.id, title: w.title, published: w.state === "published" }),
                       { key: "delete", label: "Delete", name: `Delete ${w.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([w]) },
-                    ]}
+                    ].filter((a): a is RowAction => a !== null)}
                   />
                 </StackedCell>
               </StackedRow>

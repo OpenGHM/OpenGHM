@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import admin as admin_router
 from app.api.v1 import auth as auth_router
 from app.api.v1 import community as community_router
+from app.api.v1 import home as home_router
 from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
 from app.api.v1 import users as users_router
@@ -151,6 +152,8 @@ async def lifespan(app: FastAPI):
     await db.community_tutorials.create_index("slug", unique=True)
     await db.community_tutorials.create_index("position")
     await db.community_publications.create_index([("year", -1), ("title", 1)])
+    await db.community_news.create_index("slug", unique=True)
+    await db.community_news.create_index([("date", -1), ("created_at", -1)])
 
     # Startup: warm slurmly client (non-fatal — first job submission will retry)
     try:
@@ -206,6 +209,8 @@ app.include_router(admin_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(wbm_output_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(community_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(community_router.admin_router, prefix=settings.API_V1_PREFIX)
+app.include_router(home_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(home_router.admin_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

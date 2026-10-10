@@ -110,6 +110,33 @@ export interface Tutorial extends TutorialInput, ContentMeta {
 /** A tutorial as the Community page lists it. */
 export type TutorialCard = Omit<Tutorial, "body"> & { has_body: boolean };
 
+/** The closed list of a news post's tags; each is a coloured pill on its card. */
+export type NewsTag = "announcement" | "platform" | "dataset" | "event" | "other";
+
+export interface NewsCover {
+  url: string;
+  alt: string;
+}
+
+/** What an admin writes; the shape of a create or update request. */
+export interface NewsInput {
+  state: ContentState;
+  slug: string;
+  title: string;
+  tag: NewsTag;
+  summary: string;
+  cover: NewsCover | null;
+  /** YYYY-MM-DD, the post's own date. */
+  date: string;
+  /** null → "Read more". */
+  link_label: string | null;
+  /** http(s) or a path on this site; used when the post has no page text. */
+  link_url: string | null;
+  body: RichTextDoc | null;
+}
+
+export interface NewsPost extends NewsInput, ContentMeta {}
+
 export type PublicationType = "paper" | "dataset" | "software" | "talk";
 
 export interface PublicationInput {
@@ -158,7 +185,7 @@ export interface CommunityFile {
 }
 
 /** The lists an admin acts on several rows of at once. */
-export type ContentKind = "workshops" | "tutorials" | "publications";
+export type ContentKind = "workshops" | "tutorials" | "publications" | "news";
 
 export type BulkAction = "delete" | "publish" | "draft";
 

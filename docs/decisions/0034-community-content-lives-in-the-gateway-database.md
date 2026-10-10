@@ -33,10 +33,18 @@ and the files they carry (cover photos, slides, notebooks).
 **Content is in MongoDB, files are in a GridFS bucket in the same database, and
 rich text is whitelisted ProseMirror JSON that is rendered without raw HTML.**
 
-- **Items.** Four collections: `community_workshops`, `community_tutorials`,
-  `community_publications` and `community_settings` (one document). Each item
+- **Items.** Five collections: `community_workshops`, `community_tutorials`,
+  `community_publications`, `community_news` and `community_settings` (one
+  document). Each item
   has a `state` of `draft` or `published`; the public routes return published
   items only.
+- **News and the home feed.** News posts (`community_news`) are the same kind of
+  content and are written in `/admin/home/news`; the home page's "Latest
+  Datasets & News" is a feed of published posts, published workshops and public
+  datasets, configured by one document in `site_settings` (`_id: "home_updates"`:
+  title, label, count, sources, ordered pins). A new collection rather than a
+  field of `community_settings`, because the section belongs to the home page,
+  not the Community page. Datasets are read from the catalogue, never copied.
 - **Files.** A GridFS bucket named `community_files`, through motor's
   `AsyncIOMotorGridFSBucket`. Not Anvil S3, for the reason above, and not
   `snapshots/`, `raw_data/` or any other published prefix: these are editable

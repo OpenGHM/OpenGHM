@@ -11,6 +11,8 @@ import type {
   ContentKind,
   CommunitySettings,
   CommunitySettingsInput,
+  NewsInput,
+  NewsPost,
   Publication,
   PublicationInput,
   Tutorial,
@@ -34,6 +36,9 @@ const ADMIN = "/api/v1/admin/community";
 function refreshPublicPages() {
   try {
     revalidatePath("/community", "layout");
+    // News posts feed the home page and have pages of their own.
+    revalidatePath("/");
+    revalidatePath("/news", "layout");
   } catch {
     // Outside a request (a test); the write itself succeeded.
   }
@@ -112,6 +117,28 @@ export async function deleteTutorial(id: string): Promise<ActionResult<null>> {
 /** Sets each tutorial's position to its place in `ids`. */
 export async function reorderTutorials(ids: string[]): Promise<ActionResult<null>> {
   return write<null>("post", "/tutorials/reorder", { ids });
+}
+
+// ─── News posts ──────────────────────────────────────────────────────────────
+
+export async function fetchAdminNewsList(): Promise<ActionResult<NewsPost[]>> {
+  return read<NewsPost[]>("/news");
+}
+
+export async function fetchAdminNews(id: string): Promise<ActionResult<NewsPost>> {
+  return read<NewsPost>(`/news/${encodeURIComponent(id)}`);
+}
+
+export async function createNews(input: NewsInput): Promise<ActionResult<NewsPost>> {
+  return write<NewsPost>("post", "/news", input);
+}
+
+export async function updateNews(id: string, input: NewsInput): Promise<ActionResult<NewsPost>> {
+  return write<NewsPost>("put", `/news/${encodeURIComponent(id)}`, input);
+}
+
+export async function deleteNews(id: string): Promise<ActionResult<null>> {
+  return write<null>("delete", `/news/${encodeURIComponent(id)}`);
 }
 
 // ─── Publications ────────────────────────────────────────────────────────────

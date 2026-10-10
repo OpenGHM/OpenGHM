@@ -1,4 +1,4 @@
-"""The Community page: its public routes and the admin routes that write it
+"""The Community page and the news posts: its public routes and the admin routes that write it
 (ADR 0034).
 
 Two routers in one module. `router` (`/community`) is anonymous: published
@@ -29,6 +29,8 @@ from app.models.community import (
     CommunityPage,
     CommunitySettings,
     CommunitySettingsInput,
+    NewsInput,
+    NewsPost,
     Publication,
     PublicationInput,
     ReorderRequest,
@@ -48,6 +50,7 @@ admin_router = APIRouter(prefix="/admin/community", tags=["community-admin"])
 WORKSHOPS = "community_workshops"
 TUTORIALS = "community_tutorials"
 PUBLICATIONS = "community_publications"
+NEWS = "community_news"
 SETTINGS = "community_settings"
 SETTINGS_ID = "community"
 
@@ -96,6 +99,10 @@ def _tutorial_card(doc: dict) -> TutorialCard:
 
 def _has_content(body: dict | None) -> bool:
     return bool(body and body.get("content"))
+
+
+def _news(doc: dict) -> NewsPost:
+    return NewsPost.model_validate(_with_id(doc))
 
 
 def _settings(doc: dict | None) -> CommunitySettings:
@@ -173,6 +180,15 @@ async def get_tutorial(slug: str):
     return _tutorial(doc)
 
 
+@router.get("/news/{slug}", response_model=NewsPost)
+async def get_news(slug: str):
+    """A published post that has a body; one without has no page of its own."""
+    doc = await get_db()[NEWS].find_one({"slug": slug, "state": "published"})
+    if doc is None or not _has_content(doc.get("body")):
+        raise _not_found("news")
+    return _news(doc)
+
+
 @router.get("/files/{file_id}")
 async def download_file(file_id: str):
     """The bytes of an uploaded file. A file's id is unguessable and its bytes
@@ -234,6 +250,11 @@ async def bulk_workshops(body: BulkRequest, user: TokenPayload = Depends(_conten
 @admin_router.post("/tutorials/bulk", response_model=BulkResult)
 async def bulk_tutorials(body: BulkRequest, user: TokenPayload = Depends(_content_manager)):
     return await _bulk(user, body, TUTORIALS, "tutorial", "slug")
+
+
+@admin_router.post("/news/bulk", response_model=BulkResult)
+async def bulk_news(body: BulkRequest, user: TokenPayload = Depends(_content_manager)):
+    return await _bulk(user, body, NEWS, "news", "slug")
 
 
 @admin_router.post("/publications/bulk", response_model=BulkResult)
@@ -403,6 +424,56 @@ async def delete_tutorial(item_id: str, user: TokenPayload = Depends(_content_ma
         raise _not_found("tutorial")
     await get_db()[TUTORIALS].delete_one({"_id": item_id})
     await _audit(user, "community.tutorial.delete", item_id, slug=doc["slug"])
+    return Response(status_code=204)
+
+
+# ---- admin: news posts -------------------------------------------------------
+
+
+@admin_router.get("/news", response_model=list[NewsPost])
+async def list_news(_user: TokenPayload = Depends(_content_manager)):
+    docs = await get_db()[NEWS].find({}).sort([("date", -1), ("created_at", -1)]).to_list(None)
+    return [_news(d) for d in docs]
+
+
+@admin_router.post("/news", status_code=201, response_model=NewsPost)
+async def create_news(body: NewsInput, user: TokenPayload = Depends(_content_manager)):
+    if await _slug_taken(NEWS, body.slug, None):
+        raise _slug_conflict()
+    doc = _new_document(user, body.model_dump())
+    await _insert(NEWS, doc)
+    await _audit(user, "community.news.create", doc["_id"], slug=body.slug, state=body.state)
+    return _news(doc)
+
+
+@admin_router.get("/news/{item_id}", response_model=NewsPost)
+async def get_news_admin(item_id: str, _user: TokenPayload = Depends(_content_manager)):
+    doc = await get_db()[NEWS].find_one({"_id": item_id})
+    if doc is None:
+        raise _not_found("news")
+    return _news(doc)
+
+
+@admin_router.put("/news/{item_id}", response_model=NewsPost)
+async def update_news(
+    item_id: str, body: NewsInput, user: TokenPayload = Depends(_content_manager)
+):
+    if await get_db()[NEWS].find_one({"_id": item_id}) is None:
+        raise _not_found("news")
+    if await _slug_taken(NEWS, body.slug, item_id):
+        raise _slug_conflict()
+    await _update(NEWS, item_id, _changes(user, body.model_dump()))
+    await _audit(user, "community.news.update", item_id, slug=body.slug, state=body.state)
+    return _news(await get_db()[NEWS].find_one({"_id": item_id}))
+
+
+@admin_router.delete("/news/{item_id}", status_code=204)
+async def delete_news(item_id: str, user: TokenPayload = Depends(_content_manager)):
+    doc = await get_db()[NEWS].find_one({"_id": item_id})
+    if doc is None:
+        raise _not_found("news")
+    await get_db()[NEWS].delete_one({"_id": item_id})
+    await _audit(user, "community.news.delete", item_id, slug=doc["slug"])
     return Response(status_code=204)
 
 

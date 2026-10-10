@@ -139,7 +139,7 @@ export function DeleteItemsDialog({
 
   const description = isFile
     ? `${many ? "The files are" : "The file is"} gone for good. If a workshop, tutorial or page uses ${many ? "one of them" : "it"}, that page shows a broken image or link until you change it.`
-    : `${many ? "They are" : "It is"} removed from the Community page and cannot be restored.`;
+    : `${many ? "They are" : "It is"} removed from ${noun === "news" ? "the site and the home page" : "the Community page"} and cannot be restored.`;
 
   return (
     <ConfirmActionDialog

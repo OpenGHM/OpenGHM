@@ -1,13 +1,16 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-const { reorderTutorials, bulkContent, toast, refresh } = vi.hoisted(() => ({
+const { reorderTutorials, bulkContent, pinItem, unpinItem, toast, refresh } = vi.hoisted(() => ({
   reorderTutorials: vi.fn(),
   bulkContent: vi.fn(),
+  pinItem: vi.fn(),
+  unpinItem: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   refresh: vi.fn(),
 }));
 vi.mock("@/lib/community/admin-actions", () => ({ reorderTutorials, bulkContent, bulkDeleteFiles: vi.fn() }));
+vi.mock("@/lib/home/admin-actions", () => ({ pinItem, unpinItem }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push: vi.fn(), replace: vi.fn() }),
@@ -447,6 +450,52 @@ describe("a workshop's actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete Live one" }));
     fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Delete workshop" }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Workshop deleted."));
+  });
+});
+
+describe("pinning a workshop to the home page", () => {
+  const items = [
+    workshop({ id: "w1", title: "Live one", slug: "live-one", state: "published" }),
+    workshop({ id: "w2", title: "Pinned one", slug: "pinned-one", state: "published" }),
+    workshop({ id: "w3", title: "Hidden one", slug: "hidden-one", state: "draft" }),
+  ];
+
+  it("has a Pin button for a published workshop, an Unpin button for a pinned one, and none for a draft", () => {
+    render(<WorkshopList workshops={items} pinned={["w2"]} />);
+    expect(screen.getByRole("button", { name: "Pin Live one to the home page" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unpin Pinned one from the home page" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Hidden one (to|from) the home page/ })).toBeNull();
+    expect(screen.getByText("Pinned to the home page")).toBeTruthy();
+  });
+
+  it("offers no pin button when the pins could not be read", () => {
+    render(<WorkshopList workshops={items} pinned={null} />);
+    expect(screen.queryByRole("button", { name: /the home page$/ })).toBeNull();
+  });
+
+  it("pins it at once, says so and refreshes", async () => {
+    pinItem.mockResolvedValue({ ok: true, data: {} });
+    render(<WorkshopList workshops={items} pinned={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pin Live one to the home page" }));
+    await waitFor(() => expect(pinItem).toHaveBeenCalledWith("workshop", "w1"));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Pinned to the home page."));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("unpins it at once", async () => {
+    unpinItem.mockResolvedValue({ ok: true, data: {} });
+    render(<WorkshopList workshops={items} pinned={["w2"]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Unpin Pinned one from the home page" }));
+    await waitFor(() => expect(unpinItem).toHaveBeenCalledWith("workshop", "w2"));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Unpinned from the home page."));
+  });
+
+  it("says why when the backend refuses, and does not refresh", async () => {
+    pinItem.mockResolvedValue({ ok: false, reason: "error", status: 409, message: "At most 12 items can be pinned. Unpin one first." });
+    render(<WorkshopList workshops={items} pinned={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pin Live one to the home page" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("At most 12 items can be pinned. Unpin one first."));
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
 

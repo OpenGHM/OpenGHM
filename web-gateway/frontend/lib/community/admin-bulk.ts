@@ -13,6 +13,7 @@ const NOUNS: Record<Noun, [one: string, many: string]> = {
   workshops: ["workshop", "workshops"],
   tutorials: ["tutorial", "tutorials"],
   publications: ["publication", "publications"],
+  news: ["news post", "news posts"],
   files: ["file", "files"],
 };
 
