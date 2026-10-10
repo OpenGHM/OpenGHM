@@ -431,7 +431,7 @@ describe("publications", () => {
     // A publication has no page of its own on the site, and no Edit button: its title opens the sheet.
     expect(screen.queryByRole("link", { name: /on site/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
-    expect(screen.getByRole("button", { name: `Move to draft: ${publication.title}` })).toBeTruthy();
+    expect(screen.getByRole("button", { name: `Hide ${publication.title}` })).toBeTruthy();
     expect(screen.getByRole("button", { name: `Delete ${publication.title}` })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: publication.title }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -442,7 +442,7 @@ describe("publications", () => {
     render(<PublicationManager publications={[publication]} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select A paper" }));
     const bar = screen.getByRole("region", { name: "Selected publications" });
-    fireEvent.click(within(bar).getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "Show" }));
     await waitFor(() => expect(actions.bulkContent).toHaveBeenCalledWith("publications", "publish", [publication.id]));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select A paper" }));
     fireEvent.click(within(screen.getByRole("region", { name: "Selected publications" })).getByRole("button", { name: "Delete" }));
@@ -604,8 +604,8 @@ describe("the media library", () => {
     render(<FilesLibrary files={files} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all files" }));
     const bar = screen.getByRole("region", { name: "Selected files" });
-    expect(within(bar).queryByRole("button", { name: "Publish" })).toBeNull();
-    expect(within(bar).queryByRole("button", { name: "Move to draft" })).toBeNull();
+    expect(within(bar).queryByRole("button", { name: "Show" })).toBeNull();
+    expect(within(bar).queryByRole("button", { name: "Hide" })).toBeNull();
     fireEvent.click(within(bar).getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Delete 2 files?")).toBeTruthy();

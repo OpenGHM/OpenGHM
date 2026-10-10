@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EyeOff, ExternalLink, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { TableHead, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
@@ -15,8 +15,8 @@ import {
   TITLE_CELL,
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
-import { StatePill, WorkshopStatusPill } from "@/components/admin/community/form-bits";
-import { RowActions, type RowAction } from "@/components/admin/community/row-actions";
+import { PinnedBadge, StatePill, WorkshopStatusPill } from "@/components/admin/community/form-bits";
+import { RowActions, visibilityAction, type RowAction } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { usePinToggle } from "@/components/admin/home/use-pin-toggle";
 import { TimeStamp } from "@/components/common/time-stamp";
@@ -39,7 +39,7 @@ function DateRange({ workshop }: { workshop: Workshop }) {
 
 /**
  * Every workshop, newest first as the backend sends them, each a link to its
- * editor. A checkbox on each row selects it for Publish, Move to draft and
+ * editor. A checkbox on each row selects it for Show, Hide and
  * Delete, and the buttons at the end of a row do the same for that row alone,
  * plus pinning it to the home page. `pinned` is the ids pinned now, or null
  * when they could not be read.
@@ -51,7 +51,7 @@ export function WorkshopList({ workshops, pinned = null }: { workshops: Workshop
   if (workshops.length === 0) {
     return (
       <EmptyState title="No workshops yet.">
-        Add the first one with New workshop. It stays a draft, off the site, until you publish it.
+        Add the first one with New workshop. It stays hidden from the site until you make it visible.
       </EmptyState>
     );
   }
@@ -61,8 +61,8 @@ export function WorkshopList({ workshops, pinned = null }: { workshops: Workshop
         <StateButtons
           count={selectedItems.length}
           busy={busy}
-          onPublish={() => void setState(selectedItems, "published")}
-          onDraft={() => void setState(selectedItems, "draft")}
+          onShow={() => void setState(selectedItems, "published")}
+          onHide={() => void setState(selectedItems, "draft")}
         />
         <DeleteButton busy={busy} onClick={() => askDelete(selectedItems)} />
       </SelectionBar>
@@ -98,7 +98,7 @@ export function WorkshopList({ workshops, pinned = null }: { workshops: Workshop
                     {w.title}
                   </Link>
                   <p className="font-mono text-xs break-all text-muted-foreground">/{w.slug}</p>
-                  {pinned?.includes(w.id) && <p className="mt-1 text-xs font-medium text-primary">Pinned to the home page</p>}
+                  {pinned?.includes(w.id) && <PinnedBadge />}
                 </StackedCell>
                 <StackedCell label="Date" className="text-sm">
                   <DateRange workshop={w} />
@@ -116,11 +116,9 @@ export function WorkshopList({ workshops, pinned = null }: { workshops: Workshop
                   <RowActions
                     actions={[
                       ...(w.state === "published"
-                        ? [
-                            { key: "view", label: "View on site", name: `View ${w.title} on site`, icon: ExternalLink, href: `/community/workshops/${encodeURIComponent(w.slug)}` },
-                            { key: "draft", label: "Move to draft", name: `Move to draft: ${w.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([w], "draft") },
-                          ]
-                        : [{ key: "publish", label: "Publish", name: `Publish ${w.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([w], "published") }]),
+                        ? [{ key: "view", label: "View on site", name: `View ${w.title} on site`, icon: ExternalLink, href: `/community/workshops/${encodeURIComponent(w.slug)}` }]
+                        : []),
+                      visibilityAction(w, busy, (state) => void setState([w], state)),
                       pins.action({ id: w.id, title: w.title, published: w.state === "published" }),
                       { key: "delete", label: "Delete", name: `Delete ${w.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([w]) },
                     ].filter((a): a is RowAction => a !== null)}

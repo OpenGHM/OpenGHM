@@ -95,8 +95,8 @@ describe("the workshop list", () => {
     expect(link.getAttribute("href")).toBe("/admin/community/workshops/w1");
     expect(screen.getByText("Upcoming")).toBeTruthy();
     expect(screen.getByText("Past")).toBeTruthy();
-    expect(screen.getByText("Published")).toBeTruthy();
-    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("Visible")).toBeTruthy();
+    expect(screen.getByText("Hidden")).toBeTruthy();
     // A range prints both days; a single day prints one.
     const days = Array.from(container.querySelectorAll("time[datetime]"))
       .map((t) => t.getAttribute("datetime"))
@@ -250,10 +250,10 @@ describe("a tutorial's actions", () => {
     expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Edit/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Actions for/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Move to draft: Live" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Publish Live" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Publish Hidden" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Move to draft: Hidden" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Hide Live" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show Live" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Show Hidden" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Hide Hidden" })).toBeNull();
     expect(screen.getByRole("button", { name: "Delete Live" })).toBeTruthy();
   });
 });
@@ -288,7 +288,7 @@ describe("selecting rows", () => {
     fireEvent.click(row("Gamma"));
     const bar = screen.getByRole("region", { name: "Selected tutorials" });
     expect(within(bar).getByText("2 selected")).toBeTruthy();
-    for (const name of ["Publish", "Move to draft", "Delete", "Clear selection"]) expect(within(bar).getByRole("button", { name })).toBeTruthy();
+    for (const name of ["Show", "Hide", "Delete", "Clear selection"]) expect(within(bar).getByRole("button", { name })).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "Clear selection" }));
     expect(screen.queryByText("2 selected")).toBeNull();
   });
@@ -306,9 +306,9 @@ describe("selecting rows", () => {
     render(<TutorialList tutorials={three} />);
     fireEvent.click(row("Beta"));
     fireEvent.click(row("Gamma"));
-    fireEvent.click(within(screen.getByRole("region", { name: "Selected tutorials" })).getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Selected tutorials" })).getByRole("button", { name: "Show" }));
     await waitFor(() => expect(bulkContent).toHaveBeenCalledWith("tutorials", "publish", ["b", "c"]));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Published 2 tutorials."));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("2 tutorials shown on the site."));
     expect(refresh).toHaveBeenCalled();
     expect(screen.queryByText("2 selected")).toBeNull();
   });
@@ -317,18 +317,18 @@ describe("selecting rows", () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: ["a"], missing: [] } });
     render(<TutorialList tutorials={three} />);
     fireEvent.click(row("Alpha"));
-    fireEvent.click(screen.getByRole("button", { name: "Move to draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
     await waitFor(() => expect(bulkContent).toHaveBeenCalledWith("tutorials", "draft", ["a"]));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Moved 1 tutorial to draft."));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("1 tutorial hidden from the site."));
   });
 
   it("names the rows it could not change and keeps them selected", async () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: ["b"], missing: ["c"] } });
     render(<TutorialList tutorials={three} />);
     fireEvent.click(all());
-    fireEvent.click(within(screen.getByRole("region", { name: "Selected tutorials" })).getByRole("button", { name: "Publish" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Selected tutorials" })).getByRole("button", { name: "Show" }));
     await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith("Published 1 tutorial, but “Gamma” no longer exists. Reload the page.")
+      expect(toast.error).toHaveBeenCalledWith("1 tutorial shown on the site, but “Gamma” no longer exists. Reload the page.")
     );
     expect(row("Gamma").getAttribute("aria-checked")).toBe("true");
     expect(row("Beta").getAttribute("aria-checked")).toBe("false");
@@ -338,7 +338,7 @@ describe("selecting rows", () => {
     bulkContent.mockResolvedValue({ ok: false, reason: "error", message: "Nope." });
     render(<TutorialList tutorials={three} />);
     fireEvent.click(row("Beta"));
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Nope."));
     expect(row("Beta").getAttribute("aria-checked")).toBe("true");
     expect(refresh).not.toHaveBeenCalled();
@@ -391,13 +391,13 @@ describe("a workshop's actions", () => {
     workshop({ id: "w2", title: "Hidden one", slug: "hidden-one", state: "draft" }),
   ];
 
-  it("has View on site, Move to draft and Delete for a published workshop, and no Edit", () => {
+  it("has View on site, Hide and Delete for a published workshop, and no Edit", () => {
     render(<WorkshopList workshops={items} />);
     const view = screen.getByRole("link", { name: "View Live one on site" });
     expect(view.getAttribute("href")).toBe("/community/workshops/live-one");
     expect(view.getAttribute("target")).toBe("_blank");
-    expect(screen.getByRole("button", { name: "Move to draft: Live one" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Publish Live one" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Hide Live one" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show Live one" })).toBeNull();
     expect(screen.getByRole("button", { name: "Delete Live one" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();
@@ -405,30 +405,30 @@ describe("a workshop's actions", () => {
     expect(screen.getByRole("link", { name: "Live one" }).getAttribute("href")).toBe("/admin/community/workshops/w1");
   });
 
-  it("has Publish and no View on site for a draft", () => {
+  it("has Show and no View on site for a draft", () => {
     render(<WorkshopList workshops={items} />);
-    expect(screen.getByRole("button", { name: "Publish Hidden one" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Hidden one" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "View Hidden one on site" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Move to draft: Hidden one" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide Hidden one" })).toBeNull();
   });
 
   it("holds the buttons of a row while a request for it is on its way", async () => {
     let answer: (value: unknown) => void = () => {};
     bulkContent.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     render(<WorkshopList workshops={items} />);
-    fireEvent.click(screen.getByRole("button", { name: "Publish Hidden one" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Publish Hidden one" }).hasAttribute("disabled")).toBe(true));
-    expect(screen.getByRole("button", { name: "Move to draft: Live one" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Show Hidden one" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Show Hidden one" }).hasAttribute("disabled")).toBe(true));
+    expect(screen.getByRole("button", { name: "Hide Live one" }).hasAttribute("disabled")).toBe(true);
     await act(async () => answer({ ok: true, data: { done: ["w2"], missing: [] } }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Publish Hidden one" }).hasAttribute("disabled")).toBe(false));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Show Hidden one" }).hasAttribute("disabled")).toBe(false));
   });
 
   it("publishes just that row", async () => {
     bulkContent.mockResolvedValue({ ok: true, data: { done: ["w2"], missing: [] } });
     render(<WorkshopList workshops={items} />);
-    fireEvent.click(screen.getByRole("button", { name: "Publish Hidden one" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Hidden one" }));
     await waitFor(() => expect(bulkContent).toHaveBeenCalledWith("workshops", "publish", ["w2"]));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Published 1 workshop."));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("1 workshop shown on the site."));
   });
 
   it("asks before it deletes that row, naming it", async () => {
@@ -465,7 +465,26 @@ describe("pinning a workshop to the home page", () => {
     expect(screen.getByRole("button", { name: "Pin Live one to the home page" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Unpin Pinned one from the home page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Hidden one (to|from) the home page/ })).toBeNull();
-    expect(screen.getByText("Pinned to the home page")).toBeTruthy();
+    expect(screen.getByText("Pinned")).toBeTruthy();
+    const on = screen.getByRole("button", { name: "Unpin Pinned one from the home page" });
+    expect(on.getAttribute("aria-pressed")).toBe("true");
+    expect(on.getAttribute("data-tone")).toBe("pinned");
+    expect(on.className).toContain("bg-primary");
+    const off = screen.getByRole("button", { name: "Pin Live one to the home page" });
+    expect(off.getAttribute("aria-pressed")).toBe("false");
+    expect(off.className).not.toContain("bg-primary");
+  });
+
+  it("shows the visibility toggle by the current state, with the click's effect as its name", () => {
+    render(<WorkshopList workshops={items} pinned={["w2"]} />);
+    const visible = screen.getByRole("button", { name: "Hide Live one" });
+    expect(visible.getAttribute("data-tone")).toBe("visible");
+    expect(visible.className).toContain("text-success");
+    const hidden = screen.getByRole("button", { name: "Show Hidden one" });
+    expect(hidden.getAttribute("data-tone")).toBe("hidden");
+    expect(screen.getAllByText("Visible").length).toBe(2);
+    expect(screen.getAllByText("Hidden").length).toBe(1);
+    expect(screen.queryByText(/Draft|Published/)).toBeNull();
   });
 
   it("offers no pin button when the pins could not be read", () => {

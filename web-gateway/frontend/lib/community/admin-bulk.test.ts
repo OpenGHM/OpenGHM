@@ -33,15 +33,15 @@ describe("stateChangeSummary", () => {
   it("says what was done", () => {
     expect(stateChangeSummary("tutorials", "published", { done: ["a", "b"], missing: [] }, titles)).toEqual({
       ok: true,
-      message: "Published 2 tutorials.",
+      message: "2 tutorials shown on the site.",
     });
-    expect(stateChangeSummary("workshops", "draft", { done: ["a"], missing: [] }, titles).message).toBe("Moved 1 workshop to draft.");
+    expect(stateChangeSummary("workshops", "draft", { done: ["a"], missing: [] }, titles).message).toBe("1 workshop hidden from the site.");
   });
 
   it("names what was missing, and is not a success", () => {
     expect(stateChangeSummary("tutorials", "published", { done: ["a"], missing: ["b", "z"] }, titles)).toEqual({
       ok: false,
-      message: "Published 1 tutorial, but “Beta” and “z” no longer exist. Reload the page.",
+      message: "1 tutorial shown on the site, but “Beta” and “z” no longer exist. Reload the page.",
     });
     expect(stateChangeSummary("tutorials", "draft", { done: [], missing: ["c"] }, titles).message).toBe(
       "Nothing was changed: “Gamma” no longer exists. Reload the page."

@@ -93,6 +93,6 @@ export function validateHome(f: HomeForm): FormErrors {
 /** Words for a pin that does not show. */
 export const PIN_REASON_LABEL: Record<PinReason, string> = {
   missing: "No longer exists",
-  unpublished: "Not published",
+  unpublished: "Hidden",
   private: "Private",
 };

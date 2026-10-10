@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { EyeOff, Trash2, Upload } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,7 +28,7 @@ import {
   TITLE_CELL,
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
-import { RowActions } from "@/components/admin/community/row-actions";
+import { RowActions, visibilityAction } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { SaveNotices, StateSelect } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, StatePill, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
@@ -54,7 +54,7 @@ type Editing = { kind: "none" } | { kind: "new" } | { kind: "edit"; publication:
 /**
  * The publications list, with the editor in a sheet over the right edge so the
  * list keeps its place. Year first, as the site orders them. A checkbox on
- * each row selects it for Publish, Move to draft and Delete, and the buttons at
+ * each row selects it for Show, Hide and Delete, and the buttons at
  * the end of a row do the state change and Delete for that row (the title opens
  * the editor). A sheet
  * with unsaved changes asks before it closes. `startNew` opens it on a new
@@ -87,7 +87,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
     <>
       {publications.length === 0 ? (
         <EmptyState title="No publications yet.">
-          Add the first one with New publication above. It stays a draft, off the site, until you publish it.
+          Add the first one with New publication above. It stays hidden from the site until you make it visible.
         </EmptyState>
       ) : (
         <>
@@ -95,8 +95,8 @@ export function PublicationManager({ publications, startNew = false }: { publica
             <StateButtons
               count={selectedItems.length}
               busy={busy}
-              onPublish={() => void setState(selectedItems, "published")}
-              onDraft={() => void setState(selectedItems, "draft")}
+              onShow={() => void setState(selectedItems, "published")}
+              onHide={() => void setState(selectedItems, "draft")}
             />
             <DeleteButton busy={busy} onClick={() => askDelete(selectedItems)} />
           </SelectionBar>
@@ -148,9 +148,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
                   <StackedCell className={ACTIONS_CELL}>
                     <RowActions
                       actions={[
-                        p.state === "published"
-                          ? { key: "draft", label: "Move to draft", name: `Move to draft: ${p.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([p], "draft") }
-                          : { key: "publish", label: "Publish", name: `Publish ${p.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([p], "published") },
+                        visibilityAction(p, busy, (state) => void setState([p], state)),
                         { key: "delete", label: "Delete", name: `Delete ${p.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([p]) },
                       ]}
                     />

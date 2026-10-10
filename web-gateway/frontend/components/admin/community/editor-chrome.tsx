@@ -56,7 +56,7 @@ export function SaveNotices({ expired, general }: { expired: boolean; general: s
   );
 }
 
-/** The state select: Draft stays off the site, Published is on it. */
+/** The visibility select: Hidden stays off the site, Visible is on it. (Stored as draft / published.) */
 export function StateSelect({
   id,
   value,
@@ -71,10 +71,10 @@ export function StateSelect({
       id={id}
       value={value}
       onChange={(e) => onChange(e.target.value as ContentState)}
-      className={cn(SELECT_CLASS, "w-auto min-w-36")}
+      className={cn(SELECT_CLASS, "w-auto min-w-48")}
     >
-      <option value="draft">Draft: not on the site</option>
-      <option value="published">Published: on the site</option>
+      <option value="draft">Hidden from the site</option>
+      <option value="published">Visible on the site</option>
     </select>
   );
 }
@@ -111,7 +111,7 @@ export function SaveBar({
       {state && stateId && onStateChange && (
         <>
           <label htmlFor={stateId} className="sr-only">
-            State
+            Visibility
           </label>
           <StateSelect id={stateId} value={state} onChange={onStateChange} />
         </>

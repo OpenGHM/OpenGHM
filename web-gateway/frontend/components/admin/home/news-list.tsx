@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EyeOff, ExternalLink, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { TableHead, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
@@ -15,8 +15,8 @@ import {
   TITLE_CELL,
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
-import { StatePill } from "@/components/admin/community/form-bits";
-import { RowActions, type RowAction } from "@/components/admin/community/row-actions";
+import { PinnedBadge, StatePill } from "@/components/admin/community/form-bits";
+import { RowActions, visibilityAction, type RowAction } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { usePinToggle } from "@/components/admin/home/use-pin-toggle";
 import { TimeStamp } from "@/components/common/time-stamp";
@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Every news post, newest date first as the backend sends them, each a link
- * to its editor. A checkbox on each row selects it for Publish, Move to draft
+ * to its editor. A checkbox on each row selects it for Show, Hide
  * and Delete, and the buttons at the end of a row do the same for that row
  * alone, plus pinning it to the home page. `pinned` is the ids pinned now, or
  * null when they could not be read.
@@ -39,7 +39,7 @@ export function NewsList({ posts, pinned }: { posts: NewsPost[]; pinned: readonl
   if (posts.length === 0) {
     return (
       <EmptyState title="No news posts yet.">
-        Add the first one with New post. It stays a draft, off the site, until you publish it.
+        Add the first one with New post. It stays hidden from the site until you make it visible.
       </EmptyState>
     );
   }
@@ -49,8 +49,8 @@ export function NewsList({ posts, pinned }: { posts: NewsPost[]; pinned: readonl
         <StateButtons
           count={selectedItems.length}
           busy={busy}
-          onPublish={() => void setState(selectedItems, "published")}
-          onDraft={() => void setState(selectedItems, "draft")}
+          onShow={() => void setState(selectedItems, "published")}
+          onHide={() => void setState(selectedItems, "draft")}
         />
         <DeleteButton busy={busy} onClick={() => askDelete(selectedItems)} />
       </SelectionBar>
@@ -80,9 +80,7 @@ export function NewsList({ posts, pinned }: { posts: NewsPost[]; pinned: readonl
                 ? { key: "view", label: "View on site", name: `View ${p.title} on site`, icon: ExternalLink, href: `/news/${encodeURIComponent(p.slug)}` }
                 : null,
               pins.action({ id: p.id, title: p.title, published: p.state === "published" }),
-              p.state === "published"
-                ? { key: "draft", label: "Move to draft", name: `Move to draft: ${p.title}`, icon: EyeOff, disabled: busy, onSelect: () => void setState([p], "draft") }
-                : { key: "publish", label: "Publish", name: `Publish ${p.title}`, icon: Upload, disabled: busy, onSelect: () => void setState([p], "published") },
+              visibilityAction(p, busy, (state) => void setState([p], state)),
               { key: "delete", label: "Delete", name: `Delete ${p.title}`, icon: Trash2, destructive: true, onSelect: () => askDelete([p]) },
             ];
             return (
@@ -98,7 +96,7 @@ export function NewsList({ posts, pinned }: { posts: NewsPost[]; pinned: readonl
                     {p.title}
                   </Link>
                   <p className="font-mono text-xs break-all text-muted-foreground">/{p.slug}</p>
-                  {isPinned && <p className="mt-1 text-xs font-medium text-primary">Pinned to the home page</p>}
+                  {isPinned && <PinnedBadge />}
                 </StackedCell>
                 <StackedCell label="Tag">
                   <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold", TAG_CLASS[p.tag])}>

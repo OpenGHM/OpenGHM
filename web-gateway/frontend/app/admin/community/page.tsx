@@ -11,7 +11,7 @@ import { settle, type Loaded } from "@/lib/community/admin-load";
 
 const HERE = "/admin/community";
 
-/** How many items a section holds and how many are drafts; null for a section that could not be read. */
+/** How many items a section holds and how many are hidden; null for a section that could not be read. */
 function figures(result: Loaded<{ state: string }[]>): SectionFigures {
   return result.ok
     ? { total: result.data.length, drafts: result.data.filter((item) => item.state === "draft").length }

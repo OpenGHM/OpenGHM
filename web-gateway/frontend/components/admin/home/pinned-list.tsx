@@ -41,7 +41,7 @@ const nameOf = (row: PinRow) => row.title ?? `${KIND_LABEL[row.kind]} ${row.id}`
  * The pinned items in the order they show on the home page, first first. Each
  * row has a grip to drag it by (or to focus and move with the keyboard: Space,
  * arrows, Space) and a button to unpin it. A pin whose item is gone, or is no
- * longer published, is marked and stays until it is removed; the home page
+ * longer visible, is marked and stays until it is removed; the home page
  * skips it. Nothing here is saved until the form is: the order is the form's.
  */
 export function PinnedList({

@@ -20,7 +20,7 @@ const KIND_OPTIONS: { value: FeedKind | "all"; label: string }[] = [
 
 /**
  * The items an admin can pin: a search box and a kind filter over the newest
- * published posts, workshops and datasets, each with a Pin button. What is
+ * visible posts, workshops and datasets, each with a Pin button. What is
  * pinned already (in the form, saved or not) is disabled, and so is every row
  * once the pins are full. Typing waits a moment before it asks the backend.
  */
@@ -122,7 +122,7 @@ export function PinPicker({
         </p>
       ) : items && items.length === 0 && !loading ? (
         <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-          Nothing matches. Only published posts and workshops, and public datasets, can be pinned.
+          Nothing matches. Only visible posts and workshops, and public datasets, can be pinned.
         </p>
       ) : (
         <ul aria-label="Items that can be pinned" aria-busy={loading} className={cn("space-y-2", loading && "opacity-60")}>

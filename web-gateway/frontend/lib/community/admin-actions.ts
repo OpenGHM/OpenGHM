@@ -160,7 +160,7 @@ export async function deletePublication(id: string): Promise<ActionResult<null>>
 }
 
 /**
- * Delete, publish or move to draft several items of a kind in one request.
+ * Delete, show or hide several items of a kind in one request.
  * The backend answers per id (`done`, `missing`) and audits each item as the
  * single-item route does; `publish` and `draft` change only the state.
  */

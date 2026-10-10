@@ -23,7 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { EyeOff, ExternalLink, GripVertical, Trash2, Upload } from "lucide-react";
+import { ExternalLink, GripVertical, Trash2 } from "lucide-react";
 import { TableHead, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/admin/admin-states";
 import {
@@ -37,7 +37,7 @@ import {
 } from "@/components/admin/stacked-table";
 import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
 import { StatePill } from "@/components/admin/community/form-bits";
-import { RowActions } from "@/components/admin/community/row-actions";
+import { RowActions, visibilityAction } from "@/components/admin/community/row-actions";
 import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { TimeStamp } from "@/components/common/time-stamp";
 import { reorderTutorials } from "@/lib/community/admin-actions";
@@ -157,7 +157,7 @@ export function TutorialList({ tutorials }: { tutorials: Tutorial[] }) {
   if (order.length === 0) {
     return (
       <EmptyState title="No tutorials yet.">
-        Add the first one with New tutorial. It stays a draft, off the site, until you publish it.
+        Add the first one with New tutorial. It stays hidden from the site until you make it visible.
       </EmptyState>
     );
   }
@@ -168,8 +168,8 @@ export function TutorialList({ tutorials }: { tutorials: Tutorial[] }) {
         <StateButtons
           count={selectedItems.length}
           busy={busy}
-          onPublish={() => void setState(selectedItems, "published")}
-          onDraft={() => void setState(selectedItems, "draft")}
+          onShow={() => void setState(selectedItems, "published")}
+          onHide={() => void setState(selectedItems, "draft")}
         />
         <DeleteButton busy={busy} onClick={() => askDelete(selectedItems)} />
       </SelectionBar>
@@ -308,9 +308,7 @@ function TutorialRow({
             ...(t.state === "published" && !isEmptyDoc(t.body)
               ? [{ key: "view", label: "View on site", name: `View ${t.title} on site`, icon: ExternalLink, href: `/community/tutorials/${encodeURIComponent(t.slug)}` }]
               : []),
-            t.state === "published"
-              ? { key: "draft", label: "Move to draft", name: `Move to draft: ${t.title}`, icon: EyeOff, disabled: busy, onSelect: () => onSetState("draft") }
-              : { key: "publish", label: "Publish", name: `Publish ${t.title}`, icon: Upload, disabled: busy, onSelect: () => onSetState("published") },
+            visibilityAction(t, busy, onSetState),
             { key: "delete", label: "Delete", name: `Delete ${t.title}`, icon: Trash2, destructive: true, onSelect: onDelete },
           ]}
         />

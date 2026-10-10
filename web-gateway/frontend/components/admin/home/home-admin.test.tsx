@@ -272,7 +272,7 @@ describe("the news list", () => {
     expect(screen.getByRole("link", { name: "Post one" }).getAttribute("href")).toBe("/admin/home/news/n1");
     expect(screen.getAllByText("Announcement")).toHaveLength(2);
     expect(screen.getByText("Community Event")).toBeTruthy();
-    expect(screen.getAllByText("Published")).toHaveLength(2);
+    expect(screen.getAllByText("Visible")).toHaveLength(2);
   });
 
   it("has View on site only for a published post that has page text", () => {
@@ -286,7 +286,11 @@ describe("the news list", () => {
     expect(screen.getByRole("button", { name: "Pin Post one to the home page" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Unpin Post three from the home page" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Post two (to|from) the home page/ })).toBeNull();
-    expect(screen.getByText("Pinned to the home page")).toBeTruthy();
+    expect(screen.getByText("Pinned")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unpin Post three from the home page" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Pin Post one to the home page" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Hide Post one" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Post two" })).toBeTruthy();
   });
 
   it("pins a post at once", async () => {
@@ -302,9 +306,9 @@ describe("the news list", () => {
     render(<NewsList posts={posts} pinned={null} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Post two" }));
     expect(screen.getByText("1 selected")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
     await waitFor(() => expect(bulkContent).toHaveBeenCalledWith("news", "publish", ["n2"]));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Published 1 news post."));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("1 news post shown on the site."));
   });
 
   it("asks before it deletes", async () => {

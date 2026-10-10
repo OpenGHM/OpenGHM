@@ -43,7 +43,7 @@ function SectionCard({
               <span className="text-xs text-muted-foreground">{unit}</span>
               {figures.drafts !== null && figures.drafts > 0 && (
                 <span className={cn("rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground")}>
-                  {figures.drafts} {figures.drafts === 1 ? "draft" : "drafts"}
+                  {figures.drafts} hidden
                 </span>
               )}
             </p>
@@ -56,7 +56,7 @@ function SectionCard({
 
 /**
  * The Community admin's front page: one card for each section, with how many
- * items it holds and how many of them are still drafts, off the site.
+ * items it holds and how many of them are hidden from the site.
  */
 export function CommunityOverview({
   workshops,

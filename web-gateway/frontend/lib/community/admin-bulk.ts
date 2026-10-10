@@ -54,7 +54,7 @@ export function stateChangeSummary(
 ): { ok: boolean; message: string } {
   const done = result.done.length;
   const what = `${done} ${nounFor(noun, done)}`;
-  const did = state === "published" ? `Published ${what}` : `Moved ${what} to draft`;
+  const did = state === "published" ? `${what} shown on the site` : `${what} hidden from the site`;
   if (result.missing.length === 0) return { ok: true, message: `${did}.` };
   const names = nameList(result.missing.map((id) => titles.get(id) ?? id));
   const gone = `${names} no longer ${result.missing.length === 1 ? "exists" : "exist"}. Reload the page.`;

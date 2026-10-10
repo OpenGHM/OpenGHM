@@ -5,7 +5,7 @@ export default function NewNewsPage() {
   return (
     <AdminPage
       title="New post"
-      description="It stays a draft until you set it to Published."
+      description="It stays hidden until you make it visible."
       breadcrumb={[
         { label: "Admin", href: "/admin" },
         { label: "Home", href: "/admin/home/updates" },

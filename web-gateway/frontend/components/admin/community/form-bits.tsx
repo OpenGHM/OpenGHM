@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Eye, EyeOff, Pin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -116,18 +116,29 @@ export function ToggleRow({
   );
 }
 
-/** Draft or Published, as a pill. Published is the one that is on the site. */
+/** Visible or Hidden, as a pill. Visible (published) is the one that is on the site. */
 export function StatePill({ state }: { state: ContentState }) {
+  const visible = state === "published";
+  const Icon = visible ? Eye : EyeOff;
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-        state === "published"
-          ? "border-success/25 bg-success/10 text-success"
-          : "border-border bg-muted text-muted-foreground"
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+        visible ? "border-success/25 bg-success/10 text-success" : "border-border bg-muted text-muted-foreground"
       )}
     >
-      {state === "published" ? "Published" : "Draft"}
+      <Icon className="size-3.5" aria-hidden="true" />
+      {visible ? "Visible" : "Hidden"}
+    </span>
+  );
+}
+
+/** Beside the title of a row that is pinned to the home page. */
+export function PinnedBadge() {
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+      <Pin className="size-3 fill-current" aria-hidden="true" />
+      Pinned
     </span>
   );
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pin, PinOff } from "lucide-react";
+import { Pin } from "lucide-react";
 import type { RowAction } from "@/components/admin/community/row-actions";
 import { pinItem, unpinItem } from "@/lib/home/admin-actions";
 import type { FeedKind } from "@/lib/home/types";
@@ -44,17 +44,19 @@ export function usePinToggle(kind: FeedKind, pinned: readonly string[] | null) {
     router.refresh();
   };
 
-  /** The row action for an item, or null when it cannot be pinned (a draft, or the pins are unknown). */
+  /** The row action for an item, or null when it cannot be pinned (hidden, or the pins are unknown). */
   const action = (item: { id: string; title: string; published: boolean }): RowAction | null => {
     if (pinned === null) return null;
     const isPinned = pinned.includes(item.id);
-    // A draft is not on the site, so there is nothing to pin; one already pinned can still be unpinned.
+    // A hidden item is not on the site, so there is nothing to pin; one already pinned can still be unpinned.
     if (!item.published && !isPinned) return null;
     return {
       key: "pin",
-      label: isPinned ? "Unpin from home page" : "Pin to home page",
+      label: isPinned ? "Pinned to the home page — click to unpin" : "Pin to the home page",
       name: `${isPinned ? "Unpin" : "Pin"} ${item.title} ${isPinned ? "from" : "to"} the home page`,
-      icon: isPinned ? PinOff : Pin,
+      icon: Pin,
+      tone: isPinned ? "pinned" : undefined,
+      pressed: isPinned,
       disabled: busy,
       onSelect: () => void toggle(item.id, isPinned),
     };

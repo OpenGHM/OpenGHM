@@ -5,7 +5,7 @@ export default function NewWorkshopPage() {
   return (
     <AdminPage
       title="New workshop"
-      description="It stays a draft until you set it to Published."
+      description="It stays hidden until you make it visible."
       breadcrumb={[
         { label: "Admin", href: "/admin" },
         { label: "Community", href: "/admin/community" },

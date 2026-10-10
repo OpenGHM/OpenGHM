@@ -23,7 +23,7 @@ import { COUNT_MAX, COUNT_MIN, PINS_MAX } from "@/lib/home/settings";
 import type { FeedItem, HomeSources, HomeUpdatesAdmin, HomeUpdatesSettingsInput } from "@/lib/home/types";
 
 const SOURCES: { key: keyof HomeSources; label: string; hint: string }[] = [
-  { key: "news", label: "News posts", hint: "The newest published news posts." },
+  { key: "news", label: "News posts", hint: "The newest visible news posts." },
   { key: "workshops", label: "Workshops", hint: "Workshops, by when they were announced." },
   { key: "datasets", label: "Datasets", hint: "Public datasets, by when they were added to the repository." },
 ];

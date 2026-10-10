@@ -20,7 +20,7 @@ export function UpdatesPreview({ items }: { items: FeedItem[] | null }) {
   if (items.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-        Nothing to show: no source has a published item. The home page leaves the section out.
+        Nothing to show: no source has a visible item. The home page leaves the section out.
       </p>
     );
   }

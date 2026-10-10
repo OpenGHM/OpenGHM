@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { EyeOff, Trash2, Upload } from "lucide-react";
+import { Eye, EyeOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog, type ConfirmResult } from "@/components/admin/confirm-action-dialog";
 import { useSelection } from "@/components/admin/community/selection";
@@ -19,9 +19,9 @@ export interface Item {
 }
 
 /**
- * What a list does with its rows: the selection, publish and move to draft
+ * What a list does with its rows: the selection, show and hide
  * for any of them (the selection or one row), and the delete that first
- * asks. Publish and draft toast their outcome, drop the rows they dealt with
+ * asks. Show and hide toast their outcome, drop the rows they dealt with
  * from the selection and refresh; rows they could not change stay selected.
  */
 export function useContentActions(noun: Exclude<Noun, "files">, items: Item[]) {
@@ -47,7 +47,7 @@ export function useContentActions(noun: Exclude<Noun, "files">, items: Item[]) {
       return;
     }
     if (!result.ok) {
-      toast.error(bulkFailure(result, state === "published" ? "publish" : "move to draft"));
+      toast.error(bulkFailure(result, state === "published" ? "show" : "hide"));
       return;
     }
     const summary = stateChangeSummary(noun, state, result.data, titles);
@@ -68,27 +68,27 @@ export function useContentActions(noun: Exclude<Noun, "files">, items: Item[]) {
   };
 }
 
-/** Publish and Move to draft for the selected rows, for a `SelectionBar`. */
+/** Show and Hide for the selected rows, for a `SelectionBar`. */
 export function StateButtons({
   count,
   busy,
-  onPublish,
-  onDraft,
+  onShow,
+  onHide,
 }: {
   count: number;
   busy: boolean;
-  onPublish: () => void;
-  onDraft: () => void;
+  onShow: () => void;
+  onHide: () => void;
 }) {
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="min-h-10 sm:min-h-8" disabled={busy || count === 0} onClick={onPublish}>
-        <Upload aria-hidden="true" />
-        Publish
+      <Button type="button" variant="outline" size="sm" className="min-h-10 sm:min-h-8" disabled={busy || count === 0} onClick={onShow}>
+        <Eye aria-hidden="true" />
+        Show
       </Button>
-      <Button type="button" variant="outline" size="sm" className="min-h-10 sm:min-h-8" disabled={busy || count === 0} onClick={onDraft}>
+      <Button type="button" variant="outline" size="sm" className="min-h-10 sm:min-h-8" disabled={busy || count === 0} onClick={onHide}>
         <EyeOff aria-hidden="true" />
-        Move to draft
+        Hide
       </Button>
     </>
   );
