@@ -31,8 +31,8 @@ export function Hero() {
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
-          <Button variant="on-dark" size="xl">
-            Start Simulation
+          <Button asChild variant="on-dark" size="xl">
+            <Link href="/community">Join a Workshop</Link>
           </Button>
         </>
       }
