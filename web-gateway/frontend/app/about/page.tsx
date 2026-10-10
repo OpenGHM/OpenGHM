@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import Image from "next/image";
-import { ArrowUpRight, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 import { Footer } from "@/components/landing/footer";
 import { PanelDots, SectionEyebrow, SectionTitle } from "@/components/landing/section-parts";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
@@ -238,30 +238,23 @@ export default function AboutPage() {
           </section>
 
           {/* One address, so the panel is a call to action rather than a
-              list: the copy sits at the top and the address and its button
-              at the bottom, matching the height of Supported By. */}
+              list: a short line at the top, the address and its button at
+              the bottom. Kept short so it never sets the row's height. */}
           <section
             aria-labelledby="contact-heading"
-            className="relative flex flex-[1_1_300px] flex-col gap-10 overflow-hidden rounded-panel bg-hero px-6 py-10 text-white sm:px-10 sm:py-12"
+            className="relative flex flex-[1_1_340px] flex-col gap-6 overflow-hidden rounded-panel bg-hero px-6 py-10 text-white sm:px-10 sm:py-12"
           >
             <PanelDots alpha={0.07} />
-            <div className="relative flex flex-col gap-5">
-              <span className="flex size-12 items-center justify-center rounded-2xl border border-white/[0.14] bg-white/10">
-                <Mail className="size-5 text-hero-eyebrow" aria-hidden="true" />
-              </span>
-              <div className="flex flex-col gap-3">
-                <h2
-                  id="contact-heading"
-                  className="text-[28px] font-bold tracking-[-0.03em]"
-                >
-                  Get in touch
-                </h2>
-                <p className="text-base leading-[1.6] text-pretty text-white/70">
-                  Questions about the data, the workspace, a workshop or
-                  working with us? Write to the team and we will get back to
-                  you.
-                </p>
-              </div>
+            <div className="relative flex flex-col gap-3">
+              <h2
+                id="contact-heading"
+                className="text-[28px] font-bold tracking-[-0.03em]"
+              >
+                Get in touch
+              </h2>
+              <p className="text-base leading-[1.6] text-pretty text-white/70">
+                Questions, ideas or collaborations: write to the team.
+              </p>
             </div>
             <div className="relative mt-auto flex flex-col gap-5 border-t border-white/[0.14] pt-6">
               <div className="flex flex-col gap-1">
@@ -274,8 +267,8 @@ export default function AboutPage() {
               </div>
               <Button asChild variant="on-dark" size="xl" className="w-full">
                 <a href={`mailto:${CONTACT_EMAIL}`}>
+                  <Mail aria-hidden="true" />
                   Email us
-                  <ArrowUpRight aria-hidden="true" />
                 </a>
               </Button>
             </div>
