@@ -17,7 +17,7 @@ import NewsPostPage, { generateMetadata } from "./page";
 function post(over: Partial<NewsPost> = {}): NewsPost {
   return {
     id: "n-1", state: "published", created_at: "2026-10-01T00:00:00Z", updated_at: "2026-10-01T00:00:00Z", updated_by: "a",
-    slug: "v2-released", title: "Python API v2.0 Released", tag: "platform", summary: "Faster.", cover: null,
+    slug: "v2-released", title: "Python API v2.0 Released", tag: "announcement", summary: "Faster.", cover: null,
     date: "2026-10-10", link_label: null, link_url: null,
     body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Details of the release." }] }] },
     ...over,
@@ -38,7 +38,7 @@ describe("a news post's page", () => {
     render(await NewsPostPage(params()));
     const crumbs = within(screen.getByRole("navigation", { name: "Breadcrumb" }));
     expect(crumbs.getByRole("link", { name: "News" }).getAttribute("href")).toBe("/news");
-    expect(screen.getByText("Platform Update")).toBeTruthy();
+    expect(screen.getByText("Announcement")).toBeTruthy();
     expect(screen.getByText("October 10, 2026")).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Python API v2.0 Released" })).toBeTruthy();
     expect(screen.getByText("Faster.")).toBeTruthy();

@@ -66,7 +66,7 @@ def http(mongo) -> TestClient:
 def news(mongo, slug: str, day: str, **over) -> str:
     doc = {
         "_id": f"n-{slug}", "state": "published", "slug": slug, "title": f"News {slug}",
-        "tag": "platform", "summary": "Summary.", "cover": None, "date": day,
+        "tag": "announcement", "summary": "Summary.", "cover": None, "date": day,
         "link_label": "Read more", "link_url": None, "body": None,
         "created_at": at(day), "updated_at": at(day), "updated_by": "admin-1",
     }
@@ -152,7 +152,7 @@ def test_each_source_has_its_own_date_tag_link_and_picture(http, mongo):
     workshop(mongo, "x", "2026-10-07", cover={"url": "https://example.org/w.png", "alt": "", "caption": None})
     dataset(mongo, "ds-1", "2026-10-06")
     n, w, d = feed(http)
-    assert (n["kind"], n["tag"], n["tag_label"], n["date"]) == ("news", "platform", "Platform Update", "2026-10-08")
+    assert (n["kind"], n["tag"], n["tag_label"], n["date"]) == ("news", "announcement", "Announcement", "2026-10-08")
     assert n["image"] == {"url": "https://example.org/c.png", "alt": "Cover"}
     assert (w["kind"], w["tag"], w["tag_label"], w["href"]) == (
         "workshop", "event", "Community Event", "/community/workshops/x",
@@ -507,7 +507,7 @@ def test_an_anonymous_caller_is_401_on_every_admin_route(http, method, path, bod
 
 def post(slug: str = "v2-released", **over) -> dict:
     body = {
-        "state": "published", "slug": slug, "title": "Python API v2.0 Released", "tag": "platform",
+        "state": "published", "slug": slug, "title": "Python API v2.0 Released", "tag": "announcement",
         "summary": "Faster.", "cover": None, "date": "2026-10-10", "link_label": "Read more",
         "link_url": None, "body": None,
     }
@@ -526,7 +526,7 @@ def doc(text: str) -> dict:
 
 def test_a_news_post_is_created_read_updated_and_deleted(http, mongo):
     made = create_news(http)
-    assert made["tag"] == "platform" and made["created_at"] and made["updated_by"] == "admin-1"
+    assert made["tag"] == "announcement" and made["created_at"] and made["updated_by"] == "admin-1"
     assert http.get(f"{ADMIN_NEWS}/{made['id']}", headers=ADMIN).json() == made
     assert [p["id"] for p in http.get(ADMIN_NEWS, headers=ADMIN).json()] == [made["id"]]
     r = http.put(f"{ADMIN_NEWS}/{made['id']}", json=post(title="Changed", tag="event"), headers=ADMIN)

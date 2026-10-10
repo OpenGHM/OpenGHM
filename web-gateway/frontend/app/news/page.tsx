@@ -7,7 +7,7 @@ import type { FeedItem } from "@/lib/home/types";
 
 export const metadata: Metadata = {
   title: "News | OpenGHM",
-  description: "New datasets, platform updates and community events from the OpenGHM project.",
+  description: "New datasets, announcements and community events from the OpenGHM project.",
 };
 
 /** Everything the home page's "Latest Datasets & News" draws on, newest first. Open to anyone. */
@@ -27,7 +27,7 @@ export default async function NewsPage() {
         breadcrumb={[{ label: "Home", href: "/" }, { label: "News" }]}
         eyebrow="What's New"
         title="All updates"
-        subtitle="New datasets, platform updates and community events, newest first."
+        subtitle="New datasets, announcements and community events, newest first."
       />
       <PageBody className="flex-1">
         {failed ? (

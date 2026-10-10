@@ -15,7 +15,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 FeedKind = Literal["news", "workshop", "dataset"]
 #: Colours a card's tag pill; the closed list of News posts' tags.
-FeedTag = Literal["announcement", "platform", "dataset", "event", "other"]
+FeedTag = Literal["announcement", "dataset", "event", "other"]
 PinReason = Literal["missing", "unpublished", "private"]
 
 DEFAULT_TITLE = "Latest Datasets & News"

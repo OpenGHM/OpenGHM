@@ -4,7 +4,6 @@ import type { FeedKind } from "@/lib/home/types";
 /** Background and text colour of a card's tag pill. */
 export const TAG_CLASS: Record<NewsTag, string> = {
   dataset: "bg-secondary text-secondary-foreground",
-  platform: "bg-compute/10 text-compute",
   event: "bg-success/10 text-success",
   announcement: "bg-info/10 text-info",
   other: "bg-muted text-muted-foreground",
@@ -13,7 +12,6 @@ export const TAG_CLASS: Record<NewsTag, string> = {
 /** The tags of a news post, in the order the editor lists them. */
 export const NEWS_TAGS: { value: NewsTag; label: string }[] = [
   { value: "announcement", label: "Announcement" },
-  { value: "platform", label: "Platform Update" },
   { value: "dataset", label: "New Dataset" },
   { value: "event", label: "Community Event" },
   { value: "other", label: "News" },

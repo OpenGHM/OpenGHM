@@ -76,7 +76,7 @@ describe("the Latest updates page", () => {
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByText("Pinned")).toBeTruthy();
-    expect(within(rows[0]).getByText("Platform Update")).toBeTruthy();
+    expect(within(rows[0]).getByText("Announcement")).toBeTruthy();
     expect(within(rows[1]).queryByText("Pinned")).toBeNull();
     await waitFor(() => expect(fetchPinCandidates).toHaveBeenCalled());
   });
@@ -258,7 +258,7 @@ describe("the Latest updates page", () => {
 describe("the news list", () => {
   const meta = { created_at: "2026-10-01T00:00:00Z", updated_at: "2026-10-02T00:00:00Z", updated_by: "u1" };
   const post = (over: Partial<NewsPost>): NewsPost => ({
-    id: "n1", state: "published", slug: "one", title: "Post one", tag: "platform", summary: "", cover: null,
+    id: "n1", state: "published", slug: "one", title: "Post one", tag: "announcement", summary: "", cover: null,
     date: "2026-10-09", link_label: null, link_url: null, body: null, ...meta, ...over,
   });
   const posts = [
@@ -270,7 +270,7 @@ describe("the news list", () => {
   it("shows title, tag, date and state, each title a link to its editor", () => {
     render(<NewsList posts={posts} pinned={[]} />);
     expect(screen.getByRole("link", { name: "Post one" }).getAttribute("href")).toBe("/admin/home/news/n1");
-    expect(screen.getAllByText("Platform Update")).toHaveLength(2);
+    expect(screen.getAllByText("Announcement")).toHaveLength(2);
     expect(screen.getByText("Community Event")).toBeTruthy();
     expect(screen.getAllByText("Published")).toHaveLength(2);
   });
@@ -335,11 +335,11 @@ describe("the news editor", () => {
     render(<NewsEditor post={null} />);
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Python API v2" } });
     expect((screen.getByLabelText("Slug") as HTMLInputElement).value).toBe("python-api-v2");
-    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "platform" } });
+    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "announcement" } });
     fireEvent.click(screen.getByRole("button", { name: "Create post" }));
     await waitFor(() => expect(createNews).toHaveBeenCalled());
     expect(createNews.mock.calls[0][0]).toMatchObject({
-      state: "draft", slug: "python-api-v2", title: "Python API v2", tag: "platform", cover: null,
+      state: "draft", slug: "python-api-v2", title: "Python API v2", tag: "announcement", cover: null,
       link_label: null, link_url: null, body: null,
     });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/admin/home/news/n9"));

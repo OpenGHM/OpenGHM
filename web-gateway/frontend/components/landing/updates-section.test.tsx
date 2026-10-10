@@ -45,7 +45,7 @@ describe("an update card", () => {
   it("shows the tag, title and summary, and is not a link without an address", () => {
     render(<UpdateCard item={feedItem()} />);
     const card = screen.getByRole("article");
-    expect(within(card).getByText("Platform Update").className).toMatch(/text-compute/);
+    expect(within(card).getByText("Announcement").className).toMatch(/text-info/);
     expect(within(card).getByRole("heading", { name: "Python API v2.0 Released" })).toBeTruthy();
     expect(within(card).getByText("Major performance improvements.")).toBeTruthy();
     expect(within(card).queryByRole("link")).toBeNull();

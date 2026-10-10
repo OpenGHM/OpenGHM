@@ -222,7 +222,7 @@ class ReorderRequest(BaseModel):
 
 # ---- news posts -------------------------------------------------------------
 
-NewsTag = Literal["announcement", "platform", "dataset", "event", "other"]
+NewsTag = Literal["announcement", "dataset", "event", "other"]
 DEFAULT_NEWS_LINK_LABEL = "Read more"
 
 

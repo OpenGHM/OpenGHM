@@ -46,7 +46,6 @@ CANDIDATE_POOL = 200
 
 NEWS_TAG_LABELS = {
     "announcement": "Announcement",
-    "platform": "Platform Update",
     "dataset": "New Dataset",
     "event": "Community Event",
     "other": "News",

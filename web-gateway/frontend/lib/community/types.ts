@@ -111,7 +111,7 @@ export interface Tutorial extends TutorialInput, ContentMeta {
 export type TutorialCard = Omit<Tutorial, "body"> & { has_body: boolean };
 
 /** The closed list of a news post's tags; each is a coloured pill on its card. */
-export type NewsTag = "announcement" | "platform" | "dataset" | "event" | "other";
+export type NewsTag = "announcement" | "dataset" | "event" | "other";
 
 export interface NewsCover {
   url: string;
