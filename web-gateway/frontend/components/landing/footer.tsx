@@ -1,31 +1,28 @@
 import Image from "next/image";
+import Link from "next/link";
 import { CurrentYear } from "./current-year";
 
-const PLATFORM_LINKS = [
-  "Data Repository",
-  "Simulation Engine",
-  "Python Toolkit",
-  "Documentation",
+// Only pages that exist. Add a link when its page does.
+const PLATFORM_LINKS: FooterLink[] = [
+  { label: "Data Repository", href: "/repository" },
+  { label: "Workspace", href: "/workspace" },
 ];
-const COMMUNITY_LINKS = [
-  "Workshops",
-  "GitHub Discussions",
-  "Contributors",
-  "Code of Conduct",
+const COMMUNITY_LINKS: FooterLink[] = [
+  { label: "Workshops", href: "/community?tab=workshops" },
+  { label: "News", href: "/news" },
 ];
-const LEGAL_LINKS = [
-  "Privacy Policy",
-  "Terms of Service",
-  "Data Citation",
-  "Contact Us",
-];
+
+interface FooterLink {
+  label: string;
+  href: string;
+}
 
 export function Footer() {
   return (
     <footer className="border-t border-border bg-card">
       <div className="mx-auto max-w-[1360px] px-4 pt-12 pb-8 sm:px-7 lg:pt-16">
-        <div className="mb-12 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-[2fr_1fr_1fr_1fr] lg:gap-12">
-          <div className="col-span-2 sm:col-span-3 lg:col-span-1">
+        <div className="mb-12 grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-[2fr_1fr_1fr] lg:gap-12">
+          <div className="col-span-2 lg:col-span-1">
             <Image
               src="/images/logo_light4.webp"
               alt="OpenGHM Logo"
@@ -42,7 +39,6 @@ export function Footer() {
 
           <FooterColumn title="Platform" links={PLATFORM_LINKS} />
           <FooterColumn title="Community" links={COMMUNITY_LINKS} />
-          <FooterColumn title="Legal" links={LEGAL_LINKS} />
         </div>
 
         <div className="border-t border-border pt-6 text-[13px] leading-relaxed text-pretty text-muted-foreground">
@@ -71,7 +67,7 @@ function FooterColumn({
   links,
 }: {
   title: string;
-  links: string[];
+  links: FooterLink[];
 }) {
   return (
     <div>
@@ -80,13 +76,13 @@ function FooterColumn({
       </h5>
       <ul className="space-y-3">
         {links.map((link) => (
-          <li key={link}>
-            <a
-              href="#"
+          <li key={link.href}>
+            <Link
+              href={link.href}
               className="text-sm text-foreground/80 transition-colors hover:text-primary"
             >
-              {link}
-            </a>
+              {link.label}
+            </Link>
           </li>
         ))}
       </ul>
