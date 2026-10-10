@@ -28,7 +28,7 @@ export function CtaSection() {
           </Link>
         </Button>
         <Button asChild variant="on-dark" size="xl">
-          <Link href="/community?tab=tutorials">Browse Tutorials</Link>
+          <Link href="/workspace">Open Workspace</Link>
         </Button>
       </div>
     </section>
