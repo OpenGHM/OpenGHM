@@ -93,8 +93,6 @@ const FUNDING_LOGOS = [
 
 const CONTACTS = [
   { label: "General", email: "info@openghm.org" },
-  { label: "Support", email: "help@openghm.org" },
-  { label: "Press", email: "media@openghm.org" },
 ];
 
 /** The PI and Co-PI get the dark avatar and the filled role pill. */
