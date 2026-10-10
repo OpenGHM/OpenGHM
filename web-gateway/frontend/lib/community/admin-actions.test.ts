@@ -10,6 +10,8 @@ vi.mock("@/lib/api-client", () => ({ getApiClient }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import {
+  bulkContent,
+  bulkDeleteFiles,
   createTutorial,
   createWorkshop,
   deleteCommunityFile,
@@ -76,6 +78,48 @@ describe("writes", () => {
       url: "/api/v1/admin/community/tutorials/reorder",
       data: { ids: ["b", "a"] },
     });
+  });
+
+  it("posts a bulk action to the kind's bulk route and refreshes the public pages", async () => {
+    request.mockResolvedValue({ data: { done: ["a", "b"], missing: ["c"] } });
+    expect(await bulkContent("tutorials", "publish", ["a", "b", "c"])).toEqual({
+      ok: true,
+      data: { done: ["a", "b"], missing: ["c"] },
+    });
+    expect(request).toHaveBeenCalledWith({
+      method: "post",
+      url: "/api/v1/admin/community/tutorials/bulk",
+      data: { action: "publish", ids: ["a", "b", "c"] },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/community", "layout");
+    await bulkContent("publications", "delete", ["p"]);
+    expect(request).toHaveBeenLastCalledWith({
+      method: "post",
+      url: "/api/v1/admin/community/publications/bulk",
+      data: { action: "delete", ids: ["p"] },
+    });
+  });
+
+  it("posts the files to delete to bulk-delete", async () => {
+    request.mockResolvedValue({ data: { done: ["f1"], missing: [] } });
+    expect(await bulkDeleteFiles(["f1"])).toEqual({ ok: true, data: { done: ["f1"], missing: [] } });
+    expect(request).toHaveBeenCalledWith({
+      method: "post",
+      url: "/api/v1/admin/community/files/bulk-delete",
+      data: { ids: ["f1"] },
+    });
+  });
+
+  it("maps a refused bulk request like any other write", async () => {
+    request.mockRejectedValue(refused(401, "Not signed in."));
+    expect(await bulkContent("workshops", "delete", ["w"])).toEqual({ ok: false, reason: "session_expired" });
+    request.mockRejectedValue(refused(422, [{ loc: ["body", "ids"], msg: "List should have at least 1 item", type: "x" }]));
+    expect(await bulkDeleteFiles([])).toMatchObject({
+      ok: false,
+      reason: "error",
+      errors: [{ path: "ids", message: "List should have at least 1 item" }],
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("saves the settings with PUT", async () => {

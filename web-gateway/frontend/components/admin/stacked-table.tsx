@@ -30,7 +30,7 @@ export function StackedRow({ className, ...props }: React.ComponentProps<typeof 
   return (
     <TableRow
       className={cn(
-        "max-sm:block max-sm:rounded-xl max-sm:border! max-sm:bg-card max-sm:p-3",
+        "max-sm:relative max-sm:block max-sm:rounded-xl max-sm:border! max-sm:bg-card max-sm:p-3",
         className
       )}
       {...props}
@@ -56,3 +56,19 @@ export function StackedCell({
     />
   );
 }
+
+/*
+ * The cells a list with row controls adds. Each is a column of its own from
+ * `sm`; on a phone, where the row is a card, it sits in a corner of the card
+ * (the row is `relative`) and `TITLE_CELL` leaves room for them.
+ */
+
+/** The row's checkbox: the first column; the card's top-left corner. */
+export const CHECK_CELL = "w-10 pr-0 max-sm:absolute max-sm:top-[1.0625rem] max-sm:left-3 max-sm:w-auto max-sm:p-0";
+
+/** The row's "⋯" menu: the last column; the card's top-right corner. */
+export const MENU_CELL = "w-12 pr-2 pl-0 text-right max-sm:absolute max-sm:top-1.5 max-sm:right-1.5 max-sm:w-auto max-sm:p-0";
+
+/** The row's title, which may wrap so a long one does not widen the table, with
+ *  the corners left free for the checkbox and the menu. */
+export const TITLE_CELL = "min-w-0 whitespace-normal max-sm:pr-12 max-sm:pl-8";

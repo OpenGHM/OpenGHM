@@ -477,10 +477,17 @@ only the `admin` role holds: `GET`, `POST`, `GET|PUT|DELETE /{id}` for
 `workshops`, `tutorials` and `publications`; `POST /tutorials/reorder`;
 `GET|PUT /settings`; `POST` (multipart field `file`), `GET` and `DELETE /{id}`
 on `/files`. A slug already in use is `409 slug_taken`.
+The lists act on several rows at once: `POST /{workshops|tutorials|publications}/bulk`
+with `{"action": "delete" | "publish" | "draft", "ids": [...]}` and
+`POST /files/bulk-delete` with `{"ids": [...]}`, 1 to 200 unique ids each.
+They answer `{"done": [...], "missing": [...]}`: an id with no item is
+reported, not an error, and the rest are still done. `publish` and `draft`
+change only `state`, `updated_at` and `updated_by`.
 Every write is an audit event in the `content` category, `community.<kind>.create`,
 `.update` or `.delete`, `community.tutorial.reorder`, `community.settings.update`,
 `community.file.upload` and `community.file.delete`, with the item's id as its
-target.
+target. A bulk action writes one event per item, named as the single-item
+route names it (a state change is `.update`).
 
 A workshop's `status` (`upcoming` or `past`) is derived at read time: past once
 its last day, `end_date` or else `date`, is before today in UTC. Rich text is

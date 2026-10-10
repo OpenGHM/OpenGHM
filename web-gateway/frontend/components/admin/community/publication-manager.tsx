@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { EyeOff, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +17,19 @@ import {
 import { TableHead, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
 import { EmptyState } from "@/components/admin/admin-states";
-import { StackedBody, StackedCell, StackedHeader, StackedRow, StackedTable } from "@/components/admin/stacked-table";
+import {
+  CHECK_CELL,
+  MENU_CELL,
+  StackedBody,
+  StackedCell,
+  StackedHeader,
+  StackedRow,
+  StackedTable,
+  TITLE_CELL,
+} from "@/components/admin/stacked-table";
+import { DeleteButton, DeleteItemsDialog, StateButtons, useContentActions } from "@/components/admin/community/content-actions";
+import { RowMenu } from "@/components/admin/community/row-menu";
+import { RowCheckbox, SelectAllCheckbox, SelectionBar } from "@/components/admin/community/selection";
 import { SaveNotices, StateSelect } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, StatePill, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
 import { useContentEditor } from "@/components/admin/community/use-content-editor";
@@ -41,8 +53,10 @@ type Editing = { kind: "none" } | { kind: "new" } | { kind: "edit"; publication:
 
 /**
  * The publications list, with the editor in a sheet over the right edge so the
- * list keeps its place. Year first, as the site orders them. A sheet with
- * unsaved changes asks before it closes. `startNew` opens it on a new
+ * list keeps its place. Year first, as the site orders them. A checkbox on
+ * each row selects it for Publish, Move to draft and Delete, and the "⋯" at the
+ * end of a row holds Edit, the state change and Delete for that row. A sheet
+ * with unsaved changes asks before it closes. `startNew` opens it on a new
  * publication: the page's New publication link is `?new=1`, in the band like
  * every other section's New button, and the page keys this component on it.
  */
@@ -52,6 +66,7 @@ export function PublicationManager({ publications, startNew = false }: { publica
   const [discarding, setDiscarding] = useState(false);
   // The sheet's form reports whether it has unsaved input, so closing can ask.
   const dirty = useRef(false);
+  const { selection, selectedItems, busy, setState, deleting, askDelete, closeDelete } = useContentActions("publications", publications);
 
   const markDirty = useCallback((value: boolean) => {
     dirty.current = value;
@@ -74,45 +89,78 @@ export function PublicationManager({ publications, startNew = false }: { publica
           Add the first one with New publication above. It stays a draft, off the site, until you publish it.
         </EmptyState>
       ) : (
-        <StackedTable>
-          <StackedHeader>
-            <TableRow>
-              <TableHead className="w-20">Year</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Updated</TableHead>
-            </TableRow>
-          </StackedHeader>
-          <StackedBody>
-            {publications.map((p) => (
-              <StackedRow key={p.id}>
-                <StackedCell label="Year" className="font-mono text-sm">
-                  {p.year}
-                </StackedCell>
-                <StackedCell className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setEditing({ kind: "edit", publication: p })}
-                    className="min-h-10 text-left font-medium text-foreground underline-offset-4 outline-none hover:text-primary hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-0"
-                  >
-                    {p.title}
-                  </button>
-                  <p className="text-xs text-muted-foreground">{[p.authors, p.venue].filter(Boolean).join(" · ")}</p>
-                </StackedCell>
-                <StackedCell label="Type" className="text-sm">
-                  {typeLabel(p.type)}
-                </StackedCell>
-                <StackedCell label="State">
-                  <StatePill state={p.state} />
-                </StackedCell>
-                <StackedCell label="Updated" className="text-xs text-muted-foreground">
-                  <TimeStamp value={p.updated_at} format="relative" />
-                </StackedCell>
-              </StackedRow>
-            ))}
-          </StackedBody>
-        </StackedTable>
+        <>
+          <SelectionBar selection={selection} label="publications" layout="table">
+            <StateButtons
+              count={selectedItems.length}
+              busy={busy}
+              onPublish={() => void setState(selectedItems, "published")}
+              onDraft={() => void setState(selectedItems, "draft")}
+            />
+            <DeleteButton busy={busy} onClick={() => askDelete(selectedItems)} />
+          </SelectionBar>
+          <StackedTable>
+            <StackedHeader>
+              <TableRow>
+                <TableHead className={CHECK_CELL}>
+                  <SelectAllCheckbox selection={selection} label="publications" />
+                </TableHead>
+                <TableHead className="w-20">Year</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className={MENU_CELL}>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </StackedHeader>
+            <StackedBody>
+              {publications.map((p) => (
+                // The year is the first column but, on a phone, the card leads with the title.
+                <StackedRow key={p.id} data-state={selection.has(p.id) ? "selected" : undefined} className="max-sm:flex max-sm:flex-col">
+                  <StackedCell className={CHECK_CELL}>
+                    <RowCheckbox selection={selection} id={p.id} title={p.title} />
+                  </StackedCell>
+                  <StackedCell label="Year" className="font-mono text-sm">
+                    {p.year}
+                  </StackedCell>
+                  <StackedCell className={`${TITLE_CELL} max-sm:order-first`}>
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ kind: "edit", publication: p })}
+                      className="min-h-10 text-left font-medium text-foreground underline-offset-4 outline-none hover:text-primary hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-h-0"
+                    >
+                      {p.title}
+                    </button>
+                    <p className="text-xs text-muted-foreground">{[p.authors, p.venue].filter(Boolean).join(" · ")}</p>
+                  </StackedCell>
+                  <StackedCell label="Type" className="text-sm">
+                    {typeLabel(p.type)}
+                  </StackedCell>
+                  <StackedCell label="State">
+                    <StatePill state={p.state} />
+                  </StackedCell>
+                  <StackedCell label="Updated" className="text-xs text-muted-foreground">
+                    <TimeStamp value={p.updated_at} format="relative" />
+                  </StackedCell>
+                  <StackedCell className={MENU_CELL}>
+                    <RowMenu
+                      title={p.title}
+                      actions={[
+                        { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setEditing({ kind: "edit", publication: p }) },
+                        p.state === "published"
+                          ? { key: "draft", label: "Move to draft", icon: EyeOff, disabled: busy, onSelect: () => void setState([p], "draft") }
+                          : { key: "publish", label: "Publish", icon: Upload, disabled: busy, onSelect: () => void setState([p], "published") },
+                        { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => askDelete([p]) },
+                      ]}
+                    />
+                  </StackedCell>
+                </StackedRow>
+              ))}
+            </StackedBody>
+          </StackedTable>
+        </>
       )}
 
       <Sheet open={editing.kind !== "none"} onOpenChange={(open) => !open && requestClose()}>
@@ -129,6 +177,8 @@ export function PublicationManager({ publications, startNew = false }: { publica
           )}
         </SheetContent>
       </Sheet>
+
+      <DeleteItemsDialog noun="publications" targets={deleting} onClose={closeDelete} onDeleted={selection.drop} />
 
       <ConfirmActionDialog
         open={discarding}

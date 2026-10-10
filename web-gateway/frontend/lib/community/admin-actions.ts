@@ -5,7 +5,10 @@ import { getApiClient } from "@/lib/api-client";
 import { adminFailure } from "@/lib/community/admin-failure";
 import type { ActionResult } from "@/lib/jobs/types";
 import type {
+  BulkAction,
+  BulkResult,
   CommunityFile,
+  ContentKind,
   CommunitySettings,
   CommunitySettingsInput,
   Publication,
@@ -129,6 +132,19 @@ export async function deletePublication(id: string): Promise<ActionResult<null>>
   return write<null>("delete", `/publications/${encodeURIComponent(id)}`);
 }
 
+/**
+ * Delete, publish or move to draft several items of a kind in one request.
+ * The backend answers per id (`done`, `missing`) and audits each item as the
+ * single-item route does; `publish` and `draft` change only the state.
+ */
+export async function bulkContent(
+  kind: ContentKind,
+  action: BulkAction,
+  ids: string[]
+): Promise<ActionResult<BulkResult>> {
+  return write<BulkResult>("post", `/${kind}/bulk`, { action, ids });
+}
+
 // ─── Page settings and files ─────────────────────────────────────────────────
 
 export async function fetchAdminSettings(): Promise<ActionResult<CommunitySettings>> {
@@ -145,4 +161,9 @@ export async function fetchCommunityFiles(): Promise<ActionResult<CommunityFile[
 
 export async function deleteCommunityFile(id: string): Promise<ActionResult<null>> {
   return write<null>("delete", `/files/${encodeURIComponent(id)}`);
+}
+
+/** Deletes several files in one request; answers per id like `bulkContent`. */
+export async function bulkDeleteFiles(ids: string[]): Promise<ActionResult<BulkResult>> {
+  return write<BulkResult>("post", "/files/bulk-delete", { ids });
 }

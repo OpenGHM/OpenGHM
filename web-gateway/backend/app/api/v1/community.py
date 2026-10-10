@@ -22,6 +22,9 @@ from app.core.authz import require_permission
 from app.core.database import get_db
 from app.core.roles import Permission
 from app.models.community import (
+    BulkDeleteRequest,
+    BulkRequest,
+    BulkResult,
     CommunityFile,
     CommunityPage,
     CommunitySettings,
@@ -191,6 +194,51 @@ async def download_file(file_id: str):
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+# ---- admin: bulk actions -------------------------------------------------------
+
+
+async def _bulk(
+    user: TokenPayload, body: BulkRequest, collection: str, kind: str, label: str
+) -> BulkResult:
+    """Apply `body.action` to each id, one at a time, and audit each one as the
+    single-item route does (`community.<kind>.delete`, or `.update` for a state
+    change; `label` is the field the audit detail names the item by). An id with
+    no item is reported in `missing` and does not stop the rest."""
+    done: list[str] = []
+    missing: list[str] = []
+    for item_id in body.ids:
+        doc = await get_db()[collection].find_one({"_id": item_id})
+        if doc is None:
+            missing.append(item_id)
+            continue
+        if body.action == "delete":
+            await get_db()[collection].delete_one({"_id": item_id})
+            await _audit(user, f"community.{kind}.delete", item_id, **{label: doc[label]})
+        else:
+            state = "published" if body.action == "publish" else "draft"
+            await get_db()[collection].update_one(
+                {"_id": item_id}, {"$set": _changes(user, {"state": state})}
+            )
+            await _audit(user, f"community.{kind}.update", item_id, **{label: doc[label]}, state=state)
+        done.append(item_id)
+    return BulkResult(done=done, missing=missing)
+
+
+@admin_router.post("/workshops/bulk", response_model=BulkResult)
+async def bulk_workshops(body: BulkRequest, user: TokenPayload = Depends(_content_manager)):
+    return await _bulk(user, body, WORKSHOPS, "workshop", "slug")
+
+
+@admin_router.post("/tutorials/bulk", response_model=BulkResult)
+async def bulk_tutorials(body: BulkRequest, user: TokenPayload = Depends(_content_manager)):
+    return await _bulk(user, body, TUTORIALS, "tutorial", "slug")
+
+
+@admin_router.post("/publications/bulk", response_model=BulkResult)
+async def bulk_publications(body: BulkRequest, user: TokenPayload = Depends(_content_manager)):
+    return await _bulk(user, body, PUBLICATIONS, "publication", "title")
 
 
 # ---- admin: workshops and tutorials (both have a unique slug) ----------------
@@ -488,3 +536,23 @@ async def delete_file(file_id: str, user: TokenPayload = Depends(_content_manage
     await community_files.delete_file(file_id)
     await _audit(user, "community.file.delete", file_id, filename=info["filename"])
     return Response(status_code=204)
+
+
+@admin_router.post("/files/bulk-delete", response_model=BulkResult)
+async def bulk_delete_files(body: BulkDeleteRequest, user: TokenPayload = Depends(_content_manager)):
+    """Delete each listed file, audited as `community.file.delete`; an id with
+    no file is reported in `missing`."""
+    done: list[str] = []
+    missing: list[str] = []
+    for file_id in body.ids:
+        stored = await community_files.open_file(file_id)
+        if stored is None:
+            missing.append(file_id)
+            continue
+        info = community_files.describe(stored)
+        if not await community_files.delete_file(file_id):
+            missing.append(file_id)
+            continue
+        await _audit(user, "community.file.delete", file_id, filename=info["filename"])
+        done.append(file_id)
+    return BulkResult(done=done, missing=missing)

@@ -220,6 +220,40 @@ class ReorderRequest(BaseModel):
     ids: list[str] = Field(max_length=500)
 
 
+# ---- bulk actions -----------------------------------------------------------
+
+#: At most this many items in one bulk request.
+BULK_MAX = 200
+
+BulkAction = Literal["delete", "publish", "draft"]
+_BulkId = Annotated[str, Field(min_length=1, max_length=64)]
+
+
+def _unique(ids: list[str]) -> list[str]:
+    if len(set(ids)) != len(ids):
+        raise ValueError("Each item may be listed once.")
+    return ids
+
+
+class BulkRequest(BaseModel):
+    """One action for several items of a kind: `delete`, or `publish` and
+    `draft`, which only change the state."""
+
+    action: BulkAction
+    ids: Annotated[list[_BulkId], Field(min_length=1, max_length=BULK_MAX), AfterValidator(_unique)]
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: Annotated[list[_BulkId], Field(min_length=1, max_length=BULK_MAX), AfterValidator(_unique)]
+
+
+class BulkResult(BaseModel):
+    """What happened to each id: `done` were changed, `missing` no longer exist."""
+
+    done: list[str]
+    missing: list[str]
+
+
 # ---- publications -----------------------------------------------------------
 
 

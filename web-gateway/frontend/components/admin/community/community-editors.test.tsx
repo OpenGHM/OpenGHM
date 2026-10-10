@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const actions = vi.hoisted(() => ({
@@ -13,6 +13,8 @@ const actions = vi.hoisted(() => ({
   deletePublication: vi.fn(),
   saveAdminSettings: vi.fn(),
   deleteCommunityFile: vi.fn(),
+  bulkContent: vi.fn(),
+  bulkDeleteFiles: vi.fn(),
 }));
 const { uploadCommunityFile, toast, refresh, replace } = vi.hoisted(() => ({
   uploadCommunityFile: vi.fn(),
@@ -51,6 +53,18 @@ import { SettingsForm } from "@/components/admin/community/settings-form";
 import { TutorialEditor } from "@/components/admin/community/tutorial-editor";
 import { WorkshopEditor } from "@/components/admin/community/workshop-editor";
 import type { CommunityFile, Publication, Tutorial, Workshop } from "@/lib/community/types";
+
+// Radix menus read what jsdom lacks.
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  Element.prototype.scrollIntoView ??= () => {};
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => {};
+});
 
 afterEach(() => {
   cleanup();
@@ -410,6 +424,35 @@ describe("publications", () => {
     expect(replace).toHaveBeenCalledWith("/admin/community/publications", { scroll: false });
   });
 
+  it("has a checkbox per row, a select-all and a menu whose Edit opens the sheet", async () => {
+    render(<PublicationManager publications={[publication]} />);
+    expect(screen.getAllByRole("checkbox", { name: "Select all publications" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("checkbox", { name: "Select A paper" })).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: "Actions for A paper" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const menu = await screen.findByRole("menu");
+    // A publication has no page of its own on the site.
+    expect(within(menu).queryByRole("menuitem", { name: "View on site" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("deletes the selected publications after asking, and publishes them from the bar", async () => {
+    actions.bulkContent.mockResolvedValue({ ok: true, data: { done: [publication.id], missing: [] } });
+    render(<PublicationManager publications={[publication]} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select A paper" }));
+    const bar = screen.getByRole("region", { name: "Selected publications" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(actions.bulkContent).toHaveBeenCalledWith("publications", "publish", [publication.id]));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select A paper" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Selected publications" })).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Delete this publication?")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete publication" }));
+    await waitFor(() => expect(actions.bulkContent).toHaveBeenLastCalledWith("publications", "delete", [publication.id]));
+  });
+
   it("asks before it closes a sheet with unsaved input", async () => {
     render(<PublicationManager publications={[publication]} />);
     fireEvent.click(screen.getByRole("button", { name: "A paper" }));
@@ -513,6 +556,12 @@ describe("the media library", () => {
     { id: "a".repeat(24), url: `/api/community/files/${"a".repeat(24)}`, filename: "photo.jpg", content_type: "image/jpeg", size: 340 * 1024, uploaded_at: "2026-10-05T00:00:00Z" },
     { id: "b".repeat(24), url: `/api/community/files/${"b".repeat(24)}`, filename: "slides.pdf", content_type: "application/pdf", size: 6.1 * 1024 * 1024, uploaded_at: "2026-10-04T00:00:00Z" },
   ];
+  const openMenu = async (name: string) => {
+    const trigger = screen.getByRole("button", { name: `Actions for ${name}` });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    return screen.findByRole("menu");
+  };
 
   it("shows an image as a thumbnail and another file by its type, with sizes", () => {
     render(<FilesLibrary files={files} />);
@@ -522,23 +571,59 @@ describe("the media library", () => {
     expect(screen.getByText(/6\.1 MB/)).toBeTruthy();
   });
 
-  it("copies the address content stores", async () => {
+  it("copies the address content stores, from the tile's menu", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     render(<FilesLibrary files={files} />);
-    fireEvent.click(screen.getByRole("button", { name: "Copy address of photo.jpg" }));
+    fireEvent.click(within(await openMenu("photo.jpg")).getByRole("menuitem", { name: "Copy address" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(files[0].url));
+    expect(toast.success).toHaveBeenCalledWith("Copied the address of photo.jpg.");
   });
 
   it("warns that content may use a file before it deletes it", async () => {
-    actions.deleteCommunityFile.mockResolvedValue({ ok: true, data: null });
+    actions.bulkDeleteFiles.mockResolvedValue({ ok: true, data: { done: ["b".repeat(24)], missing: [] } });
     render(<FilesLibrary files={files} />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete slides.pdf" }));
-    expect(await screen.findByText(/broken image or link/)).toBeTruthy();
-    expect(actions.deleteCommunityFile).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Delete file" }));
-    await waitFor(() => expect(actions.deleteCommunityFile).toHaveBeenCalledWith("b".repeat(24)));
+    fireEvent.click(within(await openMenu("slides.pdf")).getByRole("menuitem", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/broken image or link/)).toBeTruthy();
+    expect(within(dialog).getByText("“slides.pdf”")).toBeTruthy();
+    expect(actions.bulkDeleteFiles).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete file" }));
+    await waitFor(() => expect(actions.bulkDeleteFiles).toHaveBeenCalledWith(["b".repeat(24)]));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("has a checkbox on each tile and a select-all that goes indeterminate", () => {
+    render(<FilesLibrary files={files} />);
+    const all = screen.getByRole("checkbox", { name: "Select all files" });
+    expect(all.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select photo.jpg" }));
+    expect(all.getAttribute("aria-checked")).toBe("mixed");
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    fireEvent.click(all);
+    expect(all.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.queryByText("2 selected")).toBeNull();
+  });
+
+  it("offers no Publish or Move to draft for files, and deletes the selected ones after a warning", async () => {
+    actions.bulkDeleteFiles.mockResolvedValue({ ok: true, data: { done: files.map((f) => f.id), missing: [] } });
+    render(<FilesLibrary files={files} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all files" }));
+    const bar = screen.getByRole("region", { name: "Selected files" });
+    expect(within(bar).queryByRole("button", { name: "Publish" })).toBeNull();
+    expect(within(bar).queryByRole("button", { name: "Move to draft" })).toBeNull();
+    fireEvent.click(within(bar).getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Delete 2 files?")).toBeTruthy();
+    expect(within(dialog).getByText(/broken image or link/)).toBeTruthy();
+    expect(within(dialog).getByText("“photo.jpg” and “slides.pdf”")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete 2 files" }));
+    await waitFor(() => expect(actions.bulkDeleteFiles).toHaveBeenCalledWith(files.map((f) => f.id)));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("2 files deleted."));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(screen.queryByText("2 selected")).toBeNull();
   });
 
   it("shows the empty state", () => {

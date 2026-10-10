@@ -156,3 +156,14 @@ export interface CommunityFile {
   size: number;
   uploaded_at: string;
 }
+
+/** The lists an admin acts on several rows of at once. */
+export type ContentKind = "workshops" | "tutorials" | "publications";
+
+export type BulkAction = "delete" | "publish" | "draft";
+
+/** What a bulk request did, by id: `done` were changed, `missing` no longer exist. */
+export interface BulkResult {
+  done: string[];
+  missing: string[];
+}

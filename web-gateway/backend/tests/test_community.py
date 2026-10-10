@@ -220,19 +220,23 @@ ADMIN_ROUTES = [
     ("get", "/workshops/x", None),
     ("put", "/workshops/x", workshop()),
     ("delete", "/workshops/x", None),
+    ("post", "/workshops/bulk", {"action": "delete", "ids": ["x"]}),
     ("get", "/tutorials", None),
     ("post", "/tutorials", tutorial()),
     ("put", "/tutorials/x", tutorial()),
     ("delete", "/tutorials/x", None),
     ("post", "/tutorials/reorder", {"ids": []}),
+    ("post", "/tutorials/bulk", {"action": "publish", "ids": ["x"]}),
     ("get", "/publications", None),
     ("post", "/publications", publication()),
     ("put", "/publications/x", publication()),
     ("delete", "/publications/x", None),
+    ("post", "/publications/bulk", {"action": "draft", "ids": ["x"]}),
     ("get", "/settings", None),
     ("put", "/settings", {}),
     ("get", "/files", None),
     ("delete", f"/files/{FILE_ID}", None),
+    ("post", "/files/bulk-delete", {"ids": [FILE_ID]}),
 ]
 
 
@@ -355,6 +359,121 @@ def test_the_admin_list_has_every_state_newest_date_first(http):
     got = http.get(f"{ADMIN_URL}/workshops", headers=ADMIN).json()
     assert [w["slug"] for w in got] == ["b", "a"]
     assert got[1]["state"] == "draft" and "body" in got[1]
+
+
+# ---- bulk actions ----------------------------------------------------------------
+
+BULK_KINDS = [
+    ("workshops", workshop, "workshop", "slug"),
+    ("tutorials", tutorial, "tutorial", "slug"),
+    ("publications", publication, "publication", "title"),
+]
+
+
+def bulk(http, kind: str, action: str, ids: list[str], headers=ADMIN):
+    return http.post(f"{ADMIN_URL}/{kind}/bulk", json={"action": action, "ids": ids}, headers=headers)
+
+
+def collection_of(mongo: FakeDB, kind: str):
+    return getattr(mongo, f"community_{kind}")
+
+
+def named(kind: str, build, n: int) -> dict:
+    """A body for the n-th item: slugs and titles differ, so audits can tell them apart."""
+    return build(f"item-{n}", title=f"Item {n}") if kind != "publications" else build(title=f"Item {n}")
+
+
+@pytest.mark.parametrize(("kind", "build", "noun", "label"), BULK_KINDS)
+def test_bulk_delete_removes_each_item_and_audits_each_like_a_single_delete(http, mongo, kind, build, noun, label):
+    items = [create(http, kind, named(kind, build, n)) for n in range(3)]
+    ids = [i["id"] for i in items]
+    r = bulk(http, kind, "delete", ids[:2])
+    assert r.status_code == 200
+    assert r.json() == {"done": ids[:2], "missing": []}
+    assert set(collection_of(mongo, kind).docs) == {ids[2]}
+    deletes = [e for e in mongo.audit_events.docs.values() if e["action"] == f"community.{noun}.delete"]
+    assert sorted(e["target_id"] for e in deletes) == sorted(ids[:2])
+    assert all(e["actor_id"] == "admin-1" and e["category"] == "content" for e in deletes)
+    # The detail is what the single route writes: the slug, or a publication's title.
+    expected = {i["id"]: i[label] for i in items[:2]}
+    assert {e["target_id"]: e["detail"][label] for e in deletes} == expected
+
+
+@pytest.mark.parametrize(("kind", "build", "noun", "label"), BULK_KINDS)
+def test_bulk_publish_and_draft_change_only_the_state_and_who_and_when(http, mongo, kind, build, noun, label):
+    drafts = [create(http, kind, {**named(kind, build, n), "state": "draft"}) for n in range(2)]
+    ids = [d["id"] for d in drafts]
+    before = {i: dict(collection_of(mongo, kind).docs[i]) for i in ids}
+    r = bulk(http, kind, "publish", ids)
+    assert r.json() == {"done": ids, "missing": []}
+    for i in ids:
+        after = collection_of(mongo, kind).docs[i]
+        assert after["state"] == "published"
+        assert after["updated_by"] == "admin-1" and after["updated_at"] >= before[i]["updated_at"]
+        assert {k: v for k, v in after.items() if k not in ("state", "updated_at", "updated_by")} == {
+            k: v for k, v in before[i].items() if k not in ("state", "updated_at", "updated_by")
+        }
+    assert bulk(http, kind, "draft", ids[:1]).json() == {"done": ids[:1], "missing": []}
+    states = {i: collection_of(mongo, kind).docs[i]["state"] for i in ids}
+    assert states == {ids[0]: "draft", ids[1]: "published"}
+    # One audit event per item and change, named as a single update is.
+    updates = [e for e in mongo.audit_events.docs.values() if e["action"] == f"community.{noun}.update"]
+    assert len(updates) == 3
+    assert sorted((e["target_id"], e["detail"]["state"]) for e in updates) == sorted(
+        [(ids[0], "published"), (ids[1], "published"), (ids[0], "draft")]
+    )
+    assert all(e["detail"][label] == drafts[ids.index(e["target_id"])][label] for e in updates)
+
+
+def test_a_published_workshop_goes_on_the_site_and_a_drafted_one_comes_off(http):
+    w = create(http, "workshops", workshop("w", state="draft"))
+    assert http.get(f"{PUBLIC}/workshops/w").status_code == 404
+    bulk(http, "workshops", "publish", [w["id"]])
+    assert http.get(f"{PUBLIC}/workshops/w").status_code == 200
+    bulk(http, "workshops", "draft", [w["id"]])
+    assert http.get(f"{PUBLIC}/workshops/w").status_code == 404
+
+
+@pytest.mark.parametrize("action", ["delete", "publish", "draft"])
+def test_bulk_reports_ids_that_do_not_exist_and_still_does_the_rest(http, mongo, action):
+    t = create(http, "tutorials", tutorial("a"))
+    r = bulk(http, "tutorials", action, ["nope", t["id"], "gone"])
+    assert r.status_code == 200
+    assert r.json() == {"done": [t["id"]], "missing": ["nope", "gone"]}
+    assert [e["target_id"] for e in mongo.audit_events.docs.values() if e["action"] != "community.tutorial.create"] == [t["id"]]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"action": "archive", "ids": ["a"]},
+        {"action": "delete", "ids": []},
+        {"action": "delete"},
+        {"ids": ["a"]},
+        {"action": "delete", "ids": ["a", "a"]},
+        {"action": "delete", "ids": [""]},
+        {"action": "delete", "ids": [1]},
+        {"action": "delete", "ids": [f"id-{n}" for n in range(201)]},
+    ],
+)
+def test_bulk_refuses_a_bad_action_or_ids_and_changes_nothing(http, mongo, body):
+    w = create(http, "workshops", workshop())
+    r = http.post(f"{ADMIN_URL}/workshops/bulk", json=body, headers=ADMIN)
+    assert r.status_code == 422
+    assert set(mongo.community_workshops.docs) == {w["id"]}
+    assert audit_actions(mongo) == ["community.workshop.create"]
+
+
+def test_bulk_takes_two_hundred_ids(http):
+    ids = [f"id-{n}" for n in range(200)]
+    assert bulk(http, "publications", "delete", ids).json() == {"done": [], "missing": ids}
+
+
+def test_bulk_leaves_other_kinds_alone(http, mongo):
+    w = create(http, "workshops", workshop())
+    t = create(http, "tutorials", tutorial())
+    assert bulk(http, "tutorials", "delete", [w["id"], t["id"]]).json() == {"done": [t["id"]], "missing": [w["id"]]}
+    assert set(mongo.community_workshops.docs) == {w["id"]}
 
 
 # ---- field rules ----------------------------------------------------------------
@@ -720,6 +839,27 @@ def test_an_image_is_stored_listed_served_inline_and_deleted(http, mongo):
     assert audit_actions(mongo) == ["community.file.upload", "community.file.delete"]
     ev = [e for e in mongo.audit_events.docs.values() if e["action"].endswith("upload")][0]
     assert ev["target_id"] == f["id"] and ev["detail"]["filename"] == "Photo One.png"
+
+
+def test_bulk_delete_removes_files_audits_each_and_reports_missing(http, mongo):
+    a = upload(http, "a.png", PNG).json()
+    b = upload(http, "b.png", PNG).json()
+    c = upload(http, "c.png", PNG).json()
+    other = "f" * 24
+    r = http.post(f"{ADMIN_URL}/files/bulk-delete", json={"ids": [a["id"], other, "not-an-id", c["id"]]}, headers=ADMIN)
+    assert r.status_code == 200
+    assert r.json() == {"done": [a["id"], c["id"]], "missing": [other, "not-an-id"]}
+    assert [f["id"] for f in http.get(f"{ADMIN_URL}/files", headers=ADMIN).json()] == [b["id"]]
+    assert http.get(f"{PUBLIC}/files/{a['id']}").status_code == 404
+    deletes = [e for e in mongo.audit_events.docs.values() if e["action"] == "community.file.delete"]
+    assert sorted((e["target_id"], e["detail"]["filename"]) for e in deletes) == [(a["id"], "a.png"), (c["id"], "c.png")]
+
+
+@pytest.mark.parametrize("body", [{"ids": []}, {}, {"ids": [FILE_ID, FILE_ID]}, {"ids": ["x"] * 2}, {"ids": [str(n) for n in range(201)]}])
+def test_bulk_file_delete_refuses_bad_ids_and_deletes_nothing(http, body):
+    f = upload(http, "a.png", PNG).json()
+    assert http.post(f"{ADMIN_URL}/files/bulk-delete", json=body, headers=ADMIN).status_code == 422
+    assert [x["id"] for x in http.get(f"{ADMIN_URL}/files", headers=ADMIN).json()] == [f["id"]]
 
 
 def test_a_pdf_shows_inline_and_other_files_download(http):
