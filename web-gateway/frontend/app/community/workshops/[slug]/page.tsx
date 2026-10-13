@@ -49,25 +49,20 @@ export default async function WorkshopPage({ params }: Params) {
       />
       <PageBody className="flex-1">
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-          {cover && workshop.cover && (
-            // The picture runs to the card's edges, at 16:9 (2:1 on a wide
-            // screen), cropped to that shape rather than set in a frame.
-            <figure className="overflow-hidden rounded-card bg-card shadow-raised lg:col-span-2">
-              <CmsImage
-                src={cover.url}
-                alt={cover.alt}
-                loading="eager"
-                className="block aspect-video max-h-[520px] w-full bg-accent object-cover lg:aspect-[2/1]"
-              />
-              {workshop.cover.caption && (
-                <figcaption className="px-5 py-3 text-[13px] leading-normal text-muted-foreground">
-                  {workshop.cover.caption}
-                </figcaption>
-              )}
-            </figure>
-          )}
-
           <div className="flex min-w-0 flex-col gap-4">
+            {cover && workshop.cover && (
+              // Shown whole, flush to the card's edges: the width of the text
+              // column, at the picture's own shape.
+              <figure className="overflow-hidden rounded-card bg-card shadow-raised">
+                <CmsImage src={cover.url} alt={cover.alt} loading="eager" className="block h-auto w-full" />
+                {workshop.cover.caption && (
+                  <figcaption className="px-5 py-3 text-[13px] leading-normal text-muted-foreground">
+                    {workshop.cover.caption}
+                  </figcaption>
+                )}
+              </figure>
+            )}
+
             <article
               className={`flex flex-col gap-[18px] rounded-card bg-card p-[clamp(26px,3.6vw,48px)] ${cover ? "shadow-card" : "shadow-raised"}`}
             >

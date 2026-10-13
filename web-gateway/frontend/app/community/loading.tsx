@@ -28,7 +28,7 @@ export default function CommunityLoading() {
       </div>
       <PageBody className="reveal-delayed flex flex-1 flex-col gap-4" as="main">
         <div className="grid overflow-hidden rounded-card bg-card shadow-raised md:grid-cols-2">
-          <Skeleton className="aspect-video rounded-none md:aspect-auto md:min-h-[300px]" />
+          <Skeleton className="aspect-[4/3] rounded-none" />
           <div className="flex flex-col gap-4 px-5 py-6 sm:px-[30px]">
             <Skeleton className="h-6 w-40 rounded-full" />
             <Skeleton className="h-8 w-3/4" />

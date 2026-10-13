@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { CmsImage } from "@/components/community/cms-image";
+import { CoverImage } from "@/components/community/cover-image";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { dateBadge, formatLongDate, splitWorkshops, whenLabel, workshopHints } from "@/lib/community/format";
 import { safeImageSrc } from "@/lib/community/links";
@@ -89,17 +89,18 @@ function FeaturedWorkshop({ workshop: w }: { workshop: WorkshopCard }) {
     <article
       className={cn(
         "group relative grid overflow-hidden rounded-card border border-transparent bg-card shadow-raised transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
-        // The cover runs to the card's edges: on top at 16:9 in a single
-        // column, and as the left part of the card, as tall as it, from md.
-        cover ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "p-2.5",
+        // The cover is shown whole, flush to the card's edge. A normal photo
+        // is the left half and sets the card's height; a wide banner, which
+        // half a card would shrink to a strip, goes across the top.
+        cover ? "md:grid-cols-2 md:has-[[data-wide=true]]:grid-cols-1" : "p-2.5",
       )}
     >
       {cover && (
-        <div className="relative aspect-video overflow-hidden bg-accent md:aspect-auto md:min-h-[300px]">
-          <CmsImage src={cover.url} alt={cover.alt} className="absolute inset-0 size-full object-cover" />
+        <div className="bg-accent">
+          <CoverImage src={cover.url} alt={cover.alt} className="h-auto w-full" />
         </div>
       )}
-      <div className="flex flex-col justify-center gap-4 px-5 py-6 sm:px-[30px] sm:py-7">
+      <div className="flex flex-col justify-center gap-4 px-5 py-6 sm:px-[30px] sm:py-7 md:self-center">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status="upcoming" label="Next workshop" />
           {w.format && <FormatPill>{w.format}</FormatPill>}
