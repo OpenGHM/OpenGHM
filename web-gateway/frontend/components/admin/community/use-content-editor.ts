@@ -63,8 +63,8 @@ export function useContentEditor<F, I, T>({
     root.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [focusTick]);
 
-  const save = useCallback(async () => {
-    if (saving) return;
+  const save = useCallback(async (): Promise<T | null> => {
+    if (saving) return null;
     setTried(true);
     setGeneral([]);
     setExpired(false);
@@ -72,7 +72,7 @@ export function useContentEditor<F, I, T>({
       setServer({});
       setFocusTick((n) => n + 1);
       toast.error("Some fields need attention. They are marked below.");
-      return;
+      return null;
     }
     setSaving(true);
     const sent = fingerprint(toInput(form));
@@ -83,6 +83,7 @@ export function useContentEditor<F, I, T>({
         setServer({});
         toast.success(savedMessage);
         onSaved(result.data);
+        return result.data;
       } else if (result.reason === "session_expired") {
         setExpired(true);
       } else if (result.reason === "not_found") {
@@ -108,6 +109,7 @@ export function useContentEditor<F, I, T>({
     } finally {
       setSaving(false);
     }
+    return null;
   }, [saving, validate, form, toInput, submit, savedMessage, onSaved, mapServerPath]);
 
   useUnsavedGuard(dirty);

@@ -1,13 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, ImageIcon, Link2, Pencil, Trash2 } from "lucide-react";
+import { FileText, ImageIcon, Link2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
-import { EditorSection, SaveBar, SaveNotices } from "@/components/admin/community/editor-chrome";
+import { EditorSection, SaveBar, SaveNotices, ViewOnSiteButton } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
 import { ImageField } from "@/components/admin/community/image-field";
 import { RichTextEditor } from "@/components/admin/community/rich-text-editor";
@@ -221,13 +220,14 @@ export function NewsEditor({ post }: { post: NewsPost | null }) {
         cancelHref="/admin/home/news"
         extra={
           <>
-            {stored?.state === "published" && hasPage && (
-              <Button asChild variant="outline" className="min-h-10 sm:min-h-9">
-                <Link href={`/news/${encodeURIComponent(stored.slug)}`} target="_blank" rel="noreferrer">
-                  <ExternalLink aria-hidden="true" />
-                  View on site
-                </Link>
-              </Button>
+            {stored?.state === "published" && hasPage&& (
+              <ViewOnSiteButton
+                href={`/news/${encodeURIComponent(stored.slug)}`}
+                dirty={dirty}
+                saving={saving}
+                save={save}
+                hrefFor={(saved) => (saved.state === "published" && !isEmptyDoc(saved.body) ? `/news/${encodeURIComponent(saved.slug)}` : null)}
+              />
             )}
             {stored && (
               <Button

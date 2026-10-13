@@ -257,6 +257,44 @@ describe("a stored workshop", () => {
     expect(screen.queryByRole("link", { name: /View on site/ })).toBeNull();
   });
 
+  it("turns View on site into Save & view while there are unsaved changes, and opens the saved page", async () => {
+    const tab = { opener: {}, location: { href: "" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    actions.updateWorkshop.mockResolvedValue({ ok: true, data: { ...stored, slug: "renamed", summary: "New" } });
+    render(<WorkshopEditor workshop={stored} />);
+    type("Summary", "New");
+    expect(screen.queryByRole("link", { name: /View on site/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Save & view/ }));
+    // The tab opens on the click itself, so no popup blocker stops it.
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    await waitFor(() => expect(tab.location.href).toBe("/community/workshops/renamed"));
+    expect(tab.opener).toBeNull();
+    expect(actions.updateWorkshop).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("link", { name: /View on site/ })).toBeTruthy());
+    open.mockRestore();
+  });
+
+  it("closes the tab Save & view opened when the save fails or the workshop was hidden", async () => {
+    const tab = { opener: {}, location: { href: "" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    actions.updateWorkshop.mockResolvedValue({ ok: false, reason: "error", message: "Nope" });
+    const { unmount } = render(<WorkshopEditor workshop={stored} />);
+    type("Summary", "New");
+    fireEvent.click(screen.getByRole("button", { name: /Save & view/ }));
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(tab.location.href).toBe("");
+    unmount();
+
+    tab.close.mockClear();
+    actions.updateWorkshop.mockResolvedValue({ ok: true, data: { ...stored, state: "draft", summary: "New" } });
+    render(<WorkshopEditor workshop={stored} />);
+    type("Summary", "New");
+    fireEvent.click(screen.getByRole("button", { name: /Save & view/ }));
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(toast.info).toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it("offers Cancel back to the list", () => {
     render(<WorkshopEditor workshop={stored} />);
     expect(screen.getByRole("link", { name: "Cancel" }).getAttribute("href")).toBe("/admin/community/workshops");

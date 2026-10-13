@@ -1,13 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ExternalLink, FileText, Image as ImageIcon, Link2, ListPlus, Paperclip, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, FileText, Image as ImageIcon, Link2, ListPlus, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
-import { EditorSection, SaveBar, SaveNotices } from "@/components/admin/community/editor-chrome";
+import { EditorSection, SaveBar, SaveNotices, ViewOnSiteButton } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
 import { ImageField } from "@/components/admin/community/image-field";
 import { RichTextEditor } from "@/components/admin/community/rich-text-editor";
@@ -287,12 +286,13 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         extra={
           <>
             {published && stored && (
-              <Button asChild variant="outline" className="min-h-10 sm:min-h-9">
-                <Link href={`/community/workshops/${encodeURIComponent(stored.slug)}`} target="_blank" rel="noreferrer">
-                  <ExternalLink aria-hidden="true" />
-                  View on site
-                </Link>
-              </Button>
+              <ViewOnSiteButton
+                href={`/community/workshops/${encodeURIComponent(stored.slug)}`}
+                dirty={dirty}
+                saving={saving}
+                save={save}
+                hrefFor={(saved) => (saved.state === "published" ? `/community/workshops/${encodeURIComponent(saved.slug)}` : null)}
+              />
             )}
             {stored && (
               <Button

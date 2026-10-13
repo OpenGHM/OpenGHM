@@ -1,13 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Link2, Pencil, Terminal, Trash2 } from "lucide-react";
+import { FileText, Link2, Pencil, Terminal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
-import { EditorSection, SaveBar, SaveNotices } from "@/components/admin/community/editor-chrome";
+import { EditorSection, SaveBar, SaveNotices, ViewOnSiteButton } from "@/components/admin/community/editor-chrome";
 import { Field, SELECT_CLASS, TEXTAREA_CLASS } from "@/components/admin/community/form-bits";
 import { RichTextEditor } from "@/components/admin/community/rich-text-editor";
 import { useContentEditor } from "@/components/admin/community/use-content-editor";
@@ -252,13 +251,14 @@ export function TutorialEditor({ tutorial }: { tutorial: Tutorial | null }) {
         cancelHref="/admin/community/tutorials"
         extra={
           <>
-            {stored?.state === "published" && hasPage && (
-              <Button asChild variant="outline" className="min-h-10 sm:min-h-9">
-                <Link href={`/community/tutorials/${encodeURIComponent(stored.slug)}`} target="_blank" rel="noreferrer">
-                  <ExternalLink aria-hidden="true" />
-                  View on site
-                </Link>
-              </Button>
+            {stored?.state === "published" && hasPage&& (
+              <ViewOnSiteButton
+                href={`/community/tutorials/${encodeURIComponent(stored.slug)}`}
+                dirty={dirty}
+                saving={saving}
+                save={save}
+                hrefFor={(saved) => (saved.state === "published" && !isEmptyDoc(saved.body) ? `/community/tutorials/${encodeURIComponent(saved.slug)}` : null)}
+              />
             )}
             {stored && (
               <Button

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { AlertCircle, Check, ExternalLink, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SELECT_CLASS, SectionHeading } from "@/components/admin/community/form-bits";
@@ -146,5 +147,64 @@ export function SaveBar({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Opens the item's public page in a new tab. The site shows the last saved
+ * version, so with unsaved changes the button is Save & view: it saves, then
+ * opens the page as saved. The tab is opened on the click itself, before the
+ * save, or a browser would block it as a popup; it is closed again when the
+ * save fails or leaves nothing to show (the item was hidden, or lost its page).
+ */
+export function ViewOnSiteButton<T>({
+  href,
+  dirty,
+  saving,
+  save,
+  hrefFor,
+}: {
+  /** The saved item's page. */
+  href: string;
+  dirty: boolean;
+  saving: boolean;
+  save: () => Promise<T | null>;
+  /** The page of what was just saved, or null when it has none on the site. */
+  hrefFor: (saved: T) => string | null;
+}) {
+  if (!dirty) {
+    return (
+      <Button asChild variant="outline" className="min-h-10 sm:min-h-9">
+        <Link href={href} target="_blank" rel="noreferrer">
+          <ExternalLink aria-hidden="true" />
+          View on site
+        </Link>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="min-h-10 sm:min-h-9"
+      disabled={saving}
+      title="The site shows the saved version. This saves your changes, then opens the page."
+      onClick={async () => {
+        const tab = window.open("", "_blank");
+        if (tab) tab.opener = null;
+        const saved = await save();
+        const target = saved === null ? null : hrefFor(saved);
+        if (target === null) {
+          tab?.close();
+          if (saved !== null) toast.info("Saved. It is hidden or has no page text, so there is no page to open.");
+          return;
+        }
+        if (tab) tab.location.href = target;
+        else window.open(target, "_blank", "noopener");
+      }}
+    >
+      <ExternalLink aria-hidden="true" />
+      Save &amp; view
+    </Button>
   );
 }
