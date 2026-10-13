@@ -203,7 +203,7 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
         </div>
       </EditorSection>
 
-      <EditorSection icon={ImageIcon} title="Cover photo" description="Shown at the top of the workshop page and on its card. Other photos go in the page text.">
+      <EditorSection icon={ImageIcon} title="Cover photo" description="Shown at the top of the workshop page and on its card, cropped to 16:9 from the centre, so keep what matters in the middle. About 1600 × 900 px is right. Other photos go in the page text.">
         <ImageField
           id={id("cover")}
           value={form.cover}

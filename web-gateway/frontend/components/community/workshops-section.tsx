@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { CoverImage } from "@/components/community/cover-image";
+import { CmsImage } from "@/components/community/cms-image";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { dateBadge, formatLongDate, splitWorkshops, whenLabel, workshopHints } from "@/lib/community/format";
 import { safeImageSrc } from "@/lib/community/links";
@@ -88,19 +88,15 @@ function FeaturedWorkshop({ workshop: w }: { workshop: WorkshopCard }) {
   return (
     <article
       className={cn(
-        "group relative grid gap-2.5 rounded-card border border-transparent bg-card p-2.5 shadow-raised transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
-        // A cover sits beside the text, unless it is a wide banner: that goes
-        // above, as a side column would show only its middle.
-        cover && "md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:has-[[data-wide=true]]:grid-cols-1",
+        "group relative grid overflow-hidden rounded-card border border-transparent bg-card shadow-raised transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+        // The cover runs to the card's edges: on top at 16:9 in a single
+        // column, and as the left part of the card, as tall as it, from md.
+        cover ? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "p-2.5",
       )}
     >
       {cover && (
-        <div className="relative isolate min-h-[260px] overflow-hidden rounded-[18px] bg-accent group-has-[[data-wide=true]]:min-h-0">
-          <CoverImage
-            src={cover.url}
-            alt={cover.alt}
-            className="absolute inset-0 size-full object-contain data-[wide=true]:static data-[wide=true]:h-auto data-[wide=true]:max-h-[480px] data-[wide=true]:w-full"
-          />
+        <div className="relative aspect-video overflow-hidden bg-accent md:aspect-auto md:min-h-[300px]">
+          <CmsImage src={cover.url} alt={cover.alt} className="absolute inset-0 size-full object-cover" />
         </div>
       )}
       <div className="flex flex-col justify-center gap-4 px-5 py-6 sm:px-[30px] sm:py-7">

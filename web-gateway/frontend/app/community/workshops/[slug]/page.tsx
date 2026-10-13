@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CoverImage } from "@/components/community/cover-image";
+import { CmsImage } from "@/components/community/cms-image";
 import { RichText, isRichTextEmpty } from "@/components/community/rich-text";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { MaterialsList, WorkshopDetails } from "@/components/community/workshop-parts";
@@ -48,32 +48,26 @@ export default async function WorkshopPage({ params }: Params) {
         subtitle={<span className="font-mono text-[15px] text-hero-eyebrow">{when}</span>}
       />
       <PageBody className="flex-1">
-        {/* On a wide screen a normal photo sits in the right column above the
-            details, where it fits, and the text takes the left; a wide banner
-            goes across the top. The photo says which once it has loaded
-            (`data-wide`), and the grid places the three parts to match. In a
-            single column the order is the source order. */}
-        <div className="group grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr]">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           {cover && workshop.cover && (
-            <figure className="flex flex-col rounded-card bg-card p-2 shadow-raised lg:col-start-2 lg:row-start-1 lg:has-[[data-wide=true]]:col-span-2 lg:has-[[data-wide=true]]:col-start-1">
-              <CoverImage
+            // The picture runs to the card's edges, at 16:9 (2:1 on a wide
+            // screen), cropped to that shape rather than set in a frame.
+            <figure className="overflow-hidden rounded-card bg-card shadow-raised lg:col-span-2">
+              <CmsImage
                 src={cover.url}
                 alt={cover.alt}
                 loading="eager"
-                backdrop={false}
-                className="h-auto w-full rounded-[18px]"
+                className="block aspect-video max-h-[520px] w-full bg-accent object-cover lg:aspect-[2/1]"
               />
               {workshop.cover.caption && (
-                <figcaption className="px-3.5 pt-3 pb-1.5 text-[13px] leading-normal text-muted-foreground">
+                <figcaption className="px-5 py-3 text-[13px] leading-normal text-muted-foreground">
                   {workshop.cover.caption}
                 </figcaption>
               )}
             </figure>
           )}
 
-          <div
-            className={`flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-1 ${cover ? "lg:row-span-2 lg:group-has-[[data-wide=true]]:row-span-1 lg:group-has-[[data-wide=true]]:row-start-2" : ""}`}
-          >
+          <div className="flex min-w-0 flex-col gap-4">
             <article
               className={`flex flex-col gap-[18px] rounded-card bg-card p-[clamp(26px,3.6vw,48px)] ${cover ? "shadow-card" : "shadow-raised"}`}
             >
@@ -90,11 +84,7 @@ export default async function WorkshopPage({ params }: Params) {
             <MaterialsList materials={workshop.materials} />
           </div>
 
-          <WorkshopDetails
-            workshop={workshop}
-            when={when}
-            className={cover ? "lg:col-start-2 lg:row-start-2" : "lg:col-start-2 lg:row-start-1"}
-          />
+          <WorkshopDetails workshop={workshop} when={when} />
         </div>
       </PageBody>
       <Footer />
