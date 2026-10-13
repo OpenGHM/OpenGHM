@@ -30,7 +30,14 @@ describe("workshop form", () => {
 
   it("asks for what is missing", () => {
     const errors = validateWorkshop(emptyWorkshopForm());
-    expect(Object.keys(errors).sort()).toEqual(["date", "slug", "title"]);
+    expect(Object.keys(errors).sort()).toEqual(["slug", "title"]);
+  });
+
+  it("needs no date, but a last day needs a first day", () => {
+    const f = validWorkshop();
+    expect(validateWorkshop({ ...f, date: "", endDate: "" })).toEqual({});
+    expect(validateWorkshop({ ...f, date: "", endDate: "2027-02-15" }).end_date).toMatch(/first day/i);
+    expect(workshopToInput({ ...f, date: " ", endDate: "" })).toMatchObject({ date: null, end_date: null });
   });
 
   it("checks the dates", () => {

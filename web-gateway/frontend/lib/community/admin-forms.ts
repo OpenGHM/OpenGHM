@@ -140,7 +140,7 @@ export function workshopToForm(w: Workshop): WorkshopForm {
     slugTouched: true,
     title: w.title,
     summary: w.summary,
-    date: w.date,
+    date: w.date ?? "",
     endDate: w.end_date ?? "",
     whenLabel: w.when_label ?? "",
     format: w.format ?? "",
@@ -167,7 +167,7 @@ export function workshopToInput(f: WorkshopForm): WorkshopInput {
     slug: f.slug.trim(),
     title: f.title.trim(),
     summary: f.summary.trim(),
-    date: f.date.trim(),
+    date: orNull(f.date),
     end_date: orNull(f.endDate),
     when_label: orNull(f.whenLabel),
     format: orNull(f.format),
@@ -206,10 +206,11 @@ export function validateWorkshop(f: WorkshopForm): FormErrors {
   const location = over(f.location, LIMITS.location, "the location");
   if (location) e.location = location;
 
-  if (!f.date.trim()) e.date = "Choose the first day.";
-  else if (!isDate(f.date.trim())) e.date = "Use a date like 2027-02-15.";
+  // No date is allowed (it may not be decided); what is given must be a date.
+  if (f.date.trim() && !isDate(f.date.trim())) e.date = "Use a date like 2027-02-15.";
   if (f.endDate.trim()) {
     if (!isDate(f.endDate.trim())) e.end_date = "Use a date like 2027-03-31.";
+    else if (!f.date.trim()) e.end_date = "Set the first day, or clear this.";
     else if (isDate(f.date.trim()) && f.endDate.trim() < f.date.trim()) e.end_date = "The end can't be before the first day.";
   }
 

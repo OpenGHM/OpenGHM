@@ -28,8 +28,9 @@ function parseDay(date: string): { year: number; month: number; day: number } | 
   return { year: Number(m[1]), month, day };
 }
 
-/** The date block of a workshop row: "DEC", "10", "2024". Blank parts for a date that is not one. */
-export function dateBadge(date: string): { month: string; day: string; year: string } {
+/** The date block of a workshop row: "DEC", "10", "2024". "TBA" with no date; blank parts for a date that is not one. */
+export function dateBadge(date: string | null): { month: string; day: string; year: string } {
+  if (date === null) return { month: "TBA", day: "", year: "" };
   const d = parseDay(date);
   if (!d) return { month: "", day: "", year: "" };
   return {
@@ -62,16 +63,21 @@ export function formatDateRange(start: string, end: string | null): string {
 /** What a workshop says it happens: the admin's own wording, else the formatted date. */
 export function whenLabel(w: Pick<Workshop, "when_label" | "date" | "end_date">): string {
   const own = w.when_label?.trim();
-  return own ? own : formatDateRange(w.date, w.end_date);
+  if (own) return own;
+  return w.date ? formatDateRange(w.date, w.end_date) : "Date to be announced";
 }
 
 /** The workshops split as the page shows them: the next first, then later ones; past ones newest first. */
 export function splitWorkshops<T extends Pick<WorkshopCard, "status" | "date" | "end_date" | "title">>(
   workshops: T[],
 ): { upcoming: T[]; past: T[] } {
-  const byDateAsc = (a: T, b: T) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title);
+  // A workshop with no date yet comes after the dated upcoming ones.
+  const byDateAsc = (a: T, b: T) =>
+    Number(a.date === null) - Number(b.date === null) ||
+    (a.date ?? "").localeCompare(b.date ?? "") ||
+    a.title.localeCompare(b.title);
   const byDateDesc = (a: T, b: T) =>
-    (b.end_date ?? b.date).localeCompare(a.end_date ?? a.date) || a.title.localeCompare(b.title);
+    (b.end_date ?? b.date ?? "").localeCompare(a.end_date ?? a.date ?? "") || a.title.localeCompare(b.title);
   return {
     upcoming: workshops.filter((w) => w.status === "upcoming").sort(byDateAsc),
     past: workshops.filter((w) => w.status !== "upcoming").sort(byDateDesc),

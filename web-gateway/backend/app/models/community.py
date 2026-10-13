@@ -93,8 +93,8 @@ class WorkshopInput(BaseModel):
     slug: Slug
     title: str = Field(min_length=1, max_length=200)
     summary: str = Field("", max_length=500)
-    #: The first day.
-    date: IsoDate
+    #: The first day; none while it is not decided.
+    date: IsoDate | None = None
     end_date: IsoDate | None = None
     #: Shown instead of the formatted date, e.g. "February–March 2027".
     when_label: str | None = Field(None, max_length=100)
@@ -106,7 +106,7 @@ class WorkshopInput(BaseModel):
     materials: list[WorkshopMaterial] = Field(default_factory=list, max_length=40)
     body: dict | None = None
 
-    _blank = field_validator("end_date", "when_label", "format", "location", mode="before")(
+    _blank = field_validator("date", "end_date", "when_label", "format", "location", mode="before")(
         _blank_to_none
     )
 
@@ -117,8 +117,11 @@ class WorkshopInput(BaseModel):
 
     @model_validator(mode="after")
     def _end_not_before_start(self):
-        if self.end_date is not None and self.end_date < self.date:
-            raise ValueError("The last day cannot be before the first day.")
+        if self.end_date is not None:
+            if self.date is None:
+                raise ValueError("Set the first day before the last day.")
+            if self.end_date < self.date:
+                raise ValueError("The last day cannot be before the first day.")
         return self
 
 
@@ -126,7 +129,7 @@ class Workshop(_Meta):
     slug: str
     title: str
     summary: str
-    date: str
+    date: str | None = None
     end_date: str | None = None
     when_label: str | None = None
     format: str | None = None
@@ -147,7 +150,7 @@ class WorkshopCard(_Meta):
     slug: str
     title: str
     summary: str
-    date: str
+    date: str | None = None
     end_date: str | None = None
     when_label: str | None = None
     format: str | None = None

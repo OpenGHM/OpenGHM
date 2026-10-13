@@ -115,17 +115,26 @@ describe("a new workshop", () => {
     render(<WorkshopEditor workshop={null} />);
     save();
     expect(await screen.findByText("Give the workshop a title.")).toBeTruthy();
-    expect(screen.getByText("Choose the first day.")).toBeTruthy();
+    expect(screen.queryByText("Choose the first day.")).toBeNull();
     expect(actions.createWorkshop).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Title").getAttribute("aria-invalid")).toBe("true");
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Title")));
+  });
+
+  it("can be created with no date at all", async () => {
+    actions.createWorkshop.mockResolvedValue({ ok: true, data: { ...stored, id: "new-id", state: "draft", date: null } });
+    render(<WorkshopEditor workshop={null} />);
+    type("Title", "Date to follow");
+    save();
+    await waitFor(() => expect(actions.createWorkshop).toHaveBeenCalled());
+    expect(actions.createWorkshop.mock.calls[0][0]).toMatchObject({ title: "Date to follow", date: null, end_date: null });
   });
 
   it("creates it as a draft, then opens its own page", async () => {
     actions.createWorkshop.mockResolvedValue({ ok: true, data: { ...stored, id: "new-id", state: "draft" } });
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     save();
     await waitFor(() => expect(actions.createWorkshop).toHaveBeenCalled());
     expect(actions.createWorkshop.mock.calls[0][0]).toMatchObject({
@@ -152,7 +161,7 @@ describe("a new workshop", () => {
     });
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     save();
     const slug = screen.getByLabelText("Slug");
     expect(await screen.findAllByText("That slug is already used.")).not.toHaveLength(0);
@@ -173,7 +182,7 @@ describe("a new workshop", () => {
     });
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
     fireEvent.click(screen.getByRole("button", { name: "Add row" }));
     const labels = screen.getAllByLabelText("Label");
@@ -191,7 +200,7 @@ describe("a new workshop", () => {
     actions.createWorkshop.mockResolvedValue({ ok: false, reason: "session_expired" });
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     save();
     expect(await screen.findByText("Your session has expired.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
@@ -201,7 +210,7 @@ describe("a new workshop", () => {
     actions.createWorkshop.mockRejectedValue(new Error("network"));
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     save();
     expect(await screen.findByText(/Nothing was changed; try again/)).toBeTruthy();
     expect((screen.getByLabelText("Title") as HTMLInputElement).value).toBe("First workshop");
@@ -211,7 +220,7 @@ describe("a new workshop", () => {
     actions.createWorkshop.mockResolvedValue({ ok: true, data: { ...stored, id: "n" } });
     render(<WorkshopEditor workshop={null} />);
     type("Title", "First workshop");
-    type("First day", "2027-02-15");
+    type(/^First day/, "2027-02-15");
     fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     await waitFor(() => expect(actions.createWorkshop).toHaveBeenCalled());
   });

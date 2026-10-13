@@ -190,6 +190,22 @@ def test_workshops_list_upcoming_soonest_first_then_past_latest_first(http):
     ]
 
 
+def test_a_workshop_needs_no_date_and_stays_upcoming_after_the_dated_ones(http):
+    undated = create(http, "workshops", workshop("tba", date=None))
+    create(http, "workshops", workshop("blank", date=""))
+    create(http, "workshops", workshop("dated", date="2027-01-01"))
+    create(http, "workshops", workshop("old", date="2024-01-01"))
+    assert undated["date"] is None
+    assert undated["status"] == "upcoming"
+    got = http.get(PUBLIC).json()["workshops"]
+    assert [(w["slug"], w["date"], w["status"]) for w in got][0] == ("dated", "2027-01-01", "upcoming")
+    assert {w["slug"] for w in got[1:3]} == {"tba", "blank"}
+    assert all(w["date"] is None and w["status"] == "upcoming" for w in got[1:3])
+    assert got[3]["slug"] == "old"
+    assert http.get(f"{PUBLIC}/workshops/tba").json()["date"] is None
+    assert len(http.get(f"{ADMIN_URL}/workshops", headers=ADMIN).json()) == 4
+
+
 def test_publications_are_newest_year_first_then_by_title(http):
     for year, title in [(2022, "B"), (2024, "Z"), (2022, "A"), (2024, "M")]:
         create(http, "publications", publication(year=year, title=title))
@@ -499,6 +515,7 @@ def test_bulk_leaves_other_kinds_alone(http, mongo):
         {"date": "2026-13-01"},
         {"date": "10/01/2026"},
         {"date": "2026-12-01", "end_date": "2026-11-30"},
+        {"date": None, "end_date": "2026-12-01"},  # a last day needs a first day
         {"state": "archived"},
         {"cover": {"url": "http://example.org/a.jpg", "alt": "", "caption": None}},
         {"cover": {"url": "javascript:alert(1)", "alt": "", "caption": None}},

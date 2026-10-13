@@ -141,16 +141,20 @@ function WorkshopRow({ workshop: w }: { workshop: WorkshopCard }) {
   return (
     <li className="group relative flex flex-wrap items-center gap-x-[22px] gap-y-3.5 rounded-[18px] border border-transparent bg-card py-3.5 pr-5 pl-3.5 transition-colors hover:border-primary/25 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
       <time
-        dateTime={w.date}
-        aria-label={formatLongDate(w.date)}
+        dateTime={w.date ?? undefined}
+        aria-label={w.date ? formatLongDate(w.date) : "Date to be announced"}
         className={cn(
           "flex size-[72px] shrink-0 flex-col items-center justify-center gap-px rounded-[14px]",
           upcoming ? "bg-hero text-white" : "bg-muted text-foreground/80",
         )}
       >
         <span className="font-mono text-[11.5px] tracking-[0.06em]">{badge.month}</span>
-        <span className="text-2xl leading-none font-bold tracking-[-0.03em]">{badge.day}</span>
-        <span className="font-mono text-[10.5px] opacity-75">{badge.year}</span>
+        {w.date && (
+          <>
+            <span className="text-2xl leading-none font-bold tracking-[-0.03em]">{badge.day}</span>
+            <span className="font-mono text-[10.5px] opacity-75">{badge.year}</span>
+          </>
+        )}
       </time>
       <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-1.5">
         <Link

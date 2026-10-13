@@ -524,7 +524,9 @@ The cards on `/` are a feed over three sources, set up by admins in
 If the backend does not answer, the home page leaves the section out.
 
 A workshop's `status` (`upcoming` or `past`) is derived at read time: past once
-its last day, `end_date` or else `date`, is before today in UTC. Rich text is
+its last day, `end_date` or else `date`, is before today in UTC. `date` is
+optional: a workshop with no date yet is upcoming and listed after the dated
+ones, and `end_date` needs a `date`. Rich text is
 stored as ProseMirror JSON limited to a whitelist of nodes and marks, with links
 and image addresses checked on write, at most 512 KiB; the frontend draws it
 with its own renderer and never sets raw HTML. A workshop has a cover image;

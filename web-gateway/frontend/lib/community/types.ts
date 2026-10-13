@@ -60,8 +60,8 @@ export interface WorkshopInput {
   slug: string;
   title: string;
   summary: string;
-  /** YYYY-MM-DD, the first day. */
-  date: string;
+  /** YYYY-MM-DD, the first day; null while it is not decided. */
+  date: string | null;
   end_date: string | null;
   /** Shown instead of the formatted date, e.g. "February–March 2027". */
   when_label: string | null;
@@ -75,7 +75,7 @@ export interface WorkshopInput {
 }
 
 export interface Workshop extends WorkshopInput, ContentMeta {
-  /** Derived by the backend: past once (end_date ?? date) is before today. */
+  /** Derived by the backend: past once (end_date ?? date) is before today; upcoming with no date. */
   status: WorkshopStatus;
 }
 

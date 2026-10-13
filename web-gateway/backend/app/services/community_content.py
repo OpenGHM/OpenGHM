@@ -116,12 +116,15 @@ def utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
 
-def workshop_status(start: str, end: str | None, today: date | None = None) -> str:
+def workshop_status(start: str | None, end: str | None, today: date | None = None) -> str:
     """"past" once the last day (`end`, else `start`) is before today, else
-    "upcoming": a workshop is upcoming through the whole of its last day."""
+    "upcoming": a workshop is upcoming through the whole of its last day, and
+    while it has no date at all."""
+    last = end or start
+    if not last:
+        return "upcoming"
     today = today or utc_today()
-    last = date.fromisoformat(end or start)
-    return "past" if last < today else "upcoming"
+    return "past" if date.fromisoformat(last) < today else "upcoming"
 
 
 # ---- rich text -------------------------------------------------------------

@@ -140,10 +140,10 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
       <EditorSection
         icon={CalendarDays}
         title="When and where"
-        description="Whether the workshop shows as upcoming or past follows its dates."
+        description="Whether the workshop shows as upcoming or past follows its dates. Leave them empty while the date is not decided: it shows as upcoming, with no date."
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id={id("date")} label="First day" error={errors.date}>
+          <Field id={id("date")} label="First day" optional error={errors.date}>
             {(p) => <Input {...p} type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />}
           </Field>
           <Field id={id("end-date")} label="Last day" optional error={errors.end_date}>

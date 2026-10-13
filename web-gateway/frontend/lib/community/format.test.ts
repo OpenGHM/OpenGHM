@@ -26,6 +26,7 @@ describe("dates", () => {
 
   it("leaves the badge blank for something that is not a date", () => {
     expect(dateBadge("soon")).toEqual({ month: "", day: "", year: "" });
+    expect(dateBadge(null)).toEqual({ month: "TBA", day: "", year: "" });
     expect(dateBadge("2024-13-01")).toEqual({ month: "", day: "", year: "" });
   });
 
@@ -51,6 +52,11 @@ describe("whenLabel", () => {
     );
   });
 
+  it("says the date is to be announced when there is neither a label nor a date", () => {
+    expect(whenLabel({ when_label: null, date: null, end_date: null })).toBe("Date to be announced");
+    expect(whenLabel({ when_label: "Spring 2027", date: null, end_date: null })).toBe("Spring 2027");
+  });
+
   it("falls back to the formatted date when the label is null or blank", () => {
     expect(whenLabel({ when_label: null, date: "2024-12-10", end_date: null })).toBe("December 10, 2024");
     expect(whenLabel({ when_label: "  ", date: "2024-12-10", end_date: "2024-12-11" })).toBe("December 10–11, 2024");
@@ -58,11 +64,16 @@ describe("whenLabel", () => {
 });
 
 describe("splitWorkshops", () => {
-  const w = (title: string, date: string, status: "upcoming" | "past", end_date: string | null = null) => ({
+  const w = (title: string, date: string | null, status: "upcoming" | "past", end_date: string | null = null) => ({
     title,
     date,
     end_date,
     status,
+  });
+
+  it("puts a workshop with no date after the dated upcoming ones", () => {
+    const { upcoming } = splitWorkshops([w("tba", null, "upcoming"), w("late", "2027-05-01", "upcoming"), w("soon", "2027-02-01", "upcoming")]);
+    expect(upcoming.map((x) => x.title)).toEqual(["soon", "late", "tba"]);
   });
 
   it("puts the soonest upcoming workshop first and the latest past one first", () => {

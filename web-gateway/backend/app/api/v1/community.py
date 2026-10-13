@@ -74,12 +74,12 @@ def _with_id(doc: dict) -> dict:
 
 
 def _workshop(doc: dict) -> Workshop:
-    status = community_content.workshop_status(doc["date"], doc.get("end_date"))
+    status = community_content.workshop_status(doc.get("date"), doc.get("end_date"))
     return Workshop.model_validate({**_with_id(doc), "status": status})
 
 
 def _workshop_card(doc: dict) -> WorkshopCard:
-    status = community_content.workshop_status(doc["date"], doc.get("end_date"))
+    status = community_content.workshop_status(doc.get("date"), doc.get("end_date"))
     return WorkshopCard.model_validate(
         {
             **_with_id(doc),
@@ -143,8 +143,12 @@ async def get_community():
         _workshop_card(d)
         async for d in db[WORKSHOPS].find({"state": "published"}, no_body)
     ]
-    upcoming = sorted((w for w in workshops if w.status == "upcoming"), key=lambda w: w.date)
-    past = sorted((w for w in workshops if w.status == "past"), key=lambda w: w.date, reverse=True)
+    # A workshop with no date yet comes after the dated upcoming ones.
+    upcoming = sorted(
+        (w for w in workshops if w.status == "upcoming"),
+        key=lambda w: (w.date is None, w.date or ""),
+    )
+    past = sorted((w for w in workshops if w.status == "past"), key=lambda w: w.date or "", reverse=True)
 
     tutorial_docs = await db[TUTORIALS].find({"state": "published"}).sort("position", 1).to_list(None)
     publication_docs = (
@@ -309,7 +313,7 @@ def _changes(user: TokenPayload, fields: dict) -> dict:
 
 @admin_router.get("/workshops", response_model=list[Workshop])
 async def list_workshops(_user: TokenPayload = Depends(_content_manager)):
-    docs = await get_db()[WORKSHOPS].find({}).sort("date", -1).to_list(None)
+    docs = await get_db()[WORKSHOPS].find({}).sort([("date", -1), ("created_at", -1)]).to_list(None)
     return [_workshop(d) for d in docs]
 
 

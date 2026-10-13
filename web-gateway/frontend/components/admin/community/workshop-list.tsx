@@ -24,6 +24,7 @@ import type { Workshop } from "@/lib/community/types";
 
 /** A workshop's dates as the list prints them: the first day, and the last when there is one. */
 function DateRange({ workshop }: { workshop: Workshop }) {
+  if (!workshop.date) return <span className="whitespace-nowrap text-muted-foreground">Date to be announced</span>;
   return (
     <span className="whitespace-nowrap">
       <TimeStamp value={workshop.date} format="date" />
