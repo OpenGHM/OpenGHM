@@ -82,7 +82,7 @@ export function MaterialsList({ materials }: { materials: WorkshopMaterial[] }) 
  * admin's own rows in the order they wrote them, then the sign-up button when
  * the workshop has a sign-up link.
  */
-export function WorkshopDetails({ workshop: w, when }: { workshop: Workshop; when: string }) {
+export function WorkshopDetails({ workshop: w, when, className }: { workshop: Workshop; when: string; className?: string }) {
   const rows: { label: string; value: string }[] = [
     { label: "When", value: when },
     ...(w.format ? [{ label: "Format", value: w.format }] : []),
@@ -93,7 +93,7 @@ export function WorkshopDetails({ workshop: w, when }: { workshop: Workshop; whe
   return (
     <aside
       aria-labelledby="details-heading"
-      className="min-w-0 rounded-card bg-card px-6 pt-6 pb-3.5 shadow-raised lg:sticky lg:top-5"
+      className={cn("min-w-0 rounded-card bg-card px-6 pt-6 pb-3.5 shadow-raised lg:sticky lg:top-5", className)}
     >
       <h2 id="details-heading" className="mb-2 text-[17px] font-semibold tracking-[-0.02em]">
         Details

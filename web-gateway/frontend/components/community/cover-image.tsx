@@ -20,12 +20,15 @@ export function CoverImage({
   alt,
   loading,
   className,
+  backdrop = true,
 }: {
   src: string | null | undefined;
   alt?: string;
   loading?: "eager" | "lazy";
   /** Classes for the picture itself. */
   className?: string;
+  /** False when nothing is left to fill around the picture. */
+  backdrop?: boolean;
 }) {
   const ref = useRef<HTMLImageElement>(null);
   const mark = useCallback((img: HTMLImageElement) => {
@@ -38,13 +41,15 @@ export function CoverImage({
 
   return (
     <>
-      <CmsImage
-        src={src}
-        alt=""
-        aria-hidden="true"
-        loading={loading}
-        className="absolute inset-0 -z-10 size-full scale-110 object-cover opacity-60 blur-2xl"
-      />
+      {backdrop && (
+        <CmsImage
+          src={src}
+          alt=""
+          aria-hidden="true"
+          loading={loading}
+          className="absolute inset-0 -z-10 size-full scale-110 object-cover opacity-60 blur-2xl"
+        />
+      )}
       <CmsImage
         ref={ref}
         src={src}
