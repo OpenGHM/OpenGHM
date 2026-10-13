@@ -32,6 +32,15 @@ class FeedImage(BaseModel):
     alt: str = ""
 
 
+class FeedCoverage(BaseModel):
+    """A dataset's bounding box in degrees, for its map thumbnail."""
+
+    north: float
+    south: float
+    east: float
+    west: float
+
+
 class FeedItem(BaseModel):
     kind: FeedKind
     id: str
@@ -41,6 +50,8 @@ class FeedItem(BaseModel):
     tag_label: str
     #: None: the frontend shows the kind's own picture.
     image: FeedImage | None = None
+    #: A dataset's bounding box; the frontend draws its map when `image` is None.
+    coverage: FeedCoverage | None = None
     #: None: the card is not a link.
     href: str | None = None
     link_label: str | None = None

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.models.home import (
+    FeedCoverage,
     FeedImage,
     FeedItem,
     FeedKind,
@@ -107,6 +108,22 @@ def workshop_item(doc: dict) -> tuple[_Key, FeedItem]:
     return (item.date, announced), item
 
 
+def _coverage(document: dict) -> FeedCoverage | None:
+    """The bounding box of a catalogue document: a snapshot's `simulation`, else
+    the `coverage`, either one's `spatialCoverage`; None when it has no box."""
+    for part in ("simulation", "coverage"):
+        box = (document.get(part) or {}).get("spatialCoverage")
+        if isinstance(box, dict):
+            try:
+                return FeedCoverage(
+                    north=box["northlimit"], south=box["southlimit"],
+                    east=box["eastlimit"], west=box["westlimit"],
+                )
+            except (KeyError, TypeError, ValueError):
+                return None
+    return None
+
+
 def dataset_item(doc: dict) -> tuple[_Key, FeedItem]:
     """From a catalogue envelope; the title and description are the metadata's
     `about.name` and `about.description`."""
@@ -120,6 +137,7 @@ def dataset_item(doc: dict) -> tuple[_Key, FeedItem]:
         tag="dataset",
         tag_label=NEWS_TAG_LABELS["dataset"],
         image=None,
+        coverage=_coverage(doc.get("document") or {}),
         href=f"/repository/{doc['_id']}",
         link_label="Access Data",
         date=registered.date().isoformat(),
@@ -135,7 +153,13 @@ def build_item(kind: FeedKind, doc: dict) -> FeedItem:
 
 
 # A dataset's envelope is big (the whole metadata.json); the feed needs three fields of it.
-_DATASET_FIELDS = {"document.about.name": 1, "document.about.description": 1, "registered_at": 1}
+_DATASET_FIELDS = {
+    "document.about.name": 1,
+    "document.about.description": 1,
+    "document.simulation.spatialCoverage": 1,
+    "document.coverage.spatialCoverage": 1,
+    "registered_at": 1,
+}
 
 #: What shows publicly, per source.
 _SHOWN: dict[FeedKind, dict] = {

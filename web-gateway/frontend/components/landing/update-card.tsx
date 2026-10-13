@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { CmsImage } from "@/components/community/cms-image";
+import { CoverageThumbnail } from "@/components/repository/coverage-thumbnail";
 import { formatLongDate } from "@/lib/community/format";
 import { isExternalHref, safeHref } from "@/lib/community/links";
 import { FALLBACK_IMAGE, TAG_CLASS } from "@/lib/home/format";
@@ -10,7 +11,7 @@ import type { FeedItem } from "@/lib/home/types";
 /**
  * One card of the home page's "Latest Datasets & News", and of `/news`: a
  * picture, the coloured tag, the title, the summary and, when it leads
- * anywhere, a link. A card with no picture of its own shows the kind's. The
+ * anywhere, a link. A dataset's card draws its coverage on the world map; any other card with no picture of its own shows the kind's. The
  * link text is stretched over the whole card; an address that leaves the site
  * opens in a new tab, and one that is not safe makes the card a plain one.
  */
@@ -27,6 +28,13 @@ export function UpdateCard({ item, showDate = false }: { item: FeedItem; showDat
             src={item.image.url}
             alt={item.image.alt || item.title}
             className="absolute inset-0 size-full object-cover"
+          />
+        ) : item.coverage ? (
+          // A dataset: its coverage on the world map, as on its Data Repository card.
+          <CoverageThumbnail
+            box={item.coverage}
+            aspect="wide"
+            className="absolute inset-0 aspect-auto rounded-none border-0"
           />
         ) : (
           <Image

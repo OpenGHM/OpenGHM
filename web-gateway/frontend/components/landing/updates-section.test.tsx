@@ -60,6 +60,16 @@ describe("an update card", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toContain(encodeURIComponent(file));
   });
 
+  it("draws a dataset's coverage on the world map, as its Data Repository card does", () => {
+    const { container } = render(
+      <UpdateCard item={feedItem({ kind: "dataset", coverage: { north: 50, south: 24, east: -66, west: -125 } })} />
+    );
+    expect(screen.getByRole("img", { name: /Coverage: north 50°, south 24°, east -66°, west -125°/ })).toBeTruthy();
+    expect(screen.getAllByTestId("coverage-rect").length).toBeGreaterThan(0);
+    // The shared picture is not used.
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("shows its own cover, described by its alt text or else the title", () => {
     const { rerender } = render(
       <UpdateCard item={feedItem({ image: { url: "https://example.org/c.png", alt: "A map" } })} />

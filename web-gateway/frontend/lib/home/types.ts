@@ -6,6 +6,14 @@ import type { NewsTag } from "@/lib/community/types";
 
 export type FeedKind = "news" | "workshop" | "dataset";
 
+/** A dataset's bounding box in degrees. */
+export interface FeedCoverage {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
 export interface FeedImage {
   url: string;
   alt: string;
@@ -22,6 +30,8 @@ export interface FeedItem {
   tag_label: string;
   /** null: the kind's own picture. */
   image: FeedImage | null;
+  /** A dataset's bounding box: its card draws the map. null for news and workshops. */
+  coverage: FeedCoverage | null;
   /** null: the card is not a link. */
   href: string | null;
   link_label: string | null;

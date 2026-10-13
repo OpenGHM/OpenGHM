@@ -201,6 +201,43 @@ def test_a_long_dataset_description_is_cut_for_the_card(http, mongo):
     assert len(item["summary"]) <= 400 and item["summary"].endswith("…")
 
 
+BOX = {"northlimit": 50.0, "southlimit": 24.0, "eastlimit": -66.0, "westlimit": -125.0}
+EXPECTED_BOX = {"north": 50.0, "south": 24.0, "east": -66.0, "west": -125.0}
+
+
+def test_a_dataset_carries_its_bounding_box_for_the_map(http, mongo):
+    dataset(mongo, "model-input", "2026-10-01")
+    mongo.datasets.docs["model-input"]["document"]["coverage"] = {"spatialCoverage": BOX}
+    dataset(mongo, "snap", "2026-10-02")
+    mongo.datasets.docs["snap"]["document"]["simulation"] = {"spatialCoverage": BOX}
+    dataset(mongo, "none", "2026-10-03")
+    by_id = {i["id"]: i for i in feed(http)}
+    assert by_id["model-input"]["coverage"] == EXPECTED_BOX
+    assert by_id["snap"]["coverage"] == EXPECTED_BOX
+    assert by_id["none"]["coverage"] is None
+
+
+def test_the_dataset_query_asks_the_database_for_the_box_too():
+    # The test database ignores a projection, a real one does not: a field the
+    # card reads but the query leaves out is silently missing.
+    from app.services.home_feed import _DATASET_FIELDS
+
+    assert {"document.simulation.spatialCoverage", "document.coverage.spatialCoverage"} <= set(_DATASET_FIELDS)
+
+
+def test_a_dataset_with_a_broken_box_has_none(http, mongo):
+    dataset(mongo, "bad", "2026-10-01")
+    mongo.datasets.docs["bad"]["document"]["coverage"] = {"spatialCoverage": {"northlimit": 1}}
+    (item,) = feed(http)
+    assert item["coverage"] is None
+
+
+def test_news_and_workshops_have_no_box(http, mongo):
+    news(mongo, "a", "2026-10-01")
+    workshop(mongo, "w", "2026-10-02")
+    assert all(i["coverage"] is None for i in feed(http))
+
+
 def test_only_published_and_public_items_show(http, mongo):
     news(mongo, "draft", "2026-10-09", state="draft")
     workshop(mongo, "draft", "2026-10-09", state="draft")

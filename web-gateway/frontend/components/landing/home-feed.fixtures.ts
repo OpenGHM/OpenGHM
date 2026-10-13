@@ -10,6 +10,7 @@ export function feedItem(over: Partial<FeedItem> = {}): FeedItem {
     tag: "announcement",
     tag_label: "Announcement",
     image: null,
+    coverage: null,
     href: null,
     link_label: null,
     date: "2026-10-10",
