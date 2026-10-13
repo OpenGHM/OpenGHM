@@ -40,11 +40,13 @@ describe("workshop form", () => {
     expect(validateWorkshop({ ...validWorkshop(), endDate: "soon" }).end_date).toBeTruthy();
   });
 
-  it("wants alt text with a cover, and a cover with its alt text", () => {
+  it("asks nothing of a cover but a valid address, and sends the title as its description", () => {
     const f = validWorkshop();
-    expect(validateWorkshop({ ...f, cover: { url: "https://a.org/p.png", alt: "", caption: "" } })["cover.alt"]).toBeTruthy();
-    expect(validateWorkshop({ ...f, cover: { url: "", alt: "A hall", caption: "" } })["cover.url"]).toBeTruthy();
-    expect(validateWorkshop({ ...f, cover: { url: "http://a.org/p.png", alt: "A", caption: "" } })["cover.url"]).toBeTruthy();
+    expect(validateWorkshop({ ...f, cover: { url: "https://a.org/p.png", alt: "", caption: "" } })).toEqual({});
+    expect(validateWorkshop({ ...f, cover: { url: "http://a.org/p.png", alt: "", caption: "" } })["cover.url"]).toBeTruthy();
+    expect(validateWorkshop({ ...f, cover: { url: "", alt: "", caption: "A hall" } })["cover.url"]).toBeTruthy();
+    const sent = workshopToInput({ ...f, title: " Spring school ", cover: { url: "https://a.org/p.png", alt: "", caption: "" } });
+    expect(sent.cover).toEqual({ url: "https://a.org/p.png", alt: "Spring school", caption: null });
   });
 
   it("wants both halves of a sign-up link, a detail row and a material, by row", () => {
@@ -130,7 +132,7 @@ describe("workshop form", () => {
       when_label: "February–March 2027",
       format: "Online",
       location: null,
-      cover: { url: "https://a.org/p.png", alt: "A", caption: null },
+      cover: { url: "https://a.org/p.png", alt: "First", caption: null },
       signup: { label: "Sign up", url: "https://a.org/s" },
       details: [{ label: "Computing", value: "Anvil" }],
       materials: [{ name: "Slides", url: "https://a.org/s.pdf", note: null }],

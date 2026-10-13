@@ -54,6 +54,7 @@ export function ImageField({
   onChange,
   errors = {},
   withCaption = true,
+  withAlt = true,
 }: {
   id: string;
   value: ImageValue;
@@ -61,6 +62,8 @@ export function ImageField({
   errors?: { url?: string; alt?: string; caption?: string };
   /** False for an image that has no caption (a news post's cover). */
   withCaption?: boolean;
+  /** False when the page describes the image itself (a workshop's cover uses its title). */
+  withAlt?: boolean;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_1fr]">
@@ -99,9 +102,11 @@ export function ImageField({
             />
           )}
         </Field>
-        <Field id={`${id}-alt`} label="Description for screen readers" error={errors.alt}>
-          {(p) => <Input {...p} value={value.alt} autoComplete="off" onChange={(e) => onChange({ ...value, alt: e.target.value })} />}
-        </Field>
+        {withAlt && (
+          <Field id={`${id}-alt`} label="Description for screen readers" error={errors.alt}>
+            {(p) => <Input {...p} value={value.alt} autoComplete="off" onChange={(e) => onChange({ ...value, alt: e.target.value })} />}
+          </Field>
+        )}
         {withCaption && (
           <Field id={`${id}-caption`} label="Caption" optional error={errors.caption}>
             {(p) => <Input {...p} value={value.caption} autoComplete="off" onChange={(e) => onChange({ ...value, caption: e.target.value })} />}

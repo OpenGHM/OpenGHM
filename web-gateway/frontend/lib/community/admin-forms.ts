@@ -155,7 +155,8 @@ export function workshopToForm(w: Workshop): WorkshopForm {
 
 export function workshopToInput(f: WorkshopForm): WorkshopInput {
   const cover = f.cover.url.trim()
-    ? { url: f.cover.url.trim(), alt: f.cover.alt.trim(), caption: orNull(f.cover.caption) }
+    ? // The editor has no description field: a screen reader gets the title.
+      { url: f.cover.url.trim(), alt: f.title.trim(), caption: orNull(f.cover.caption) }
     : null;
   const signup =
     f.signup.label.trim() || f.signup.url.trim()
@@ -214,15 +215,10 @@ export function validateWorkshop(f: WorkshopForm): FormErrors {
 
   if (f.cover.url.trim()) {
     if (!isValidImageUrl(f.cover.url.trim())) e["cover.url"] = "Upload an image, or paste an https:// address.";
-    if (!f.cover.alt.trim()) e["cover.alt"] = "Describe the image for people who can't see it.";
-    else {
-      const alt = over(f.cover.alt, LIMITS.coverText, "the description");
-      if (alt) e["cover.alt"] = alt;
-    }
     const caption = over(f.cover.caption, LIMITS.coverText, "the caption");
     if (caption) e["cover.caption"] = caption;
-  } else if (f.cover.alt.trim() || f.cover.caption.trim()) {
-    e["cover.url"] = "Add the image, or clear its description.";
+  } else if (f.cover.caption.trim()) {
+    e["cover.url"] = "Add the image, or clear its caption.";
   }
 
   if (f.signup.label.trim() || f.signup.url.trim()) {

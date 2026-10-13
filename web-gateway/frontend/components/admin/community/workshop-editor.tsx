@@ -208,7 +208,8 @@ export function WorkshopEditor({ workshop }: { workshop: Workshop | null }) {
           id={id("cover")}
           value={form.cover}
           onChange={(cover) => set({ cover })}
-          errors={{ url: errors["cover.url"], alt: errors["cover.alt"], caption: errors["cover.caption"] }}
+          withAlt={false}
+          errors={{ url: errors["cover.url"], caption: errors["cover.caption"] }}
         />
       </EditorSection>
 
