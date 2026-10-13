@@ -27,8 +27,8 @@ export default function CommunityLoading() {
         </div>
       </div>
       <PageBody className="reveal-delayed flex flex-1 flex-col gap-4" as="main">
-        <div className="flex flex-col gap-2.5 rounded-card bg-card p-2.5 shadow-raised">
-          <Skeleton className="aspect-[8/3] w-full rounded-[18px]" />
+        <div className="grid gap-2.5 rounded-card bg-card p-2.5 shadow-raised md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+          <Skeleton className="min-h-[260px] rounded-[18px]" />
           <div className="flex flex-col gap-4 px-5 py-6 sm:px-[30px]">
             <Skeleton className="h-6 w-40 rounded-full" />
             <Skeleton className="h-8 w-3/4" />

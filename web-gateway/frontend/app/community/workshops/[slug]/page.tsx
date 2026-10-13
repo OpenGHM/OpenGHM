@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CoverImage } from "@/components/community/cms-image";
+import { CmsImage } from "@/components/community/cms-image";
 import { RichText, isRichTextEmpty } from "@/components/community/rich-text";
 import { FormatPill, StatusPill } from "@/components/community/workshop-pills";
 import { MaterialsList, WorkshopDetails } from "@/components/community/workshop-parts";
@@ -51,8 +51,15 @@ export default async function WorkshopPage({ params }: Params) {
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-4">
             {cover && workshop.cover && (
-              <figure className="flex flex-col rounded-card bg-card p-2 shadow-raised">
-                <CoverImage src={cover.url} alt={cover.alt} loading="eager" imgClassName="max-h-[640px]" />
+              // The card is as wide as the picture, up to the column: a small
+              // or tall picture is not set in a wide empty frame.
+              <figure className="flex w-fit max-w-full flex-col rounded-card bg-card p-2 shadow-raised">
+                <CmsImage
+                  src={cover.url}
+                  alt={cover.alt}
+                  loading="eager"
+                  className="block h-auto max-h-[480px] w-auto max-w-full rounded-[18px]"
+                />
                 {workshop.cover.caption && (
                   <figcaption className="px-3.5 pt-3 pb-1.5 text-[13px] leading-normal text-muted-foreground">
                     {workshop.cover.caption}
