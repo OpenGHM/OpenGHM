@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { OpenWorkspaceButton } from "@/components/landing/open-workspace-button";
 import { PanelDots, SectionTitle } from "./section-parts";
 
 export function CtaSection() {
@@ -27,9 +28,7 @@ export function CtaSection() {
             <ArrowRight aria-hidden="true" />
           </Link>
         </Button>
-        <Button asChild variant="on-dark" size="xl">
-          <Link href="/workspace">Open Workspace</Link>
-        </Button>
+        <OpenWorkspaceButton />
       </div>
     </section>
   );

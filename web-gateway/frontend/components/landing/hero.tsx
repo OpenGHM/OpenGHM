@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { PageHero } from "@/components/layout/page-hero";
 import { Button } from "@/components/ui/button";
+import { OpenWorkspaceButton } from "@/components/landing/open-workspace-button";
 
 export function Hero() {
   return (
@@ -31,9 +32,7 @@ export function Hero() {
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
-          <Button asChild variant="on-dark" size="xl">
-            <Link href="/workspace">Open Workspace</Link>
-          </Button>
+          <OpenWorkspaceButton />
         </>
       }
     />

@@ -78,6 +78,25 @@ page's band and one card with a link to sign in and back. Both are
 conveniences, not the authorization check; that happens in FastAPI
 ([authentication.md](authentication.md)).
 
+**`WORKSPACE_ENABLED`** turns the Workspace off for a deployment that only
+shows the repository; unset means on. Both halves read the same variable at
+run time, by the rule above. The frontend's root layout is `force-dynamic` and
+hands `siteFeatures()` (`web-gateway/frontend/lib/features.ts`) to every
+client component. While it is `"false"`:
+
+- Every way into the Workspace stays visible, marked with a Coming soon chip,
+  and is not a link: the header item, the footer link, Home's two
+  "Open Workspace" buttons, and a snapshot's "Run this snapshot" button.
+- `proxy.ts` rewrites every `/workspace` address to `/workspace-unavailable`,
+  one card that points to the Data Repository. No Workspace page renders.
+- FastAPI answers 403 `workspace_disabled` to a draft's creation, duplicate,
+  edit, submit and publish. Reading, cancelling and deleting the drafts that
+  exist still work, so the admin console's job list keeps working.
+
+Every page also carries the development notice
+(`components/layout/development-notice.tsx`), a strip above the header. It
+stays until the first release.
+
 ## 3. The stack, as built
 
 Read this table as an inventory, not as an intent. Several things a reader

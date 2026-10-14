@@ -12,6 +12,7 @@ const { usePathname } = vi.hoisted(() => ({ usePathname: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname }));
 
 import { Header } from "@/components/landing/header";
+import { SiteFeaturesProvider } from "@/components/site-features";
 
 beforeAll(() => {
   Element.prototype.hasPointerCapture ??= () => false;
@@ -217,5 +218,30 @@ describe("the header on the navy band", () => {
     render(<Header />);
     expect(screen.queryByRole("link", { name: "Sign In" })).toBeNull();
     expect(screen.getByRole("button", { name: /Ada/ }).className).toContain("rounded-full");
+  });
+});
+
+describe("the header with the Workspace off", () => {
+  const renderOff = () =>
+    render(
+      <SiteFeaturesProvider features={{ workspace: false }}>
+        <Header />
+      </SiteFeaturesProvider>
+    );
+
+  it("keeps the item, marked Coming soon and not a link", () => {
+    useSession.mockReturnValue({ data: null });
+    renderOff();
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    expect(nav.queryByRole("link", { name: /Workspace/ })).toBeNull();
+    expect(nav.getByText("Workspace").closest("[aria-disabled]")?.textContent).toContain("Coming soon");
+  });
+
+  it("disables it in the phone menu", () => {
+    useSession.mockReturnValue({ data: null });
+    renderOff();
+    const item = openMenu().getByRole("menuitem", { name: /Workspace/ });
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain("Coming soon");
   });
 });

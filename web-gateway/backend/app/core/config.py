@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # `recommendedCompute.postProcessingWalltime` to offer it.
     CLIMATOLOGY_ENABLED: bool = False
 
+    # Whether the Workspace is open: creating, editing, running and publishing a
+    # snapshot draft (403 `workspace_disabled` when off). A deployment that only
+    # shows the repository turns it off; reading, cancelling and deleting the
+    # drafts that exist still work. The frontend reads the same variable.
+    WORKSPACE_ENABLED: bool = True
+
     # Object storage (Anvil/RCAC S3). The backend never talks to S3 directly —
     # Slurm job scripts upload outputs from Anvil compute nodes using their own
     # credentials, and datasets/outputs are served as plain public HTTPS links.

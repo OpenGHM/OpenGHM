@@ -18,6 +18,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
+import { useSiteFeatures } from "@/components/site-features";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
@@ -31,6 +33,8 @@ const NAV_ITEMS_BEFORE = [
   { label: "Data Repository", href: "/repository" },
   { label: "Workspace", href: "/workspace" },
 ];
+
+const WORKSPACE_HREF = "/workspace";
 
 const NAV_ITEMS_AFTER = [
   { label: "Community", href: "/community" },
@@ -85,6 +89,9 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
   const userMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: session } = useSession();
   const pathname = usePathname();
+  // Off on a deployment that only shows the repository: the item stays, marked
+  // and not a link (lib/features.ts).
+  const { workspace } = useSiteFeatures();
 
   const handleResourcesEnter = () => {
     if (resourcesTimeoutRef.current) clearTimeout(resourcesTimeoutRef.current);
@@ -126,16 +133,27 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
           aria-label="Main"
           className="mx-auto hidden items-center gap-0.5 rounded-full border border-white/10 bg-white/6 p-[5px] backdrop-blur-sm lg:flex"
         >
-          {NAV_ITEMS_BEFORE.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              aria-current={isActive(pathname, item.href) ? "page" : undefined}
-              className={`${NAV_LINK} ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : NAV_LINK_IDLE}`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS_BEFORE.map((item) =>
+            item.href === WORKSPACE_HREF && !workspace ? (
+              <span
+                key={item.label}
+                aria-disabled="true"
+                className={`${NAV_LINK} inline-flex cursor-default items-center gap-1.5 text-hero-foreground-muted/70`}
+              >
+                {item.label}
+                <ComingSoonChip tone="dark" />
+              </span>
+            ) : (
+              <Link
+                key={item.label}
+                href={item.href}
+                aria-current={isActive(pathname, item.href) ? "page" : undefined}
+                className={`${NAV_LINK} ${isActive(pathname, item.href) ? NAV_LINK_ACTIVE : NAV_LINK_IDLE}`}
+              >
+                {item.label}
+              </Link>
+            )
+          )}
 
           {/* Resources dropdown */}
           <div
@@ -260,17 +278,24 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
-            {NAV_ITEMS_BEFORE.map((item) => (
-              <DropdownMenuItem
-                key={item.label}
-                asChild
-                className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? MENU_ACTIVE : "font-medium"}`}
-              >
-                <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
+            {NAV_ITEMS_BEFORE.map((item) =>
+              item.href === WORKSPACE_HREF && !workspace ? (
+                <DropdownMenuItem key={item.label} disabled className="min-h-10 text-[15px] font-medium">
                   {item.label}
-                </Link>
-              </DropdownMenuItem>
-            ))}
+                  <ComingSoonChip className="ml-auto" />
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  key={item.label}
+                  asChild
+                  className={`min-h-10 text-[15px] ${isActive(pathname, item.href) ? MENU_ACTIVE : "font-medium"}`}
+                >
+                  <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              )
+            )}
             <DropdownMenuLabel className="pt-3 text-xs font-medium text-muted-foreground">
               Resources
             </DropdownMenuLabel>

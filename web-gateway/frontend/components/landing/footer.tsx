@@ -1,11 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
+import { WhenWorkspace } from "@/components/site-features";
+import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
 import { CurrentYear } from "./current-year";
 
 // Only pages that exist. Add a link when its page does.
 const PLATFORM_LINKS: FooterLink[] = [
   { label: "Data Repository", href: "/repository" },
-  { label: "Workspace", href: "/workspace" },
+  { label: "Workspace", href: "/workspace", workspace: true },
 ];
 const COMMUNITY_LINKS: FooterLink[] = [
   { label: "Workshops", href: "/community?tab=workshops" },
@@ -15,6 +17,8 @@ const COMMUNITY_LINKS: FooterLink[] = [
 interface FooterLink {
   label: string;
   href: string;
+  /** A way into the Workspace: marked and not a link while it is off. */
+  workspace?: boolean;
 }
 
 export function Footer() {
@@ -75,16 +79,34 @@ function FooterColumn({
         {title}
       </h5>
       <ul className="space-y-3">
-        {links.map((link) => (
-          <li key={link.href}>
+        {links.map((link) => {
+          const anchor = (
             <Link
               href={link.href}
               className="text-sm text-foreground/80 transition-colors hover:text-primary"
             >
               {link.label}
             </Link>
-          </li>
-        ))}
+          );
+          return (
+            <li key={link.href}>
+              {link.workspace ? (
+                <WhenWorkspace
+                  off={
+                    <span aria-disabled="true" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                      {link.label}
+                      <ComingSoonChip />
+                    </span>
+                  }
+                >
+                  {anchor}
+                </WhenWorkspace>
+              ) : (
+                anchor
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

@@ -73,6 +73,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
+def _require_workspace() -> None:
+    """Refuse a draft's creation, edit, run or publish while `WORKSPACE_ENABLED`
+    is off, before anything else about the request is looked at."""
+    if not settings.WORKSPACE_ENABLED:
+        raise _error(
+            status.HTTP_403_FORBIDDEN,
+            "workspace_disabled",
+            "The Workspace is not available on this site yet.",
+        )
+
+
+_WORKSPACE = [Depends(_require_workspace)]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -407,6 +421,7 @@ async def _derived_draft(
     "/derive/{dataset_id}",
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=_WORKSPACE,
 )
 async def derive_simulation(
     dataset_id: str,
@@ -468,6 +483,7 @@ async def preview_derived_simulation(
     "/{job_id}/duplicate",
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=_WORKSPACE,
 )
 async def duplicate_simulation(
     job_id: str,
@@ -513,7 +529,7 @@ async def duplicate_simulation(
 # ---------------------------------------------------------------------------
 
 
-@router.patch("/{job_id}", response_model=JobResponse)
+@router.patch("/{job_id}", response_model=JobResponse, dependencies=_WORKSPACE)
 async def update_simulation(
     job_id: str,
     body: SimulationUpdateRequest,
@@ -800,6 +816,7 @@ async def _submitter(job_id: str, user: CurrentUser) -> TokenPayload:
     "/{job_id}/submit",
     response_model=JobResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=_WORKSPACE,
 )
 async def submit_simulation(
     job_id: str,
@@ -1191,6 +1208,7 @@ def _publish_submit_failure(exc: Exception, job_id: str) -> tuple[int, publish.P
     "/{job_id}/publish",
     response_model=JobResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=_WORKSPACE,
 )
 async def publish_simulation(
     job_id: str,

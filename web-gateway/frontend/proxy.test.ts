@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // `auth(callback)` is next-auth's wrapper; here it hands the callback back so
 // the proxy's own decision can be called with a request of any session.
@@ -58,5 +58,21 @@ describe("proxy", () => {
   it("still redirects a page navigation whose session expired", () => {
     const res = call(request({ path: "/admin/jobs", auth: { error: "RefreshTokenError" } }));
     expect(res.headers.get("location")).toContain("/auth/signin");
+  });
+
+  describe("with the Workspace off", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it.each(["/workspace", "/workspace/new", "/workspace/j1"])("shows %s as the one page that says so", (path) => {
+      vi.stubEnv("WORKSPACE_ENABLED", "false");
+      const res = call(request({ path, auth: null }));
+      expect(res.headers.get("x-middleware-rewrite")).toBe("http://localhost:3100/workspace-unavailable");
+    });
+
+    it("leaves the other pages alone", () => {
+      vi.stubEnv("WORKSPACE_ENABLED", "false");
+      const res = call(request({ path: "/workspaces-guide", auth: null }));
+      expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { signInPath } from "@/lib/auth-redirect";
+import { siteFeatures } from "@/lib/features";
 
 // "/dashboard" has no index page anymore — only its "/dashboard/profile"
 // child route exists — but the prefix match below still protects it.
@@ -13,6 +14,12 @@ const PROTECTED_PATHS = ["/dashboard", "/admin"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+
+  // While the Workspace is off every address under it shows one page that says
+  // so, and none of its own pages run (lib/features.ts).
+  if (!siteFeatures().workspace && (pathname === "/workspace" || pathname.startsWith("/workspace/"))) {
+    return NextResponse.rewrite(new URL("/workspace-unavailable", req.nextUrl.origin));
+  }
 
   const isProtected = PROTECTED_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)

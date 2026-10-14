@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { Footer } from "@/components/landing/footer";
+import { SiteFeaturesProvider } from "@/components/site-features";
 
 afterEach(cleanup);
 
@@ -31,5 +32,17 @@ describe("the footer", () => {
       .map((a) => a.getAttribute("href"))
       .filter((h) => !h?.startsWith("https://"));
     expect(hrefs).toEqual(["/repository", "/workspace", "/community?tab=workshops", "/news"]);
+  });
+});
+
+describe("the footer with the Workspace off", () => {
+  it("marks Workspace Coming soon and does not link to it", () => {
+    render(
+      <SiteFeaturesProvider features={{ workspace: false }}>
+        <Footer />
+      </SiteFeaturesProvider>
+    );
+    expect(screen.queryByRole("link", { name: "Workspace" })).toBeNull();
+    expect(screen.getByText("Workspace").textContent).toContain("Coming soon");
   });
 });

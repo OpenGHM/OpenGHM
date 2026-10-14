@@ -6,6 +6,8 @@ import { fetchDatasetById, fetchModelInputById } from "@/lib/repository/actions"
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
+import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
+import { WhenWorkspace } from "@/components/site-features";
 import { CitationCard } from "@/components/repository/citation-card";
 import { DatasetJsonLd } from "@/components/repository/dataset-json-ld";
 import { DetailHero, HeroChip } from "@/components/repository/detail-hero";
@@ -65,18 +67,35 @@ export default async function DatasetDetailPage({
                 Back to Repository
               </Link>
             </Button>
-            <Button
-              size="xl"
-              asChild
-              className="h-auto flex-col items-start justify-center gap-px py-2 shadow-float"
+            <WhenWorkspace
+              off={
+                <Button
+                  variant="on-dark"
+                  size="xl"
+                  disabled
+                  className="h-auto flex-col items-start justify-center gap-px py-2 disabled:opacity-100"
+                >
+                  <span className="flex items-center gap-2 text-[11.5px] font-normal text-white/60">
+                    New snapshot from this model snapshot
+                    <ComingSoonChip tone="dark" />
+                  </span>
+                  <span className="opacity-60">Run this snapshot</span>
+                </Button>
+              }
             >
-              <Link href={newStepHref(dataset.id, "run")}>
-                <span className="text-[11.5px] font-normal text-white/80">
-                  New snapshot from this model snapshot
-                </span>
-                Run this snapshot →
-              </Link>
-            </Button>
+              <Button
+                size="xl"
+                asChild
+                className="h-auto flex-col items-start justify-center gap-px py-2 shadow-float"
+              >
+                <Link href={newStepHref(dataset.id, "run")}>
+                  <span className="text-[11.5px] font-normal text-white/80">
+                    New snapshot from this model snapshot
+                  </span>
+                  Run this snapshot →
+                </Link>
+              </Button>
+            </WhenWorkspace>
           </>
         }
       />
