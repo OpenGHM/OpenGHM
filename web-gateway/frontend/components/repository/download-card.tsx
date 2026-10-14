@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Check, ChevronRight, Copy } from "lucide-react";
 import { DetailSection } from "@/components/repository/detail-section";
-import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
+import { ComingSoonChip, TOOLKIT_NOT_RELEASED } from "@/components/ui/coming-soon-chip";
 import { OutputDialog, stepFolders, type MetadataVariable, type OutputTab } from "@/components/repository/output-dialog";
 import type { OutputFolder } from "@/lib/repository/types";
 import { formatBytes } from "@/lib/workspace/format";
@@ -332,7 +332,7 @@ export function SnapshotDownload({
         <div className="flex flex-col gap-2">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-semibold">
             All three at once with the CLI
-            <ComingSoonChip />
+            <ComingSoonChip title={TOOLKIT_NOT_RELEASED} />
           </span>
           <Command command={fetchCommand} tone="light" />
           <span className="text-xs leading-relaxed text-muted-foreground">
@@ -372,7 +372,7 @@ export function ModelInputDownload({
         <div className="relative flex flex-col gap-2">
           <span className="flex items-center gap-2 text-[12.5px] font-semibold text-hero-text">
             Download with the CLI
-            <ComingSoonChip tone="dark" />
+            <ComingSoonChip title={TOOLKIT_NOT_RELEASED} tone="dark" />
           </span>
           <Command command={fetchCommand} tone="dark" />
           <span className="text-xs text-hero-faint">Every file is checked against SHA256SUMS as it lands.</span>

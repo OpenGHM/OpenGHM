@@ -1,4 +1,4 @@
-import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
+import { ComingSoonChip, TOOLKIT_NOT_RELEASED } from "@/components/ui/coming-soon-chip";
 import { PanelDots, SectionEyebrow, SectionTitle } from "./section-parts";
 
 interface Feature {
@@ -60,7 +60,7 @@ export function FeaturesSection() {
               </span>
               <h3 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[26px] leading-[1.2] font-semibold tracking-[-0.025em]">
                 {feature.title}
-                {feature.soon && <ComingSoonChip tone="dark" className="tracking-normal" />}
+                {feature.soon && <ComingSoonChip title={TOOLKIT_NOT_RELEASED} tone="dark" className="tracking-normal" />}
               </h3>
               <p className="col-start-2 mt-2.5 max-w-[440px] text-[15.5px] leading-[1.65] text-pretty text-hero-foreground-muted">
                 {feature.description}

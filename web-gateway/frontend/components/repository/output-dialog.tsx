@@ -9,7 +9,7 @@ import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
 import { folderCrumbs } from "@/lib/repository/tree-browse";
 import { WORLD_LAND_PATH } from "@/lib/repository/world-land";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
+import { ComingSoonChip, TOOLKIT_NOT_RELEASED } from "@/components/ui/coming-soon-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   OUTPUT_RESOLUTIONS,
@@ -666,7 +666,7 @@ function SubsetForm({
           <div className="flex items-center justify-between gap-2">
             <span className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
               Same file from a script
-              <ComingSoonChip />
+              <ComingSoonChip title={TOOLKIT_NOT_RELEASED} />
             </span>
             <CopyButton text={command} label="subset command" tone="quiet" />
           </div>
