@@ -4,15 +4,30 @@ import { Suspense } from "react";
 import { AuthPending } from "@/components/auth/auth-loading";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 import { useTokenRequest } from "@/lib/use-token-request";
 
 function ConfirmLinkBody() {
   const searchParams = useSearchParams();
-  const status = useTokenRequest(
+  const { status, submit } = useTokenRequest(
     searchParams.get("token"),
     "/api/public-auth/confirm-link",
   );
+
+  if (status === "ready") {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm leading-[1.55] text-muted-foreground">
+          Confirm only if you started this yourself. If you did not, close this
+          page: nothing changes on your account.
+        </p>
+        <Button type="button" size="xl" className="w-full" onClick={submit}>
+          Confirm the new sign-in method
+        </Button>
+      </div>
+    );
+  }
 
   if (status === "pending") {
     return <AuthPending>Confirming the link…</AuthPending>;
@@ -43,7 +58,7 @@ export default function ConfirmLinkPage() {
     <AuthShell
       eyebrow="Account linking"
       title="Link sign-in methods"
-      description="OpenGHM Gateway account linking"
+      description="Someone asked to add a new way of signing in to the OpenGHM Gateway account for this email address."
     >
       <Suspense fallback={<AuthPending>Loading…</AuthPending>}>
         <ConfirmLinkBody />

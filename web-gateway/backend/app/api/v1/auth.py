@@ -38,6 +38,11 @@ from app.models.user import (
     VerifyEmailRequest,
 )
 from app.services.email import send_email
+from app.services.email_templates import (
+    link_confirmation_email,
+    password_reset_email,
+    verification_email,
+)
 from app.services.recaptcha import verify_recaptcha
 
 logger = logging.getLogger(__name__)
@@ -72,16 +77,7 @@ async def _send_verification_email(db, user_id: str, email: str, name: str) -> N
         },
     )
     link = f"{settings.FRONTEND_URL}/auth/verify-email?token={raw_token}"
-    await send_email(
-        to=email,
-        subject="Verify your OpenGHM email address",
-        html=(
-            f"<p>Hi {name},</p>"
-            f'<p>Please verify your email address for OpenGHM Gateway: '
-            f'<a href="{link}">{link}</a></p>'
-            f"<p>This link expires in 24 hours.</p>"
-        ),
-    )
+    await send_email(email, verification_email(name, link))
 
 
 async def _send_link_confirmation_email(
@@ -114,18 +110,7 @@ async def _send_link_confirmation_email(
     )
     link = f"{settings.FRONTEND_URL}/auth/confirm-link?token={raw_token}"
     method = "a password sign-in" if pending_link["type"] == "password" else "a CILogon sign-in"
-    await send_email(
-        to=email,
-        subject="Confirm linking a new sign-in method to your OpenGHM account",
-        html=(
-            f"<p>Hi {name},</p>"
-            f"<p>Someone tried to add {method} to your OpenGHM Gateway account "
-            f"using this email address. If this was you, confirm the link "
-            f'below (expires in 24 hours): <a href="{link}">{link}</a></p>'
-            f"<p>If you didn't request this, you can safely ignore this "
-            f"email — nothing has changed on your account.</p>"
-        ),
-    )
+    await send_email(email, link_confirmation_email(name, method, link))
 
 
 async def _issue_tokens(
@@ -424,19 +409,7 @@ async def forgot_password(body: ForgotPasswordRequest):
             },
         )
         link = f"{settings.FRONTEND_URL}/auth/reset-password?token={raw_token}"
-        await send_email(
-            to=user["email"],
-            subject="Reset your OpenGHM password",
-            html=(
-                f"<p>Hi {user['name']},</p>"
-                f"<p>Someone requested a password reset for your OpenGHM "
-                f"Gateway account. If this was you, click the link below "
-                f"(expires in 1 hour):</p>"
-                f'<p><a href="{link}">{link}</a></p>'
-                f"<p>If you didn't request this, you can safely ignore this "
-                f"email — your password hasn't been changed.</p>"
-            ),
-        )
+        await send_email(user["email"], password_reset_email(user["name"], link))
         await log_event(
             "password_reset_requested", actor_id=str(user["_id"]), actor_email=user["email"]
         )

@@ -114,7 +114,7 @@ expects are deliberately absent, and §6 says which.
 | Backend | FastAPI 0.115, uvicorn, pydantic 2 / pydantic-settings |
 | Database driver | motor (async pymongo) |
 | Tokens | `python-jose` for JWTs, `bcrypt` for passwords |
-| Email | `resend` — password reset and verification only |
+| Email | `resend` — verification, password reset and sign-in linking, one layout in `app/services/email_templates.py` |
 | HPC | `slurmly`, pinned to a git commit; not on PyPI |
 
 ## 4. Where state lives

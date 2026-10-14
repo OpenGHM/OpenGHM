@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StrictMode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const { params } = vi.hoisted(() => ({ params: { value: "" } }));
 vi.mock("next/navigation", () => ({
@@ -26,13 +25,24 @@ describe("/auth/verify-email", () => {
     params.value = "";
     render(<Page />);
     expect(screen.getByText(/This verification link is invalid or has expired/)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("sends the token once and shows success", async () => {
+  it("sends nothing until the button is pressed, so a link scanner that only loads the page spends nothing", () => {
+    params.value = "token=abc";
+    render(<Page />);
+    expect(screen.getByRole("button", { name: "Verify my email" })).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the token once on the press and shows success", async () => {
     params.value = "token=abc";
     fetchMock.mockResolvedValue({ ok: true });
     render(<Page />);
+    const button = screen.getByRole("button", { name: "Verify my email" });
+    fireEvent.click(button);
+    fireEvent.click(button);
     expect(screen.getByText(/Verifying your email/)).toBeTruthy();
     expect(await screen.findByText(/Your email has been verified/)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -43,22 +53,11 @@ describe("/auth/verify-email", () => {
     });
   });
 
-  it("spends a one-time token only once under Strict Mode's double effect", async () => {
-    params.value = "token=abc";
-    fetchMock.mockResolvedValue({ ok: true });
-    render(
-      <StrictMode>
-        <Page />
-      </StrictMode>,
-    );
-    expect(await screen.findByText(/Your email has been verified/)).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   it("shows the error when the server rejects the token", async () => {
     params.value = "token=abc";
     fetchMock.mockResolvedValue({ ok: false });
     render(<Page />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify my email" }));
     expect(await screen.findByText(/This verification link is invalid or has expired/)).toBeTruthy();
   });
 
@@ -66,6 +65,7 @@ describe("/auth/verify-email", () => {
     params.value = "token=abc";
     fetchMock.mockRejectedValue(new Error("offline"));
     render(<Page />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify my email" }));
     expect(await screen.findByText(/This verification link is invalid or has expired/)).toBeTruthy();
   });
 });

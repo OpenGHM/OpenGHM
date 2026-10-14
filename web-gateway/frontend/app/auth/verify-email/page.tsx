@@ -4,15 +4,24 @@ import { Suspense } from "react";
 import { AuthPending } from "@/components/auth/auth-loading";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 import { useTokenRequest } from "@/lib/use-token-request";
 
 function VerifyEmailBody() {
   const searchParams = useSearchParams();
-  const status = useTokenRequest(
+  const { status, submit } = useTokenRequest(
     searchParams.get("token"),
     "/api/public-auth/verify-email",
   );
+
+  if (status === "ready") {
+    return (
+      <Button type="button" size="xl" className="w-full" onClick={submit}>
+        Verify my email
+      </Button>
+    );
+  }
 
   if (status === "pending") {
     return <AuthPending>Verifying your email…</AuthPending>;
@@ -47,7 +56,7 @@ export default function VerifyEmailPage() {
     <AuthShell
       eyebrow="Verification"
       title="Email verification"
-      description="OpenGHM Gateway account verification"
+      description="Confirm that this email address is yours to finish setting up your OpenGHM Gateway account."
     >
       <Suspense fallback={<AuthPending>Loading…</AuthPending>}>
         <VerifyEmailBody />

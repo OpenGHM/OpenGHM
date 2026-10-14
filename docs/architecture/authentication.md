@@ -115,6 +115,16 @@ run before a session exists and post to the frontend's own
 `/api/public-auth/<action>` Route Handler, which forwards them
 ([gateway.md §2](gateway.md#2-the-request-path)).
 
+An emailed link spends its token only when the person on the page presses
+its button — the verify-email and confirm-link pages send nothing on load.
+Mail providers open the links in a message before delivering it, and Purdue's
+does: on `dev` a verification was spent 25 seconds after sending, minutes
+before the mail reached the inbox. Spending on load would let that scanner
+verify an address, or confirm a password someone else staged on the account
+through `register`. Every email is built from one layout,
+`web-gateway/backend/app/services/email_templates.py`, with an HTML and a
+plain-text part.
+
 ### CILogon — scaffolded, never activated
 
 Both halves of the code exist and neither has ever run against the real

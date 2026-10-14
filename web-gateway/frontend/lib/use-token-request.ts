@@ -1,46 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
-export type TokenRequestStatus = "pending" | "success" | "error";
+export type TokenRequestStatus = "ready" | "pending" | "success" | "error";
 
 /**
- * Spends the one-time `token` from an emailed link with a single POST and
- * reports how it went.
+ * Spends the one-time `token` from an emailed link with a single POST, when
+ * the person on the page presses the button that calls `submit` — never on
+ * page load.
  *
- * The backend deletes the token's hash the first time it is accepted
- * (POST /auth/verify-email and POST /auth/confirm-link in
- * web-gateway/backend/app/api/v1/auth.py), so a second request with the same
- * token is answered 400. React Strict Mode runs every effect twice in
- * development; without a guard the second request would turn a successful
- * verification into an error. `startedFor` is a ref, which survives that
- * double run, so each token is sent once per mounted component.
+ * Mail providers open the links in a message before delivering it (Purdue's
+ * does: a verification was spent 25 seconds after sending, minutes before the
+ * mail reached the inbox). A page that posted on load would let that scanner
+ * verify an address, or confirm a credential an attacker staged with
+ * POST /auth/register (web-gateway/backend/app/api/v1/auth.py,
+ * _send_link_confirmation_email), without anyone reading the mail. Scanners
+ * load pages; they do not press buttons.
  *
- * A missing token is an error from the first render — it is derived here, not
- * set from inside the effect.
+ * The backend deletes the token's hash the first time it is accepted, so a
+ * second request with the same token is answered 400. `sent` makes `submit`
+ * do nothing after the first press, a double click included.
+ *
+ * A missing token is an error from the first render.
  */
 export function useTokenRequest(
   token: string | null,
   endpoint: string,
-): TokenRequestStatus {
-  const [outcome, setOutcome] = useState<{ token: string; ok: boolean } | null>(
-    null,
-  );
-  const startedFor = useRef<string | null>(null);
+): { status: TokenRequestStatus; submit: () => void } {
+  const [outcome, setOutcome] = useState<"pending" | "success" | "error" | null>(null);
+  const sent = useRef(false);
 
-  useEffect(() => {
-    if (!token || startedFor.current === token) return;
-    startedFor.current = token;
+  function submit() {
+    if (!token || sent.current) return;
+    sent.current = true;
+    setOutcome("pending");
     fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     })
-      .then((res) => setOutcome({ token, ok: res.ok }))
-      .catch(() => setOutcome({ token, ok: false }));
-  }, [token, endpoint]);
+      .then((res) => setOutcome(res.ok ? "success" : "error"))
+      .catch(() => setOutcome("error"));
+  }
 
-  if (!token) return "error";
-  if (outcome?.token !== token) return "pending";
-  return outcome.ok ? "success" : "error";
+  if (!token) return { status: "error", submit };
+  return { status: outcome ?? "ready", submit };
 }
