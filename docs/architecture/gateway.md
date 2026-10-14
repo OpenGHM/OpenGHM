@@ -125,10 +125,10 @@ that file is the schema, in the sense that nothing else declares one.
 
 | Collection | Holds |
 |---|---|
-| `users` | accounts; `email` is unique |
+| `users` | accounts; `email` is unique and lowercase, and `sso_external_id` is unique where set |
 | `jobs` | one document per **snapshot draft** — editing or submitted, including the SLURM ids once it runs |
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
-| `pending_sso_signups` | half-finished SSO sign-ups, 30-minute TTL |
+| `pending_sso_signups` | half-finished SSO steps: sign-ups for a provider that gave no email (30 minutes) and connect intents from the profile (10 minutes), TTL-reaped |
 | `audit_events` | append-only, `auth`, `job`, `system` and `content` categories |
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |

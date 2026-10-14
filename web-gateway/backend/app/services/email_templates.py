@@ -155,7 +155,26 @@ def link_confirmation_email(name: str, method: str, link: str) -> Email:
     )
 
 
-def password_reset_email(name: str, link: str) -> Email:
+def password_reset_email(name: str, link: str, *, has_password: bool = True) -> Email:
+    """An account created by CILogon has no password to reset; its email says
+    "set" instead, since the person is adding a way in, not recovering one."""
+    if not has_password:
+        return _render(
+            subject="Set a password for your OpenGHM account",
+            preheader="Add a password as another way to sign in.",
+            heading="Set a password",
+            name=name,
+            paragraphs=[
+                "Someone asked to set a password for your OpenGHM Gateway "
+                "account, which you sign in to without one. If it was you, "
+                "choose a password with the button below. You can keep using "
+                "CILogon too.",
+            ],
+            action=_Action("Set a password", link),
+            expiry="This link expires in 1 hour.",
+            closing="If you did not ask for this, you can ignore this email. "
+            "Nothing changes on your account unless the link is used.",
+        )
     return _render(
         subject="Reset your OpenGHM password",
         preheader="Choose a new password for your account.",

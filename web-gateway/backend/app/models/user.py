@@ -1,9 +1,16 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, EmailStr, Field
 from datetime import datetime
 
 from app.core.roles import RoleField
+
+# An address as a request carries it. EmailStr lowercases only the domain, but
+# users.email is the account's unique key and looked up by equality, so
+# `Ada@Purdue.edu` and `ada@purdue.edu` would be two accounts. Every request
+# model that takes an address uses this, so what is stored and what is looked
+# up are both lowercase.
+LowercaseEmail = Annotated[EmailStr, AfterValidator(str.lower)]
 
 
 class TokenPayload(BaseModel):
@@ -46,6 +53,10 @@ class UserDB(BaseModel):
     can_run_simulations: bool = False
     sso_provider: str | None = None
     sso_external_id: str | None = None
+    # The address CILogon gave on the identity's last sign-in. It may differ
+    # from `email` (a work address connected to a personal account), so it is
+    # kept apart to show which identity is connected.
+    sso_email: str | None = None
     # Set when a self-typed email (register, or ORCID's complete-sso-signup)
     # collides with an *existing* account under a different auth method.
     # Since that email isn't verified at the point of collision, the new
@@ -78,16 +89,26 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class UserProfileResponse(UserResponse):
+    """GET /users/me: the account plus how it signs in. Never the provider's
+    own id for the identity (`sso_external_id`) or the password hash, only
+    whether a password exists."""
+
+    sso_provider: str | None = None
+    sso_email: str | None = None
+    has_password: bool = False
+
+
 # --- Auth request/response models ---
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: LowercaseEmail
     password: str
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: LowercaseEmail
     password: str
     name: str
     organization: str | None = None
@@ -111,7 +132,7 @@ class SsoLoginRequest(BaseModel):
     returns a completion token — see SsoLoginResponse.
     """
 
-    email: EmailStr | None = None
+    email: LowercaseEmail | None = None
     name: str | None = None
     external_id: str
     provider: str
@@ -119,11 +140,16 @@ class SsoLoginRequest(BaseModel):
     # idp_name, "Purdue University Main Campus") — trusted at face value
     # since it comes from the IdP, not typed in by the user.
     organization: str | None = None
+    # Set when a signed-in user pressed "Connect CILogon" on their profile
+    # (POST /auth/sso-connect-intent): the call is then not a sign-in but
+    # attaches this identity to that user. The account's own email plays no
+    # part, so the two may differ.
+    connect_token: str | None = None
 
 
 class CompleteSsoSignupRequest(BaseModel):
     completion_token: str
-    email: EmailStr
+    email: LowercaseEmail
     name: str
 
 
@@ -145,17 +171,16 @@ class UserListResponse(BaseModel):
     total_pages: int
 
 
-class UserDetailResponse(UserResponse):
+class UserDetailResponse(UserProfileResponse):
     """GET /users/{user_id} — admin/staff drill-down on one account.
 
-    Extends UserResponse rather than exposing the raw document: the stored
-    doc carries password_hash, reset_token_hash, verify_token_hash and
+    Extends UserProfileResponse rather than exposing the raw document: the
+    stored doc carries password_hash, reset_token_hash, verify_token_hash and
     sso_external_id, none of which may ever reach a response. Built
     field-by-field in the handler, never via UserDetailResponse(**doc).
     """
 
     updated_at: datetime | None = None
-    sso_provider: str | None = None
     active_session_count: int = 0
     job_counts: dict[str, int] = Field(default_factory=dict)
     last_login_at: datetime | None = None
@@ -225,7 +250,7 @@ class SessionListResponse(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: LowercaseEmail
 
 
 class ResetPasswordRequest(BaseModel):
@@ -277,8 +302,14 @@ class LinkPendingResponse(BaseModel):
 class SsoLoginResponse(BaseModel):
     """Discriminated on `status`: "ok" carries the usual login tokens,
     "needs_completion" means the caller must collect the missing fields
-    (see POST /auth/complete-sso-signup) before an account can exist."""
+    (see POST /auth/complete-sso-signup) before an account can exist, and
+    "connected" answers a `connect_token`: the identity is now attached to the
+    signed-in user, who needs no tokens (they already have a session)."""
 
     status: str
     auth: AuthResponse | None = None
     completion_token: str | None = None
+
+
+class SsoConnectIntentResponse(BaseModel):
+    connect_token: str

@@ -56,3 +56,12 @@ def test_the_migration_targets_the_seeded_ids():
     sources = set(re.findall(r'\bfrom:\s*"([^"]+)"', migration))
     assert targets == set(_seeded_users())
     assert sources <= MOCK_USER_IDS
+
+
+def test_the_seed_declares_the_same_identity_index_as_the_gateway():
+    source = (MONGO_DIR / "init-mongo.js").read_text()
+    assert re.search(
+        r"db\.users\.createIndex\(\s*\{ sso_external_id: 1 \},\s*"
+        r"\{ unique: true, partialFilterExpression: \{ sso_external_id: \{ \$type: \"string\" \} \} \}\s*\)",
+        source,
+    )

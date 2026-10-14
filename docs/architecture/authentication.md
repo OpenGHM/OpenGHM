@@ -1,8 +1,8 @@
 # Authentication and authorization — architecture
 
-**Status: built.** Every mechanism below exists in the code today. The one
-thing that does *not* work yet is CILogon, and §3 says exactly how far it got
-and what is missing. Registration values and setup steps are in
+**Status: built.** Every mechanism below exists in the code today. CILogon has
+run against the real provider locally, for connect and sign-in; nothing has run
+it on `dev` yet (§3). Registration values and setup steps are in
 `ops/docs/reference/external-services.md` (private); this
 page is the shape.
 
@@ -108,9 +108,16 @@ strict mode.
 
 ### Email and password
 
-The only path that works end to end. bcrypt hashes; `POST /auth/register`
-behind reCAPTCHA when a key is configured; verification email and password
-reset by emailed token.
+bcrypt hashes; `POST /auth/register` behind reCAPTCHA when a key is configured;
+verification email and password reset by emailed token.
+
+**An email address is lowercased wherever it is taken or stored.** Every request
+model that carries one uses `LowercaseEmail`
+(`web-gateway/backend/app/models/user.py`), because `users.email` is the unique
+key and is looked up by equality: `Ada@Purdue.edu` and `ada@purdue.edu` would
+otherwise be two accounts. `main.py` lowercases the addresses stored before that
+at every startup (`app/core/account_startup.py`). Two accounts that would collide
+once lowercased are left exactly as they are, and a warning names both ids.
 
 Sign-in goes through NextAuth's credentials provider, server-side. The other
 five — register, verify-email, forgot-password, reset-password, confirm-link —
@@ -128,22 +135,27 @@ through `register`. Every email is built from one layout,
 `web-gateway/backend/app/services/email_templates.py`, with an HTML and a
 plain-text part.
 
-### CILogon — scaffolded, never activated
+### CILogon
 
-Both halves of the code exist and neither has ever run against the real
-provider:
+CILogon, an OIDC broker in front of many identity providers (Purdue, ORCID,
+Google), works the way "Sign in with Google" does on an ordinary site
+([ADR 0035](../decisions/0035-cilogon-is-ordinary-sso.md)): an identity is
+connected to one account, and a connected identity signs in to it. It has run
+against the real provider locally, for sign-in and for connecting from the
+profile. Nothing has run it on `dev`.
+
+Two halves, both in the gateway:
 
 - `web-gateway/frontend/lib/auth.ts`'s `cilogonProvider()` returns an OIDC
-  provider — or `undefined` when `CILOGON_CLIENT_ID` is empty, in which case
-  NextAuth simply never lists it.
+  provider, or `undefined` when `CILOGON_CLIENT_ID` or `CILOGON_CLIENT_SECRET` is
+  empty, in which case NextAuth never lists it. `cilogonConfigured` exports that
+  decision, made on the server, so the profile page offers "Connect CILogon" only
+  where it can work. The sign-in page's button is gated on `getProviders()` at
+  runtime, not on a build-time flag, so it appears by itself once the variables
+  are set and the pod restarts. `CILOGON_CLIENT_ID` is `""` in
+  `ops/k8s/base/frontend.yml`; registering a client is
+  `ops/docs/reference/external-services.md` (private).
 - `POST /auth/sso-login` accepts an identity NextAuth has already verified.
-
-**No CILogon client has been registered**, so `CILOGON_CLIENT_ID` is `""` in
-`ops/k8s/base/frontend.yml` (so in both environments), and the sign-in page's CILogon
-button stays hidden. The button is gated on `getProviders()` at runtime, not on
-a build-time flag, so it appears by itself once the variables are set and the
-pod restarts. Registering the client is
-`ops/docs/reference/external-services.md` (private).
 
 The trust model is the part worth understanding before touching it. **The
 backend never talks to CILogon.** NextAuth performs the OIDC handshake and
@@ -153,12 +165,99 @@ one random string that must be byte-identical on frontend and backend. Without
 it that endpoint would let anyone mint a session for any email by naming it,
 which is why it is empty by default rather than having a guessable placeholder.
 
-First CILogon sign-in creates a local account (`role: user`,
-`email_verified: true`), unless a password account already holds that email, in
-which case the SSO identity is linked to it. If the provider asserts `idp_name`
-— it does with the `org.cilogon.userinfo` scope, e.g. "Purdue University Main
-Campus" — it is stored as the account's **`organization`**. It never overwrites
-one the user set themselves through `PATCH /users/me`.
+**An account holds at most one identity.** `sso_provider`, `sso_external_id`
+(CILogon's `sub`, never sent to a browser) and `sso_email` are fields of the
+`users` document, and a unique index on `sso_external_id`, partial over strings
+(`app/core/account_startup.py`; `deploy/local/mongo/init-mongo.js` seeds the same
+one), keeps an identity on one account. `sso_email` is the address CILogon gave
+on the identity's last sign-in. It may differ from the account's `email`, and the
+profile shows it so the owner can tell which identity is connected.
+
+#### Signing in
+
+`POST /auth/sso-login` decides in this order:
+
+1. **The identity is connected to an account**: sign in to that account. The
+   session's id, name and email are the account's, taken from the backend's
+   answer in the `signIn` callback of `lib/auth.ts`; the CILogon profile never
+   supplies them. `sso_email` is refreshed to what CILogon gave this time.
+2. **The identity is unknown and CILogon gave an email that an account holds**
+   (compared lowercase): connect the identity to that account and sign in,
+   setting `email_verified`. CILogon's assertion of the address is trusted, as an
+   ordinary site trusts Google's. Two accounts are refused: a deactivated one
+   (401), and one already connected to a *different* identity (409; the person
+   signs in with that one).
+   If the account's address was **not verified**, connecting it also removes its
+   password and revokes every one of its sessions before the new one is issued:
+   someone else may have registered the owner's address and know that password.
+   The owner can set one again through forgot-password. A verified account keeps
+   its password and its other sessions. The audit event `sso_account_linked`
+   records `via: "email"` and whether the password was removed.
+3. **The identity is unknown and no account holds the address**: create an
+   account (`role: user`, `email_verified: true`) with `sso_email` set.
+4. **CILogon gave no email**: the flow below.
+
+Whichever account results, CILogon's `idp_name` (e.g. "Purdue University Main
+Campus", with the `org.cilogon.userinfo` scope) fills its **`organization`** only
+while that is empty; it never overwrites one the user set through
+`PATCH /users/me`.
+
+A refused sign-in does not end on NextAuth's error page, which cannot say why.
+`signIn` returns a redirect to `/auth/signin?sso=` `conflict` (409),
+`deactivated` (401 whose detail says so) or `failed` (anything else, including
+an unreachable backend), and the sign-in page words each. NextAuth's own
+`?error=` reads as `failed`.
+
+#### Connecting from the profile
+
+Connecting is for an identity whose address differs from the account's (a work
+address against a personal one), so the account is named by the request rather
+than matched by email:
+
+1. **Connect CILogon** on the profile calls `POST /auth/sso-connect-intent`
+   (signed in; 409 if the account already has an identity). The backend stores a
+   10-minute document of kind `connect` in `pending_sso_signups` and returns its
+   token. The server action `connectCilogon` keeps it in the httpOnly,
+   `SameSite=Lax` cookie `openghm_sso_connect`, as `${userId}:${token}`; Lax is
+   what lets the cookie come back on CILogon's cross-site redirect.
+2. The browser goes to CILogon with `prompt=login`, so a CILogon session someone
+   else left open in this browser is not what gets connected.
+3. The `signIn` callback reads the cookie and deletes it, whatever happens. It
+   passes the token as `connect_token` only while `auth()` says the user the
+   cookie names is still the one signed in; for anyone else, or nobody, the
+   cookie is ignored and this is an ordinary sign-in.
+4. With a `connect_token`, `POST /auth/sso-login` is not a sign-in. The intent is
+   spent whatever follows. The identity is attached to the intent's account;
+   the account's email never changes, `email_verified` is set only when CILogon's
+   address equals the account's, and `organization` is filled only if empty. It
+   answers `connected` with no tokens, and the callback returns to
+   `/dashboard/profile?sso=connected`, leaving the existing session untouched.
+   An identity another account holds is a 409, an account that meanwhile got an
+   identity is a 409, a bad or expired token is a 400, a deactivated account is a
+   401; the callback sends a 409 to `?sso=conflict` and any other failure to
+   `?sso=failed`. The profile toasts the result once. `sso_account_linked` is
+   audited with `via: "profile"`.
+
+Nothing is merged: an identity already held by another account stays there, and
+a person with two accounts is sorted out by an administrator.
+
+#### Disconnecting, and a password for a CILogon-only account
+
+`DELETE /users/me/sso` removes the three fields. It is refused (400) when no
+identity is connected, and when the account has no password, since CILogon would
+be its only way in. `sso_account_unlinked` is audited.
+
+An account CILogon created has no password, so `POST /auth/forgot-password` mails
+a link to any **active** account that has a password *or a verified email*. The
+link carries `&set=1` when there is no password, and the email and
+`/auth/reset-password` then say "Set a password" rather than "Reset". It still
+answers 200 for every address. Setting a password revokes the account's sessions,
+as a reset does.
+
+`GET /users/me` and the admin's user detail expose `sso_provider`, `sso_email`
+and `has_password`, never `sso_external_id` or the hash. The profile's "Sign-in
+methods" lists the password and, where CILogon is configured, its state; the
+admin card's "Sign-in method" row names CILogon and `sso_email`.
 
 ### CILogon when the provider withholds an email
 
@@ -167,8 +266,8 @@ often does not, depending on the user's own privacy settings. `email` is the
 unique key, so the account cannot be created:
 
 1. `POST /auth/sso-login` stashes what it does have — external id, provider,
-   name and organization if present — in `pending_sso_signups` with a 30-minute
-   TTL, and returns `{status: "needs_completion", completion_token}`.
+   name and organization if present — in `pending_sso_signups` (kind `signup`, a
+   30-minute TTL) and returns `{status: "needs_completion", completion_token}`.
 2. `signIn()` in `web-gateway/frontend/lib/auth.ts` sees that status and
    returns a redirect to `/auth/complete-profile?token=…` instead of finishing
    sign-in. Returning a URL from that callback is what NextAuth treats as a
@@ -178,7 +277,11 @@ unique key, so the account cannot be created:
    `POST /auth/complete-sso-signup` server-side and signs the user in with the
    result. The account is created with `email_verified: false`, because this
    address was typed by the user rather than asserted by the identity provider,
-   so it goes through the normal verification flow.
+   so it goes through the normal verification flow. If an account already holds
+   that address, nothing is attached: the identity is staged on it and a
+   confirmation email goes to the address (`POST /auth/confirm-link`), because a
+   typed address proves nothing. `POST /auth/register` does the same for a
+   password when the address belongs to an account with none.
 
 No reCAPTCHA on that page: reaching it already required a successful sign-in
 with a real identity provider, a higher bar than a captcha adds.

@@ -2,9 +2,10 @@ import NextAuth, { CredentialsSignin, type NextAuthConfig, type User } from "nex
 import type { JWT } from "next-auth/jwt";
 import type { OIDCConfig } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import "./auth.types";
 import type { UserRole } from "./auth.types";
+import { SSO_CONNECT_COOKIE, readConnectCookie } from "./sso-connect";
 
 /**
  * Thrown by the "sso-complete" provider's authorize() when the backend
@@ -41,7 +42,10 @@ type BackendAuthResponse = {
 /** Mirrors backend SsoLoginResponse (web-gateway/backend/app/models/user.py). */
 type SsoLoginResponse =
   | { status: "ok"; auth: BackendAuthResponse }
-  | { status: "needs_completion"; completion_token: string };
+  | { status: "needs_completion"; completion_token: string }
+  // The answer to a connect_token: the identity is now attached to the
+  // signed-in user, and there are no tokens because they already have a session.
+  | { status: "connected" };
 
 /**
  * The subset of a NextAuth `User` that carries backend session data
@@ -131,6 +135,13 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 }
 
 const cilogon = cilogonProvider();
+
+/**
+ * Whether CILogon sign-in is configured on this server. Decided here, on the
+ * server, from the same variables that decide whether NextAuth lists the
+ * provider, so a page can offer "Connect CILogon" without a round trip to ask.
+ */
+export const cilogonConfigured = cilogon !== undefined;
 
 export const authConfig: NextAuthConfig = {
   providers: [
@@ -246,12 +257,14 @@ export const authConfig: NextAuthConfig = {
       // that token. What it does need is a backend-format access+refresh
       // pair, so hand the now-trusted identity to POST /auth/sso-login.
       //
-      // Done here in signIn() rather than jwt() so a `needs_completion`
-      // result (a provider — ORCID, typically — that didn't release an
-      // email) can redirect the browser to /auth/complete-profile: jwt()
-      // has no way to redirect, but returning a string URL from signIn()
-      // does exactly that.
+      // Done here in signIn() rather than jwt() so a result that is not a
+      // session (`needs_completion`, `connected`, a refusal) can redirect the
+      // browser to the page that explains it: jwt() has no way to redirect,
+      // but returning a string URL from signIn() does exactly that.
       const cilogonProfile = profile as CILogonProfile;
+      // Set once the cookie below names the signed-in user: from then on a
+      // refusal goes back to the profile, not to the sign-in page.
+      let connectToken: string | null = null;
       try {
         // This callback runs inside the OAuth callback request, so the
         // real browser's headers are available via next/headers even
@@ -260,6 +273,27 @@ export const authConfig: NextAuthConfig = {
         // Next.js server's own UA ("node") instead of the device that
         // signed in.
         const incomingUserAgent = (await headers()).get("user-agent");
+
+        // A signed-in user who pressed "Connect CILogon" on their profile left
+        // this cookie (lib/account/actions.ts `connectCilogon`). With it, this
+        // CILogon sign-in is not a sign-in: the backend attaches the identity
+        // to that user, whatever email CILogon gave. It counts only while the
+        // account it names is still the one signed in (lib/sso-connect.ts);
+        // otherwise this is an ordinary sign-in. Taken off the browser either
+        // way so a retry cannot reuse it — the backend spends the intent
+        // regardless, this only tidies up. A cookie store that refuses the
+        // delete must not turn into a refused sign-in.
+        const cookieStore = await cookies();
+        const connect = readConnectCookie(cookieStore.get(SSO_CONNECT_COOKIE)?.value);
+        if (connect) {
+          try {
+            cookieStore.delete(SSO_CONNECT_COOKIE);
+          } catch {
+            // Nothing to do: the intent is spent on the backend regardless.
+          }
+          if ((await auth())?.user?.id === connect.userId) connectToken = connect.token;
+        }
+
         const res = await fetch(`${BACKEND_URL}/api/v1/auth/sso-login`, {
           method: "POST",
           headers: {
@@ -273,13 +307,42 @@ export const authConfig: NextAuthConfig = {
             external_id: account.providerAccountId,
             provider: "cilogon",
             organization: cilogonProfile.idp_name ?? null,
+            connect_token: connectToken,
           }),
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          // Returning a URL rather than false, because false lands on
+          // NextAuth's generic error page, which cannot say why. Someone who
+          // pressed a button on their profile goes back there; 409 is the
+          // identity being held by another account.
+          if (connectToken) {
+            return res.status === 409
+              ? "/dashboard/profile?sso=conflict"
+              : "/dashboard/profile?sso=failed";
+          }
+          // A plain sign-in goes back to the sign-in page with the reason.
+          // 401 is also what a wrong X-Internal-Auth gets, so only the
+          // deactivated detail is named as such.
+          const detail = ((await res.json().catch(() => null)) as { detail?: unknown } | null)
+            ?.detail;
+          if (res.status === 409) return "/auth/signin?sso=conflict";
+          if (typeof detail === "string" && detail.includes("deactivated")) {
+            return "/auth/signin?sso=deactivated";
+          }
+          return "/auth/signin?sso=failed";
+        }
 
         const data = (await res.json()) as SsoLoginResponse;
         if (data.status === "needs_completion") {
           return `/auth/complete-profile?token=${encodeURIComponent(data.completion_token)}`;
+        }
+        if (data.status === "connected") {
+          // Returning a URL from signIn() ends this OAuth callback before
+          // NextAuth creates a session or touches the session cookie (see
+          // handleAuthorized in @auth/core's lib/actions/callback/index.js,
+          // which returns the redirect ahead of handleLoginOrRegister). The
+          // session the user already had stays exactly as it was.
+          return "/dashboard/profile?sso=connected";
         }
 
         // Stash the backend session onto `user` — NextAuth passes this
@@ -287,7 +350,19 @@ export const authConfig: NextAuthConfig = {
         // this request, so jwt()'s one `if (user)` branch (shared with
         // both credentials providers above) picks it up without any
         // CILogon-specific code of its own.
+        //
+        // The id, name and email are the OpenGHM account's, not CILogon's: the
+        // account is who signs in, CILogon is only how. Without them the
+        // session would carry CILogon's name and address and a random id
+        // (Auth.js has no adapter here to map the identity to a user), so the
+        // header would name the CILogon identity while every page that asks
+        // the backend shows the account it is connected to. Set on this same
+        // object because Auth.js builds the session token's name, email and
+        // sub from it after this callback returns.
         Object.assign(user, {
+          id: data.auth.user.id,
+          name: data.auth.user.name,
+          email: data.auth.user.email,
           role: data.auth.user.role,
           accessToken: data.auth.access_token,
           refreshToken: data.auth.refresh_token,
@@ -295,7 +370,9 @@ export const authConfig: NextAuthConfig = {
         } satisfies Partial<BackendUser>);
         return true;
       } catch {
-        return false;
+        // Network trouble or a cookie store that threw: say so where the
+        // person is, as for any other refusal.
+        return connectToken ? "/dashboard/profile?sso=failed" : "/auth/signin?sso=failed";
       }
     },
     async jwt({ token, user }) {

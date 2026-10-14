@@ -3,8 +3,8 @@ touch, plus document and token builders for route-level tests.
 
 The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`
 (a second document with the same `_id` raises `DuplicateKeyError`),
-`update_one` (`$set`, `$unset`, `$addToSet`, `$pull`; `upsert=True` creates the document from the query's equalities and the `$set`), `delete_one`,
-`count_documents` — with equality, `$in`, `$ne`, `$exists` and `$gte` matching,
+`update_one` (`$set`, `$unset`, `$addToSet`, `$pull`; `upsert=True` creates the document from the query's equalities and the `$set`), `delete_one`, `delete_many`,
+`count_documents` — with equality, `$in`, `$ne`, `$exists`, `$gte` and `$regex` matching,
 on a dotted path (`publish.state`) as well as a plain key. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
 
@@ -17,6 +17,7 @@ as it would against a real database, and a route's JSON carries the offset.
 from __future__ import annotations
 
 import copy
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -77,6 +78,8 @@ def _matches(doc: dict, query: dict) -> bool:
                     ok = (found is not _ABSENT) == arg
                 elif op == "$gte":
                     ok = value is not None and value >= arg
+                elif op == "$regex":
+                    ok = isinstance(value, str) and re.search(arg, value) is not None
                 else:
                     raise NotImplementedError(f"fake Mongo: unsupported operator {op}")
                 if not ok:
@@ -127,6 +130,13 @@ class FakeAggregate:
 
     async def to_list(self, _length):
         return self._rows
+
+    def __aiter__(self):
+        async def gen():
+            for row in self._rows:
+                yield row
+
+        return gen()
 
 
 class FakeCollection:
@@ -188,6 +198,12 @@ class FakeCollection:
                 del self.docs[key]
                 return type("R", (), {"deleted_count": 1})()
         return type("R", (), {"deleted_count": 0})()
+
+    async def delete_many(self, query: dict):
+        gone = [key for key, doc in self.docs.items() if _matches(doc, query)]
+        for key in gone:
+            del self.docs[key]
+        return type("R", (), {"deleted_count": len(gone)})()
 
     async def count_documents(self, query: dict) -> int:
         return sum(1 for d in self.docs.values() if _matches(d, query))

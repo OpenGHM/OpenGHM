@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
     <AuthShell
       eyebrow="Password reset"
       title="Reset your password"
-      description="Enter your account email and we'll send a reset link"
+      description="Enter your account email and we'll send a link to reset your password, or to set one if you sign in with CILogon"
     >
       {submitted ? (
         <AuthNotice tone="neutral">

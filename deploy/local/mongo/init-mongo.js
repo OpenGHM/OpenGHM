@@ -48,6 +48,13 @@ db.users.insertMany([
 ]);
 
 db.users.createIndex({ email: 1 }, { unique: true });
+// One CILogon identity on one account. Partial, so the many accounts with no
+// identity do not collide on a missing value. The gateway declares the same
+// index at startup (app/core/account_startup.py); this is the seed's copy.
+db.users.createIndex(
+  { sso_external_id: 1 },
+  { unique: true, partialFilterExpression: { sso_external_id: { $type: "string" } } }
+);
 db.users.createIndex({ role: 1 });
 
 // Job indexes

@@ -18,6 +18,7 @@ from app.models.user import (
     UserAdminUpdateRequest,
     UserDetailResponse,
     UserListResponse,
+    UserProfileResponse,
     UserResponse,
     UserUpdateRequest,
 )
@@ -39,7 +40,19 @@ def _to_user_response(doc: dict) -> UserResponse:
     )
 
 
-@router.get("/me", response_model=UserResponse)
+def _to_profile_response(doc: dict) -> UserProfileResponse:
+    """The account with how it signs in. `has_password` is a bool so the hash
+    itself never leaves, and the provider's own id for the identity
+    (`sso_external_id`) is not here."""
+    return UserProfileResponse(
+        **_to_user_response(doc).model_dump(),
+        sso_provider=doc.get("sso_provider"),
+        sso_email=doc.get("sso_email"),
+        has_password=bool(doc.get("password_hash")),
+    )
+
+
+@router.get("/me", response_model=UserProfileResponse)
 async def get_me(
     current_user: TokenPayload = Depends(get_current_user),
 ):
@@ -53,10 +66,10 @@ async def get_me(
             detail=f"User {current_user.sub} not found in database",
         )
 
-    return _to_user_response(doc)
+    return _to_profile_response(doc)
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=UserProfileResponse)
 async def update_me(
     body: UserUpdateRequest,
     current_user: TokenPayload = Depends(get_current_user),
@@ -90,7 +103,48 @@ async def update_me(
             detail=f"User {current_user.sub} not found in database",
         )
 
-    return _to_user_response(doc)
+    return _to_profile_response(doc)
+
+
+@router.delete("/me/sso", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_sso(current_user: TokenPayload = Depends(get_current_user)):
+    """Disconnect the CILogon identity from the caller's account.
+
+    Refused while the account has no password: CILogon would be its only way
+    in, and removing it would strand the account. The identity is dropped, not
+    kept aside, so it can be connected to this or another account afterwards.
+    """
+    db = get_db()
+    doc = await db.users.find_one({"_id": current_user.sub})
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {current_user.sub} not found in database",
+        )
+    if not doc.get("sso_external_id"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No CILogon identity is connected to this account.",
+        )
+    if not doc.get("password_hash"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account has no password, so CILogon is its only way to sign in.",
+        )
+
+    await db.users.update_one(
+        {"_id": current_user.sub},
+        {
+            "$set": {"updated_at": datetime.now(timezone.utc)},
+            "$unset": {"sso_provider": "", "sso_external_id": "", "sso_email": ""},
+        },
+    )
+    await log_event(
+        "sso_account_unlinked",
+        actor_id=current_user.sub,
+        actor_email=doc["email"],
+        detail={"provider": doc.get("sso_provider")},
+    )
 
 
 @router.get("", response_model=UserListResponse)
@@ -179,6 +233,8 @@ async def get_user_detail(
         created_at=doc.get("created_at"),
         updated_at=doc.get("updated_at"),
         sso_provider=doc.get("sso_provider"),
+        sso_email=doc.get("sso_email"),
+        has_password=bool(doc.get("password_hash")),
         active_session_count=active_session_count,
         job_counts=job_counts,
         last_login_at=last_login["created_at"] if last_login else None,

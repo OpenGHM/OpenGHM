@@ -45,6 +45,9 @@ export interface AuditLogListResponse {
 export interface AdminUserDetail extends AdminUser {
   updated_at: string | null;
   sso_provider: string | null;
+  /** The address the connected identity gave, which may differ from `email`. */
+  sso_email: string | null;
+  has_password: boolean;
   active_session_count: number;
   job_counts: Record<string, number>;
   last_login_at: string | null;

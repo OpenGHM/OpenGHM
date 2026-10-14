@@ -12,6 +12,13 @@ export interface UserProfile {
    *  (ADR 0024). Admin and staff may always run, whatever this says. */
   can_run_simulations: boolean;
   created_at: string | null;
+  /** Which identity provider is connected ("cilogon"), or null. */
+  sso_provider: string | null;
+  /** The address the connected identity gave, which may differ from `email`;
+   *  null when none is connected or the provider gave none. */
+  sso_email: string | null;
+  /** Whether a password is set. CILogon can be disconnected only while it is. */
+  has_password: boolean;
 }
 
 export interface SessionEntry {

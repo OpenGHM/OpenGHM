@@ -75,9 +75,17 @@ export function UserRoleStatusCard({
             </dd>
           </div>
           {user.sso_provider && (
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <dt className="shrink-0 text-muted-foreground">Sign-in method</dt>
-              <dd className="min-w-0 text-right font-medium text-foreground capitalize">{user.sso_provider}</dd>
+              <dd className="min-w-0 text-right">
+                <span className="block font-medium text-foreground">
+                  {user.sso_provider === "cilogon" ? "CILogon" : user.sso_provider}
+                </span>
+                {/* The address the identity gave: it can differ from the account's own. */}
+                {user.sso_email && (
+                  <span className="block text-xs text-muted-foreground [overflow-wrap:anywhere]">{user.sso_email}</span>
+                )}
+              </dd>
             </div>
           )}
         </dl>

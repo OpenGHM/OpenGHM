@@ -86,3 +86,16 @@ def test_without_a_key_development_logs_the_text_with_its_link(monkeypatch, capl
         )
     assert LINK in caplog.text
     assert "<table" not in caplog.text
+
+
+def test_the_reset_email_of_an_account_without_a_password_says_set():
+    message = password_reset_email("Ada", LINK, has_password=False)
+    assert message.subject == "Set a password for your OpenGHM account"
+    assert "Set a password" in message.html and "Set a password" in message.text
+    assert LINK in message.text
+    assert "Reset your password" not in message.html
+
+
+def test_the_reset_email_of_an_account_with_a_password_still_says_reset():
+    message = password_reset_email("Ada", LINK)
+    assert message.subject == "Reset your OpenGHM password"

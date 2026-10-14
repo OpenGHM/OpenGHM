@@ -18,9 +18,10 @@ from slurmly import SlurmSSHClient, SubmittedJob, get_preset
 from slurmly.testing import FakeTransport
 from route_helpers import FakeDB
 
+from app.api.v1 import auth as auth_router
 from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
-from app.core import audit, authz
+from app.core import audit, authz, pending_sso, sessions
 from app.core.config import settings
 from app.services import job_live, published_answer, run_start, slurm
 
@@ -174,6 +175,39 @@ def client(db) -> TestClient:
     app.include_router(jobs_router.router, prefix="/api/v1")
     app.include_router(users_router.router, prefix="/api/v1")
     # Not entered as a context manager: that would run the lifespan.
+    return TestClient(app)
+
+
+# ---- the sign-in routes -------------------------------------------------------
+
+SSO_SECRET = "internal-secret"
+
+
+@pytest.fixture
+def sent_emails() -> list[tuple[str, object]]:
+    return []
+
+
+@pytest.fixture
+def auth_client(db, monkeypatch, sent_emails) -> TestClient:
+    """The auth and user routers over the fake Mongo, with the internal secret
+    `POST /auth/sso-login` wants set and every email recorded in `sent_emails`
+    as (address, message) instead of sent."""
+    for module in (auth_router, sessions, pending_sso):
+        monkeypatch.setattr(module, "get_db", lambda: db)
+    monkeypatch.setattr(settings, "INTERNAL_SERVICE_SECRET", SSO_SECRET)
+
+    async def record_email(to, message):
+        sent_emails.append((to, message))
+
+    async def recaptcha_ok(token):
+        return True
+
+    monkeypatch.setattr(auth_router, "send_email", record_email)
+    monkeypatch.setattr(auth_router, "verify_recaptcha", recaptcha_ok)
+    app = FastAPI()
+    app.include_router(auth_router.router, prefix="/api/v1")
+    app.include_router(users_router.router, prefix="/api/v1")
     return TestClient(app)
 
 

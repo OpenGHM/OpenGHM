@@ -14,7 +14,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
 from app.api.v1 import users as users_router
 from app.api.v1 import wbm_output as wbm_output_router
-from app.core import pending_sso, sessions
+from app.core import account_startup, pending_sso, sessions
 from app.core.config import settings
 from app.core.database import close_db, get_client, get_db
 from app.core.roles import Role
@@ -56,6 +56,10 @@ async def lifespan(app: FastAPI):
     await db.users.update_many(
         {"institution": {"$exists": True}}, {"$rename": {"institution": "organization"}}
     )
+    # Emails are lowercased on every request now, so the stored ones must be
+    # too. Before the unique index below, so it is built over the rewritten
+    # documents.
+    await account_startup.lowercase_emails(db)
     await db[pending_sso.COLLECTION].update_many(
         {"institution": {"$exists": True}}, {"$rename": {"institution": "organization"}}
     )
@@ -85,6 +89,18 @@ async def lifespan(app: FastAPI):
             "Could not create unique index on users.email (likely duplicate "
             "emails already in the collection) — registration's "
             "find-then-insert check is racy without it: %s",
+            exc,
+        )
+
+    # One CILogon identity on one account. Wrapped like the email index: a
+    # deployment that already holds the same identity on two accounts makes
+    # the build raise, and that should be a log line, not a failed start.
+    try:
+        await account_startup.ensure_sso_identity_index(db)
+    except Exception as exc:
+        logger.error(
+            "Could not create unique index on users.sso_external_id (likely one "
+            "identity on two accounts) — the sign-in checks are racy without it: %s",
             exc,
         )
 

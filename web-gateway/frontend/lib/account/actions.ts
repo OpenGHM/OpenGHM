@@ -1,6 +1,9 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { getApiClient } from "@/lib/api-client";
+import { auth } from "@/lib/auth";
+import { SSO_CONNECT_COOKIE, SSO_CONNECT_MAX_AGE_SECONDS, connectCookieValue } from "@/lib/sso-connect";
 import type { UserProfile, SessionListResponse } from "@/lib/account/types";
 
 export async function fetchMe(): Promise<UserProfile | null> {
@@ -82,5 +85,54 @@ export async function logoutAllSessions(): Promise<{ ok: boolean }> {
     return { ok: true };
   } catch {
     return { ok: false };
+  }
+}
+
+/**
+ * The first half of connecting CILogon from the profile: asks the backend for
+ * a connect intent and leaves its token in an httpOnly cookie for the CILogon
+ * callback to pick up (lib/auth.ts `signIn`). The caller then starts the
+ * CILogon sign-in itself — a server action cannot, it has to navigate the
+ * browser.
+ *
+ * `sameSite: "lax"` is what lets the cookie come back: CILogon redirects the
+ * browser to the callback as a cross-site top-level navigation, which "strict"
+ * would not send it on.
+ */
+export async function connectCilogon(): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const userId = (await auth())?.user?.id;
+    if (!userId) return { ok: false, message: "Sign in again, then connect CILogon." };
+    const client = await getApiClient();
+    const res = await client.post<{ connect_token: string }>("/api/v1/auth/sso-connect-intent");
+    const publicUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "";
+    (await cookies()).set(SSO_CONNECT_COOKIE, connectCookieValue(userId, res.data.connect_token), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: publicUrl.startsWith("https://"),
+      path: "/",
+      maxAge: SSO_CONNECT_MAX_AGE_SECONDS,
+    });
+    return { ok: true };
+  } catch (err) {
+    const detail =
+      (err as { response?: { data?: { detail?: string } } })?.response?.data
+        ?.detail ?? "Could not start connecting CILogon.";
+    return { ok: false, message: detail };
+  }
+}
+
+/** Disconnects the CILogon identity. The backend refuses it while the account
+ *  has no password, since CILogon would then be its only way in. */
+export async function disconnectCilogon(): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const client = await getApiClient();
+    await client.delete("/api/v1/users/me/sso");
+    return { ok: true };
+  } catch (err) {
+    const detail =
+      (err as { response?: { data?: { detail?: string } } })?.response?.data
+        ?.detail ?? "Could not disconnect CILogon.";
+    return { ok: false, message: detail };
   }
 }

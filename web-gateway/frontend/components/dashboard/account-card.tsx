@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { UserProfile } from "@/lib/account/types";
 import { updateMe, changePassword } from "@/lib/account/actions";
+import { SignInMethods } from "@/components/dashboard/sign-in-methods";
 
 const ROLE_LABELS: Record<UserProfile["role"], string> = {
   admin: "Admin",
@@ -24,7 +25,15 @@ const DETAIL_ROW = "flex flex-col gap-0.5 border-t border-border py-3 first:bord
 const DETAIL_LABEL = "text-xs text-muted-foreground";
 const DETAIL_VALUE = "text-sm font-medium text-foreground";
 
-export function AccountCard({ profile }: { profile: UserProfile }) {
+export function AccountCard({
+  profile,
+  cilogonEnabled = false,
+}: {
+  profile: UserProfile;
+  /** Whether CILogon sign-in is configured on this server; the profile page
+   *  decides on the server, so the card never offers what cannot work. */
+  cilogonEnabled?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -174,70 +183,78 @@ export function AccountCard({ profile }: { profile: UserProfile }) {
         )}
 
         <div className="border-t border-border pt-5">
-          {showPasswordForm ? (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="current-password">Current password</Label>
-                <Input
-                  id="current-password"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="new-password">New password</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min. 8 characters"
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm-new-password">Confirm new password</Label>
-                <Input
-                  id="confirm-new-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleChangePassword}
-                  disabled={pending || !currentPassword || !newPassword}
-                >
-                  Change password
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowPasswordForm(false);
-                    setCurrentPassword("");
-                    setNewPassword("");
-                    setConfirmPassword("");
-                    setPasswordError("");
-                  }}
-                  disabled={pending}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => setShowPasswordForm(true)}>
-              Change password
-            </Button>
-          )}
+          <SignInMethods profile={profile} cilogonEnabled={cilogonEnabled} />
         </div>
+
+        {/* An account with no password has none to change: its card above
+            links to setting one. */}
+        {profile.has_password && (
+          <div className="border-t border-border pt-5">
+            {showPasswordForm ? (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="current-password">Current password</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-password">New password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min. 8 characters"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm-new-password">Confirm new password</Label>
+                  <Input
+                    id="confirm-new-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+                {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleChangePassword}
+                    disabled={pending || !currentPassword || !newPassword}
+                  >
+                    Change password
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setShowPasswordForm(false);
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                      setPasswordError("");
+                    }}
+                    disabled={pending}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setShowPasswordForm(true)}>
+                Change password
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

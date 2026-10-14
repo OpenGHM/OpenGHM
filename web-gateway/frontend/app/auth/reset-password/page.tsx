@@ -17,6 +17,9 @@ function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  // The emailed link carries `set=1` for an account that has no password (one
+  // CILogon created): it adds one rather than resetting one.
+  const setting = searchParams.get("set") === "1";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,8 +73,14 @@ function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {setting && (
+        <p className="text-sm leading-[1.55] text-muted-foreground">
+          Your account signs in without a password. Set one to be able to sign in with your email
+          too; CILogon keeps working.
+        </p>
+      )}
       <div className="space-y-2">
-        <Label htmlFor="password">New password</Label>
+        <Label htmlFor="password">{setting ? "Password" : "New password"}</Label>
         <Input
           id="password"
           type="password"
@@ -96,7 +105,7 @@ function ResetPasswordForm() {
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" size="xl" className="w-full" disabled={loading}>
-        {loading ? "Resetting..." : "Reset password"}
+        {loading ? (setting ? "Setting..." : "Resetting...") : setting ? "Set password" : "Reset password"}
       </Button>
     </form>
   );
@@ -105,9 +114,9 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <AuthShell
-      eyebrow="Password reset"
+      eyebrow="Password"
       title="Set a new password"
-      description="This will sign you out everywhere else — reset your password below and sign in again."
+      description="This will sign you out everywhere else — choose your password below and sign in again."
     >
       <Suspense fallback={<AuthFormSkeleton />}>
         <ResetPasswordForm />

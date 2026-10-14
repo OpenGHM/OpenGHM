@@ -13,6 +13,13 @@ import { safeCallbackUrl } from "@/lib/auth-redirect";
 
 type DevAccount = { label: string; email: string; password: string };
 
+const SSO_REFUSALS: Record<string, string> = {
+  deactivated: "This account has been deactivated. Contact an administrator.",
+  conflict:
+    "This email's OpenGHM account is connected to a different CILogon identity. Sign in with that one.",
+  failed: "CILogon sign-in didn't work. Try again, or sign in with your email and password.",
+};
+
 function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +29,13 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered");
   const reset = searchParams.get("reset");
+  // Why a CILogon sign-in was refused (lib/auth.ts `signIn` sends it here),
+  // or NextAuth's own `error` when it failed before that callback ran — e.g.
+  // CILogon answering the callback with `error=token_expired` after its login
+  // page was left open too long.
+  const ssoRefusal =
+    SSO_REFUSALS[searchParams.get("sso") ?? ""] ??
+    (searchParams.get("error") ? SSO_REFUSALS.failed : undefined);
   // Same-origin relative paths only — never follow an arbitrary URL.
   const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
   const [cilogonEnabled, setCilogonEnabled] = useState(false);
@@ -111,7 +125,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
             Forgot password?
           </Link>
         </p>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {(error || ssoRefusal) && <p className="text-sm text-destructive">{error || ssoRefusal}</p>}
         <Button type="submit" size="xl" className="w-full" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </Button>

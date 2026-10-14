@@ -89,6 +89,8 @@ describe("dates in the admin pages are <time> elements", () => {
       ...user,
       updated_at: null,
       sso_provider: null,
+      sso_email: null,
+      has_password: true,
       active_session_count: 1,
       job_counts: {},
       last_login_at: "2026-09-29T08:00:00Z",
@@ -97,11 +99,45 @@ describe("dates in the admin pages are <time> elements", () => {
     expect(times(container)).toEqual([WHEN, "2026-09-29T08:00:00Z"]);
   });
 
+  it("the profile card names CILogon and the address it gave when it is connected", () => {
+    const detail = {
+      ...user,
+      updated_at: null,
+      sso_provider: "cilogon",
+      sso_email: "ada@purdue.edu",
+      has_password: false,
+      active_session_count: 0,
+      job_counts: {},
+      last_login_at: null,
+    } as AdminUserDetail;
+    render(<UserRoleStatusCard user={detail} isSelf={false} canManage />);
+    expect(screen.getByText("Sign-in method")).toBeTruthy();
+    expect(screen.getByText("CILogon")).toBeTruthy();
+    expect(screen.getByText("ada@purdue.edu")).toBeTruthy();
+  });
+
+  it("the profile card has no sign-in method row without a connected identity", () => {
+    const detail = {
+      ...user,
+      updated_at: null,
+      sso_provider: null,
+      sso_email: null,
+      has_password: true,
+      active_session_count: 0,
+      job_counts: {},
+      last_login_at: null,
+    } as AdminUserDetail;
+    render(<UserRoleStatusCard user={detail} isSelf={false} canManage />);
+    expect(screen.queryByText("Sign-in method")).toBeNull();
+  });
+
   it("the profile card says Never when there is no login", () => {
     const detail = {
       ...user,
       updated_at: null,
       sso_provider: null,
+      sso_email: null,
+      has_password: true,
       active_session_count: 0,
       job_counts: {},
       last_login_at: null,
