@@ -272,7 +272,8 @@ async def admin_update_user(
     body: UserAdminUpdateRequest,
     current_user: TokenPayload = Depends(require_permission(Permission.USER_MANAGE)),
 ):
-    """Admin-only: change a user's role, active status or run permission.
+    """Admin-only: change a user's role, active status or run permission, or
+    mark their email address verified.
 
     `can_run_simulations` (ADR 0024) is granted and revoked here and nowhere
     else; the change lands in the `user_admin_updated` audit event with the
@@ -291,7 +292,7 @@ async def admin_update_user(
     if user_id == current_user.sub:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You cannot change your own role, active status or run permission.",
+            detail="You cannot change your own role, active status, run permission or email verification.",
         )
 
     db = get_db()
@@ -318,7 +319,12 @@ async def admin_update_user(
             )
 
     updates["updated_at"] = datetime.now(timezone.utc)
-    await db.users.update_one({"_id": user_id}, {"$set": updates})
+    change: dict = {"$set": updates}
+    if updates.get("email_verified"):
+        # The emailed link is spent the same way POST /auth/verify-email
+        # spends it, so it cannot be used afterwards.
+        change["$unset"] = {"verify_token_hash": "", "verify_token_expires_at": ""}
+    await db.users.update_one({"_id": user_id}, change)
 
     audit_detail = {k: str(v) for k, v in updates.items() if k != "updated_at"}
 

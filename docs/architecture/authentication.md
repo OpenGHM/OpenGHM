@@ -44,7 +44,10 @@ not trust the token. They read the user's document at call time, through
 (a submit) in `authz.py`.
 
 - **A submit needs:**
-  - `is_active` and `email_verified`;
+  - `is_active` and `email_verified`. The emailed link sets `email_verified`.
+    An admin can also set it, but only to true, with "Mark verified" on the
+    user's page, which calls `PATCH /users/{id}`. That spends the link and is
+    audited as `user_admin_updated`;
   - role `admin` or `staff`, or role `user` with `can_run_simulations: true` (the "Can run simulations" switch
     on the user's page; the stored field keeps its name).
     Only an admin sets that flag, on `PATCH /users/{id}`, and the change is

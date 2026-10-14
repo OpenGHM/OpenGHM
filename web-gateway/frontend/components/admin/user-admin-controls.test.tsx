@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const { updateUser, toast, refresh } = vi.hoisted(() => ({
   updateUser: vi.fn(),
@@ -10,7 +10,12 @@ vi.mock("@/lib/admin/actions", () => ({ updateUser }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
 
-import { RoleControl, RunPermissionControl, StatusControl } from "@/components/admin/user-admin-controls";
+import {
+  EmailVerifiedControl,
+  RoleControl,
+  RunPermissionControl,
+  StatusControl,
+} from "@/components/admin/user-admin-controls";
 
 afterEach(() => {
   cleanup();
@@ -232,5 +237,29 @@ describe("the run-permission switch", () => {
 
   it("is disabled where the caller says so", () => {
     expect(renderSwitch(true, true).disabled).toBe(true);
+  });
+});
+
+describe("marking an email verified", () => {
+  const alice = { id: "u2", name: "Alice", email: "alice@example.org" };
+
+  it("says what it does, and applies nothing until confirmed", async () => {
+    render(<EmailVerifiedControl user={alice} />);
+    fireEvent.click(screen.getByRole("button", { name: "Mark verified" }));
+    expect(await screen.findByText("Mark Alice's email as verified?")).toBeTruthy();
+    expect(screen.getByText(/only if you know alice@example.org belongs to them/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Leave unverified" }));
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("marks it on confirm, then refreshes", async () => {
+    updateUser.mockResolvedValue({ ok: true });
+    render(<EmailVerifiedControl user={alice} />);
+    fireEvent.click(screen.getByRole("button", { name: "Mark verified" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mark verified" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(updateUser).toHaveBeenCalledWith("u2", { email_verified: true });
+    expect(toast.success).toHaveBeenCalledWith("Alice's email is now verified.");
   });
 });

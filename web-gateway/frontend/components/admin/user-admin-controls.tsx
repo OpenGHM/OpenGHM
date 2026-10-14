@@ -226,3 +226,41 @@ export function RunPermissionControl({
     </>
   );
 }
+
+/** "Mark verified", beside an unverified address. Pressing it opens a dialog;
+ *  nothing happens until it is confirmed. It only goes one way: the backend
+ *  accepts `email_verified: true` and nothing else, and spends the emailed
+ *  link so it cannot be used afterwards. */
+export function EmailVerifiedControl({ user }: { user: { id: string; name: string; email: string } }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-full border border-primary/30 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 max-sm:min-h-10 max-sm:px-3"
+      >
+        Mark verified
+      </button>
+      <ConfirmActionDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Mark ${user.name}'s email as verified?`}
+        description={`Do this only if you know ${user.email} belongs to them. The verification link already sent stops working, and this can't be undone here.`}
+        confirmLabel="Mark verified"
+        pendingLabel="Marking…"
+        cancelLabel="Leave unverified"
+        destructive={false}
+        successMessage={`${user.name}'s email is now verified.`}
+        failureMessage="Couldn't mark the email verified. Try again. If it keeps failing, the service may be unavailable."
+        onConfirm={async () => {
+          const result = await updateUser(user.id, { email_verified: true });
+          return result.ok ? { ok: true } : { ok: false, message: result.message };
+        }}
+        onDone={() => router.refresh()}
+      />
+    </>
+  );
+}

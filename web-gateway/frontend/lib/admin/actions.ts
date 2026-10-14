@@ -92,7 +92,7 @@ export async function revokeAllUserSessions(userId: string): Promise<{ ok: boole
 
 export async function updateUser(
   userId: string,
-  updates: { role?: UserRole; is_active?: boolean; can_run_simulations?: boolean }
+  updates: { role?: UserRole; is_active?: boolean; can_run_simulations?: boolean; email_verified?: true }
 ): Promise<{ ok: boolean; message?: string; user?: AdminUser }> {
   try {
     const client = await getApiClient();

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 
@@ -170,11 +172,16 @@ class UserAdminUpdateRequest(BaseModel):
     role, is_active and can_run_simulations can be changed, and it's never
     reachable from a user editing their own profile (see app/api/v1/users.py's self-role and
     last-admin guards for why that matters).
+
+    `email_verified` only goes one way: an admin can vouch for an address
+    (the user never got the mail, or it was lost to a filter), not take a
+    verification away.
     """
 
     role: RoleField | None = None
     is_active: bool | None = None
     can_run_simulations: bool | None = None
+    email_verified: Literal[True] | None = None
 
 
 class AuditLogEntry(BaseModel):

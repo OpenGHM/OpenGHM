@@ -5,7 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AdminUserDetail } from "@/lib/admin/types";
-import { RoleControl, RunPermissionControl, StatusControl } from "@/components/admin/user-admin-controls";
+import {
+  EmailVerifiedControl,
+  RoleControl,
+  RunPermissionControl,
+  StatusControl,
+} from "@/components/admin/user-admin-controls";
 
 export function UserRoleStatusCard({
   user,
@@ -44,10 +49,13 @@ export function UserRoleStatusCard({
         <dl className="min-w-0 space-y-2 text-sm">
           <div className="flex items-center justify-between gap-3">
             <dt className="shrink-0 text-muted-foreground">Email</dt>
-            <dd>
+            <dd className="flex items-center gap-2">
               <Badge variant={user.email_verified ? "secondary" : "outline"}>
                 {user.email_verified ? "Verified" : "Unverified"}
               </Badge>
+              {!user.email_verified && canManage && !isSelf && (
+                <EmailVerifiedControl user={user} />
+              )}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
@@ -114,7 +122,7 @@ export function UserRoleStatusCard({
           </div>
           {isSelf && (
             <p className="text-xs text-muted-foreground">
-              You can&apos;t change your own role, status or run permission.
+              You can&apos;t change your own role, status, run permission or email verification.
             </p>
           )}
         </div>
