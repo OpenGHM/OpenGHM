@@ -59,18 +59,18 @@ describe("the header's phone menu", () => {
     expect(screen.getByRole("navigation", { name: "Main" }).className).toContain("hidden");
   });
 
-  it("lists the links, the Resources items and Sign In for a visitor", () => {
+  it("lists the links, Resources marked Coming soon, and Sign In for a visitor", () => {
     useSession.mockReturnValue({ data: null });
     render(<Header />);
     const menu = openMenu();
     const labels = menu.getAllByRole("menuitem").map((el) => el.textContent);
     expect(labels).toEqual([
-      "Home", "Data Repository", "Workspace", "Models", "Toolkit", "Community", "About", "Sign In",
+      "Home", "Data Repository", "Workspace", "ResourcesComing soon", "Community", "About", "Sign In",
     ]);
+    expect(menu.getByRole("menuitem", { name: /Resources/ }).getAttribute("aria-disabled")).toBe("true");
     expect(menu.getByRole("menuitem", { name: "Workspace" }).getAttribute("href")).toBe("/workspace");
     expect(menu.getByRole("menuitem", { name: "Community" }).getAttribute("href")).toBe("/community");
     expect(menu.getByRole("menuitem", { name: "Sign In" }).getAttribute("href")).toBe("/auth/signin");
-    expect(menu.getByText("Resources")).toBeTruthy();
   });
 
   it("offers a signed-in user their profile and sign out, as the desktop menu does", () => {
@@ -178,7 +178,11 @@ describe("the header's current-page highlight", () => {
     for (const name of ["Home", "Data Repository", "Workspace", "Community", "About"]) {
       expect(nav.getByRole("link", { name }).className).toContain("whitespace-nowrap");
     }
-    expect(nav.getByRole("button", { name: "Resources" }).className).toContain("whitespace-nowrap");
+    const resources = nav.getByText("Resources");
+    expect(resources.className).toContain("whitespace-nowrap");
+    // No pages yet: marked, and neither a link nor a menu.
+    expect(resources.getAttribute("aria-disabled")).toBe("true");
+    expect(resources.textContent).toContain("Coming soon");
   });
 
   it("marks the current item in the phone menu too, and only that one", () => {

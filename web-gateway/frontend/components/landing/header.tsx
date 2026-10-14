@@ -13,7 +13,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -41,10 +40,6 @@ const NAV_ITEMS_AFTER = [
   { label: "About", href: "/about" },
 ];
 
-const RESOURCES_ITEMS = [
-  { label: "Models", href: "#" },
-  { label: "Toolkit", href: "#" },
-];
 
 /**
  * Whether `href` is the page the visitor is on. A section keeps its tab lit on
@@ -64,6 +59,8 @@ const NAV_LINK =
 const NAV_LINK_IDLE = "text-hero-foreground-muted hover:bg-white/8 hover:text-white";
 // Same size as idle; only the weight (550) differs, which is too little to shift the row.
 const NAV_LINK_ACTIVE = "bg-white font-[550] text-foreground";
+// An item with no page yet, marked Coming soon and not a link.
+const NAV_LINK_OFF = "inline-flex cursor-default items-center gap-1.5 text-hero-foreground-muted/70";
 // The current item in the phone menu, which is a light popover rather than the navy pill.
 const MENU_ACTIVE = "bg-secondary font-semibold text-secondary-foreground";
 // A row in the Resources and account popovers.
@@ -83,23 +80,13 @@ const POPOVER_ITEM =
  * overflows rather than breaking "Data Repository" onto two lines.
  */
 export function Header({ variant = "standalone" }: { variant?: "overlay" | "standalone" }) {
-  const [resourcesOpen, setResourcesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const resourcesTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: session } = useSession();
   const pathname = usePathname();
   // Off on a deployment that only shows the repository: the item stays, marked
   // and not a link (lib/features.ts).
   const { workspace } = useSiteFeatures();
-
-  const handleResourcesEnter = () => {
-    if (resourcesTimeoutRef.current) clearTimeout(resourcesTimeoutRef.current);
-    setResourcesOpen(true);
-  };
-  const handleResourcesLeave = () => {
-    resourcesTimeoutRef.current = setTimeout(() => setResourcesOpen(false), 100);
-  };
 
   const handleUserMenuEnter = () => {
     if (userMenuTimeoutRef.current) clearTimeout(userMenuTimeoutRef.current);
@@ -135,11 +122,7 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
         >
           {NAV_ITEMS_BEFORE.map((item) =>
             item.href === WORKSPACE_HREF && !workspace ? (
-              <span
-                key={item.label}
-                aria-disabled="true"
-                className={`${NAV_LINK} inline-flex cursor-default items-center gap-1.5 text-hero-foreground-muted/70`}
-              >
+              <span key={item.label} aria-disabled="true" className={`${NAV_LINK} ${NAV_LINK_OFF}`}>
                 {item.label}
                 <ComingSoonChip tone="dark" />
               </span>
@@ -155,37 +138,11 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
             )
           )}
 
-          {/* Resources dropdown */}
-          <div
-            className="relative"
-            onMouseEnter={handleResourcesEnter}
-            onMouseLeave={handleResourcesLeave}
-          >
-            <button
-              aria-expanded={resourcesOpen}
-              className={`flex items-center gap-1 ${NAV_LINK} ${NAV_LINK_IDLE}`}
-            >
-              Resources
-              <ChevronDown
-                size={15}
-                className={`transition-transform duration-200 ${resourcesOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {resourcesOpen && (
-              // The padding, not a margin, makes the gap under the button: the pointer
-              // crosses it without leaving the wrapper, so the menu does not close.
-              <div className="absolute left-0 top-full z-30 w-44 pt-2">
-                <div className="rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
-                  {RESOURCES_ITEMS.map((item) => (
-                    <Link key={item.label} href={item.href} className={POPOVER_ITEM}>
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Resources (Models, Toolkit) has no pages yet. */}
+          <span aria-disabled="true" className={`${NAV_LINK} ${NAV_LINK_OFF}`}>
+            Resources
+            <ComingSoonChip tone="dark" />
+          </span>
 
           {NAV_ITEMS_AFTER.map((item) => (
             <Link
@@ -216,7 +173,9 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
                 tone="brand"
                 className="size-[34px] text-[11px] font-bold"
               />
-              <span className="max-w-24 truncate xl:max-w-[120px]">{session.user.name ?? session.user.email}</span>
+              {/* The name shows only from xl: at lg the row has no room for it beside
+                  the Coming soon chips. Below xl it is still the button's name. */}
+              <span className="sr-only xl:not-sr-only xl:max-w-[120px] xl:truncate">{session.user.name ?? session.user.email}</span>
               <ChevronDown
                 size={14}
                 className={`transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}
@@ -296,14 +255,10 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
                 </DropdownMenuItem>
               )
             )}
-            <DropdownMenuLabel className="pt-3 text-xs font-medium text-muted-foreground">
+            <DropdownMenuItem disabled className="min-h-10 text-[15px] font-medium">
               Resources
-            </DropdownMenuLabel>
-            {RESOURCES_ITEMS.map((item) => (
-              <DropdownMenuItem key={item.label} asChild className="min-h-10 pl-4 text-[15px] font-medium">
-                <Link href={item.href}>{item.label}</Link>
-              </DropdownMenuItem>
-            ))}
+              <ComingSoonChip className="ml-auto" />
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             {NAV_ITEMS_AFTER.map((item) => (
               <DropdownMenuItem
