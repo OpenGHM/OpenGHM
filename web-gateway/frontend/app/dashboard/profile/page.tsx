@@ -29,11 +29,14 @@ export default async function ProfilePage() {
         eyebrow="Account"
         title="My Profile"
         subtitle="Manage your account details, password, and signed-in devices."
-      />
+      >
+        {/* In the band, above where the cards overlap it, so it never sits on
+            the band's edge with the cards pressed against it. */}
+        {userProfile && !userProfile.email_verified && <EmailVerificationBanner />}
+      </PageHero>
       <PageBody className="flex-1 space-y-6">
         {userProfile ? (
           <>
-            {!userProfile.email_verified && <EmailVerificationBanner />}
             <div className="grid gap-6 md:grid-cols-2">
               <AccountCard profile={userProfile} />
               <SessionsCard sessions={sessions.items} />
