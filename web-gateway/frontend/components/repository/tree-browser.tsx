@@ -265,7 +265,7 @@ type ListingView =
  * stepping back shows it at once. `requested` stops a folder being asked for
  * twice (a Strict Mode double effect, a listing that is still on its way).
  */
-function useFolderListing(kind: TreeKind, id: string, folder: string) {
+export function useFolderListing(kind: TreeKind, id: string, folder: string) {
   const [listings, setListings] = useState<Record<string, Listing>>({});
   const [failures, setFailures] = useState<Record<string, TreeErrorCode>>({});
   const [more, setMore] = useState<{ folder: string; failed: boolean } | null>(null);

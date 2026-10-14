@@ -15,6 +15,7 @@ preview is one `GET` of the object's first 256 KiB and is not kept.
 
 from __future__ import annotations
 
+import asyncio
 import codecs
 import logging
 import re
@@ -27,6 +28,7 @@ import httpx
 
 from app.core.config import settings
 from app.models.repository import (
+    OutputFolder,
     TreeFile,
     TreeFolder,
     TreeListing,
@@ -39,7 +41,10 @@ logger = logging.getLogger(__name__)
 Kind = Literal["snapshots", "model-inputs"]
 
 _TIMEOUT = 10.0
+_SIZE_TIMEOUT = 3.0
 _MAX_KEYS = "1000"
+#: `output_folders` reads at most this many listing pages (objects / 1000).
+_OUTPUT_MAX_PAGES = 20
 PREVIEW_BYTES = 256 * 1024
 _CACHE_SIZE = 512
 _MAX_PATH = 900  # an S3 key is at most 1024 bytes; the prefix takes the rest
@@ -70,11 +75,17 @@ class PreviewUnavailable(Exception):
 
 #: (prefix, cursor) -> the page. Only non-empty, successful reads.
 _pages: OrderedDict[tuple[str, str | None], TreeListing] = OrderedDict()
+#: Public URL -> the object's size. Only successful reads.
+_sizes: OrderedDict[str, int] = OrderedDict()
+#: Snapshot id -> its output's folders. Only complete, successful listings.
+_outputs: OrderedDict[str, list[OutputFolder]] = OrderedDict()
 
 
 def reset() -> None:
-    """Forget what was listed (tests)."""
+    """Forget what was listed and sized (tests)."""
     _pages.clear()
+    _sizes.clear()
+    _outputs.clear()
 
 
 def artifact_prefix(kind: Kind, artifact_id: str) -> str:
@@ -223,6 +234,87 @@ def _size_of(status: int, headers: httpx.Headers, data: bytes) -> int:
     if match is None:
         raise ValueError("no usable Content-Range")
     return int(match.group(1))
+
+
+async def _head(url: str) -> tuple[int, httpx.Headers]:
+    async with httpx.AsyncClient(timeout=_SIZE_TIMEOUT, follow_redirects=True) as client:
+        response = await client.head(url)
+        return response.status_code, response.headers
+
+
+async def _head_size(url: str) -> int | None:
+    if url in _sizes:
+        _sizes.move_to_end(url)
+        return _sizes[url]
+    try:
+        status, headers = await _head(url)
+        size = int(headers["Content-Length"]) if status == 200 else None
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        logger.warning("could not size %s: %s", url, exc)
+        return None
+    if size is not None:
+        _sizes[url] = size
+        if len(_sizes) > _CACHE_SIZE:
+            _sizes.popitem(last=False)
+    return size
+
+
+async def sizes(urls: list[str]) -> dict[str, int]:
+    """The size of each public object, by one `HEAD` each, in parallel. A URL
+    that does not answer `200` in time is left out: a size is a courtesy, and
+    the Download card shows the file without one. Published objects are
+    immutable, so a size is kept, bounded."""
+    found = await asyncio.gather(*(_head_size(u) for u in urls))
+    return {url: size for url, size in zip(urls, found) if size is not None}
+
+
+async def output_folders(snapshot_id: str) -> list[OutputFolder]:
+    """What a published snapshot's `wbm_output/` holds, one entry per
+    `<run>/<folder>/` with the count and bytes of the files under it at any
+    depth; a file directly under `<run>/` (the MT, the log) is not counted.
+    Read by a listing with no delimiter, at most `_OUTPUT_MAX_PAGES` pages.
+    Empty when the bucket could not be read or the output is larger than
+    that: the summary is a courtesy, and the Download card links to the files
+    page without it. A published tree is immutable, so a summary is kept."""
+    if snapshot_id in _outputs:
+        _outputs.move_to_end(snapshot_id)
+        return _outputs[snapshot_id]
+    prefix = f"{artifact_prefix('snapshots', snapshot_id)}wbm_output/"
+    url = f"{settings.S3_PUBLIC_BASE_URL.rstrip('/')}/{settings.S3_BUCKET}"
+    totals: dict[tuple[str, str], list[int]] = {}
+    cursor: str | None = None
+    try:
+        for _ in range(_OUTPUT_MAX_PAGES):
+            params = {"list-type": "2", "max-keys": _MAX_KEYS, "prefix": prefix}
+            if cursor:
+                params["continuation-token"] = cursor
+            response = await _get(url, params=params)
+            response.raise_for_status()
+            root = ET.fromstring(response.text)
+            for item in root.iterfind("{*}Contents"):
+                parts = (item.findtext("{*}Key") or "")[len(prefix) :].split("/")
+                if len(parts) < 3 or not parts[-1]:  # a run's own file, or a folder marker
+                    continue
+                total = totals.setdefault((parts[0], parts[1]), [0, 0])
+                total[0] += 1
+                total[1] += int(item.findtext("{*}Size") or 0)
+            cursor = root.findtext("{*}NextContinuationToken") if root.findtext("{*}IsTruncated") == "true" else None
+            if not cursor:
+                break
+        else:
+            logger.warning("Not summing %s: over %d listing pages", prefix, _OUTPUT_MAX_PAGES)
+            return []
+    except Exception as exc:  # network, HTTP status, XML
+        logger.warning("Could not list %s: %s", prefix, exc)
+        return []
+    folders = [
+        OutputFolder(run=run, name=name, path=f"wbm_output/{run}/{name}/", files=n, bytes=size)
+        for (run, name), (n, size) in sorted(totals.items())
+    ]
+    _outputs[snapshot_id] = folders
+    if len(_outputs) > _CACHE_SIZE:
+        _outputs.popitem(last=False)
+    return folders
 
 
 def _decode(data: bytes, truncated: bool) -> str | None:

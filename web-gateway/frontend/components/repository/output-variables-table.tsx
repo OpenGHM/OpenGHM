@@ -14,7 +14,7 @@ const INITIAL_ROWS = 5;
 
 // The design's swatch colours, taken in turn by row: a swatch tells the rows
 // apart at a glance, it does not say what the variable is.
-const SWATCHES = [1, 8, 7, 2, 3, 6, 4, 5].map((n) => `var(--data-${n})`);
+export const SWATCHES = [1, 8, 7, 2, 3, 6, 4, 5].map((n) => `var(--data-${n})`);
 
 export function OutputVariablesTable({ variables }: { variables: Variable[] }) {
   const [expanded, setExpanded] = useState(false);

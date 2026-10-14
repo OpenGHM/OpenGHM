@@ -1,8 +1,11 @@
+import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
 import { PanelDots, SectionEyebrow, SectionTitle } from "./section-parts";
 
 interface Feature {
   title: string;
   description: string;
+  /** Not released yet: the toolkit, until openghm is published. */
+  soon?: boolean;
 }
 
 const FEATURES: Feature[] = [
@@ -25,6 +28,7 @@ const FEATURES: Feature[] = [
     title: "The Toolkit",
     description:
       "Powerful Python APIs for data processing, spatial resampling, and interactive visualization notebooks.",
+    soon: true,
   },
 ];
 
@@ -54,8 +58,9 @@ export function FeaturesSection() {
               >
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <h3 className="text-[26px] leading-[1.2] font-semibold tracking-[-0.025em]">
+              <h3 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[26px] leading-[1.2] font-semibold tracking-[-0.025em]">
                 {feature.title}
+                {feature.soon && <ComingSoonChip tone="dark" className="tracking-normal" />}
               </h3>
               <p className="col-start-2 mt-2.5 max-w-[440px] text-[15.5px] leading-[1.65] text-pretty text-hero-foreground-muted">
                 {feature.description}

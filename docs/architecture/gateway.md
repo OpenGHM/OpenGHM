@@ -552,6 +552,10 @@ anonymously with plain `httpx`, and only in small pieces:
   ([simulation-reuse.md](simulation-reuse.md) §3);
 - one folder of a published tree, or the first 256 KiB of one file, for the
   files page (`tree_browse.py`, below).
+- for a snapshot's Download card, the container's size (one `HEAD`,
+  `tree_browse.sizes`) and a summary of its `wbm_output/` (a listing with no
+  delimiter, `tree_browse.output_folders`), both kept since a published
+  object never changes.
 
 The bucket sends no CORS headers (checked 2026-10-07: a preflight is `403`),
 so the browser cannot list or read it from script; it can only follow a link.
@@ -563,12 +567,28 @@ Two read routes return those strings for a published artifact:
 response is the prefix (`snapshots/<id>/`, `model-inputs/<id>/`) plus its
 `metadata.json` and `SHA256SUMS`. A snapshot's also carries the fetch command
 (`openghm snapshot fetch <id>`), the container's `uses.container.https` and the
-`model-inputs/<uses.modelInput.id>/` prefix. The strings are built from the
-stored document and the two settings on each request, so nothing is stored and
-nothing checks that the objects exist. The detail pages render them in a
-Download card.
+`model-inputs/<uses.modelInput.id>/` prefix; a model input's carries
+`openghm model-input fetch <id>`. The strings are built from the stored
+document and the two settings on each request, and nothing checks that the
+objects exist. A snapshot's response adds `containerSize` (null when the
+`HEAD` did not answer `200` within 3 s) and `output`: one entry per
+`wbm_output/<run>/<folder>/` with the count and bytes of the files under it,
+empty when the listing failed or ran past 20 pages.
 
-The card's **Browse files** opens `/repository/<id>/files` (or
+The detail pages render them in a Download section, kept small and built
+for the two reasons to come. A snapshot's opens with its **output**, which is
+nearly all of its bytes (the Global v1.0.0 snapshot: 486 GiB, 452 GiB of it
+daily): its size and two doors, **Download a subset** and **Output files**,
+into one dialog with a tab for each (below, "Reading output"). Then
+**Reproduce the run**: the code and init (the files page), the model input
+(its page) and the container (a direct download), and `openghm snapshot
+fetch`, which gets those three and never the output. `metadata.json` and
+`SHA256SUMS` are not offered by themselves; the fetch reads them and the files
+page lists them. The section streams in under a `Suspense`, since the output
+listing can take seconds the first time. A model input's section is the fetch
+command, the files page and the S3 address.
+
+The section's **Browse** links open `/repository/<id>/files` (or
 `/repository/model-inputs/<id>/files`), which walks the tree a folder at a
 time, with `?path=` naming the folder and `?file=` the file open in a
 preview. It reads two open routes per kind, under `datasets/{id}` and
@@ -1122,6 +1142,43 @@ and what they mean is the toolkit's.
 - **Nothing is stored.** No cache, no derivative, no job document field: each request is
   one SSH round trip, about a second plus the read. `Cache-Control` is `public,
   max-age=3600` for a snapshot's maps and `private, no-cache` for a run's.
+
+**In the UI**, a published snapshot's output is the Download section's "Simulation
+output" dialog (`web-gateway/frontend/components/repository/output-dialog.tsx`). The
+browser reaches the two routes it needs through Next route handlers that pass the answers
+through, `/api/repository/datasets/{id}/output` and `…/output/subset` (only `variable`,
+`resolution`, `start`, `end` and `bbox` are passed on).
+
+- **Download a subset.** The inventory, read when the tab first shows, lists the variables
+  (searchable; the metadata's `fullName` stands in for a missing long name), the time
+  steps each has and their years. The period is picked as a run of years and, for monthly
+  and daily data, of months, sent as `YYYY-MM` (the toolkit reads an end month to its last
+  day). The size shown is the most the file can hold, steps x rows x cols x 4 bytes, since
+  the file is deflated and how well depends on the variable: measured 2026-10-14, a
+  Wyoming box of yearly `runoff` came out at 96% of it and a Global month of daily
+  `runoff` over a box at 43% (100 MB, about 2 minutes end to end). Over 1 GiB the dialog
+  warns, mirroring the toolkit's `MAX_NC_BYTES`; it does not refuse, and the toolkit's
+  own refusal is shown in its words (a Global daily request reads a whole map per day, so
+  at most about 53 days fit one call, and about 35 for the whole grid). The file is fetched by script, so the button can say
+  "Cutting the file…" and then show progress against `Content-Length`; it is saved from a
+  blob under a name of the dialog's (`runoff_monthly_2000-01_2000-12_box.nc`), shown
+  before the download with the same request as an `openghm output subset` command.
+- **Output files.** A row per time step folder with its size and share of the output,
+  each opening that folder in the dialog itself (the files page's listing and table, the
+  folder kept in state rather than the URL, so a look never leaves the page; the files
+  page, for a preview, opens in a new tab), and the whole output folder as an `aws s3 sync
+  --no-sign-request --endpoint-url <S3_PUBLIC_BASE_URL> s3://<bucket>/snapshots/<id>/wbm_output/<run>/`
+  command (checked 2026-10-14 with aws-cli against Anvil S3). There is no toolkit
+  command that fetches the output; `snapshot fetch` leaves it out.
+
+A run's output on scratch has no UI yet.
+
+Every command of the `openghm` toolkit the UI shows (the fetches on the Download
+sections, the subset's "Same file from a script") carries a **Coming soon** chip
+(`components/ui/coming-soon-chip.tsx`), as does the home page's Toolkit feature: the
+command can be read and copied, but the toolkit is not on PyPI yet
+([its README](../../packages/openghm/README.md#install)). The chips come off when it is
+published.
 
 ## 6. What is absent, and not by oversight
 

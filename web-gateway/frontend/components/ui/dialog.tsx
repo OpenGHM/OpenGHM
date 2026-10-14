@@ -46,12 +46,18 @@ function DialogOverlay({
  */
 function DialogContent({
   className,
+  overlayClassName,
+  showCloseButton = true,
   children,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  overlayClassName?: string
+  /** Off for a dialog that draws its own close button in its header. */
+  showCloseButton?: boolean
+}) {
   return (
     <DialogPrimitive.Portal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
@@ -61,13 +67,15 @@ function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          data-slot="dialog-close-button"
-          className="absolute top-2 right-2 inline-flex size-10 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:top-3 sm:right-3 sm:size-8"
-        >
-          <XIcon className="size-4" aria-hidden="true" />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close-button"
+            className="absolute top-2 right-2 inline-flex size-10 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:top-3 sm:right-3 sm:size-8"
+          >
+            <XIcon className="size-4" aria-hidden="true" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   )

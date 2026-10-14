@@ -16,7 +16,7 @@ import {
   RelatedLinksSection,
   SpatialCoverageSection,
 } from "@/components/repository/detail-parts";
-import { DownloadCard } from "@/components/repository/download-card";
+import { ModelInputDownload } from "@/components/repository/download-card";
 import { ModelInputDatasetsTable } from "@/components/repository/model-input-datasets-table";
 import { formatLongDate } from "@/lib/workspace/time";
 
@@ -106,14 +106,7 @@ export default async function ModelInputDetailPage({
             {/* Download — links from the backend, bytes from Anvil S3 */}
             {links && (
               <div id="download" className="scroll-mt-24">
-                <DownloadCard
-                  browseHref={`/repository/model-inputs/${id}/files`}
-                  items={[
-                    { label: "Model input tree", url: links.treeUrl, isFile: false },
-                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
-                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
-                  ]}
-                />
+                <ModelInputDownload id={id} treeUrl={links.treeUrl} fetchCommand={links.fetchCommand} />
               </div>
             )}
           </div>

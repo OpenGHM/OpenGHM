@@ -215,6 +215,20 @@ export interface SnapshotLinks {
   containerUrl: string;
   modelInputId: string;
   modelInputTreeUrl: string;
+  /** The container's bytes; null when the bucket did not say. */
+  containerSize: number | null;
+  /** What `wbm_output/` holds, folder by folder; empty when it could not be listed. */
+  output: OutputFolder[];
+}
+
+/** One folder of a snapshot's output, `wbm_output/<run>/<name>/`, and the files under it. */
+export interface OutputFolder {
+  run: string;
+  name: string;
+  /** Relative to the snapshot's root; ends with `/`. */
+  path: string;
+  files: number;
+  bytes: number;
 }
 
 /** `GET /repository/model-inputs/{id}/links` — `ModelInputLinks` in the backend. */
@@ -223,6 +237,8 @@ export interface ModelInputLinks {
   treeUrl: string;
   metadataUrl: string;
   sha256sumsUrl: string;
+  /** `openghm model-input fetch <id>` */
+  fetchCommand: string;
 }
 
 // ─── Browsing a published tree ────────────────────────────────────────────────

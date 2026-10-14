@@ -9,23 +9,30 @@ import type { TreeFile, TreeFolder } from "@/lib/repository/types";
 import { formatBytes } from "@/lib/workspace/format";
 import { formatUtcDate, formatUtcDateTime } from "@/lib/workspace/time";
 
+const FOLDER_CLASS =
+  "inline-flex items-center gap-2 text-left font-mono text-[13px] font-medium break-all text-primary outline-none hover:text-primary-hover hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
 /**
  * One folder's entries: folders first, then files, each in the order the
- * backend sent. A folder and a previewable file are links to their own URL
- * (`?path=`, `?file=`), so each opens in a new tab as well; a plain click only
- * pushes the URL and the page follows it.
+ * backend sent. On the files page a folder and a previewable file are links to
+ * their own URL (`?path=`, `?file=`), so each opens in a new tab as well; a
+ * plain click only pushes the URL and the page follows it. Given
+ * `onOpenFolder` (a browser inside a dialog, which keeps its folder in state),
+ * a folder is a button that calls it and a file is not opened for preview.
  */
 export function TreeBrowserTable({
   pathname,
   folder,
   folders,
   files,
+  onOpenFolder,
 }: {
   pathname: string;
   /** The folder listed, as in `?path=`. */
   folder: string;
   folders: TreeFolder[];
   files: TreeFile[];
+  onOpenFolder?: (path: string) => void;
 }) {
   return (
     <Table>
@@ -45,14 +52,21 @@ export function TreeBrowserTable({
           return (
             <TableRow key={`d:${f.path}`}>
               <TableCell className="pl-6">
-                <a
-                  href={href}
-                  onClick={pushOnPlainClick(href)}
-                  className="inline-flex items-center gap-2 font-mono text-[13px] font-medium break-all text-primary hover:text-primary-hover hover:underline"
-                >
-                  <Folder className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                  {f.name}/
-                </a>
+                {onOpenFolder ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenFolder(f.path)}
+                    className={FOLDER_CLASS}
+                  >
+                    <Folder className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                    {f.name}/
+                  </button>
+                ) : (
+                  <a href={href} onClick={pushOnPlainClick(href)} className={FOLDER_CLASS}>
+                    <Folder className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                    {f.name}/
+                  </a>
+                )}
               </TableCell>
               <TableCell className="text-right text-muted-foreground">—</TableCell>
               <TableCell className="text-muted-foreground">—</TableCell>
@@ -65,7 +79,7 @@ export function TreeBrowserTable({
           return (
             <TableRow key={`f:${f.path}`}>
               <TableCell className="pl-6">
-                {f.previewable ? (
+                {f.previewable && !onOpenFolder ? (
                   <a
                     href={href}
                     onClick={pushOnPlainClick(href)}

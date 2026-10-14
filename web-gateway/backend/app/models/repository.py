@@ -381,6 +381,21 @@ def s3_url(base_url: str, bucket: str, key: str) -> str:
     return f"{base_url.rstrip('/')}/{bucket}/{key}"
 
 
+class OutputFolder(BaseModel):
+    """One folder of a published snapshot's output, ``wbm_output/<run>/<name>/``
+    (``daily``, ``monthly``, ``yearly``, ``climatology``, ...), with the files
+    under it at any depth."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run: str
+    name: str
+    #: relative to the snapshot's root; ends with ``/``.
+    path: str
+    files: int
+    bytes: int
+
+
 class SnapshotLinks(BaseModel):
     """Where to fetch a published snapshot, computed from its ``metadata.json``
     and the S3 settings, never stored."""
@@ -399,6 +414,11 @@ class SnapshotLinks(BaseModel):
     #: ``uses.modelInput.id`` and its ``model-inputs/<id>/`` prefix.
     modelInputId: str
     modelInputTreeUrl: str
+    #: The container's bytes, by a ``HEAD``; None when the bucket did not say.
+    containerSize: int | None = None
+    #: What ``wbm_output/`` holds, folder by folder; empty when it could not
+    #: be listed. Both filled by the route, not by ``snapshot_links``.
+    output: list[OutputFolder] = []
 
 
 class ModelInputLinks(BaseModel):
@@ -410,6 +430,8 @@ class ModelInputLinks(BaseModel):
     treeUrl: str
     metadataUrl: str
     sha256sumsUrl: str
+    #: ``openghm model-input fetch <id>`` (packages/openghm/README.md).
+    fetchCommand: str
 
 
 def snapshot_links(document: dict[str, Any], *, base_url: str, bucket: str) -> SnapshotLinks:
@@ -440,6 +462,7 @@ def model_input_links(document: dict[str, Any], *, base_url: str, bucket: str) -
         treeUrl=tree,
         metadataUrl=f"{tree}metadata.json",
         sha256sumsUrl=f"{tree}SHA256SUMS",
+        fetchCommand=f"openghm model-input fetch {model_input_id}",
     )
 
 

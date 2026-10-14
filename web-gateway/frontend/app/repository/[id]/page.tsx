@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { fetchDatasetById, fetchDatasetLinks, fetchModelInputById } from "@/lib/repository/actions";
+import { fetchDatasetById, fetchModelInputById } from "@/lib/repository/actions";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import {
   RelatedLinksSection,
   SpatialCoverageSection,
 } from "@/components/repository/detail-parts";
-import { DownloadCard } from "@/components/repository/download-card";
+import { DownloadSkeleton, SnapshotDownloadSection } from "@/components/repository/download-section";
 import { ExecutionCard } from "@/components/repository/execution-card";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import { newStepHref } from "@/lib/workspace/draft-wizard";
@@ -29,7 +30,7 @@ export default async function DatasetDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [dataset, links] = await Promise.all([fetchDatasetById(id), fetchDatasetLinks(id)]);
+  const dataset = await fetchDatasetById(id);
   if (!dataset) notFound();
 
   const { about, simulation, uses, runtime } = dataset;
@@ -121,22 +122,15 @@ export default async function DatasetDetailPage({
               <CitationCard dataset={dataset} />
             </div>
 
-            {/* Download — links from the backend, bytes from Anvil S3 */}
-            {links && (
-              <div id="download" className="scroll-mt-24">
-                <DownloadCard
-                  command={links.fetchCommand}
-                  browseHref={`/repository/${id}/files`}
-                  items={[
-                    { label: "Model snapshot tree", url: links.treeUrl, isFile: false },
-                    { label: "metadata.json", url: links.metadataUrl, isFile: true },
-                    { label: "SHA256SUMS", url: links.sha256sumsUrl, isFile: true },
-                    { label: "Container image", url: links.containerUrl, isFile: true },
-                    { label: "Model input tree", url: links.modelInputTreeUrl, isFile: false },
-                  ]}
+            {/* Download — links from the backend, bytes from Anvil S3; streamed in */}
+            <div id="download" className="scroll-mt-24">
+              <Suspense fallback={<DownloadSkeleton />}>
+                <SnapshotDownloadSection
+                  dataset={dataset}
+                  modelInputName={modelInput?.about.name ?? `Model input ${modelInputId.slice(0, 12)}…`}
                 />
-              </div>
-            )}
+              </Suspense>
+            </div>
           </div>
 
           {/* Right column */}

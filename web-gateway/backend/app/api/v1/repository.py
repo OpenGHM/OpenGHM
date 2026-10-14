@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from math import ceil
 from typing import Literal
 
@@ -311,16 +313,23 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
 
 @router.get("/datasets/{dataset_id}/links")
 async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
-    """Download links for a published snapshot: plain strings, no S3 call
-    (gateway.md §5). A separate route rather than a field on
-    ``DatasetResponse`` because they depend on the deployment's S3 settings,
-    not only on the document, and the list route would otherwise carry them
-    on every item. Open, like ``get_dataset``."""
+    """Download links for a published snapshot: plain strings, plus the
+    container's size and a summary of the output, read from the bucket
+    (gateway.md §5). A separate
+    route rather than a field on ``DatasetResponse`` because they depend on
+    the deployment's S3 settings, not only on the document, and the list route
+    would otherwise carry them on every item. Open, like ``get_dataset``."""
     db = get_db()
     doc = await db["datasets"].find_one({"_id": dataset_id})
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
-    return snapshot_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
+    links = snapshot_links(doc["document"], base_url=settings.S3_PUBLIC_BASE_URL, bucket=settings.S3_BUCKET)
+    sizes, output = await asyncio.gather(
+        tree_browse.sizes([links.containerUrl]), tree_browse.output_folders(dataset_id)
+    )
+    links.containerSize = sizes.get(links.containerUrl)
+    links.output = output
+    return links
 
 
 @router.get("/datasets/{dataset_id}/files")
