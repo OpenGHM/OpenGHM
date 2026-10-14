@@ -178,9 +178,13 @@ with a real identity provider, a higher bar than a captcha adds.
 | Refresh token | opaque random string, `REFRESH_TOKEN_EXPIRE_DAYS` (30) |
 | Stored | only the refresh token's SHA-256, in `refresh_tokens` |
 
-**One document per signed-in device.** Signing in on a second device does not
+**One document per sign-in.** Signing in on a second device does not
 disturb the first — that is the whole reason the collection exists rather than
-a field on the user. The session id also rides in the access token's `sid`
+a field on the user. A row goes when its device signs out, when it is revoked,
+or 30 days after its last refresh; a browser that drops its cookie without
+signing out leaves its row until then, so one person's list can hold several
+rows for the same machine. Registering starts no session: the form sends the
+new user to sign in. The session id also rides in the access token's `sid`
 claim, which is how `POST /auth/logout` revokes just the calling device without
 the client ever sending its refresh token back.
 

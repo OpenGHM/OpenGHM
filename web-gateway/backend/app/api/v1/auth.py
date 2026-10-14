@@ -26,6 +26,7 @@ from app.models.user import (
     LinkPendingResponse,
     LoginRequest,
     RefreshRequest,
+    RegisteredResponse,
     RegisterRequest,
     ResetPasswordRequest,
     SessionEntry,
@@ -138,7 +139,7 @@ async def _issue_tokens(
 ) -> AuthResponse:
     """Mint an access+refresh pair for one device.
 
-    Shared by login/register/refresh/sso so all four stay in sync — a raw
+    Shared by login/refresh/sso/change-password so they stay in sync — a raw
     refresh token is only ever returned here, never stored. Pass
     `session_id` to rotate an existing device's session (the refresh path);
     omit it to start a new one (a fresh sign-in).
@@ -227,13 +228,10 @@ async def login(
 
 @router.post(
     "/register",
-    response_model=AuthResponse | LinkPendingResponse,
+    response_model=RegisteredResponse | LinkPendingResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(
-    body: RegisterRequest,
-    user_agent: str | None = Header(default=None, alias="User-Agent"),
-):
+async def register(body: RegisterRequest):
     if not await verify_recaptcha(body.recaptcha_token):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -291,9 +289,7 @@ async def register(
     # can still log in and use the app.
     await _send_verification_email(db, user_id, body.email, body.name)
 
-    return await _issue_tokens(
-        db, user_id, body.email, Role.USER, body.name, user_agent=user_agent
-    )
+    return RegisteredResponse(email=body.email)
 
 
 @router.post("/refresh", response_model=AuthResponse)

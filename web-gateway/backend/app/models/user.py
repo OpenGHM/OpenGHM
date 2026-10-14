@@ -247,6 +247,16 @@ class AuthResponse(BaseModel):
     user: UserResponse
 
 
+class RegisteredResponse(BaseModel):
+    """What POST /auth/register answers for a new account. It carries no
+    tokens: the form sends the user to sign in, and that sign-in starts the
+    device's session. Tokens minted here were never used, and each left a
+    session row labelled with the Next.js server's user agent ("node")."""
+
+    status: str = "registered"
+    email: EmailStr
+
+
 class LinkPendingResponse(BaseModel):
     """Returned instead of AuthResponse when a self-typed email (register,
     or ORCID's complete-sso-signup) matches an existing account under a
