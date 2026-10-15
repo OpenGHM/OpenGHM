@@ -5,8 +5,10 @@ import asyncio
 from math import ceil
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pymongo.errors import DuplicateKeyError
+from starlette.background import BackgroundTask
 
 from app.core.authz import require_permission
 from app.core.config import settings
@@ -17,6 +19,7 @@ from app.models.generated.snapshot import OpenGHMSnapshotMetadata
 from app.models.repository import (
     DatasetDetailResponse,
     DatasetResponse,
+    FolderSummary,
     CatalogueResponse,
     MineResponse,
     ModelInputCatalogueItem,
@@ -39,7 +42,7 @@ from app.models.repository import (
     snapshot_links,
 )
 from app.models.user import TokenPayload
-from app.services import job_script, published_answer, run_start, tree_browse
+from app.services import job_script, published_answer, run_start, tree_archive, tree_browse
 from app.services.catalogue import (
     CatalogueQuery,
     InvalidBoundingBox,
@@ -101,6 +104,121 @@ async def _browse_preview(kind: tree_browse.Kind, artifact_id: str, path: str) -
                 "message": "The file could not be read right now. Try again in a few minutes.",
             },
         ) from exc
+
+
+def _folder_failure(exc: Exception, path: str) -> HTTPException:
+    """The answer for what a folder summary or archive can fail with besides its
+    own refusals: 422 ``invalid_path``, 404 ``path_not_found``, 503
+    ``listing_unavailable``."""
+    if isinstance(exc, tree_browse.InvalidPath):
+        return HTTPException(status_code=422, detail={"code": "invalid_path", "message": str(exc)})
+    if isinstance(exc, tree_browse.PathNotFound):
+        return HTTPException(
+            status_code=404,
+            detail={"code": "path_not_found", "message": f"Nothing is published at '{path}'."},
+        )
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "listing_unavailable",
+            "message": "The files could not be listed right now. Try again in a few minutes.",
+        },
+    )
+
+
+_FOLDER_FAILURES = (tree_browse.InvalidPath, tree_browse.PathNotFound, tree_browse.ListingUnavailable)
+
+
+async def _browse_folder_summary(
+    kind: tree_browse.Kind, artifact_id: str, path: str
+) -> FolderSummary:
+    """What the folder at ``path`` holds, and whether its ZIP is allowed."""
+    try:
+        folder = tree_browse.validate_path(path)
+        return await tree_browse.folder_summary(kind, artifact_id, folder)
+    except _FOLDER_FAILURES as exc:
+        raise _folder_failure(exc, path) from exc
+
+
+async def _archive_request(request: Request) -> tuple[str, list[str]]:
+    """The folder and the entry names asked for, from a form (``folder`` and a
+    ``names`` field for each entry: what a browser's form sends) or from JSON
+    ``{"folder": ..., "names": [...]}``. 422 ``invalid_selection`` for a body of
+    another shape."""
+    refusal = HTTPException(
+        status_code=422,
+        detail={
+            "code": "invalid_selection",
+            "message": "Send a folder and the names of its entries to download.",
+        },
+    )
+    try:
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.json()
+            folder, names = body.get("folder", ""), body.get("names")
+        else:
+            # A name is one field: the default of 1000 fields would refuse a full selection.
+            form = await request.form(max_fields=tree_browse.MAX_SELECTED + 100)
+            folder, names = form.get("folder", ""), form.getlist("names")
+    except (ValueError, AttributeError) as exc:
+        raise refusal from exc
+    if not isinstance(folder, str) or not isinstance(names, list):
+        raise refusal
+    if not all(isinstance(name, str) for name in names):
+        raise refusal
+    return folder, names
+
+
+async def _browse_archive(
+    kind: tree_browse.Kind, artifact_id: str, request: Request
+) -> StreamingResponse:
+    """The entries asked for, of a folder, as a ZIP, streamed. Besides the
+    summary's own answers (a missing folder or name is ``path_not_found``, a bad
+    name ``invalid_path`` and a bad count ``invalid_selection``, all 422 or 404):
+    413 ``selection_too_large`` (with ``bytes`` and ``limit_bytes``) and 429
+    ``archive_busy``, both before anything is sent."""
+    path, names = await _archive_request(request)
+    try:
+        folder = tree_browse.validate_path(path)
+        names = tree_browse.validate_names(names)
+        archive = await tree_archive.open_archive(kind, artifact_id, folder, names)
+    except tree_browse.InvalidSelection as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_selection", "message": str(exc)}
+        ) from exc
+    except _FOLDER_FAILURES as exc:
+        raise _folder_failure(exc, str(exc) if isinstance(exc, tree_browse.PathNotFound) else path) from exc
+    except tree_archive.SelectionTooLarge as exc:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "selection_too_large",
+                "message": "This selection is too large to download as a ZIP. "
+                "Select less, or use an S3 tool.",
+                "bytes": exc.size,
+                "limit_bytes": tree_browse.ARCHIVE_LIMIT_BYTES,
+            },
+        ) from exc
+    except tree_archive.ArchiveBusy as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "archive_busy",
+                "message": "Other downloads are being prepared. Try again in a minute.",
+            },
+        ) from exc
+    headers = {
+        "Content-Disposition": tree_archive.content_disposition(archive.filename),
+        "Cache-Control": "no-store",
+    }
+    if archive.length is not None:
+        headers["Content-Length"] = str(archive.length)
+    return StreamingResponse(
+        archive.stream(),
+        media_type="application/zip",
+        headers=headers,
+        background=BackgroundTask(archive.release),
+    )
 
 
 async def _load_all_datasets() -> list[DatasetResponse]:
@@ -358,6 +476,31 @@ async def get_dataset_file_preview(
     return await _browse_preview("snapshots", dataset_id, path)
 
 
+@router.get("/datasets/{dataset_id}/files/folder")
+async def get_dataset_folder_summary(
+    dataset_id: str,
+    path: str = Query(default="", description="Folder, relative to the snapshot's root"),
+) -> FolderSummary:
+    """What a folder of a published snapshot holds, at any depth, and whether
+    it is small enough for ``.../files/archive``. Open."""
+    db = get_db()
+    if await db["datasets"].find_one({"_id": dataset_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    return await _browse_folder_summary("snapshots", dataset_id, path)
+
+
+@router.post("/datasets/{dataset_id}/files/archive")
+async def post_dataset_folder_archive(dataset_id: str, request: Request) -> StreamingResponse:
+    """Entries of a folder of a published snapshot as one ZIP, stored and
+    streamed from the public bucket (``tree_archive``). A POST, so that a browser
+    form can carry up to 1000 names; the body is a form or JSON (see
+    ``_archive_request``). Open."""
+    db = get_db()
+    if await db["datasets"].find_one({"_id": dataset_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    return await _browse_archive("snapshots", dataset_id, request)
+
+
 @router.post("/datasets/{dataset_id}/published-answer")
 async def get_published_answer(
     dataset_id: str,
@@ -544,6 +687,27 @@ async def get_model_input_file_preview(
     if await db["model_inputs"].find_one({"_id": model_input_id}) is None:
         raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
     return await _browse_preview("model-inputs", model_input_id, path)
+
+
+@router.get("/model-inputs/{model_input_id}/files/folder")
+async def get_model_input_folder_summary(
+    model_input_id: str,
+    path: str = Query(default="", description="Folder, relative to the model input's root"),
+) -> FolderSummary:
+    """The model-input sibling of ``get_dataset_folder_summary``."""
+    db = get_db()
+    if await db["model_inputs"].find_one({"_id": model_input_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return await _browse_folder_summary("model-inputs", model_input_id, path)
+
+
+@router.post("/model-inputs/{model_input_id}/files/archive")
+async def post_model_input_folder_archive(model_input_id: str, request: Request) -> StreamingResponse:
+    """The model-input sibling of ``post_dataset_folder_archive``."""
+    db = get_db()
+    if await db["model_inputs"].find_one({"_id": model_input_id}) is None:
+        raise HTTPException(status_code=404, detail=f"Model input '{model_input_id}' not found")
+    return await _browse_archive("model-inputs", model_input_id, request)
 
 
 @router.post(

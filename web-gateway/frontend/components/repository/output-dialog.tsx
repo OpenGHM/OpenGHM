@@ -5,7 +5,9 @@ import { Check, Copy, X } from "lucide-react";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import { SWATCHES } from "@/components/repository/output-variables-table";
 import { useFolderListing } from "@/components/repository/tree-browser";
+import { SelectionBar } from "@/components/repository/selection-bar";
 import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
+import { useTreeSelection } from "@/components/repository/use-tree-selection";
 import { folderCrumbs } from "@/lib/repository/tree-browse";
 import { WORLD_LAND_PATH } from "@/lib/repository/world-land";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -966,7 +968,7 @@ function FilesTab({ snapshotId, treeUrl, output }: { snapshotId: string; treeUrl
  * and listing, with the folder kept in state rather than the URL, so leaving
  * the page is never the price of a look. Crumbs run from the output's root;
  * a file is downloaded or its URL copied, and the files page (a new tab)
- * previews it.
+ * previews it. Ticked entries come down as one ZIP.
  */
 function FolderBrowser({
   snapshotId,
@@ -983,35 +985,46 @@ function FolderBrowser({
   onBack: () => void;
 }) {
   const listing = useFolderListing("snapshot", snapshotId, folder);
+  const selection = useTreeSelection("snapshot", snapshotId, folder);
   const { view } = listing;
   const pagePath = `/repository/${snapshotId}/files`;
   const crumbs = folderCrumbs(folder).filter((c) => c.path.length > root.length);
   return (
     <div className="flex flex-col">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-5 py-3 sm:px-[26px]">
-        <button
-          type="button"
-          onClick={onBack}
-          className={cn("rounded-[9px] px-2 py-1 text-[13px] font-semibold text-primary hover:bg-secondary", FOCUS)}
-        >
-          ← Output files
-        </button>
-        <nav aria-label="Output folders" className="min-w-0 flex-1">
-          <ol className="flex flex-wrap items-center gap-1 font-mono text-[13px]">
-            <BrowserCrumb label="output" current={folder === root} onClick={() => onOpen(root)} />
-            {crumbs.map((c) => (
-              <BrowserCrumb key={c.path} label={c.name} current={c.path === folder} onClick={() => onOpen(c.path)} separator />
-            ))}
-          </ol>
-        </nav>
-        <a
-          href={`${pagePath}?path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn("rounded-[9px] px-2 py-1 text-[13px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground", FOCUS)}
-        >
-          Open in files page ↗
-        </a>
+      <div className="sticky top-0 z-10 bg-card">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-5 py-3 sm:px-[26px]">
+          <button
+            type="button"
+            onClick={onBack}
+            className={cn("rounded-[9px] px-2 py-1 text-[13px] font-semibold text-primary hover:bg-secondary", FOCUS)}
+          >
+            ← Output files
+          </button>
+          <nav aria-label="Output folders" className="min-w-0 flex-1">
+            <ol className="flex flex-wrap items-center gap-1 font-mono text-[13px]">
+              <BrowserCrumb label="output" current={folder === root} onClick={() => onOpen(root)} />
+              {crumbs.map((c) => (
+                <BrowserCrumb key={c.path} label={c.name} current={c.path === folder} onClick={() => onOpen(c.path)} separator />
+              ))}
+            </ol>
+          </nav>
+          <a
+            href={`${pagePath}?path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn("rounded-[9px] px-2 py-1 text-[13px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground", FOCUS)}
+          >
+            Open in files page ↗
+          </a>
+        </div>
+        <SelectionBar
+          kind="snapshot"
+          id={snapshotId}
+          folder={folder}
+          files={view.status === "ready" ? view.listing.files : []}
+          selection={selection}
+          className="border-b border-border"
+        />
       </div>
       {view.status === "loading" && (
         <div role="status" aria-label="Loading folder" className="space-y-3 px-6 py-5">
@@ -1047,6 +1060,7 @@ function FolderBrowser({
               folders={view.listing.folders}
               files={view.listing.files}
               onOpenFolder={onOpen}
+              selection={selection}
             />
           )}
           {view.listing.nextCursor !== null && (

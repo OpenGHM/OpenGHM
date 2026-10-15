@@ -24,6 +24,7 @@ const OUTPUT: OutputFolder[] = [
   { run: "G", name: "cell_area", path: "wbm_output/G/cell_area/", files: 1, bytes: 1024 },
 ];
 
+const FOLDER = { path: "x", url: "https://s3.example/openghm/snapshots/abc/x/", files: 2, bytes: 2048, limit_bytes: 500 * 1024 ** 2, fits: true, complete: true };
 const fetchMock = vi.fn();
 let snapshot = 0;
 const id = () => `${String(snapshot).padStart(2, "0")}${"a".repeat(62)}`;
@@ -34,6 +35,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockImplementation(async (url: string) => {
     if (url.endsWith("/output")) return Response.json(INVENTORY);
+    if (url.includes("/files/folder?")) return Response.json(FOLDER);
     return new Response("netcdf!", { headers: { "content-length": "7" } });
   });
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
@@ -237,6 +239,38 @@ describe("browsing the output inside the dialog", () => {
     expect(screen.getByRole("link", { name: /Open in files page/ }).getAttribute("target")).toBe("_blank");
     fireEvent.click(screen.getByRole("button", { name: "← Output files" }));
     expect(screen.getByRole("list", { name: "Output by time step" })).toBeTruthy();
+    fetchTreeListing.mockReset();
+  });
+
+  it("ticks entries of the folder in the dialog and posts them as one ZIP, or says the selection is over the limit", async () => {
+    fetchTreeListing.mockResolvedValue({
+      ok: true,
+      data: {
+        id: "x",
+        path: "wbm_output/G/yearly/",
+        folders: [{ name: "runoff", path: "wbm_output/G/yearly/runoff/" }],
+        files: [
+          { name: "a.nc", path: "wbm_output/G/yearly/a.nc", size: 2048, lastModified: "2026-09-26T00:00:00Z", url: "https://s3.example/a.nc", previewable: false },
+        ],
+        nextCursor: null,
+      },
+    });
+    open("files");
+    fireEvent.click(screen.getByRole("button", { name: "Browse Yearly output" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select a.nc" }));
+    expect((await screen.findByRole("status", { name: "" })).textContent).toBe("1 selected · 2.0 KB");
+    const form = screen.getByRole("button", { name: "Download ZIP" }).closest("form") as HTMLFormElement;
+    expect(form.getAttribute("action")).toBe(`/api/repository/datasets/${id()}/files/archive`);
+    const data = new FormData(form);
+    expect([data.get("folder"), ...data.getAll("names")]).toEqual(["wbm_output/G/yearly/", "a.nc"]);
+
+    fetchMock.mockImplementation(async () => Response.json({ ...FOLDER, bytes: 4 * 1024 ** 3, fits: false }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select runoff/" }));
+    await screen.findByText("The selection is 4.0 GB, over the 500 MB limit for a ZIP. Select less, or use an S3 tool.");
+    expect((screen.getByRole("button", { name: "Download ZIP" }) as HTMLButtonElement).disabled).toBe(true);
+    // Opening the folder starts with nothing ticked.
+    fireEvent.click(screen.getByRole("button", { name: "runoff/" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull());
     fetchTreeListing.mockReset();
   });
 

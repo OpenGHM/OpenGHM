@@ -133,6 +133,7 @@ and 0012 were folded into 0010.
 | [0033](decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md) | WBM output is read on Anvil by the toolkit, and the gateway asks for subsets | accepted |
 | [0034](decisions/0034-community-content-lives-in-the-gateway-database.md) | Community-page content lives in the gateway's database, and its files in GridFS | accepted |
 | [0035](decisions/0035-cilogon-is-ordinary-sso.md) | CILogon is ordinary single sign-on: a matching email connects, a connected identity signs in | accepted |
+| [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted |
 
 ## Missions
 

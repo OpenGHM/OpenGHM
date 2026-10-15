@@ -3,6 +3,9 @@
 /** A snapshot id is a SHA-256 in hex. Anything else is not one, and the backend is not asked. */
 export const SNAPSHOT_ID = /^[0-9a-f]{64}$/;
 
+/** A model input's id has the same form. */
+export const MODEL_INPUT_ID = SNAPSHOT_ID;
+
 export function proxyRefusal(status: number, code: string, message: string): Response {
   return Response.json({ code, message }, { status, headers: { "Cache-Control": "no-store" } });
 }

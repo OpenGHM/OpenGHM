@@ -278,6 +278,24 @@ export interface TreeListing {
   nextCursor: string | null;
 }
 
+/**
+ * `GET .../files/folder` — what a folder holds at any depth and whether a ZIP
+ * of it is allowed (`FolderSummary` in the backend). `complete` is false when
+ * the listing was cut off: the counts are what it had reached and `fits` is false.
+ */
+export interface FolderSummary {
+  /** `""` for the tree's root, else ending with `/`. */
+  path: string;
+  /** The folder's public HTTPS URL, for its S3 command. */
+  url: string;
+  files: number;
+  bytes: number;
+  /** The most a ZIP may hold before compression. */
+  limit_bytes: number;
+  fits: boolean;
+  complete: boolean;
+}
+
 /** `GET .../files/preview` — a file's first bytes (`TreePreview` in the backend). */
 export interface TreePreview {
   path: string;

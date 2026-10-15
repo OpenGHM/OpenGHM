@@ -83,12 +83,21 @@ function setup(url = PATHNAME) {
   return render(<TreeBrowser kind="snapshot" id="snap-1" name="Test snapshot" />);
 }
 
+const fetchMock = vi.fn();
+
 beforeEach(() => {
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+  // The size of a folder, for its ZIP: small unless a test says otherwise.
+  vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockImplementation(async () =>
+    Response.json({ path: "x", url: `${BASE}x/`, files: 3, bytes: 3072, limit_bytes: 500 * 1024 ** 2, fits: true, complete: true })
+  );
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
+  fetchMock.mockReset();
   nav.uninstall();
   vi.mocked(fetchTreeListing).mockReset();
   vi.mocked(fetchTreePreview).mockReset();
@@ -106,7 +115,7 @@ describe("TreeBrowser listing", () => {
     await screen.findByText("metadata.json");
     expect(fetchTreeListing).toHaveBeenCalledWith("snapshot", "snap-1", "");
     const rows = screen.getAllByRole("row").slice(1);
-    expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual([
+    expect(rows.map((r) => within(r).getAllByRole("cell")[1].textContent)).toEqual([
       "wbm_init/",
       "wbm_output/",
       "metadata.json",
@@ -114,8 +123,9 @@ describe("TreeBrowser listing", () => {
       "grid.nc",
     ]);
     const cells = within(rows[2]).getAllByRole("cell");
-    expect(cells[1].textContent).toBe("2.0 KB");
-    expect(cells[2].textContent).toBe("30 Sep 2026");
+    // After the row's checkbox and its name.
+    expect(cells[2].textContent).toBe("2.0 KB");
+    expect(cells[3].textContent).toBe("30 Sep 2026");
   });
 
   it("gives each file a download link to its public URL and a copy-URL button", async () => {
@@ -347,5 +357,56 @@ describe("TreeBrowser preview", () => {
     expect(within(dialog).getByRole("link", { name: "Download" }).getAttribute("href")).toBe(
       `${BASE}wbm_init/later.init`
     );
+  });
+});
+
+describe("TreeBrowser selection", () => {
+  const box = (name: string) => screen.getByRole("checkbox", { name });
+
+  it("puts a checkbox in front of every row, and shows no bar until one is ticked", async () => {
+    serve({ "": [ROOT] });
+    setup();
+    await screen.findByText("metadata.json");
+    for (const name of ["Select wbm_init/", "Select wbm_output/", "Select metadata.json", "Select SHA256SUMS", "Select grid.nc", "Select all"]) {
+      expect(box(name)).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("totals what is ticked, files at their listed size and a folder by its summary, and posts them as one form", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ path: "wbm_init/", url: `${BASE}wbm_init/`, files: 3, bytes: 4096, limit_bytes: 500 * 1024 ** 2, fits: true, complete: true })
+    );
+    serve({ "": [ROOT] });
+    setup();
+    await screen.findByText("metadata.json");
+    fireEvent.click(box("Select metadata.json"));
+    fireEvent.click(box("Select wbm_init/"));
+    expect(fetchMock).toHaveBeenCalledWith("/api/repository/datasets/snap-1/files/folder?path=wbm_init/");
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("2 selected · 6.0 KB"));
+    const form = screen.getByRole("button", { name: "Download ZIP" }).closest("form") as HTMLFormElement;
+    expect(form.getAttribute("action")).toBe("/api/repository/datasets/snap-1/files/archive");
+    const data = new FormData(form);
+    expect([data.get("folder"), ...data.getAll("names")]).toEqual(["", "metadata.json", "wbm_init/"]);
+  });
+
+  it("says a selection over the limit is, at once, and clears when another folder is opened", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ path: "wbm_output/", url: `${BASE}wbm_output/`, files: 9, bytes: 7 * 1024 ** 3, limit_bytes: 500 * 1024 ** 2, fits: false, complete: true })
+    );
+    serve({
+      "": [ROOT],
+      "wbm_init/": [listing("wbm_init/", { files: [file("wbm_init/a.init")] })],
+    });
+    setup();
+    await screen.findByText("metadata.json");
+    fireEvent.click(box("Select wbm_output/"));
+    await screen.findByText("The selection is 7.0 GB, over the 500 MB limit for a ZIP. Select less, or use an S3 tool.");
+    expect((screen.getByRole("button", { name: "Download ZIP" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("link", { name: "wbm_init/" }));
+    await screen.findByText("a.init");
+    expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull();
+    expect(box("Select a.init").getAttribute("aria-checked")).toBe("false");
   });
 });

@@ -570,7 +570,9 @@ anonymously with plain `httpx`, and only in small pieces:
   whether its published output answers a draft
   ([simulation-reuse.md](simulation-reuse.md) §3);
 - one folder of a published tree, or the first 256 KiB of one file, for the
-  files page (`tree_browse.py`, below).
+  files page (`tree_browse.py`, below);
+- a folder's objects, one after another, to write it as a ZIP
+  (`tree_archive.py`, below);
 - for a snapshot's Download card, the container's size (one `HEAD`,
   `tree_browse.sizes`) and a summary of its `wbm_output/` (a listing with no
   delimiter, `tree_browse.output_folders`), both kept since a published
@@ -628,13 +630,59 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   `{ path, size, kind: "text" | "binary", text, truncated }`. The bytes are
   text when they hold no NUL and decode as UTF-8, a character cut at the end
   of the range aside. It is not kept.
+- **`GET …/files/folder?path=<folder>`** totals a folder at any depth, by a
+  listing with no delimiter (at most 20 pages): `{ path, files, bytes,
+  limit_bytes, fits, complete, url }`, `url` being the folder's public HTTPS URL.
+  `fits` is whether the folder is at most 500 MiB, the most one ZIP may hold. A listing cut off at the cap answers
+  `fits: false, complete: false` with the counts it reached. A complete answer
+  is kept in the process like a page.
+- **`POST …/files/archive`** streams entries of one folder as one ZIP
+  ([ADR 0036](../decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md)).
+  The body is a form (a `folder`, and a `names` field for each entry) or JSON
+  `{ folder, names }`: 1 to 1000 names, each a file name or a folder name
+  ending in `/`, directly inside `folder` (`422 invalid_path` for any other
+  shape, `422 invalid_selection` for a count or body out of range, `404
+  path_not_found` for a name the folder does not hold). It is a POST so that a
+  browser form can carry the names and the browser itself takes the response to
+  disk. A file is stored as its name, a folder as its name and what is under it
+  at any depth. It lists afresh, finding the names in `folder`'s listing and
+  each folder's objects in one listing of at most 20 pages shared by all of
+  them, and answers `413 selection_too_large` (with `bytes` and `limit_bytes`)
+  before sending anything when the total is over 500 MiB or could not be listed
+  whole. The file is `<id>-<name>.zip` for one entry, else `<id>-<folder's name,
+  or "files" at the root>.zip`. Entries are stored, not
+  deflated (NetCDF is compressed already), written by the standard library's
+  `zipfile` to a buffer with no `tell()`, which makes it put each entry's
+  checksum after its data. Each object is read anonymously over one client
+  (`tree_archive.py`): up to 8 are requested ahead of the one being written,
+  one buffered whole only if it is at most 16 MiB and the buffered total stays
+  within 64 MiB, a larger one streamed in 64 KiB pieces in its turn; the
+  output order is the selection's, and a failed read ends the response and
+  cancels the others. The exact length
+  follows from the listed sizes and names and is sent as `Content-Length`,
+  except above 65535 entries or near 2 GiB, where ZIP64 changes the records.
+  At most three archives are written at once per process; another is `429
+  archive_busy`, not queued. A read that fails once the response has begun
+  ends the connection without a clean finish (and is logged), so the browser
+  shows a failed download.
+
+The frontend passes both routes through
+(`app/api/repository/{datasets,model-inputs}/[id]/files/{folder,archive}`).
+Every row of the files page's table and of the output dialog's browser starts
+with a checkbox (the header's ticks the rows loaded so far), and a bar over the
+table totals what is ticked: files at their listed size, a ticked folder by its
+`…/files/folder` summary, asked once per folder while the view is open. Over
+500 MiB, or with a folder the summary could list only in part, the bar's
+**Download ZIP** is off and says so before anyone clicks. Otherwise it submits
+a hidden form to the archive route, aimed at a hidden frame in which a refusal
+the backend still gives is read and shown in the bar.
 
 An unknown id is `404`. A path that is absolute, has an empty, `.` or `..`
 segment, a backslash or a control character, or is over 900 characters is
 `422 invalid_path`. Nothing under a folder, or no such file, is
 `404 path_not_found`. A bucket that cannot be read is `503
-listing_unavailable` or `preview_unavailable`. A file's checksum, a folder's
-total size and a look inside a NetCDF file are not shown.
+listing_unavailable` or `preview_unavailable`. A file's checksum and a look
+inside a NetCDF file are not shown.
 
 The bucket is `S3_BUCKET`, set to `openghm` — the one bucket this project
 has, with every artifact under a prefix

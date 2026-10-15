@@ -11,6 +11,11 @@ input folder can hold thousands of day files, so paging is passed through to the
 caller as `cursor` rather than followed to the end. A published tree is
 immutable by id, so a non-empty page is kept by (prefix, cursor), bounded. A
 preview is one `GET` of the object's first 256 KiB and is not kept.
+
+A folder's total (`folder_summary`) is the other way a listing is followed: with
+no delimiter, page after page, up to a cap, so that the page can say before a
+click whether the folder is small enough to be downloaded as a ZIP
+(`tree_archive`, which reads the same objects).
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import quote
 
@@ -28,6 +34,7 @@ import httpx
 
 from app.core.config import settings
 from app.models.repository import (
+    FolderSummary,
     OutputFolder,
     TreeFile,
     TreeFolder,
@@ -45,6 +52,11 @@ _SIZE_TIMEOUT = 3.0
 _MAX_KEYS = "1000"
 #: `output_folders` reads at most this many listing pages (objects / 1000).
 _OUTPUT_MAX_PAGES = 20
+#: `scan_folder` reads at most this many listing pages (objects / 1000), so a
+#: folder of millions of objects is not listed to its end for a yes or no.
+_FOLDER_MAX_PAGES = 20
+#: What a folder's ZIP may hold before compression (ADR 0036).
+ARCHIVE_LIMIT_BYTES = 500 * 1024 * 1024
 PREVIEW_BYTES = 256 * 1024
 _CACHE_SIZE = 512
 _MAX_PATH = 900  # an S3 key is at most 1024 bytes; the prefix takes the rest
@@ -59,6 +71,10 @@ _CONTENT_RANGE_RE = re.compile(r"^bytes (?:\d+-\d+|\*)/(\d+)$")
 
 class InvalidPath(ValueError):
     """The path is not a relative folder or file path."""
+
+
+class InvalidSelection(InvalidPath):
+    """The names asked for are too few, too many, or not entries of a folder."""
 
 
 class PathNotFound(Exception):
@@ -79,6 +95,8 @@ _pages: OrderedDict[tuple[str, str | None], TreeListing] = OrderedDict()
 _sizes: OrderedDict[str, int] = OrderedDict()
 #: Snapshot id -> its output's folders. Only complete, successful listings.
 _outputs: OrderedDict[str, list[OutputFolder]] = OrderedDict()
+#: Folder prefix -> its summary. Only complete, successful listings.
+_folder_summaries: OrderedDict[str, FolderSummary] = OrderedDict()
 
 
 def reset() -> None:
@@ -86,6 +104,7 @@ def reset() -> None:
     _pages.clear()
     _sizes.clear()
     _outputs.clear()
+    _folder_summaries.clear()
 
 
 def artifact_prefix(kind: Kind, artifact_id: str) -> str:
@@ -113,6 +132,32 @@ def validate_path(path: str, *, file: bool = False) -> str:
     if any(segment in ("", ".", "..") for segment in segments):
         raise InvalidPath("The path must be relative, with no empty, '.' or '..' segment.")
     return path
+
+
+#: A ZIP is made of 1..`MAX_SELECTED` entries of one folder.
+MAX_SELECTED = 1000
+_MAX_NAME = 255
+
+
+def validate_names(names: list[str]) -> list[str]:
+    """The entries named, each a file name or a folder name ending in `/`,
+    without repeats and in the order given. Raises `InvalidSelection` for none,
+    for more than `MAX_SELECTED`, and for a name that is not one entry of the
+    folder: empty, `.`, `..`, holding a `/` other than a folder's last, a
+    backslash or a control character, or over 255 characters."""
+    if not 1 <= len(names) <= MAX_SELECTED:
+        raise InvalidSelection(f"Select between 1 and {MAX_SELECTED} entries.")
+    for name in names:
+        base = name.removesuffix("/")
+        if (
+            base in ("", ".", "..")
+            or "/" in base
+            or "\\" in base
+            or any(ord(c) < 32 or ord(c) == 127 for c in base)
+            or len(name) > _MAX_NAME
+        ):
+            raise InvalidSelection(f"'{name}' is not a file or folder name.")
+    return list(dict.fromkeys(names))
 
 
 def _is_previewable(name: str) -> bool:
@@ -315,6 +360,117 @@ async def output_folders(snapshot_id: str) -> list[OutputFolder]:
     if len(_outputs) > _CACHE_SIZE:
         _outputs.popitem(last=False)
     return folders
+
+
+@dataclass(frozen=True)
+class FolderObject:
+    """One object under a folder: its key, size, `LastModified` as the bucket
+    lists it, and public URL."""
+
+    key: str
+    size: int
+    modified: str
+    url: str
+
+
+def folder_page_cap() -> int:
+    """How many listing pages `scan_folder` reads at most, in all."""
+    return _FOLDER_MAX_PAGES
+
+
+async def scan_folder(
+    kind: Kind, artifact_id: str, path: str, max_pages: int | None = None
+) -> tuple[list[FolderObject], bool]:
+    """Every object under the folder at `path` (already validated by
+    `validate_path`, `""` the root), at any depth, by a listing with no
+    delimiter of at most `max_pages` pages (`folder_page_cap()` unless given),
+    and whether it reached the end. A zero-byte folder marker is not an object.
+    Raises `PathNotFound` for a folder with nothing in it and `ListingUnavailable`
+    when the bucket cannot be read."""
+    objects, complete, _ = await scan_folder_pages(kind, artifact_id, path, max_pages)
+    return objects, complete
+
+
+async def scan_folder_pages(
+    kind: Kind, artifact_id: str, path: str, max_pages: int | None = None
+) -> tuple[list[FolderObject], bool, int]:
+    """`scan_folder`, and how many listing pages it read."""
+    prefix = f"{artifact_prefix(kind, artifact_id)}{path}"
+    url = f"{settings.S3_PUBLIC_BASE_URL.rstrip('/')}/{settings.S3_BUCKET}"
+    objects: list[FolderObject] = []
+    cursor: str | None = None
+    complete = False
+    pages = 0
+    try:
+        for _ in range(_FOLDER_MAX_PAGES if max_pages is None else max_pages):
+            pages += 1
+            params = {"list-type": "2", "max-keys": _MAX_KEYS, "prefix": prefix}
+            if cursor:
+                params["continuation-token"] = cursor
+            response = await _get(url, params=params)
+            response.raise_for_status()
+            root = ET.fromstring(response.text)
+            for item in root.iterfind("{*}Contents"):
+                key = item.findtext("{*}Key") or ""
+                if not key.startswith(prefix) or key.endswith("/"):  # a folder marker
+                    continue
+                objects.append(
+                    FolderObject(
+                        key=key,
+                        size=int(item.findtext("{*}Size") or 0),
+                        modified=item.findtext("{*}LastModified") or "",
+                        url=_object_url(key),
+                    )
+                )
+            if root.findtext("{*}IsTruncated") != "true":
+                complete = True
+                break
+            cursor = root.findtext("{*}NextContinuationToken")
+            if not cursor:
+                raise ValueError("truncated listing without a continuation token")
+    except Exception as exc:  # network, HTTP status, XML: all mean "could not list"
+        logger.warning("Could not list %s: %s", prefix, exc)
+        raise ListingUnavailable(str(exc)) from exc
+    if not objects:
+        raise PathNotFound(path)
+    return objects, complete, pages
+
+
+def summarize(
+    kind: Kind, artifact_id: str, path: str, objects: list[FolderObject], complete: bool
+) -> FolderSummary:
+    total = sum(o.size for o in objects)
+    return FolderSummary(
+        path=path,
+        url=s3_url(
+            settings.S3_PUBLIC_BASE_URL,
+            settings.S3_BUCKET,
+            f"{artifact_prefix(kind, artifact_id)}{path}",
+        ),
+        files=len(objects),
+        bytes=total,
+        limit_bytes=ARCHIVE_LIMIT_BYTES,
+        fits=complete and total <= ARCHIVE_LIMIT_BYTES,
+        complete=complete,
+    )
+
+
+async def folder_summary(kind: Kind, artifact_id: str, path: str) -> FolderSummary:
+    """What the folder at `path` holds and whether a ZIP of it is allowed. A
+    listing cut off at the page cap answers `fits=false` with the counts it
+    reached: it is not read on to learn the exact total. A published tree is
+    immutable, so a complete summary is kept."""
+    prefix = f"{artifact_prefix(kind, artifact_id)}{path}"
+    if prefix in _folder_summaries:
+        _folder_summaries.move_to_end(prefix)
+        return _folder_summaries[prefix]
+    objects, complete = await scan_folder(kind, artifact_id, path)
+    summary = summarize(kind, artifact_id, path, objects, complete)
+    if complete:
+        _folder_summaries[prefix] = summary
+        if len(_folder_summaries) > _CACHE_SIZE:
+            _folder_summaries.popitem(last=False)
+    return summary
 
 
 def _decode(data: bytes, truncated: bool) -> str | None:

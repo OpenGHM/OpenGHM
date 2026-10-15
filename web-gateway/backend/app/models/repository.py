@@ -508,6 +508,27 @@ class TreeListing(BaseModel):
     nextCursor: str | None
 
 
+class FolderSummary(BaseModel):
+    """What a folder holds at any depth, and whether it is small enough to be
+    downloaded as one ZIP. When ``complete`` is false the listing was cut off
+    (too many objects to read), the counts are what it had reached, and
+    ``fits`` is false."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: the folder, ``""`` for the tree's root, else ending with ``/``.
+    path: str
+    #: the folder's public HTTPS URL, built like the tree URLs of ``SnapshotLinks``
+    #: (``.../snapshots/<id>/<path>``), for the S3 command of a folder too big to ZIP.
+    url: str
+    files: int
+    bytes: int
+    #: the most a ZIP may hold before compression.
+    limit_bytes: int
+    fits: bool
+    complete: bool
+
+
 class TreePreview(BaseModel):
     """A file's first bytes. ``size`` is the whole object's."""
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { File as FileIcon, FileText, Folder } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CopyUrlButton, DownloadLink } from "@/components/repository/tree-file-actions";
+import type { TreeSelection } from "@/components/repository/use-tree-selection";
 import { pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { treeHref } from "@/lib/repository/tree-browse";
 import type { TreeFile, TreeFolder } from "@/lib/repository/types";
@@ -19,6 +21,10 @@ const FOLDER_CLASS =
  * plain click only pushes the URL and the page follows it. Given
  * `onOpenFolder` (a browser inside a dialog, which keeps its folder in state),
  * a folder is a button that calls it and a file is not opened for preview.
+ *
+ * Given `selection`, each row starts with a checkbox, and the header's ticks or
+ * clears every row loaded so far (a dash when only some are ticked). An entry is
+ * known to the selection by its name, a folder's ending with `/`.
  */
 export function TreeBrowserTable({
   pathname,
@@ -26,6 +32,7 @@ export function TreeBrowserTable({
   folders,
   files,
   onOpenFolder,
+  selection,
 }: {
   pathname: string;
   /** The folder listed, as in `?path=`. */
@@ -33,12 +40,35 @@ export function TreeBrowserTable({
   folders: TreeFolder[];
   files: TreeFile[];
   onOpenFolder?: (path: string) => void;
+  selection?: Pick<TreeSelection, "names" | "toggle" | "setAll" | "clear">;
 }) {
+  const everyName = [...folders.map((f) => `${f.name}/`), ...files.map((f) => f.name)];
+  const ticked = selection ? everyName.filter((n) => selection.names.includes(n)).length : 0;
+  const nameCell = selection ? "pl-1" : "pl-6";
+  const tick = (name: string, label: string) =>
+    selection && (
+      <TableCell className="w-10 pl-6 pr-0">
+        <Checkbox
+          checked={selection.names.includes(name)}
+          onCheckedChange={() => selection.toggle(name)}
+          aria-label={`Select ${label}`}
+        />
+      </TableCell>
+    );
   return (
     <Table>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="pl-6">Name</TableHead>
+          {selection && (
+            <TableHead className="w-10 pl-6 pr-0">
+              <Checkbox
+                checked={ticked === 0 ? false : ticked === everyName.length ? true : "indeterminate"}
+                onCheckedChange={() => (ticked === everyName.length ? selection.clear() : selection.setAll(everyName))}
+                aria-label="Select all"
+              />
+            </TableHead>
+          )}
+          <TableHead className={nameCell}>Name</TableHead>
           <TableHead className="w-28 text-right">Size</TableHead>
           <TableHead className="w-32">Modified</TableHead>
           <TableHead className="w-24 pr-6 text-right">
@@ -50,8 +80,9 @@ export function TreeBrowserTable({
         {folders.map((f) => {
           const href = treeHref(pathname, f.path);
           return (
-            <TableRow key={`d:${f.path}`}>
-              <TableCell className="pl-6">
+            <TableRow key={`d:${f.path}`} data-state={selection?.names.includes(`${f.name}/`) ? "selected" : undefined}>
+              {tick(`${f.name}/`, `${f.name}/`)}
+              <TableCell className={nameCell}>
                 {onOpenFolder ? (
                   <button
                     type="button"
@@ -77,8 +108,9 @@ export function TreeBrowserTable({
         {files.map((f) => {
           const href = treeHref(pathname, folder, f.path);
           return (
-            <TableRow key={`f:${f.path}`}>
-              <TableCell className="pl-6">
+            <TableRow key={`f:${f.path}`} data-state={selection?.names.includes(f.name) ? "selected" : undefined}>
+              {tick(f.name, f.name)}
+              <TableCell className={nameCell}>
                 {f.previewable && !onOpenFolder ? (
                   <a
                     href={href}

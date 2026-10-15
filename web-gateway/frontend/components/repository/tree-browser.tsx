@@ -6,8 +6,10 @@ import { AlertCircle, ChevronRight, FolderOpen, Home, Loader2, RotateCw } from "
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SelectionBar } from "@/components/repository/selection-bar";
 import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
 import { TreePreviewSheet, type PreviewView } from "@/components/repository/tree-preview-sheet";
+import { useTreeSelection } from "@/components/repository/use-tree-selection";
 import { pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { fetchTreeListing, fetchTreePreview } from "@/lib/repository/actions";
 import {
@@ -67,6 +69,7 @@ export function TreeBrowser({
   const rootHref = treeHref(pathname, "");
 
   const listings = useFolderListing(kind, id, folder);
+  const selection = useTreeSelection(kind, id, folder);
   const { view } = listings;
   const loadedFiles = view.status === "ready" ? view.listing.files : [];
   const open = file ? loadedFiles.find((f) => f.path === file) : undefined;
@@ -85,7 +88,7 @@ export function TreeBrowser({
 
   return (
     <>
-      <Card className="gap-0 overflow-hidden border-0 py-0 shadow-raised">
+      <Card className="gap-0 overflow-clip border-0 py-0 shadow-raised">
         <div className="border-b border-border/70 px-5 py-3.5 sm:px-6">
           <nav aria-label={`Folders of ${name}`}>
             <ol className="flex flex-wrap items-center gap-1 font-mono text-[13px]">
@@ -124,12 +127,23 @@ export function TreeBrowser({
                   This folder is empty.
                 </p>
               ) : (
-                <TreeBrowserTable
-                  pathname={pathname}
-                  folder={folder}
-                  folders={view.listing.folders}
-                  files={view.listing.files}
-                />
+                <>
+                  <SelectionBar
+                    kind={kind}
+                    id={id}
+                    folder={folder}
+                    files={view.listing.files}
+                    selection={selection}
+                    className="sticky top-0 z-10 border-b border-border/70"
+                  />
+                  <TreeBrowserTable
+                    pathname={pathname}
+                    folder={folder}
+                    folders={view.listing.folders}
+                    files={view.listing.files}
+                    selection={selection}
+                  />
+                </>
               )}
               {view.listing.nextCursor !== null && (
                 <div className="flex flex-col items-center gap-2 border-t py-4">

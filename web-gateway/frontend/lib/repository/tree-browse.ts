@@ -9,6 +9,26 @@ export function treeRoute(kind: TreeKind, id: string): string {
   return `/api/v1/repository/${segment}/${encodeURIComponent(id)}`;
 }
 
+/** The gateway's own routes for a tree's folders, under `app/api/repository`; the browser never calls FastAPI. */
+function filesApi(kind: TreeKind, id: string): string {
+  const segment = kind === "snapshot" ? "datasets" : "model-inputs";
+  return `/api/repository/${segment}/${encodeURIComponent(id)}/files`;
+}
+
+/** `GET`: what a folder holds, at any depth, and whether it is small enough for a ZIP. */
+export function folderSummaryRoute(kind: TreeKind, id: string, folder: string): string {
+  return `${filesApi(kind, id)}/folder?path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`;
+}
+
+/**
+ * `POST` a form of `folder` and a `names` field for each entry (a folder's
+ * name ends with `/`): the entries as one ZIP. A form, so that the browser
+ * itself takes the stream to disk and the names are not squeezed into a URL.
+ */
+export function archiveRoute(kind: TreeKind, id: string): string {
+  return `${filesApi(kind, id)}/archive`;
+}
+
 /** A folder as the listing route names it: `""` for the root, else ending with `/`. */
 export function normalizeFolder(raw: string | null | undefined): string {
   if (!raw) return "";
