@@ -1,34 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
+import { cn } from "@/lib/utils";
 
 /**
  * Copies a file's public URL. Icon-only, for a table row; the label names the
  * file for a screen reader.
  */
 export function CopyUrlButton({ url, label }: { url: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      onClick={handleCopy}
-      aria-label={`Copy URL of ${label}`}
-      title={copied ? "Copied" : "Copy URL"}
-      className="text-muted-foreground hover:text-foreground"
-    >
-      {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
-    </Button>
+    <CopyButton
+      text={url}
+      label={`URL of ${label}`}
+      iconOnly
+      idleTitle="Copy URL"
+      iconClassName="size-4"
+      copiedIconClassName="text-success"
+      className={cn(
+        buttonVariants({ variant: "ghost", size: "icon-sm" }),
+        "text-muted-foreground hover:text-foreground"
+      )}
+    />
   );
 }
 

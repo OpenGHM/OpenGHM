@@ -2,9 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Copy } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { DetailSection } from "@/components/repository/detail-section";
 import { ComingSoonChip, TOOLKIT_NOT_RELEASED } from "@/components/ui/coming-soon-chip";
+import { CopyButton as SharedCopyButton } from "@/components/ui/copy-button";
 import { OutputDialog, stepFolders, type MetadataVariable, type OutputTab } from "@/components/repository/output-dialog";
 import type { OutputFolder } from "@/lib/repository/types";
 import { formatBytes } from "@/lib/workspace/format";
@@ -22,20 +23,11 @@ function CopyButton({
   idle?: string;
   tone: "dark" | "dark-quiet" | "light" | "light-quiet";
 }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      aria-label={`Copy ${label}`}
+    <SharedCopyButton
+      text={text}
+      label={label}
+      idle={idle}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-[9px] px-3 py-2 text-[12.5px] font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         tone === "dark" && "bg-hero-foreground text-hero hover:bg-accent",
@@ -43,10 +35,7 @@ function CopyButton({
         tone === "light" && "bg-primary text-primary-foreground hover:bg-primary-hover",
         tone === "light-quiet" && "text-muted-foreground hover:bg-muted hover:text-primary",
       )}
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? "Copied" : idle}
-    </button>
+    />
   );
 }
 
