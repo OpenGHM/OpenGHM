@@ -8,11 +8,12 @@ records ``mode: local`` + an exit code.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
-from openghm import Config
+from openghm import Config, continuation
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.sim import (
@@ -337,6 +338,7 @@ class _Faked:
         self.run_during_wbm = None
         self.forks_during_wbm = None
         self.pp_calls = []
+        self.wbm_calls = 0
 
     def sidecar(self) -> dict:
         return json.loads((self.work / "simulation.json").read_text())
@@ -350,7 +352,13 @@ class _Faked:
         return [requested_run_value(f.read_text()) for f in (self.init, self.dump) if f.exists()]
 
 
-def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, pp_code=0, pp_files=_PP_NINE, pp_log=_PP_DONE):
+def wbm_log(out_dir: Path, wbm_id: str, last_day: str) -> None:
+    """A WBM log whose last day line is ``last_day``'s (the file's year is not checked)."""
+    (out_dir / f"{wbm_id}.log").write_text(
+        f"Spinup 1/1 (2000-12-31) Balance=0\nFile wbm_{last_day[:4]}.nc ({last_day}) Balance=0\n")
+
+
+def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, wbm_last_day="2001-12-31", pp_code=0, pp_files=_PP_NINE, pp_log=_PP_DONE):
     from openghm import post_processing
     from openghm.cli import main as cli_main
     from openghm.post_processing import block_value, requested_run_value
@@ -368,6 +376,9 @@ def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, pp_code=0, pp_files=_P
         fake.dump.parent.mkdir(parents=True)
         fake.dump.write_text(staged)                       # WBM's dump of the init it read
         (fake.out / "PostProcessing.pl").write_text((_PP_FIXTURES / "PostProcessing.pl").read_text())
+        fake.wbm_calls += 1
+        if wbm_last_day:                                    # the fixtures' Run_End is 2001-12-31
+            wbm_log(fake.out, continuation.wbm_id_of(staged), wbm_last_day)
         return RunResult(dry_run=False, argv=built.argv, display=built.display, exit_code=wbm_code)
 
     def container(argv, log_path):
@@ -659,3 +670,176 @@ def test_cli_sim_submit_post_processing_is_refused_the_same_way(tmp_path):
 def test_cli_sim_post_processing_choice_is_checked_by_click(tmp_path):
     out = _invoke(tmp_path, _make_snapshot(tmp_path), "--post-processing", "daily", "--dry-run")
     assert out.exit_code == 2 and "daily" in out.output
+
+
+# ── rerunning on a work directory that holds a run (ADR 0037) ───────────────────
+
+_T0 = 1_700_000_000        # seconds; the mtimes below are explicit, never the clock's
+
+
+def _touch(path: Path, seconds: int) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+    os.utime(path, ns=(seconds * 10**9, seconds * 10**9))
+    return path
+
+
+def _left_by_a_cut_job(fake, *, state="resumable"):
+    """What SLURM leaves after killing a job in 2001: the state saved on 2000-12-31, 2000's output
+    written before it, 2001's output half-written after it. ``state`` may break the save."""
+    wbm_id = "wbm_SHORT_standard"
+    rs = fake.work / "WBM_run_state"
+    _touch(rs / f"{wbm_id}.dat", _T0)
+    _touch(rs / f"{wbm_id}.bucket-1.dat", _T0 + 1)
+    _touch(rs / f"{wbm_id}.yr_data.json", _T0 + 2)
+    if state == "inconsistent":
+        _touch(rs / f"{wbm_id}.bucket-1.dat", _T0 + 3)          # a save began again and was cut
+    kept = _touch(fake.out / "daily" / "wbm_2000.nc", _T0 - 100)
+    area = _touch(fake.out / "cell_area" / "area.nc", _T0 + 500)
+    cut = _touch(fake.out / "daily" / "wbm_2001.nc", _T0 + 500)
+    return kept, area, cut
+
+
+def test_sim_run_on_a_cut_jobs_directory_deletes_the_output_after_the_state_and_resumes(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    kept, area, cut = _left_by_a_cut_job(fake)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert fake.wbm_calls == 1
+    assert kept.exists() and area.exists() and not cut.exists()
+    assert "openghm: rerun: deleted 1 output file(s), written after the state saved at 2023-11-14T22:13:22Z" in out.output
+
+
+def test_sim_run_on_a_directory_with_output_but_no_state_deletes_all_of_it(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    kept, area, cut = _left_by_a_cut_job(fake)
+    for f in (fake.work / "WBM_run_state").iterdir():
+        f.unlink()
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert area.exists() and not kept.exists() and not cut.exists()
+    assert "deleted 2 output file(s), there is no saved state" in out.output
+
+
+def test_sim_run_on_a_fresh_directory_says_nothing_of_a_rerun(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 0, out.output
+    assert "rerun" not in out.output
+
+
+def test_sim_run_refuses_a_state_no_one_save_wrote_and_does_not_start_wbm(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    kept, area, cut = _left_by_a_cut_job(fake, state="inconsistent")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 64, out.output
+    assert "was not all written by one save" in out.output and "WBM_run_state" in out.output
+    assert "this simulation cannot be continued" in out.output
+    assert fake.wbm_calls == 0 and fake.pp_calls == []
+    assert cut.exists()                                         # nothing deleted either
+    assert fake.sidecar()["exit_code"] == 64
+
+
+def test_sim_run_fails_with_65_when_wbm_exits_0_short_of_the_run_end(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_last_day="2000-12-31")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 65, out.output
+    assert "openghm: WBM stopped on 2000-12-31, before the run's end 2001-12-31" in out.output
+    assert fake.pp_calls == []                                  # not post-processed
+    assert fake.sidecar()["exit_code"] == 65
+    assert fake.sidecar()["post_processing"]["ok"] is None
+    assert fake.run_values() == ["1", "1"]                      # the init is still put back
+
+
+def test_sim_run_fails_with_65_when_the_log_has_no_day_line(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_last_day=None)
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 65, out.output
+    assert "WBM's log has no day line" in out.output and fake.pp_calls == []
+
+
+def test_sim_run_65_does_not_hide_wbms_own_failure(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_code=3, wbm_last_day="2000-12-31")
+    out = _invoke(tmp_path, snap)
+    assert out.exit_code == 3, out.output
+    assert "before the run's end" not in out.output
+
+
+def test_sim_run_json_reports_the_exit_code_it_exits_with(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init", wbm_last_day="2000-12-31")
+    out = _invoke(tmp_path, snap, "--json")
+    assert out.exit_code == 65
+    assert json.loads(out.stdout)["exitCode"] == 65
+
+
+def test_sim_run_dry_run_touches_no_state(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    out = _invoke(tmp_path, snap, "--dry-run")
+    assert out.exit_code == 0, out.output
+    assert fake.wbm_calls == 0 and not fake.work.exists()
+
+
+def test_sim_run_with_an_init_without_an_id_checks_nothing(tmp_path, monkeypatch):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+    monkeypatch.setattr(cli_main, "run_command", lambda built, **kw: RunResult(
+        dry_run=False, argv=built.argv, display=built.display, exit_code=0))
+    out = _run_cli(tmp_path, "--spool", "fresh")            # the module's _INIT_TEMPLATE has no ID
+    assert out.exit_code == 0, out.output
+
+
+# ── sim state ─────────────────────────────────────────────────────────────────
+
+
+def _state(work, *args):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    return CliRunner().invoke(cli, ["sim", "state", str(work), *args])
+
+
+def test_sim_state_json_for_none_resumable_and_inconsistent(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    assert _invoke(tmp_path, snap).exit_code == 0                      # stages the work directory
+    for f in (fake.work / "WBM_run_state").glob("*"):
+        f.unlink()
+    got = json.loads(_state(fake.work, "--json").stdout)
+    assert got == {"state": "none", "saved_at": None, "wbm_id": "wbm_SHORT_standard"}
+
+    _left_by_a_cut_job(fake)
+    got = json.loads(_state(fake.work, "--json").stdout)
+    assert got == {"state": "resumable", "saved_at": "2023-11-14T22:13:22Z", "wbm_id": "wbm_SHORT_standard"}
+
+    _touch(fake.work / "WBM_run_state" / "wbm_SHORT_standard.bucket-1.dat", _T0 + 3)
+    got = json.loads(_state(fake.work, "--json").stdout)
+    assert got == {"state": "inconsistent", "saved_at": None, "wbm_id": "wbm_SHORT_standard"}
+
+
+def test_sim_state_prints_a_line_without_json(tmp_path, monkeypatch):
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    assert _invoke(tmp_path, snap).exit_code == 0
+    _left_by_a_cut_job(fake)
+    out = _state(fake.work)
+    assert out.exit_code == 0 and out.output.strip() == "resumable: saved at 2023-11-14T22:13:22Z (WBM run wbm_SHORT_standard)"
+
+
+def test_sim_state_exits_2_when_the_directory_the_sidecar_or_the_init_cannot_be_read(tmp_path, monkeypatch):
+    out = _state(tmp_path / "nowhere", "--json")
+    assert out.exit_code == 2 and "not a directory" in out.output
+    out = _state(tmp_path, "--json")                                     # no simulation.json
+    assert out.exit_code == 2 and "simulation.json" in out.output
+    fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
+    assert _invoke(tmp_path, snap).exit_code == 0
+    fake.init.unlink()
+    out = _state(fake.work, "--json")
+    assert out.exit_code == 2 and "wbm_test.init" in out.output
+    assert "Traceback" not in out.output
+
+
+def test_sim_state_of_an_init_without_an_id_is_none_with_a_null_id(tmp_path, monkeypatch):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+    monkeypatch.setattr(cli_main, "run_command", lambda built, **kw: RunResult(
+        dry_run=False, argv=built.argv, display=built.display, exit_code=0))
+    assert _run_cli(tmp_path, "--spool", "fresh").exit_code == 0
+    got = json.loads(_state(tmp_path / "out" / "sim1", "--json").stdout)
+    assert got == {"state": "none", "saved_at": None, "wbm_id": None}

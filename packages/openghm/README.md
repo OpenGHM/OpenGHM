@@ -167,6 +167,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm output inventory <work dir>\|--snapshot <id>` | h5py (extra `output`) | describe a run's WBM output: the files and years that exist, each variable with its units and display settings, the grid; see [Reading output](#reading-output-openghm-output) |
 | `openghm output subset <work dir>\|--snapshot <id> --var V --resolution R --format nc\|png\|json` | h5py (extra `output`) | cut one variable by period and area: a NetCDF file, a north-up map, or a pixel's series; refuses a call over its limits |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
+| `openghm sim state <work dir> [--json]` | — | whether a work directory holds a resumable WBM state (`none`, `resumable` with `saved_at`, `inconsistent`) |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
 | `openghm sim logs <id> [-f]` | slurm `.out`/`.err` | print or `--follow` (tail) the SLURM log |
 | `openghm sim cancel <id>` | `scancel` | cancel the run's SLURM job (`-y` to skip confirm) |
@@ -573,8 +574,8 @@ toolkit does neither.
 state saved at the end of their run, so running in a snapshot folder that has it
 ends in seconds: the v2 tutorial with its published state stopped after 5 s with
 "Destination dataset is up to date! Nothing to do..." and wrote no `.nc`
-(job 21043201). `sim run` and `sim submit` always give a run an empty
-`WBM_run_state`, so it computes. The same directory also holds the state at the
+(job 21043201). A simulation id that has not run before has an empty
+`WBM_run_state`, so it computes; rerunning an id continues its run (next). The same directory also holds the state at the
 end of the spinup (`<run id>.spinup.dat`), which could skip a spinup that has not
 changed; the toolkit does not use it.
 
@@ -597,6 +598,45 @@ They differ only in **where** the model runs:
 - **`sim submit`** generates an `sbatch` script and submits it. Run `submit` and the
   management commands (`status`/`logs`/`cancel`, which call `sacct`/`scancel`) on a
   SLURM login node. `list` just reads the local sidecars.
+
+**Rerunning a simulation.** `sim run --id X` on the work directory of an id that has run
+(a job SLURM stopped at its time limit, rerun with the identical command) continues the run:
+WBM reads `WBM_run_state/<run id>.dat`, saved at each 31 December and at the end of the run, and
+resumes the day after. `<run id>` is the init's `ID`, not the simulation id. The end-of-spinup
+state (`<run id>.spinup.*`) is not read by a resume and does not count below. Around WBM, `sim run`:
+
+- **reads the state** from the files' times. WBM saves `<run id>.dat` first and
+  `<run id>.yr_data.json` last, so the state is `resumable` when both exist and no `.dat` file of
+  the run is newer than the `.json`; `inconsistent` when `<run id>.dat` exists and that does not
+  hold (a job was stopped while WBM was saving); `none` without `<run id>.dat`.
+  `saved_at` is the `.json`'s time.
+- **refuses an inconsistent state** before WBM starts: it says so on stderr and exits 64, and
+  nothing is deleted or run.
+- **deletes the output WBM will write again**, when `wbm_output/<id>/` exists: every `*.nc` under
+  it newer than `<run id>.dat` (WBM writes a year's files before that year's state save, so these
+  are the year a cut interrupted, possibly half-written), or every `*.nc` when there is no state.
+  `cell_area/` is kept. One line on stderr says how many files.
+- **checks that WBM reached the end** after it exits 0: the last per-day line of
+  `wbm_output/<id>/<run id>.log` (which WBM appends to across reruns) must be a `File ...
+  (<date>)` line dated the init's `Run_End`, after `--run-end`. Otherwise it says `WBM stopped on
+  <date>, before the run's end <Run_End>` (or that the log has no day line), does not
+  post-process, and exits 65. This also catches WBM's "Nothing to do" exit 0.
+
+`sim submit` does none of this; the job it writes runs WBM itself.
+
+`openghm sim state WORK_DIR [--json]` reports the state of a work directory without changing
+anything. WORK_DIR is `<output_base>/<id>`; `simulation.json` names the init and its `ID`. With
+`--json` it prints one object, `{"state": "none"|"resumable"|"inconsistent", "saved_at":
+"<ISO-8601 UTC>"|null, "wbm_id": "<run id>"|null}` (`saved_at` only when resumable; `wbm_id` is
+`null` for an init with no `ID`, whose state is `none`); without it, one line. It exits 0
+whenever it could look, and 2 when the work directory, its `simulation.json` or its init cannot
+be read.
+
+`sim run` exit codes: `0` finished (and post-processed, when asked); WBM's own code when it is
+not 0 (a signal is negative; the message names it); `1` post-processing failed; `2` refused before
+anything was staged (bad options, missing image or input); `64` the run state is inconsistent;
+`65` WBM exited 0 before the run's last day. `simulation.json` records WBM's code in `exit_code`,
+or 64 or 65 for those two; a refusal with `2` happens before the file is written.
 
 **Post-processing.** An init whose `PostProcessing` block has `Run => 1` asks WBM for
 climatology, multi-year means and spatial aggregates (`PostProcessing.pl`). WBM starts that
@@ -672,6 +712,7 @@ openghm sim status run-001                  # sacct → State / ExitCode / Elaps
 openghm sim logs run-001 --follow           # tail slurm-<job>.out
 openghm sim cancel run-001                  # scancel (prompts unless -y)
 openghm sim post-process <output_base>/run-001 --wbm-exit-code 0   # what the job script runs after WBM, when the init asks for post-processing
+openghm sim state <output_base>/run-001 --json   # none | resumable (saved_at) | inconsistent: can a rerun continue?
 ```
 
 ## Develop / test

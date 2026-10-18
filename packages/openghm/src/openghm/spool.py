@@ -1229,9 +1229,10 @@ def harvest(plan: SpoolPlan, *, log: Optional[Callable[[str], None]] = None) -> 
 
 def run_cached(
     built: BuiltCommand, *, capture: bool = False, evaluator: Optional[Evaluator] = None,
-    log: Optional[Callable[[str], None]] = None,
+    log: Optional[Callable[[str], None]] = None, stage: bool = True,
 ) -> RunResult:
     """Stage, :func:`prepare`, run ``built.argv``, and on exit 0 :func:`harvest`.
+    ``stage=False`` runs a command the caller has already staged.
 
     A harvest that fails does not turn a finished run into a failed one: it is reported to
     ``log`` and recorded as ``spool.harvest_error``; if even that record cannot be written, that
@@ -1240,7 +1241,8 @@ def run_cached(
     plan = built.spool
     if plan is None:
         raise OpenghmError("this command was not built with --spool cache")
-    stage_files(built)
+    if stage:
+        stage_files(built)
     prepare(plan, evaluator=evaluator, log=log)
     result = run_command(built, capture=capture, stage=False)
     if result.exit_code == 0:

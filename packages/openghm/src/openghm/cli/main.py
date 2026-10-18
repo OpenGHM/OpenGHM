@@ -16,12 +16,12 @@ from typing import Callable, List, Optional
 
 import click
 
-from .. import post_processing
+from .. import continuation, post_processing
 from ..config import load_config
 from ..errors import OpenghmError
 from ..mounts import DataMountSpec
 from ..network import build_network
-from ..run import run_command
+from ..run import run_command, stage_files
 from ..runtime import RuntimeContext
 from ..sim import (
     SIDECAR_NAME, SubmitOptions, build_submit, build_run, post_processing_requested, record_exit_code, sidecar_path,
@@ -400,31 +400,70 @@ def sim_run_cmd(**p) -> None:
         post_processing=p["post_processing"], user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    layout = None
     try:
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
                               check_assets=not p["dry_run"])
+        if not p["dry_run"]:
+            stage_files(built)
+            layout = continuation.layout_for_run(built)
+            _prepare_rerun(layout)
         if built.spool and not p["dry_run"]:
             # fill + link before WBM, harvest after it exits 0
-            result = run_cached(built, capture=p["as_json"], log=lambda m: click.echo(m, err=True))
+            result = run_cached(built, capture=p["as_json"], log=lambda m: click.echo(m, err=True), stage=False)
         else:
-            result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"])
+            result = run_command(built, dry_run=p["dry_run"], capture=p["as_json"], stage=False)
+    except continuation.RunStateInconsistent:
+        click.echo(
+            f"openghm: the run state in {layout.run_state_dir} was not all written by one save "
+            "(a job was stopped while WBM was saving it); this simulation cannot be continued", err=True)
+        _record_exit_code(built, continuation.EXIT_STATE_INCONSISTENT)
+        raise SystemExit(continuation.EXIT_STATE_INCONSISTENT)
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
         raise SystemExit(2)
     post = None
+    exit_code = result.exit_code or 0
     if not result.dry_run:
-        # The run is over: a bookkeeping failure must not make it look refused.
-        try:
-            record_exit_code(built, result.exit_code or 0)
-        except Exception as e:  # noqa: BLE001
-            click.echo(f"openghm: warning: could not record the exit code in simulation.json: {e}", err=True)
-        post = _post_process(built, result.exit_code or 0)
+        if exit_code == 0 and layout is not None:
+            # WBM exits 0 on a resume with nothing to do, and on a run it ended early
+            short = continuation.stopped_short(layout)
+            if short:
+                click.echo(f"openghm: {short}", err=True)
+                exit_code = result.exit_code = continuation.EXIT_STOPPED_SHORT
+        _record_exit_code(built, exit_code)
+        post = _post_process(built, exit_code)
     present("sim run", ctx, built, result, as_json=p["as_json"])
-    if not result.dry_run and result.exit_code:
-        raise SystemExit(result.exit_code)
+    if not result.dry_run and exit_code:
+        raise SystemExit(exit_code)
     if post is not None and post.get("ok") is False:
         raise SystemExit(1)
+
+
+def _prepare_rerun(layout: Optional["continuation.RunLayout"]) -> None:
+    """Before WBM in `sim run`, on a work directory that may already hold a run: refuse a state no
+    one save wrote, and delete the output WBM will write again. Raises
+    :class:`continuation.RunStateInconsistent`; says what it did on stderr."""
+    if layout is None:
+        return
+    state = continuation.state_status(layout.run_state_dir, layout.wbm_id)
+    if state.status == continuation.INCONSISTENT:
+        raise continuation.RunStateInconsistent(layout.run_state_dir)
+    if not os.path.isdir(layout.output_dir):
+        return
+    deleted = continuation.prepare_rerun(layout.output_dir, state)
+    since = f"written after the state saved at {state.saved_at}" if state.saved_at else "there is no saved state"
+    click.echo(f"openghm: rerun: deleted {len(deleted)} output file(s), {since}", err=True)
+
+
+def _record_exit_code(built: BuiltCommand, exit_code: int) -> None:
+    """Put the run's exit code in simulation.json. The run is over, so a bookkeeping failure must
+    not make it look refused: it is only a warning."""
+    try:
+        record_exit_code(built, exit_code)
+    except Exception as e:  # noqa: BLE001
+        click.echo(f"openghm: warning: could not record the exit code in simulation.json: {e}", err=True)
 
 
 def _say_post_processing(record: dict) -> None:
@@ -482,6 +521,34 @@ def sim_post_process_cmd(sim_dir: str, wbm_exit_code: int) -> None:
         raise SystemExit(wbm_exit_code)
     if record is not None and record.get("ok") is False:
         raise SystemExit(1)
+
+
+@sim_group.command("state")
+@click.argument("work_dir", metavar="WORK_DIR")
+@click.option("--json", "as_json", is_flag=True, help="machine-readable JSON output")
+def sim_state_cmd(work_dir: str, as_json: bool) -> None:
+    """whether a simulation's work directory holds a resumable WBM run state, and when it was saved
+
+    WORK_DIR is the simulation's work directory (<output_base>/<id>); its simulation.json names
+    the init, whose ID names the state files in WORK_DIR/WBM_run_state. The state is `none` (no
+    saved state), `resumable` (complete: a rerun of `sim run` continues from it) or `inconsistent`
+    (a job was stopped while WBM was saving it). With --json, one object: state, saved_at (ISO-8601
+    UTC, only when resumable, else null) and wbm_id (null when the init has none). Exits 0 whenever
+    it could look and 2 when the work directory, its simulation.json or its init cannot be read.
+    """
+    try:
+        layout = continuation.layout_from_work_dir(work_dir)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    state = (continuation.state_status(layout.run_state_dir, layout.wbm_id) if layout.wbm_id
+             else continuation.RunState(continuation.NONE))
+    if as_json:
+        click.echo(json.dumps({"state": state.status, "saved_at": state.saved_at, "wbm_id": layout.wbm_id or None}))
+    elif state.status == continuation.RESUMABLE:
+        click.echo(f"resumable: saved at {state.saved_at} (WBM run {layout.wbm_id})")
+    else:
+        click.echo(state.status)
 
 
 @sim_group.command("list")
