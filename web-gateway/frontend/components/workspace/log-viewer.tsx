@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { ChevronDown, Download, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CopyButton } from "@/components/workspace/copy-button";
@@ -15,8 +18,9 @@ import { LogBlock, LogSkeleton } from "@/components/workspace/log-block";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import type { LogStream } from "@/lib/jobs/types";
-import { filenameFromDisposition, messageFromErrorBody } from "@/lib/workspace/log-download";
-import { buildLogBox, LOG_SOURCES } from "@/lib/workspace/log-box";
+import { currentJobNumber, jobCount } from "@/lib/workspace/job-runs";
+import { filenameFromDisposition, logDownloadUrl, messageFromErrorBody } from "@/lib/workspace/log-download";
+import { buildLogBox, LOG_SOURCES, sourceTitle } from "@/lib/workspace/log-box";
 import { rowsToText } from "@/lib/workspace/log-sections";
 import { previewStreamState } from "@/lib/workspace/log-stream";
 import { useJobLogs } from "@/lib/workspace/use-job-logs";
@@ -27,12 +31,32 @@ import { useJobLogs } from "@/lib/workspace/use-job-logs";
  * (`buildLogBox`). It reads them as they grow, follows the end, and downloads
  * a whole file through the route handler. `previewLogs` is fixture text for
  * the dev preview, shown without reading anything.
+ *
+ * A simulation run by several jobs (ADR 0037) has a job output and messages
+ * for each job, and a picker chooses whose are shown and downloaded: the
+ * current job's until a person picks another. WBM's log is one file across
+ * jobs, so the picker does not touch it.
  */
 export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStream, string>> }) {
   const { jobId, status, view, sessionExpired: liveExpired } = useLiveJobContext();
   const preview = previewLogs !== undefined;
 
-  const logs = useJobLogs({ jobId, status, disabled: preview });
+  const [picked, setPicked] = useState<number | null>(null);
+  const total = jobCount(view);
+  const current = currentJobNumber(view);
+  // The job whose output and messages are shown; undefined (the backend's
+  // current job) for a simulation that has had only one.
+  const job = total > 1 ? Math.min(picked ?? current, total) : undefined;
+  const earlierJobs = view.previous_jobs.length > 0;
+
+  const logs = useJobLogs({
+    jobId,
+    status,
+    disabled: preview,
+    job,
+    jobEnded: job !== undefined && job < current,
+    earlierJobs,
+  });
   const previewStates = useMemo(
     () => ({
       wbm: previewStreamState(previewLogs?.wbm),
@@ -43,8 +67,8 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
   );
   const states = preview ? previewStates : logs.states;
   const box = useMemo(
-    () => buildLogBox({ states, status, files: view.files, failure: view.failure }),
-    [states, status, view.files, view.failure]
+    () => buildLogBox({ states, status, files: view.files, failure: view.failure, job, earlierJobs }),
+    [states, status, view.files, view.failure, job, earlierJobs]
   );
   const text = box.kind === "rows" ? rowsToText(box.rows) : "";
 
@@ -60,7 +84,7 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
     }
     setDownloading(true);
     try {
-      const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/logs/${stream}`, {
+      const res = await fetch(logDownloadUrl(jobId, stream, job), {
         cache: "no-store",
       });
       if (res.ok) {
@@ -99,7 +123,43 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
         <h2 id="logs-heading" className="text-xl font-[650] tracking-[-0.02em] text-foreground">
           Logs
         </h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          {job !== undefined && (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Choose the job whose output and messages are shown"
+                  className="min-h-10 shrink-0 gap-1.5 rounded-[9px] border-0 bg-muted px-3 text-[12.5px] font-semibold text-foreground shadow-none hover:bg-secondary hover:text-primary sm:min-h-8"
+                >
+                  Job {job}
+                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  Job output and messages of
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={String(job)}
+                  // The current job is followed, so the page moves on to the next one by itself.
+                  onValueChange={(value) => setPicked(Number(value) === current ? null : Number(value))}
+                >
+                  {Array.from({ length: total }, (_, i) => i + 1).map((n) => {
+                    const note = n === current ? "current" : (view.previous_jobs.find((p) => p.number === n)?.slurm_state ?? null);
+                    return (
+                      <DropdownMenuRadioItem key={n} value={String(n)} className="min-h-10 sm:min-h-8">
+                        Job {n}
+                        {note && <span className="ml-2 font-mono text-xs text-muted-foreground">{note}</span>}
+                      </DropdownMenuRadioItem>
+                    );
+                  })}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <CopyButton text={text} label="logs text" disabled={text === ""} />
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
@@ -120,14 +180,14 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {LOG_SOURCES.map(({ stream, label }) => (
+              {LOG_SOURCES.map(({ stream }) => (
                 <DropdownMenuItem
                   key={stream}
                   disabled={!preview && !states[stream].exists}
                   onSelect={() => void download(stream)}
                   className="min-h-10 sm:min-h-8"
                 >
-                  {label}
+                  {sourceTitle(stream, job)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

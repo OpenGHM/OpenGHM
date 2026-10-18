@@ -8,8 +8,8 @@ vi.mock("@/lib/api-client", () => ({
 
 import { GET } from "./route";
 
-const call = (stream: string, id = "job 1") =>
-  GET(new Request("http://app.test/x"), { params: Promise.resolve({ id, stream }) });
+const call = (stream: string, id = "job 1", query = "") =>
+  GET(new Request(`http://app.test/x${query}`), { params: Promise.resolve({ id, stream }) });
 
 beforeEach(() => {
   getBackendAuth.mockReset();
@@ -58,6 +58,42 @@ describe("the log download route", () => {
     expect(res.headers.get("content-length")).toBe("7");
     expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(await res.text()).toBe("the log");
+  });
+
+  describe("the job of a simulation run by several (ADR 0037)", () => {
+    const answer = () => vi.fn().mockImplementation(async () => new Response("the log", { status: 200 }));
+
+    it("asks the backend for that job's stdout or stderr", async () => {
+      const fetchMock = answer();
+      vi.stubGlobal("fetch", fetchMock);
+      await call("stderr", "job 1", "?job=2");
+      expect(fetchMock.mock.calls[0][0]).toBe("http://backend.test/api/v1/jobs/job%201/logs/stderr/download?job=2");
+      await call("stdout", "job 1", "?job=12");
+      expect(fetchMock.mock.calls[1][0]).toBe("http://backend.test/api/v1/jobs/job%201/logs/stdout/download?job=12");
+    });
+
+    it("asks for the current job, as before, without one", async () => {
+      const fetchMock = answer();
+      vi.stubGlobal("fetch", fetchMock);
+      await call("stdout");
+      expect(fetchMock.mock.calls[0][0]).toBe("http://backend.test/api/v1/jobs/job%201/logs/stdout/download");
+    });
+
+    it("leaves the job out for WBM's log, which is one file across jobs", async () => {
+      const fetchMock = answer();
+      vi.stubGlobal("fetch", fetchMock);
+      await call("wbm", "job 1", "?job=2");
+      expect(fetchMock.mock.calls[0][0]).toBe("http://backend.test/api/v1/jobs/job%201/logs/wbm/download");
+    });
+
+    it.each(["0", "-1", "1.5", "two", "", "1&x=2", "9999999"])("refuses %j without calling the backend", async (job) => {
+      const fetchMock = answer();
+      vi.stubGlobal("fetch", fetchMock);
+      const res = await call("stdout", "job 1", `?job=${encodeURIComponent(job)}`);
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("invalid_job");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   it("passes the backend's refusal through with its status and JSON", async () => {

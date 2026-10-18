@@ -149,7 +149,7 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
         `Cores are for memory. On Anvil's shared partition a core brings ${ANVIL_SHARED_MB_PER_CORE} MB, and memory comes only with cores, so the snapshot recommends the number that gives its simulation enough. With fewer, the simulation may be stopped for running out of memory. You get a warning, and can still submit.`,
         `Left empty, the walltime is the snapshot's recommended time plus 50%, and never more than ${MAX_WALLTIME_HOURS} hours, the longest one job may run. A walltime you set is used as written, up to ${MAX_WALLTIME}.`,
         "If a simulation needs longer than its walltime, it may be stopped when time runs out.",
-        `A snapshot whose reference simulation took more than ${MAX_WALLTIME_HOURS} hours cannot use the automatic walltime: shorten the run period or set a walltime yourself.`
+        `A simulation that SLURM stops at its walltime after WBM saved its state is continued: the gateway submits it again and WBM carries on from the last saved state. A snapshot whose reference simulation took more than ${MAX_WALLTIME_HOURS} hours therefore runs as several jobs, and this page says how many it may take.`
       ),
     ],
   },

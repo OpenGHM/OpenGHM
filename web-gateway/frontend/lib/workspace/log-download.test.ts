@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filenameFromDisposition, messageFromErrorBody } from "@/lib/workspace/log-download";
+import { filenameFromDisposition, logDownloadUrl, messageFromErrorBody } from "@/lib/workspace/log-download";
 
 describe("filenameFromDisposition", () => {
   it("reads the quoted name the backend sends", () => {
@@ -28,5 +28,21 @@ describe("messageFromErrorBody", () => {
     expect(messageFromErrorBody(null, "f")).toBe("f");
     expect(messageFromErrorBody({}, "f")).toBe("f");
     expect(messageFromErrorBody("text", "f")).toBe("f");
+  });
+});
+
+describe("logDownloadUrl", () => {
+  it("is the route of the log, for the current job when none is named", () => {
+    expect(logDownloadUrl("j1", "stdout")).toBe("/api/jobs/j1/logs/stdout");
+    expect(logDownloadUrl("a b", "stderr")).toBe("/api/jobs/a%20b/logs/stderr");
+  });
+
+  it("carries the job of stdout and stderr (ADR 0037)", () => {
+    expect(logDownloadUrl("j1", "stdout", 1)).toBe("/api/jobs/j1/logs/stdout?job=1");
+    expect(logDownloadUrl("j1", "stderr", 3)).toBe("/api/jobs/j1/logs/stderr?job=3");
+  });
+
+  it("never carries one for WBM's log, which is one file across jobs", () => {
+    expect(logDownloadUrl("j1", "wbm", 2)).toBe("/api/jobs/j1/logs/wbm");
   });
 });

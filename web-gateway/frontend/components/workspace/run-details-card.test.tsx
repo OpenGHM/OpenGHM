@@ -27,6 +27,10 @@ function details(job: Job, recommended: { cores: number; walltime: string } | nu
         work_dir: job.work_dir,
         files: job.files,
         cancel_requested_at: job.cancel_requested_at,
+        previous_jobs: job.previous_jobs,
+        job_number: job.job_number,
+        max_jobs: job.max_jobs,
+        continuation: job.continuation,
         live,
       }}
       preview
@@ -198,6 +202,13 @@ describe("the run details card: what the page says once", () => {
     expect(value("Started")).toMatch(/\(waited 1 h\)$/);
     expect(value("Ended")).toMatch(/\(ran 1 h\)$/);
     expect(screen.queryByText("Cancel requested", { selector: "dt" })).toBeNull();
+  });
+
+  it("counts a continued job's wait from the end of the job before it, not from the first submit", () => {
+    // Submitted 3 h ago; the first job ended 2 h 5 min ago and the second started 2 h ago.
+    details(previewDraftJob("completed:continued"), null);
+    expect(value("Started")).toMatch(/\(waited 5 min\)$/);
+    expect(value("Ended")).toMatch(/\(ran 1 h\)$/);
   });
 
   it("has no Ended row while the run is going, and says how long a queued one has waited", () => {

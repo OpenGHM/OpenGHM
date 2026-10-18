@@ -230,6 +230,22 @@ describe("DraftReviewStep: the summary", () => {
     expect(row("Walltime").textContent).toContain("4 d · the limit for one job");
   });
 
+  it("says a run that does not fit in one job may take several, under Walltime, and only then", () => {
+    const local = { ...LOCAL, slurm: { cores: null, walltime: null } };
+    review({ local, recommended: { cores: 16, walltime: "111:30:00" } });
+    expect(
+      within(row("Walltime")).getByText("May run as up to 2 jobs of 96 h each; each continues where the last one stopped.")
+    ).toBeTruthy();
+
+    cleanup();
+    review({ local, recommended: { cores: 16, walltime: "15:00" } });
+    expect(screen.queryByText(/May run as up to/)).toBeNull();
+    // A walltime of the draft's own is its own.
+    cleanup();
+    review({ local: { ...LOCAL, slurm: { cores: null, walltime: "96:00:00" } }, recommended: { cores: 16, walltime: "111:30:00" } });
+    expect(screen.queryByText(/May run as up to/)).toBeNull();
+  });
+
   it("adds the post-processing time to the automatic walltime of a climatology choice, and says so", () => {
     const recommended = { cores: 16, walltime: "15:00", postProcessingWalltime: "1:00:00" };
     const local = (post_processing: "standard" | "climatology") => ({

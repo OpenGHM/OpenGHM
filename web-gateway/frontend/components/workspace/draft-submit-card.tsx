@@ -17,6 +17,7 @@ import { DraftSection, STEP_CARD } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
 import {
+  automaticJobCount,
   describeCoresBelowRecommended,
   effectiveCompute,
   runsClimatology,
@@ -223,6 +224,13 @@ export function DraftSubmitCard({
         runsClimatology(saved.parameters.post_processing, snapshotOutput)
       )
     : null;
+  const jobCount = saved
+    ? automaticJobCount(
+        saved.slurm_config,
+        recommended,
+        runsClimatology(saved.parameters.post_processing, snapshotOutput)
+      )
+    : null;
 
   const done = stage === "done";
 
@@ -379,6 +387,7 @@ export function DraftSubmitCard({
               walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
               walltimeCapped={compute.walltimeCapped}
               walltimeIncludesPostProcessing={compute.includesPostProcessing}
+              jobs={jobCount?.jobs ?? null}
               coresWarning={describeCoresBelowRecommended(saved.slurm_config, recommended)}
             />
           )}

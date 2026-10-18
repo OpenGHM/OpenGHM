@@ -24,9 +24,17 @@ const INITIAL_STATES: LogStates = {
 
 type Action =
   | { type: "chunk"; stream: LogStream; chunk: JobLogChunk }
-  | { type: "error"; stream: LogStream; message: string };
+  | { type: "error"; stream: LogStream; message: string }
+  /** The job shown changed: what was read of its streams is not theirs. */
+  | { type: "reset"; streams: readonly LogStream[] };
+
+/** The streams a job of its own has files for; `wbm` is one file across jobs. */
+const PER_JOB: readonly LogStream[] = ["stdout", "stderr"];
 
 function reducer(states: LogStates, action: Action): LogStates {
+  if (action.type === "reset") {
+    return { ...states, ...Object.fromEntries(action.streams.map((s) => [s, INITIAL_STREAM])) };
+  }
   const current = states[action.stream];
   return {
     ...states,
@@ -60,17 +68,34 @@ interface Plan {
  * there is more, every 5 s once caught up. It reads only while the job is not
  * over and the tab is visible; when the job ends it reads each stream to the
  * end of its file once more and stops. Not before the job has started: there
- * is nothing on Anvil to read.
+ * is nothing on Anvil to read, unless an earlier job of the simulation ran
+ * (`earlierJobs`).
+ *
+ * A simulation run by several jobs (ADR 0037) has a stdout and a stderr for
+ * each; `job` is the number of the one to read (the backend's current job when
+ * it is undefined), and `jobEnded` says that job is over, so its two files stop
+ * being read once caught up. WBM's own log is one file across jobs and is read
+ * as ever. Changing `job` forgets what was read of stdout and stderr.
  */
 export function useJobLogs({
   jobId,
   status,
   disabled,
+  job,
+  jobEnded = false,
+  earlierJobs = false,
 }: {
   jobId: string;
   status: JobStatus;
   /** Fixture data: never read. */
   disabled: boolean;
+  /** Which job's stdout and stderr to read; undefined is the current job's. */
+  job?: number;
+  /** The job `job` names has ended, so its stdout and stderr will not grow. */
+  jobEnded?: boolean;
+  /** An earlier job of the simulation ran, so there are logs to read even
+   *  while the next one is being submitted. */
+  earlierJobs?: boolean;
 }): {
   states: LogStates;
   sessionExpired: boolean;
@@ -81,30 +106,43 @@ export function useJobLogs({
   const [sessionExpired, setSessionExpired] = useState(false);
 
   const offsetsRef = useRef<Record<LogStream, number | null>>({ wbm: null, stdout: null, stderr: null });
-  const inFlightRef = useRef<Partial<Record<LogStream, Promise<ReadOutcome>>>>({});
+  const inFlightRef = useRef<Partial<Record<LogStream, { job: number | undefined; promise: Promise<ReadOutcome> }>>>({});
+  // Bumped when `job` changes, so a read that was under way for the old one is dropped.
+  const generationRef = useRef(0);
+  const jobRef = useRef(job);
+  const jobEndedRef = useRef(jobEnded);
   const terminalRef = useRef(isTerminalStatus(status));
   const wakeRef = useRef<(() => void) | null>(null);
   const retryRef = useRef<((stream?: LogStream) => void) | null>(null);
 
   const terminal = isTerminalStatus(status);
-  const readable = logsReadable(status);
+  const readable = logsReadable(status) || earlierJobs;
 
   const read = useCallback(
     (which: LogStream): Promise<ReadOutcome> => {
+      // The job a stream belongs to: WBM's log has none of its own.
+      const forJob = PER_JOB.includes(which) ? job : undefined;
       // One read per stream at a time: a second caller waits for the first
       // rather than reading the same offset twice.
       const running = inFlightRef.current[which];
-      if (running) return running;
+      if (running && running.job === forJob) return running.promise;
 
+      const generation = generationRef.current;
       const run = async (): Promise<ReadOutcome> => {
         const previous = offsetsRef.current[which];
         let result;
         try {
-          result = await fetchJobLog(jobId, which, previous ?? undefined);
+          result =
+            forJob === undefined
+              ? await fetchJobLog(jobId, which, previous ?? undefined)
+              : await fetchJobLog(jobId, which, previous ?? undefined, undefined, forJob);
         } catch {
+          if (generation !== generationRef.current) return "idle";
           dispatch({ type: "error", stream: which, message: "Couldn't reach the gateway." });
           return "error";
         }
+        // Read for a job that is no longer the one shown: not this state's.
+        if (generation !== generationRef.current && PER_JOB.includes(which)) return "idle";
         if (!result.ok) {
           if (result.reason === "session_expired") {
             setSessionExpired(true);
@@ -128,17 +166,32 @@ export function useJobLogs({
       };
 
       const promise = run().finally(() => {
-        delete inFlightRef.current[which];
+        if (inFlightRef.current[which]?.promise === promise) delete inFlightRef.current[which];
       });
-      inFlightRef.current[which] = promise;
+      inFlightRef.current[which] = { job: forJob, promise };
       return promise;
     },
-    [jobId]
+    [jobId, job]
   );
 
   useEffect(() => {
     terminalRef.current = terminal;
   }, [terminal]);
+
+  useEffect(() => {
+    jobEndedRef.current = jobEnded;
+  }, [jobEnded]);
+
+  // Another job's stdout and stderr: nothing read of the last one is theirs,
+  // and they are read from a tail again. This runs before the reader below
+  // restarts for the new `read`.
+  useEffect(() => {
+    if (jobRef.current === job) return;
+    jobRef.current = job;
+    generationRef.current += 1;
+    for (const stream of PER_JOB) offsetsRef.current[stream] = null;
+    dispatch({ type: "reset", streams: PER_JOB });
+  }, [job]);
 
   useEffect(() => {
     if (disabled || !readable) return;
@@ -191,9 +244,11 @@ export function useJobLogs({
         plan.failures = 0;
         if (outcome === "more") {
           plan.due = Date.now();
-        } else if (endedBeforeRead) {
+        } else if (endedBeforeRead || (jobEndedRef.current && PER_JOB.includes(which))) {
           // Caught up, and the job had ended before this read began: a read
-          // that raced the ending may have missed the last bytes.
+          // that raced the ending may have missed the last bytes. The same for
+          // the files of a job of the simulation that is over, whatever the
+          // simulation is doing now.
           plan.done = true;
         } else if (terminalRef.current) {
           plan.due = Date.now();

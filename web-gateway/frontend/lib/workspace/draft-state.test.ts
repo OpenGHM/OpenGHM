@@ -522,82 +522,30 @@ describe("submitProblems", () => {
     });
   });
 
-  describe("the snapshot's reference simulation is longer than one job may be", () => {
-    const withWalltime = (walltime: string): DraftContext => ({
+  describe("a reference simulation longer than one job may be", () => {
+    // Not a problem (ADR 0037): the run is continued in further jobs, and the
+    // wizard says how many (`automaticJobCount`).
+    const withWalltime = (walltime: string, postProcessingWalltime?: string): DraftContext => ({
       snapshotState: "found",
       dataset: {
         ...dataset,
         simulation: {
           ...dataset.simulation,
-          recommendedCompute: { cores: 16, walltime },
+          recommendedCompute: { cores: 16, walltime, ...(postProcessingWalltime ? { postProcessingWalltime } : {}) },
         },
       },
     });
 
-    it("is a problem on the walltime field, at the run step, until the draft sets one", () => {
+    it("lists nothing, with or without a walltime of the draft's own", () => {
       const ctx = withWalltime("111:30:00");
-      expect(problems(fromJob(ok), ctx)).toEqual([
-        {
-          field: "walltime",
-          step: "run",
-          message:
-            "The reference simulation took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period or set a walltime.",
-        },
-      ]);
-      expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
-      expect(problems(edited(ok, { slurm: { cores: 4, walltime: null } }), ctx)).toHaveLength(1);
-    });
-
-    it("is not one when the recommendation fits, as the backend counts it", () => {
-      for (const walltime of ["4:30:00", "15:00", "80:00:00", "96:00:00"]) {
-        expect(problems(fromJob(ok), withWalltime(walltime))).toEqual([]);
-      }
-    });
-  });
-
-  describe("a climatology run and its post-processing together are longer than one job may be", () => {
-    // The run alone is 80 h and fits; with 20 h of post-processing it is 100 h.
-    const ctx: DraftContext = {
-      snapshotState: "found",
-      dataset: {
-        ...dataset,
-        simulation: {
-          ...dataset.simulation,
-          recommendedCompute: { cores: 16, walltime: "80:00:00", postProcessingWalltime: "20:00:00" },
-        },
-      },
-    };
-
-    it("is a problem on the walltime field once the draft asks for climatology", () => {
-      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), ctx)).toEqual([
-        {
-          field: "walltime",
-          step: "run",
-          message:
-            "The reference simulation and its post-processing took about 100 h together, more than the 96 h one job may use. Shorten the run period, turn post-processing off or set a walltime.",
-        },
-      ]);
-    });
-
-    it("is one for a snapshot whose own init asks for climatology and a draft that asks nothing", () => {
-      const own: DraftContext = { ...ctx, dataset: { ...ctx.dataset!, postProcessing: "climatology" } };
-      expect(problems(fromJob(ok), own)).toHaveLength(1);
-      expect(problems(edited(ok, { params: { post_processing: "standard" } }), own)).toEqual([]);
-    });
-
-    it("is not one for the standard output, a walltime of the draft's own, or no measurement", () => {
-      expect(problems(edited(ok, { params: { post_processing: "standard" } }), ctx)).toEqual([]);
       expect(problems(fromJob(ok), ctx)).toEqual([]);
-      const asked = { params: { post_processing: "climatology" as const } };
-      expect(problems(edited(ok, { ...asked, slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
-      const unmeasured: DraftContext = {
-        ...ctx,
-        dataset: {
-          ...ctx.dataset!,
-          simulation: { ...ctx.dataset!.simulation, recommendedCompute: { cores: 16, walltime: "80:00:00" } },
-        },
-      };
-      expect(problems(edited(ok, asked), unmeasured)).toEqual([]);
+      expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
+      expect(problems(edited(ok, { slurm: { cores: 4, walltime: null } }), ctx)).toEqual([]);
+    });
+
+    it("lists nothing for a climatology run whose post-processing makes it longer", () => {
+      const ctx = withWalltime("80:00:00", "20:00:00");
+      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), ctx)).toEqual([]);
     });
   });
 

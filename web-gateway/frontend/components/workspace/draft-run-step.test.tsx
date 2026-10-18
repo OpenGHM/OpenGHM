@@ -637,28 +637,33 @@ describe("the draft run step: compute", () => {
   });
 });
 
-describe("the draft run step: a walltime the snapshot's reference simulation does not fit in", () => {
+describe("the draft run step: a reference simulation that does not fit in one job", () => {
   const long = { cores: 16, walltime: "111:30:00" };
 
-  it("explains it next to the Walltime field, and shows the automatic one as the limit", () => {
+  it("says it runs as several jobs next to the Walltime field, and shows the automatic one as the limit", () => {
     step({ recommended: long });
-    // Visible with the fields closed.
-    const notice = screen.getByText(/reference simulation took about 111 h 30 min, more than the 96 h/);
+    // Visible with the fields closed; a note, not a warning.
+    const notice = screen.getByText(/may run as up to 2 jobs of 96 h each/);
+    expect(notice.textContent).toBe(
+      "This simulation may run as up to 2 jobs of 96 h each (the reference simulation took about 111 h 30 min, plus 50%). Each job continues where the last one stopped."
+    );
+    expect(notice.className).toContain("text-muted-foreground");
+    expect(screen.queryByRole("button", { name: "Why?" })).toBeNull();
     expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
-    expect(notice.textContent).toMatch(/Shorten the run period or set a walltime\./);
-    // One line, with the long reason behind a button.
-    expect(screen.queryByText(/the simulation may be stopped when time runs out/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Why?" }));
-    expect(screen.getByText(/the simulation may be stopped when time runs out/)).toBeTruthy();
     const walltime = screen.getByLabelText(/^Walltime/);
-    expect(walltime.getAttribute("aria-describedby")).toContain(notice.closest("div")!.id);
+    expect(walltime.getAttribute("aria-describedby")).toContain(notice.id);
     expect(walltime.getAttribute("placeholder")).toBe("96:00:00");
     expect(screen.getByText("Empty = recommended: 16 cores, 4 d (the limit for one job).")).toBeTruthy();
   });
 
+  it("counts the jobs from the recommendation with headroom", () => {
+    step({ recommended: { cores: 16, walltime: "192:00:00" } });
+    expect(screen.getByText(/may run as up to 3 jobs of 96 h each/)).toBeTruthy();
+  });
+
   it("is gone once the draft sets a walltime of its own", () => {
     step({ recommended: long, slurm: { cores: null, walltime: "96:00:00" } });
-    expect(screen.queryByText(/more than the 96 h/)).toBeNull();
+    expect(screen.queryByText(/may run as up to/)).toBeNull();
     expect(screen.getByText("Custom: 16 cores (recommended) · 4 d")).toBeTruthy();
   });
 
@@ -1222,16 +1227,17 @@ describe("the draft run step: the walltime of a climatology choice", () => {
     expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
   });
 
-  it("warns that the run and its post-processing together do not fit in one job", () => {
+  it("names the post-processing in the several jobs a climatology run may take", () => {
     const big = { cores: 16, walltime: "80:00:00", postProcessingWalltime: "20:00:00" };
     const { unmount } = step({ parameters: climatology, recommended: big });
     expect(
-      screen.getByText(/The reference simulation and its post-processing took about 100 h together, more than the 96 h/)
+      screen.getByText(/the reference simulation and its post-processing took about 100 h, plus 50%/)
     ).toBeTruthy();
+    expect(screen.getByText(/may run as up to 2 jobs of 96 h each/)).toBeTruthy();
     expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
     unmount();
-    // The run alone fits.
+    // The run alone is 80 h, 120 h with headroom: also two jobs, without the post-processing in it.
     step({ parameters: { ...PARAMETERS, post_processing: "standard" }, recommended: big });
-    expect(screen.queryByText(/more than the 96 h/)).toBeNull();
+    expect(screen.getByText(/the reference simulation took about 80 h, plus 50%/)).toBeTruthy();
   });
 });

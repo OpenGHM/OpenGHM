@@ -7,6 +7,10 @@ import { BACKEND_URL, getBackendAuth } from "@/lib/api-client";
  * decides who may read the log and how large a file it will send: what it
  * refuses with (404 `log_missing`, 413 `log_too_large`, 502
  * `anvil_unreachable`) comes back unchanged, status and JSON.
+ *
+ * `?job=<number>` names the job of a simulation run by several (ADR 0037) whose
+ * stdout or stderr is wanted; without it the backend reads the current job.
+ * The `wbm` log is one file across jobs, so it is asked for without one.
  */
 
 const STREAMS = new Set(["stdout", "stderr", "wbm"]);
@@ -28,6 +32,14 @@ export async function GET(
     return json(400, "invalid_stream", "The log must be one of stdout, stderr or wbm.");
   }
 
+  // A job number is a whole number from 1; anything else is refused here
+  // rather than put into the backend's address.
+  const requested = new URL(request.url).searchParams.get("job");
+  if (requested !== null && !/^[1-9]\d{0,5}$/.test(requested)) {
+    return json(400, "invalid_job", "The job must be a whole number from 1.");
+  }
+  const job = stream === "wbm" ? null : requested;
+
   const { headers, authenticated } = await getBackendAuth();
   if (!authenticated) {
     return json(401, "session_expired", "Your session has expired. Sign in again.");
@@ -36,7 +48,7 @@ export async function GET(
   let upstream: Response;
   try {
     upstream = await fetch(
-      `${BACKEND_URL}/api/v1/jobs/${encodeURIComponent(id)}/logs/${stream}/download`,
+      `${BACKEND_URL}/api/v1/jobs/${encodeURIComponent(id)}/logs/${stream}/download${job ? `?job=${job}` : ""}`,
       { headers, cache: "no-store", signal: request.signal }
     );
   } catch {

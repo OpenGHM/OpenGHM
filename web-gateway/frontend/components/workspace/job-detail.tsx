@@ -82,6 +82,10 @@ export function JobDetail({
         files: job.files,
         output: job.output,
         publish: job.publish,
+        previous_jobs: job.previous_jobs,
+        job_number: job.job_number,
+        max_jobs: job.max_jobs,
+        continuation: job.continuation,
         live: previewLive,
       }}
       preview={preview}

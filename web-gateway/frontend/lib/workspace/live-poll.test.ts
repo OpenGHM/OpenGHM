@@ -127,3 +127,39 @@ describe("the publish record in the view", () => {
     expect(mergeView(held, { ...base, publish: null }).publish).toBeNull();
   });
 });
+
+describe("the jobs of a simulation in the view (ADR 0037)", () => {
+  const base = { job_id: "j", sim_id: "s", status: "RUNNING" } as JobStatusResponse;
+  const ended = {
+    number: 1,
+    slurm_job_id: "1001",
+    slurm_state: "TIMEOUT",
+    slurm_start: "2026-10-01T00:00:00Z",
+    slurm_end: "2026-10-05T00:00:00Z",
+    state_saved_at: "2026-10-04T22:00:00Z",
+  };
+
+  it("is one job, none ended, none being submitted, until the answer says otherwise", () => {
+    expect(toView("RUNNING")).toMatchObject({ previous_jobs: [], job_number: 1, max_jobs: 0, continuation: null });
+    expect(toView("RUNNING", { previous_jobs: [ended] }).job_number).toBe(2);
+  });
+
+  it("takes what the answer carries", () => {
+    const continuation = { number: 2, requested_at: "2026-10-05T00:00:05Z", tries: 1 };
+    const view = toView("SUBMITTED", { previous_jobs: [ended], job_number: 1, max_jobs: 5, continuation });
+    expect(view).toMatchObject({ previous_jobs: [ended], job_number: 1, max_jobs: 5, continuation });
+  });
+
+  it("keeps them across an answer without them (the cancel route's), and replaces them when it has them", () => {
+    const held = toView("RUNNING", { previous_jobs: [ended], job_number: 2, max_jobs: 5 });
+    expect(mergeView(held, { ...base })).toMatchObject({ previous_jobs: [ended], job_number: 2, max_jobs: 5 });
+    const next = mergeView(held, { ...base, previous_jobs: [], job_number: 1, max_jobs: 3, continuation: null });
+    expect(next).toMatchObject({ previous_jobs: [], job_number: 1, max_jobs: 3, continuation: null });
+  });
+
+  it("drops the continuation when the answer says there is none any more", () => {
+    const continuation = { number: 2, requested_at: "2026-10-05T00:00:05Z", tries: 0 };
+    const held = toView("SUBMITTED", { previous_jobs: [ended], continuation });
+    expect(mergeView(held, { ...base, continuation: null }).continuation).toBeNull();
+  });
+});

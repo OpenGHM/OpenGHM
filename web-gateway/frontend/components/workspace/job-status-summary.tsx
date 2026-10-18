@@ -21,6 +21,7 @@ import { CompletedResults } from "@/components/workspace/completed-results";
 import { DuplicateDraftButton } from "@/components/workspace/duplicate-draft-button";
 import { ExcerptBlock } from "@/components/workspace/excerpt-block";
 import { FailedDetails } from "@/components/workspace/failed-details";
+import { JobHistory } from "@/components/workspace/job-history";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import { RunMetadata } from "@/components/workspace/run-metadata";
 import { RunDay, RunTimeline } from "@/components/workspace/run-timeline";
@@ -30,6 +31,12 @@ import { HUE, TONE_HUE } from "@/lib/jobs/status-hue";
 import { isTerminalStatus, type Job } from "@/lib/jobs/types";
 import { cancelledBy } from "@/lib/workspace/cancelled-by";
 import { failureCopyFor } from "@/lib/workspace/failure-copy";
+import {
+  describeContinuation,
+  describeContinuationTries,
+  describeJobNumber,
+  previousRanSeconds,
+} from "@/lib/workspace/job-runs";
 import { describeQueueReason } from "@/lib/workspace/queue-reason";
 import {
   describeProgress,
@@ -255,6 +262,21 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
   switch (shown) {
     case "PENDING":
     case "SUBMITTED":
+      // Between two jobs of one simulation (ADR 0037): the next is being
+      // submitted, so SLURM has nothing to say about it yet.
+      if (view.continuation) {
+        const tries = describeContinuationTries(view.continuation);
+        return {
+          Icon: Hourglass,
+          title: "Continuing in a new job",
+          sub: (
+            <>
+              The previous job reached its time limit after WBM saved its state. The next job is being submitted to
+              SLURM.{tries && ` ${tries}`}
+            </>
+          ),
+        };
+      }
       return {
         Icon: Hourglass,
         title: "In the queue",
@@ -285,7 +307,9 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
         sub: "SLURM has been asked to stop this snapshot draft. It stays Cancelling until SLURM confirms.",
       };
     case "COMPLETED": {
-      const ran = secondsBetween(view.slurm_start ?? startedAt, view.slurm_end ?? completedAt);
+      // The time the jobs ran, all of them when the simulation was continued.
+      const last = secondsBetween(view.slurm_start ?? startedAt, view.slurm_end ?? completedAt);
+      const ran = last === null ? null : last + (previousRanSeconds(view.previous_jobs) ?? 0);
       return { Icon: CheckCircle2, title: ran === null ? "Completed" : `Completed in ${shortDuration(ran)}`, sub: null };
     }
     case "FAILED": {
@@ -368,6 +392,8 @@ export function JobStatusSummary({
     slurm_exit_code: view.slurm_exit_code ?? job.slurm_exit_code,
   };
   const { Icon } = headline;
+  const jobNumber = describeJobNumber(view);
+  const continued = describeContinuation(view);
   const spinning = shown === "RUNNING" || shown === "COMPLETING";
   // A reason for a job that is neither failed nor over, when SLURM or the gateway gave one.
   const showReason = Boolean(statusReason) && active;
@@ -387,6 +413,11 @@ export function JobStatusSummary({
           </h2>
           {headline.sub && (
             <p className="mt-2 min-w-0 break-words text-sm leading-relaxed text-muted-foreground">{headline.sub}</p>
+          )}
+          {jobNumber && (
+            <p className="mt-2 min-w-0 break-words text-sm leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">{jobNumber}.</span> {continued}
+            </p>
           )}
         </div>
         {shown === "COMPLETED" && completedAt && <RunDay iso={completedAt} />}
@@ -441,6 +472,8 @@ export function JobStatusSummary({
           </div>
         </div>
       )}
+
+      <JobHistory />
 
       {(sessionExpired || cancelExpired) && <SessionExpiredBanner className="mt-4" />}
 

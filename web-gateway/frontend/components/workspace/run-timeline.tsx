@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
+import { waitingSince } from "@/lib/workspace/job-runs";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import {
   formatLocalDate,
@@ -58,7 +59,10 @@ function Stop({ iso, align = "left", children }: { iso: string; align?: "left" |
  * ended under it. Read from the same moments the Run details card and the
  * heading's "Completed in 10 min" use (SLURM's own when the poll has them, else
  * the gateway's), so it adds no number of its own. Nothing is drawn unless the
- * start and the end are known; a run with no submit time is only the run.
+ * start and the end are known; a run with no submit time is only the run. Of a
+ * simulation continued in several jobs it is the last job's: its wait counts
+ * from the end of the job before it, and the earlier jobs are listed beside
+ * (`JobHistory`).
  */
 export function RunTimeline() {
   const { submittedAt, startedAt, completedAt, view } = useLiveJobContext();
@@ -66,7 +70,11 @@ export function RunTimeline() {
   const ended = view.slurm_end ?? completedAt;
   const ran = secondsBetween(started, ended);
   if (!started || !ended || ran === null) return null;
-  const queued = submittedAt ? secondsBetween(submittedAt, started) : null;
+  // Of a continued simulation, the last job's own wait: from the end of the
+  // job before it.
+  const continued = view.previous_jobs.length > 0;
+  const submitted = waitingSince(view.previous_jobs, submittedAt);
+  const queued = submitted ? secondsBetween(submitted, started) : null;
 
   return (
     <div className="mt-6 space-y-2">
@@ -90,8 +98,10 @@ export function RunTimeline() {
           gridTemplateColumns: queued !== null ? `${Math.max(queued, 1)}fr ${Math.max(ran, 1)}fr` : "1fr",
         }}
       >
-        {queued !== null && submittedAt && (
-          <Stop iso={submittedAt}>Submitted · queued {shortDuration(queued)}</Stop>
+        {queued !== null && submitted && (
+          <Stop iso={submitted}>
+            {continued ? "Resubmitted" : "Submitted"} · queued {shortDuration(queued)}
+          </Stop>
         )}
         <div className="flex justify-between gap-3">
           <Stop iso={started}>Started · ran {shortDuration(ran)}</Stop>

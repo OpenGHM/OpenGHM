@@ -11,13 +11,7 @@
  * snapshot's own order). Opening a draft therefore never saves, and a value the
  * server normalises never makes the two differ for ever.
  */
-import {
-  describeWalltimeOverLimitShort,
-  postProcessingShare,
-  runsClimatology,
-  validateSlurmConfig,
-  walltimeOverLimit,
-} from "@/lib/jobs/compute";
+import { validateSlurmConfig } from "@/lib/jobs/compute";
 import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { checkRunStartFor, isRealDate } from "@/lib/jobs/run-start";
 import type {
@@ -508,14 +502,6 @@ export function submitProblems(
   if (custom && Object.keys(custom).length > 0) {
     add("custom", "Custom parameters can't run yet. Remove them to submit.");
   }
-
-  // The snapshot's reference simulation is longer than one job may be: a submit
-  // refuses it (`walltime_over_limit`) unless the draft sets a walltime.
-  // With the post-processing time added when the run asks for climatology.
-  const recommended = ctx.dataset?.simulation.recommendedCompute ?? null;
-  const postProcessing = runsClimatology(local.parameters.post_processing, ctx.dataset?.postProcessing);
-  const over = walltimeOverLimit(local.slurm, recommended, postProcessing);
-  if (over !== null) add("walltime", describeWalltimeOverLimitShort(over, postProcessingShare(recommended, postProcessing)));
 
   // Not saved: a submit would run the saved value, not this one.
   for (const field of save.withheld) {

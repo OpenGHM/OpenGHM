@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   automaticWalltimeLabel,
+  describeJobCountShort,
   describeSlurmTime,
   describeUnsupportedField,
 } from "@/lib/jobs/compute";
@@ -23,10 +24,6 @@ export function describeSubmitFailure(
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
         .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
-    case "walltime_over_limit":
-      // The backend's sentence says how long the reference simulation took, what one
-      // job may use, and what to change.
-      return failure.message;
     case "answered_by_published":
       return "The model snapshot already publishes these results, so nothing was run. Use Run anyway if you want to run it again.";
     case "not_a_draft":
@@ -63,7 +60,8 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
  * means the snapshot's recommendation for cores and the recommendation plus 50%
  * (at most the limit for one job: `walltimeCapped`) for walltime, with the
  * snapshot's post-processing time added to it when the run asks for climatology
- * (`walltimeIncludesPostProcessing`).
+ * (`walltimeIncludesPostProcessing`). `jobs` says the run may take several jobs
+ * of that walltime, each continuing where the last one stopped.
  */
 export function SubmitSummary({
   snapshotTitle,
@@ -77,6 +75,7 @@ export function SubmitSummary({
   walltimeFromSnapshot,
   walltimeCapped = false,
   walltimeIncludesPostProcessing = false,
+  jobs = null,
   coresWarning = null,
 }: {
   snapshotTitle: string;
@@ -93,6 +92,9 @@ export function SubmitSummary({
   walltimeCapped?: boolean;
   /** The automatic walltime has the snapshot's post-processing time in it. */
   walltimeIncludesPostProcessing?: boolean;
+  /** How many jobs of the walltime the run may take (`automaticJobCount`);
+   *  null when one is enough. */
+  jobs?: number | null;
   /** `describeCoresBelowRecommended`: shown under Cores, because the dialog is
    *  the last place to notice it. A hint; Submit stays on. */
   coresWarning?: string | null;
@@ -124,6 +126,11 @@ export function SubmitSummary({
           <Recommendation show={walltime !== null && walltimeFromSnapshot}>
             {automaticWalltimeLabel(walltimeCapped, "summary", walltimeIncludesPostProcessing)}
           </Recommendation>
+          {jobs !== null && (
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+              {describeJobCountShort(jobs)}
+            </span>
+          )}
         </SummaryRow>
       </dl>
       <p className="text-sm text-muted-foreground">Runs on the shared ees260008 allocation.</p>

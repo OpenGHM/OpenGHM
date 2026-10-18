@@ -16,15 +16,13 @@ import {
   describeCoresBelowRecommended,
   describeCoresBelowRecommendedShort,
   describeDuration,
+  describeJobCount,
   describeWalltimeBelowReference,
-  describeWalltimeOverLimit,
-  describeWalltimeOverLimitShort,
+  automaticJobCount,
   effectiveCompute,
   parseSlurmTime,
-  postProcessingShare,
   secondsToHms,
   validateSlurmConfig,
-  walltimeOverLimit,
   type Recommended,
 } from "@/lib/jobs/compute";
 import { MAX_CORES, type SlurmConfig } from "@/lib/jobs/types";
@@ -64,12 +62,13 @@ function Warning({ id, short, why }: { id?: string; short: string; why: string }
  * spoken of only when a value is over them. The account and partition are the
  * gateway's (one shared allocation, ADR 0024), so they are not fields.
  *
- * Two warnings stand above the fields, each one line with the long reason
- * behind "Why": cores below what the snapshot recommends (memory comes with
- * cores), and a snapshot whose reference simulation is longer than one job may
- * be, with no walltime set; and a walltime shorter than the reference
- * simulation, as a quiet note. A value that is refused (here or by the server)
- * has its message under the field.
+ * A warning stands above the fields, one line with the long reason behind
+ * "Why": cores below what the snapshot recommends (memory comes with cores).
+ * Two quiet notes stand with it: a snapshot whose reference simulation is
+ * longer than one job may be, with no walltime set, runs as several jobs, each
+ * continuing where the last one stopped (`automaticJobCount`); and a walltime
+ * shorter than the reference simulation. A value that is refused (here or by
+ * the server) has its message under the field.
  *
  * `postProcessing` says the run will post-process (a climatology choice,
  * `runsClimatology`): the automatic walltime then includes the snapshot's
@@ -100,12 +99,11 @@ export function ComputeSection({
   // for one job.
   const automatic = effectiveCompute({ cores: null, walltime: null }, recommended, postProcessing);
   const automaticSeconds = automatic.walltime ? parseSlurmTime(automatic.walltime) : null;
-  const overLimit = walltimeOverLimit(config, recommended, postProcessing);
-  const overLimitShare = postProcessingShare(recommended, postProcessing);
+  const jobCount = automaticJobCount(config, recommended, postProcessing);
   const belowReference = describeWalltimeBelowReference(config, recommended, postProcessing);
   const coresWarning = describeCoresBelowRecommendedShort(config, recommended);
   const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
-  const walltimeNoteId = overLimit !== null || belowReference ? `${id}-walltime-note` : undefined;
+  const walltimeNoteId = jobCount !== null || belowReference ? `${id}-walltime-note` : undefined;
   const summary = describeComputeSummary(config, recommended, postProcessing);
 
   const emptyMeans =
@@ -117,7 +115,7 @@ export function ComputeSection({
 
   return (
     <DraftSection title="Compute" help="compute">
-      {(coresWarning || overLimit !== null || belowReference) && (
+      {(coresWarning || jobCount !== null || belowReference) && (
         <div className="space-y-3">
           {coresWarning && (
             <Warning
@@ -126,12 +124,10 @@ export function ComputeSection({
               why={describeCoresBelowRecommended(config, recommended) as string}
             />
           )}
-          {overLimit !== null && (
-            <Warning
-              id={walltimeNoteId}
-              short={describeWalltimeOverLimitShort(overLimit, overLimitShare)}
-              why={describeWalltimeOverLimit(overLimit, overLimitShare)}
-            />
+          {jobCount !== null && (
+            <p id={walltimeNoteId} className="text-xs text-muted-foreground">
+              {describeJobCount(jobCount, automatic.includesPostProcessing)}
+            </p>
           )}
           {belowReference && (
             <p id={walltimeNoteId} className="text-xs text-muted-foreground">

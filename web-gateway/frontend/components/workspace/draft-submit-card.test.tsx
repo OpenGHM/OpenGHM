@@ -274,10 +274,9 @@ describe("DraftSubmitCard: long refusals", () => {
     expect(text.className).toContain("min-w-0");
   });
 
-  it("shows the backend's sentence for walltime_over_limit as it is", async () => {
-    const message =
-      "This model snapshot's reference simulation took about 111 h 30 min, and one job may use at most 96 h. Shorten the run period, or set a walltime yourself.";
-    submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "walltime_over_limit" });
+  it("shows the backend's sentence for a refusal it has no wording for as it is", async () => {
+    const message = "Anvil is not configured for this gateway.";
+    submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "anvil_not_configured" });
     card();
     await openDialog();
     fireEvent.click(confirmButton());
@@ -321,6 +320,29 @@ describe("DraftSubmitCard: submitting", () => {
     await openDialog();
     expect(dialog().textContent).toContain("model snapshot's recommendation");
     expect(dialog().textContent).toContain("22 min 30 s");
+  });
+
+  it("says in the confirmation that a run over the limit for one job may take several", async () => {
+    flush.mockResolvedValue({
+      ok: true,
+      job: { ...SAVED, slurm_config: { cores: null, walltime: null } },
+      withheld: [],
+    });
+    card({ recommended: { cores: 16, walltime: "111:30:00" } });
+    await openDialog();
+    expect(dialog().textContent).toContain("limit for one job");
+    expect(dialog().textContent).toContain("May run as up to 2 jobs of 96 h each; each continues where the last one stopped.");
+  });
+
+  it("does not say it for a run that fits in one job", async () => {
+    flush.mockResolvedValue({
+      ok: true,
+      job: { ...SAVED, slurm_config: { cores: null, walltime: null } },
+      withheld: [],
+    });
+    card();
+    await openDialog();
+    expect(dialog().textContent).not.toContain("May run as up to");
   });
 
   it("does nothing more on Cancel: no submit, nothing stopped, Submit available again", async () => {

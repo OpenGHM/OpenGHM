@@ -13,8 +13,10 @@ import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { PublishedAnswerCard, PublishedAnswerNotice } from "@/components/workspace/published-answer-card";
 import {
+  automaticJobCount,
   automaticWalltimeLabel,
   describeCoresBelowRecommendedShort,
+  describeJobCountShort,
   describeSlurmTime,
   effectiveCompute,
   runsClimatology,
@@ -185,6 +187,11 @@ export function DraftReviewStep({
     runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing)
   );
   const coresWarning = describeCoresBelowRecommendedShort(slurm, recommended);
+  const jobCount = automaticJobCount(
+    slurm,
+    recommended,
+    runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing)
+  );
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
@@ -288,6 +295,7 @@ export function DraftReviewStep({
                   · {automaticWalltimeLabel(compute.walltimeCapped, "summary", compute.includesPostProcessing)}
                 </span>
               )}
+              {jobCount && <span className="block text-xs text-muted-foreground">{describeJobCountShort(jobCount.jobs)}</span>}
             </Row>
             {spatial && (
               <Row

@@ -24,6 +24,7 @@ import type {
   PublishFailureCause,
   PublishRecord,
   PublishRetry,
+  PreviousJob,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
 
@@ -107,6 +108,10 @@ export function fakeDraft(status: JobStatus, overrides: Partial<Job> = {}): Job 
     files: null,
     output: null,
     publish: null,
+    previous_jobs: [],
+    job_number: 1,
+    max_jobs: 5,
+    continuation: null,
     ...overrides,
   };
 }
@@ -241,6 +246,35 @@ const FAILURE_FIXTURES: Record<
       excerpt: "slurmstepd: error: could not write to the job directory",
     },
   },
+  continuation_failed: {
+    slurm_state: "TIMEOUT",
+    slurm_exit_code: "0:0",
+    failure: {
+      phase: null,
+      message:
+        "SLURM stopped job 1 at its time limit after WBM saved its state, but job 2 could not be submitted: sbatch: error: Batch job submission failed: Socket timed out on send/recv operation. What WBM saved is still on Anvil.",
+      excerpt: null,
+    },
+  },
+  run_state_incomplete: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "64:0",
+    failure: {
+      phase: "run",
+      message:
+        "The run state left by the earlier job was not written by one save, so WBM did not start. Submit this snapshot draft again as a new one to run it from the start.",
+      excerpt: "openghm: the run state in WBM_run_state/ was written by more than one save",
+    },
+  },
+  run_incomplete: {
+    slurm_state: "FAILED",
+    slurm_exit_code: "65:0",
+    failure: {
+      phase: "check",
+      message: "WBM stopped on 2001-03-04, before the run's end 2001-12-31",
+      excerpt: WBM_LOG_TAIL,
+    },
+  },
 };
 
 /** A small, plausible manifest: three variables at three time steps. */
@@ -260,6 +294,20 @@ function fakeOutput(): OutputManifest {
     total_bytes: files.reduce((n, f) => n + f.bytes, 0),
     files,
     truncated: false,
+  };
+}
+
+/** An ended job of a continued simulation: it ran its 15 min walltime to the
+ *  limit, saved its state 2 min before, and ended 2 h 5 min ago, just before the
+ *  fixtures' own job started (2 h ago). */
+function fakePreviousJob(number: number, slurmJobId: string): PreviousJob {
+  return {
+    number,
+    slurm_job_id: slurmJobId,
+    slurm_state: "TIMEOUT",
+    slurm_start: iso(125 * 60_000 + 15 * 60_000),
+    slurm_end: iso(125 * 60_000),
+    state_saved_at: iso(127 * 60_000),
   };
 }
 
@@ -404,6 +452,27 @@ export function previewDraftJob(
       });
     }
 
+    // A simulation continued in a second job (ADR 0037): the first ended at its
+    // time limit with a saved state. `submitted:continuing` is the gap between
+    // the two, with no SLURM id; the others run or ended as job 2.
+    if (variant === "continued" || variant === "continuing") {
+      const status = kind.toUpperCase() as JobStatus;
+      const previous_jobs = [fakePreviousJob(1, "12345601")];
+      if (variant === "continuing") {
+        return fakeDraft(status, {
+          slurm_job_id: null,
+          previous_jobs,
+          job_number: 1,
+          continuation: { number: 2, requested_at: iso(30_000), tries: 0 },
+        });
+      }
+      return fakeDraft(status, {
+        ...(status === "COMPLETED" ? { ...onAnvil, slurm_state: "COMPLETED", slurm_exit_code: "0:0", output: fakeOutput() } : {}),
+        previous_jobs,
+        job_number: 2,
+      });
+    }
+
     if (kind === "completed") {
       const base = fakeDraft("COMPLETED", {
         ...onAnvil,
@@ -435,12 +504,19 @@ export function previewDraftJob(
     if (kind === "failed") {
       const cause = (variant ?? "wbm_error") as keyof typeof FAILURE_FIXTURES;
       const f = FAILURE_FIXTURES[cause] ?? FAILURE_FIXTURES.wbm_error;
+      // The next job could not be submitted, so a job had already ended; the
+      // refused state is the next job's own.
+      const continued =
+        cause === "continuation_failed" || cause === "run_state_incomplete"
+          ? { previous_jobs: [fakePreviousJob(1, "12345601")], job_number: cause === "run_state_incomplete" ? 2 : 1 }
+          : {};
       return fakeDraft("FAILED", {
         ...onAnvil,
         slurm_state: f.slurm_state,
         slurm_exit_code: f.slurm_exit_code,
         failure: { cause, ...f.failure },
         status_reason: f.failure.message,
+        ...continued,
       });
     }
 

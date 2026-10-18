@@ -88,6 +88,10 @@ function summary(job: Job, { live = null, viewerEmail = null }: { live?: JobLive
         cancel_requested_by_email: job.cancel_requested_by_email,
         files: job.files,
         output: job.output,
+        previous_jobs: job.previous_jobs,
+        job_number: job.job_number,
+        max_jobs: job.max_jobs,
+        continuation: job.continuation,
         live,
       }}
       preview
@@ -453,5 +457,105 @@ describe("a snapshot draft that was deleted while its page was open", () => {
     expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Refresh|Retry now/ })).toBeNull();
     expect(screen.queryByText(/Checking with SLURM|Checked with SLURM/)).toBeNull();
+  });
+});
+
+describe("a simulation continued in more than one job (ADR 0037)", () => {
+  const ended = (number: number) => ({
+    number,
+    slurm_job_id: `1000${number}`,
+    slurm_state: "TIMEOUT",
+    slurm_start: "2026-09-27T12:00:00Z",
+    slurm_end: "2026-10-01T12:00:00Z",
+    state_saved_at: "2026-10-01T09:30:00Z",
+  });
+
+  it("says nothing of jobs for a simulation run by one", () => {
+    const { container } = render(summary(live("RUNNING"), { live: runLive() }));
+    expect(container.textContent).not.toMatch(/Job \d|Earlier jobs|Continued after/);
+  });
+
+  it("says which job of how many is running, that it was continued, and lists the earlier ones", () => {
+    const { container } = render(
+      summary(live("RUNNING", { previous_jobs: [ended(1)], job_number: 2, max_jobs: 5 }), { live: runLive() })
+    );
+    const text = container.textContent ?? "";
+    expect(text).toContain("Job 2 of at most 5.");
+    expect(text).toContain("Continued after the previous job reached its time limit");
+    expect(screen.getByRole("heading", { name: "Earlier jobs" })).toBeTruthy();
+    const [row] = screen.getAllByRole("listitem");
+    expect(row.textContent).toContain("Job 1");
+    expect(row.textContent).toContain("#10001");
+    expect(row.textContent).toContain("TIMEOUT");
+    expect(row.textContent).toContain("ran 96 h");
+    expect(row.textContent).toContain("State saved");
+    // Start and end are two moments.
+    expect(row.querySelectorAll("time")).toHaveLength(3);
+  });
+
+  it("lists every earlier job, oldest first", () => {
+    render(summary(live("RUNNING", { previous_jobs: [ended(1), ended(2)], job_number: 3, max_jobs: 5 }), { live: runLive() }));
+    expect(screen.getAllByRole("listitem").map((li) => li.textContent?.slice(0, 5))).toEqual(["Job 1", "Job 2"]);
+    expect(screen.getByText("Job 3 of at most 5.")).toBeTruthy();
+  });
+
+  it("shows the next job being submitted, not an ordinary queue, while the continuation is set", () => {
+    const { container } = render(
+      summary(
+        live("SUBMITTED", {
+          slurm_job_id: null,
+          previous_jobs: [ended(1)],
+          job_number: 1,
+          max_jobs: 5,
+          continuation: { number: 2, requested_at: "2026-09-30T12:03:00Z", tries: 0 },
+        })
+      )
+    );
+    expect(screen.getByRole("heading", { name: "Continuing in a new job" })).toBeTruthy();
+    const text = container.textContent ?? "";
+    expect(text).toContain("The next job is being submitted to SLURM.");
+    expect(text).toContain("Job 2 of at most 5.");
+    expect(text).not.toContain("In the queue");
+    expect(text).not.toContain("earlier attempt");
+    expect(screen.getByRole("button", { name: "Cancel simulation" })).toBeTruthy();
+  });
+
+  it("says how many submits did not go through, after the first", () => {
+    const { container } = render(
+      summary(
+        live("SUBMITTED", {
+          slurm_job_id: null,
+          previous_jobs: [ended(1)],
+          max_jobs: 5,
+          continuation: { number: 2, requested_at: "2026-09-30T12:03:00Z", tries: 2 },
+        })
+      )
+    );
+    expect(container.textContent).toContain("2 earlier attempts did not go through; the gateway tries again.");
+  });
+
+  it("is an ordinary queue once the next job has a SLURM id and the continuation is over", () => {
+    render(summary(live("PENDING", { previous_jobs: [ended(1)], job_number: 2, max_jobs: 5 }), { live: QUEUED }));
+    expect(screen.getByRole("heading", { name: "In the queue" })).toBeTruthy();
+    expect(screen.getByText("Job 2 of at most 5.")).toBeTruthy();
+  });
+
+  it("counts all the jobs in how long a completed simulation ran, and counts the last one's wait from the end of the one before", () => {
+    // The fixture's last job ran 1 h; the first ran 70 h.
+    const job = previewDraftJob("completed:continued");
+    const { container } = render(
+      summary({ ...job, previous_jobs: [{ ...ended(1), slurm_end: "2026-09-30T10:00:00Z" }] })
+    );
+    expect(screen.getByRole("heading", { name: "Completed in 71 h" })).toBeTruthy();
+    expect(container.textContent).toContain("Job 2 of at most 5.");
+    expect(container.textContent).toMatch(/Resubmitted · queued/);
+    expect(container.textContent).toContain("Started · ran 1 h");
+  });
+
+  it("also lists the earlier jobs for a simulation that failed in the next one", () => {
+    const { container } = render(summary(previewDraftJob("failed:run_state_incomplete")));
+    expect(container.textContent).toContain(FAILURE_COPY.run_state_incomplete.title);
+    expect(screen.getByRole("heading", { name: "Earlier jobs" })).toBeTruthy();
+    expect(container.textContent).toContain("Job 2 of at most 5.");
   });
 });

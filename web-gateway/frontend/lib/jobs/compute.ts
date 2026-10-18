@@ -57,7 +57,8 @@ export function formatSlurmTime(total: number): string {
 /** A snapshot's recommended walltime plus 50%, in SLURM's format, rounded up
  *  to a whole second and never over what one job may use (`MAX_WALLTIME`):
  *  `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`, `80:00:00` becomes
- *  `96:00:00`. This is what the backend asks SLURM for when a draft has no
+ *  `96:00:00`. A run that needs more is continued in further jobs of that size
+ *  (`automaticJobCount`). This is what the backend asks SLURM for when a draft has no
  *  walltime of its own (`with_headroom` in app/services/job_script.py): the
  *  recommendation is what a simulation took, not what it is safe to ask for. Null if
  *  `value` is not a SLURM time. */
@@ -70,7 +71,7 @@ export function withHeadroom(value: string): string | null {
 /** Whether a run will post-process: the draft asks for `climatology`, or asks
  *  nothing (`choice` null) and the snapshot's own init does (`own`, the
  *  dataset's `postProcessing`; null, absent or `none` count as not). The one
- *  rule the walltime a draft is shown and the over-limit check share, as
+ *  rule the walltime a draft is shown and the job count share, as
  *  `runs_climatology` in app/services/job_script.py is for the backend's. */
 export function runsClimatology(
   choice: PostProcessingChoice | null | undefined,
@@ -134,50 +135,49 @@ export interface Recommended {
   postProcessingWalltime?: string;
 }
 
-/** The snapshot's recommended walltime in seconds, when a submit of a draft
- *  with this `walltime` would have to ask for more than one job may use: the
- *  draft has none of its own and the recommendation alone is over the limit.
- *  When the run `postProcessing` the recommendation includes the measured
- *  post-processing time (`recommendedSeconds`). Null otherwise, and when the
- *  snapshot is unknown or its value is not a time (the backend decides). The
- *  same rule as `walltime_over_limit` in app/services/job_script.py, which
- *  refuses the submit. */
-export function walltimeOverLimit(
-  config: SlurmConfig,
-  recommended: Recommended | null,
-  postProcessing = false
-): number | null {
-  if (config.walltime !== null) return null;
-  const seconds = recommendedSeconds(recommended, postProcessing);
-  return seconds !== null && seconds > MAX_WALLTIME_SECONDS ? seconds : null;
-}
-
-/** The post-processing part of `walltimeOverLimit`'s seconds, to say so: 0 when
- *  the run does not post-process or its time was not measured. */
+/** The post-processing part of a run's recommended time, in seconds: 0 when the
+ *  run does not post-process or its time was not measured. */
 export function postProcessingShare(recommended: Recommended | null, postProcessing: boolean): number {
   return postProcessing ? (postProcessingSeconds(recommended) ?? 0) : 0;
 }
 
-/** What to tell a person when `walltimeOverLimit` applies: why, and what to do.
- *  `postProcessing` is the part of `seconds` the post-processing takes
- *  (`postProcessingShare`), which the sentence names when there is one. */
-export function describeWalltimeOverLimit(seconds: number, postProcessing = 0): string {
-  const limit = MAX_WALLTIME_SECONDS / 3600;
-  if (postProcessing > 0) {
-    return `This model snapshot's reference simulation took about ${describeHours(seconds - postProcessing)}, and its post-processing about ${describeHours(postProcessing)} more: more than the ${limit} h one job may use. Shorten the run period, turn post-processing off, or set a walltime yourself (the simulation may be stopped when time runs out).`;
-  }
-  return `This model snapshot's reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out).`;
+/** What a run is asked for when its automatic walltime is more than one job may
+ *  use (ADR 0037): the draft has no walltime of its own and the snapshot's
+ *  recommendation with headroom (`withHeadroom`, before the cap) is over the
+ *  limit. Each job then asks for the limit and SLURM stops it there; the
+ *  gateway submits the same job again and WBM carries on from its last saved
+ *  state, so `jobs` is how many jobs of that size the run may take:
+ *  `ceil(walltime with headroom / limit)`. `seconds` is the recommendation
+ *  itself (with the post-processing time when the run `postProcessing`s,
+ *  `recommendedSeconds`), to say what it is based on. Null when one job is
+ *  enough, when the draft sets a walltime (its jobs are as long as it says;
+ *  nothing here predicts whether it needs more), when the snapshot is unknown
+ *  and when its value is not a time. */
+export function automaticJobCount(
+  config: SlurmConfig,
+  recommended: Recommended | null,
+  postProcessing = false
+): { jobs: number; seconds: number } | null {
+  if (config.walltime !== null) return null;
+  const seconds = recommendedSeconds(recommended, postProcessing);
+  if (seconds === null) return null;
+  const jobs = Math.ceil(Math.ceil(seconds * 1.5) / MAX_WALLTIME_SECONDS);
+  return jobs > 1 ? { jobs, seconds } : null;
 }
 
-/** `describeWalltimeOverLimit` in one line, for under the field: the facts, and
- *  the way out. The reason it matters ("the simulation may be stopped") is the long
- *  form's, offered beside it. */
-export function describeWalltimeOverLimitShort(seconds: number, postProcessing = 0): string {
+/** `describeJobCount` without the reason, for a summary that already shows the
+ *  walltime. */
+export function describeJobCountShort(jobs: number): string {
+  return `May run as up to ${jobs} jobs of ${MAX_WALLTIME_SECONDS / 3600} h each; each continues where the last one stopped.`;
+}
+
+/** What to tell a person when `automaticJobCount` applies, in one sentence
+ *  under the field: how many jobs, and that each carries on from the last.
+ *  `postProcessing` says the reference time has the post-processing in it. */
+export function describeJobCount(count: { jobs: number; seconds: number }, postProcessing = false): string {
   const limit = MAX_WALLTIME_SECONDS / 3600;
-  if (postProcessing > 0) {
-    return `The reference simulation and its post-processing took about ${describeHours(seconds)} together, more than the ${limit} h one job may use. Shorten the run period, turn post-processing off or set a walltime.`;
-  }
-  return `The reference simulation took about ${describeHours(seconds)}, more than the ${limit} h one job may use. Shorten the run period or set a walltime.`;
+  const took = postProcessing ? "reference simulation and its post-processing took" : "reference simulation took";
+  return `This simulation may run as up to ${count.jobs} jobs of ${limit} h each (the ${took} about ${describeHours(count.seconds)}, plus 50%). Each job continues where the last one stopped.`;
 }
 
 /** A softer hint for a walltime the draft chose that is shorter than the

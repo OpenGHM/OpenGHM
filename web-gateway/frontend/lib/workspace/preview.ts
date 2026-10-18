@@ -27,6 +27,9 @@ export const FAILED_CAUSES: readonly FailureCause[] = [
   "node_failure",
   "lost",
   "outcome_missing",
+  "continuation_failed",
+  "run_state_incomplete",
+  "run_incomplete",
 ];
 
 /** The causes a failed publish can carry (`PublishFailureCause` in the
@@ -73,6 +76,14 @@ export const PREVIEW_GROUPS: readonly PreviewGroup[] = [
       plain("RUNNING"),
       { key: "cancelling", label: "CANCELLING", status: "RUNNING" },
       plain("COMPLETING"),
+    ],
+  },
+  {
+    title: "Continued",
+    options: [
+      { key: "submitted:continuing", label: "next job being submitted", status: "SUBMITTED" },
+      { key: "running:continued", label: "running job 2", status: "RUNNING" },
+      { key: "completed:continued", label: "completed in 2 jobs", status: "COMPLETED" },
     ],
   },
   {

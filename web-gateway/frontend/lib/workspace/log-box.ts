@@ -22,6 +22,13 @@ export const LOG_SOURCES: readonly { stream: LogStream; label: string }[] = [
 const sourceLabel = (stream: LogStream): string =>
   LOG_SOURCES.find((s) => s.stream === stream)?.label ?? stream;
 
+/** A source's name, with its job when the simulation was run by several
+ *  (ADR 0037): `Job output (job 2)`. WBM's log is one file across jobs, so it
+ *  never names one. */
+export function sourceTitle(stream: LogStream, job?: number): string {
+  return job !== undefined && stream !== "wbm" ? `${sourceLabel(stream)} (job ${job})` : sourceLabel(stream);
+}
+
 const separator = (title: string): LogRow => ({ kind: "separator", text: `──── ${title} ────` });
 
 export type LogBox =
@@ -37,11 +44,16 @@ export function buildLogBox(input: {
   status: JobStatus;
   files: FilesState | null;
   failure: Pick<JobFailure, "cause" | "excerpt"> | null;
+  /** Which job's stdout and stderr these are, when the simulation has had
+   *  several; named in their separators. */
+  job?: number;
+  /** An earlier job ran, so there are logs even before the next one starts. */
+  earlierJobs?: boolean;
 }): LogBox {
-  const { states, status, files, failure } = input;
+  const { states, status, files, failure, job, earlierJobs = false } = input;
   const all = LOG_SOURCES.map((s) => states[s.stream]);
 
-  if (!logsReadable(status) && all.every((s) => isEmptyText(s.text))) {
+  if (!logsReadable(status) && !earlierJobs && all.every((s) => isEmptyText(s.text))) {
     return { kind: "empty", message: "Logs appear here once SLURM starts the simulation." };
   }
   if (files === "purged" && all.every((s) => s.loaded && !s.exists)) {
@@ -63,7 +75,7 @@ export function buildLogBox(input: {
   };
   const block = (stream: LogStream, rows: LogRow[], extra: LogRow[] = []): LogRow[] => {
     const state = states[stream];
-    const out: LogRow[] = [separator(sourceLabel(stream))];
+    const out: LogRow[] = [separator(sourceTitle(stream, job))];
     if (state.startedMidway || state.text.dropped > 0) {
       out.push({
         kind: "note",

@@ -484,3 +484,171 @@ describe("LogViewer download", () => {
     expect(screen.getByText("Your session has expired.")).toBeTruthy();
   });
 });
+
+describe("LogViewer with several jobs (ADR 0037)", () => {
+  const ended = (number: number) => ({
+    number,
+    slurm_job_id: `1000${number}`,
+    slurm_state: "TIMEOUT",
+    slurm_start: "2026-10-01T00:00:00Z",
+    slurm_end: "2026-10-05T00:00:00Z",
+    state_saved_at: "2026-10-04T22:00:00Z",
+  });
+  const TWO = { previous_jobs: [ended(1)], job_number: 2, max_jobs: 5 };
+  const picker = () => screen.getByRole("button", { name: "Choose the job whose output and messages are shown" });
+
+  /** Each file's text says whose it is, so a read of the wrong job shows. */
+  const perJob = async (_id: string, s: LogStream, offset?: number, _limit?: number, job?: number) => {
+    const data = s === "wbm" ? "wbm line\n" : `${s} of job ${job ?? "default"}\n`;
+    return chunk({ stream: s, data, offset: offset ?? 0, next_offset: (offset ?? 0) + data.length, size: data.length });
+  };
+
+  it("has no picker for a simulation run by one job, and reads as before", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(viewer("COMPLETED", { data: { previous_jobs: [], job_number: 1, max_jobs: 5 } }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    expect(screen.queryByRole("button", { name: /Choose the job/ })).toBeNull();
+    expect(fetchJobLog.mock.calls).toEqual([
+      ["j1", "wbm", undefined],
+      ["j1", "stdout", undefined],
+      ["j1", "stderr", undefined],
+    ]);
+    expect(box().textContent).toContain("──── Job output ────");
+  });
+
+  it("reads the current job's stdout and stderr by number, and WBM's log without one", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(viewer("FAILED", { data: TWO }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    expect(fetchJobLog.mock.calls).toEqual([
+      ["j1", "wbm", undefined],
+      ["j1", "stdout", undefined, undefined, 2],
+      ["j1", "stderr", undefined, undefined, 2],
+    ]);
+    expect(picker().textContent).toContain("Job 2");
+    const text = box().textContent ?? "";
+    expect(text).toContain("──── Job output (job 2) ────");
+    expect(text).toContain("──── WBM log ────");
+    expect(text).toContain("──── Messages (job 2) ────");
+    expect(text).toContain("stdout of job 2");
+  });
+
+  it("lists the jobs, the current one marked and the others by SLURM's state", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(viewer("FAILED", { data: { previous_jobs: [ended(1), ended(2)], job_number: 3, max_jobs: 5 } }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    fireEvent.keyDown(picker(), { key: "Enter" });
+    const items = screen.getAllByRole("menuitemradio");
+    expect(items.map((i) => i.textContent)).toEqual(["Job 1TIMEOUT", "Job 2TIMEOUT", "Job 3current"]);
+    expect(items.map((i) => i.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+  });
+
+  it("shows another job's stdout and stderr when it is picked, and goes on with WBM's log where it was", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(viewer("FAILED", { data: TWO }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    fireEvent.keyDown(picker(), { key: "Enter" });
+    await act(async () => fireEvent.click(screen.getByRole("menuitemradio", { name: /Job 1/ })));
+    for (let i = 0; i < 4; i++) await tick(0);
+
+    // Job 1's files are read from a tail; WBM's log goes on from where it was (byte 9), not from a tail.
+    expect(fetchJobLog.mock.calls.slice(3)).toEqual([
+      ["j1", "wbm", 9],
+      ["j1", "stdout", undefined, undefined, 1],
+      ["j1", "stderr", undefined, undefined, 1],
+    ]);
+    expect(picker().textContent).toContain("Job 1");
+    const text = box().textContent ?? "";
+    expect(text).toContain("──── Job output (job 1) ────");
+    expect(text).toContain("stdout of job 1");
+    expect(text).not.toContain("stdout of job 2");
+    expect(text).toContain("wbm line");
+  });
+
+  it("stops reading the files of a job that is over once they are caught up, while the run goes on", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(viewer("RUNNING", { data: TWO }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    fireEvent.keyDown(picker(), { key: "Enter" });
+    await act(async () => fireEvent.click(screen.getByRole("menuitemradio", { name: /Job 1/ })));
+    for (let i = 0; i < 4; i++) await tick(0);
+    const before = fetchJobLog.mock.calls.length;
+    await tick(30_000);
+    const after = fetchJobLog.mock.calls.slice(before);
+    // Only WBM's log, which still grows, is read again.
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.every((c) => c[1] === "wbm")).toBe(true);
+  });
+
+  it("downloads the picked job's stdout and stderr, and WBM's log without a job", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("x", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(viewer("FAILED", { data: TWO }));
+    for (let i = 0; i < 4; i++) await tick(0);
+    fireEvent.keyDown(picker(), { key: "Enter" });
+    await act(async () => fireEvent.click(screen.getByRole("menuitemradio", { name: /Job 1/ })));
+    for (let i = 0; i < 4; i++) await tick(0);
+
+    const download = async (name: string) => {
+      fireEvent.keyDown(screen.getByRole("button", { name: "Download a log" }), { key: "Enter" });
+      await act(async () => fireEvent.click(screen.getByRole("menuitem", { name })));
+    };
+    fireEvent.keyDown(screen.getByRole("button", { name: "Download a log" }), { key: "Enter" });
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Job output (job 1)",
+      "WBM log",
+      "Messages (job 1)",
+    ]);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await download("Messages (job 1)");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/jobs/j1/logs/stderr?job=1", expect.anything());
+    await download("WBM log");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/jobs/j1/logs/wbm", expect.anything());
+    click.mockRestore();
+  });
+
+  it("reads the earlier job's logs while the next one is being submitted", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    render(
+      viewer("SUBMITTED", {
+        data: {
+          ...TWO,
+          job_number: 1,
+          slurm_job_id: null,
+          continuation: { number: 2, requested_at: "2026-10-05T00:00:05Z", tries: 0 },
+        },
+      })
+    );
+    for (let i = 0; i < 4; i++) await tick(0);
+    expect(fetchJobLog).toHaveBeenCalled();
+    expect(screen.queryByText("Logs appear here once SLURM starts the simulation.")).toBeNull();
+    expect(picker().textContent).toContain("Job 1");
+  });
+
+  it("follows the current job when the next one starts, unless a person picked another", async () => {
+    fetchJobLog.mockImplementation(perJob);
+    pollJobStatus
+      .mockResolvedValueOnce({ ...polled("RUNNING"), data: { ...polled("RUNNING").data, ...TWO } })
+      .mockResolvedValue({
+        ...polled("RUNNING"),
+        data: { ...polled("RUNNING").data, previous_jobs: [ended(1), ended(2)], job_number: 3, max_jobs: 5 },
+      });
+    render(
+      <LiveJobProvider jobId="j1" initialStatus="RUNNING" initialData={TWO}>
+        <LogViewer />
+      </LiveJobProvider>
+    );
+    for (let i = 0; i < 4; i++) await tick(0);
+    expect(picker().textContent).toContain("Job 2");
+    await tick(5_000);
+    for (let i = 0; i < 6; i++) await tick(0);
+    expect(picker().textContent).toContain("Job 3");
+    expect(fetchJobLog.mock.calls.some((c) => c[4] === 3)).toBe(true);
+    expect(box().textContent).toContain("stdout of job 3");
+    expect(box().textContent).not.toContain("stdout of job 2");
+  });
+});

@@ -105,6 +105,24 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
     nextStep: "contact_admin",
     tone: "neutral",
   },
+  continuation_failed: {
+    title: "The next job couldn't be submitted",
+    body: "SLURM stopped a job at its time limit after WBM saved its state, but the gateway could not submit the job that carries on from it. What WBM saved is still on Anvil.",
+    nextStep: "contact_admin",
+    tone: "neutral",
+  },
+  run_state_incomplete: {
+    title: "The saved run state is incomplete",
+    body: "A job was stopped while WBM was saving its state, so the next job could not safely carry on from it and did not start WBM.",
+    nextStep: "resubmit",
+    tone: "neutral",
+  },
+  run_incomplete: {
+    title: "WBM stopped before the end of the run",
+    body: "WBM exited normally, but its log does not reach the last day of the run, so the output is incomplete.",
+    nextStep: "new_draft",
+    tone: "danger",
+  },
   cancelled_by_user: {
     title: "Cancelled",
     body: "This snapshot draft was stopped at its owner's request.",
@@ -119,6 +137,15 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
 };
 
+/** A `timeout` that was not continued because the simulation had used all the
+ *  jobs it may have (`detail` `job_limit`): a longer walltime would not help
+ *  when each job already ran to the limit, so the way on is a shorter run. */
+const TIMEOUT_JOB_LIMIT_COPY: FailureCopy = {
+  ...FAILURE_COPY.timeout,
+  body: "The simulation used all the jobs it may have and WBM still had not finished. Anything it wrote may still be on Anvil. Try a shorter run period.",
+  nextStep: "new_draft",
+};
+
 /** A verdict whose cause this frontend has no wording for (the backend gained
  *  one first, or an old document names one that is gone). The card shows this
  *  title and the verdict's own `message`, never a crash. */
@@ -129,11 +156,12 @@ export const UNKNOWN_FAILURE_COPY: FailureCopy = {
   tone: "danger",
 };
 
-/** The copy for a verdict: its cause's, else `UNKNOWN_FAILURE_COPY`, and
+/** The copy for a verdict: its cause's (a `timeout`'s also by its `detail`), else `UNKNOWN_FAILURE_COPY`, and
  *  `UNRECORDED_FAILURE_COPY` when there is no verdict. The one lookup: never
  *  index `FAILURE_COPY` by a cause from the backend directly. */
-export function failureCopyFor(failure: Pick<JobFailure, "cause"> | null | undefined): FailureCopy {
+export function failureCopyFor(failure: Pick<JobFailure, "cause" | "detail"> | null | undefined): FailureCopy {
   if (!failure) return UNRECORDED_FAILURE_COPY;
+  if (failure.cause === "timeout" && failure.detail === "job_limit") return TIMEOUT_JOB_LIMIT_COPY;
   return (Object.hasOwn(FAILURE_COPY, failure.cause) ? FAILURE_COPY[failure.cause] : undefined) ?? UNKNOWN_FAILURE_COPY;
 }
 

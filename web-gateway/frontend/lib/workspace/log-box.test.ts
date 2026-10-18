@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FailureCause, JobStatus, LogStream } from "@/lib/jobs/types";
-import { buildLogBox, LOG_SOURCES, type LogBox } from "@/lib/workspace/log-box";
+import { buildLogBox, LOG_SOURCES, sourceTitle, type LogBox } from "@/lib/workspace/log-box";
 import type { LogRow } from "@/lib/workspace/log-sections";
 import { INITIAL_STREAM, previewStreamState, type StreamState } from "@/lib/workspace/log-stream";
 
@@ -46,6 +46,16 @@ describe("LOG_SOURCES", () => {
       ["wbm", "WBM log"],
       ["stderr", "Messages"],
     ]);
+  });
+});
+
+describe("sourceTitle", () => {
+  it("is the source's name, with its job for stdout and stderr only (ADR 0037)", () => {
+    expect(sourceTitle("stdout")).toBe("Job output");
+    expect(sourceTitle("stdout", 2)).toBe("Job output (job 2)");
+    expect(sourceTitle("stderr", 1)).toBe("Messages (job 1)");
+    // WBM's log is one file across jobs.
+    expect(sourceTitle("wbm", 2)).toBe("WBM log");
   });
 });
 
@@ -151,6 +161,20 @@ describe("the box before there is anything", () => {
 
   it("is loading until a stream has answered", () => {
     expect(buildLogBox({ states: blank, status: "RUNNING", files: null, failure: null })).toEqual({ kind: "loading" });
+  });
+
+  it("names the job in the separators of stdout and stderr, but not of the WBM log", () => {
+    const rows = rowsOf(buildLogBox({ states: states(), status: "COMPLETED", files: null, failure: null, job: 2 }));
+    expect(rows.filter((r) => r.kind === "separator").map((r) => r.text)).toEqual([
+      "──── Job output (job 2) ────",
+      "──── WBM log ────",
+      "──── Messages (job 2) ────",
+    ]);
+  });
+
+  it("shows the logs of an earlier job while the next one is queued", () => {
+    const box = buildLogBox({ states: states(), status: "SUBMITTED", files: null, failure: null, job: 1, earlierJobs: true });
+    expect(box.kind).toBe("rows");
   });
 
   it("waits for SLURM while the job is queued", () => {

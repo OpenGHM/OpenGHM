@@ -5,6 +5,14 @@
  * the route's own `{ code, message }`.
  */
 
+/** The download route's address for one log. `job` is the job of a simulation
+ *  run by several (ADR 0037) whose stdout or stderr is wanted; WBM's log is one
+ *  file across jobs and is asked for without one. */
+export function logDownloadUrl(jobId: string, stream: "stdout" | "stderr" | "wbm", job?: number): string {
+  const base = `/api/jobs/${encodeURIComponent(jobId)}/logs/${stream}`;
+  return job !== undefined && stream !== "wbm" ? `${base}?job=${job}` : base;
+}
+
 /** `filename` from a `Content-Disposition` header, or `fallback`. */
 export function filenameFromDisposition(header: string | null, fallback: string): string {
   if (!header) return fallback;

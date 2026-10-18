@@ -3,8 +3,9 @@
  * polls, when to poll at all, what a failed poll is called, and the shape of
  * the answer the screen holds. `use-live-job.ts` wires them to timers.
  */
-import type { JobLive, JobStatus, JobStatusResponse, PublishRecord } from "@/lib/jobs/types";
+import type { JobLive, JobRunFields, JobStatus, JobStatusResponse, PublishRecord } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
+import { currentJobNumber } from "@/lib/workspace/job-runs";
 
 /** How often a queued, running or cancelling job is asked about. */
 export const POLL_INTERVAL_MS = 5_000;
@@ -48,11 +49,14 @@ export function describePollError(
   return "Couldn't check the simulation's status";
 }
 
-/** Everything a status response carries except the ids; `live` is always set. */
-export type StatusView = Omit<JobStatusResponse, "job_id" | "sim_id" | "live" | "publish"> & {
-  live: JobLive | null;
-  publish: PublishRecord | null;
-};
+/** Everything a status response carries except the ids; `live` is always set,
+ *  and so are the run fields (one job, none ended, when the answer had none:
+ *  `max_jobs` 0 is "not known"). */
+export type StatusView = Omit<JobStatusResponse, "job_id" | "sim_id" | "live" | "publish" | keyof JobRunFields> &
+  JobRunFields & {
+    live: JobLive | null;
+    publish: PublishRecord | null;
+  };
 
 /** The fields of a (possibly partial) status response, with nulls for the rest. */
 export function toView(status: JobStatus, data?: Partial<JobStatusResponse>): StatusView {
@@ -75,15 +79,24 @@ export function toView(status: JobStatus, data?: Partial<JobStatusResponse>): St
     output: data?.output ?? null,
     publish: data?.publish ?? null,
     live: data?.live ?? null,
+    previous_jobs: data?.previous_jobs ?? [],
+    job_number: currentJobNumber(data ?? {}),
+    max_jobs: data?.max_jobs ?? 0,
+    continuation: data?.continuation ?? null,
   };
 }
 
 /** The view after a new answer. An answer without a `live` key (the cancel
  *  route's) keeps the one already held; an explicit `null` replaces it. The
- *  same goes for `publish`. */
+ *  same goes for `publish` and for the run fields (`previous_jobs`,
+ *  `job_number`, `max_jobs`, `continuation`). */
 export function mergeView(previous: StatusView, data: JobStatusResponse): StatusView {
   const next = toView(data.status, data);
   if (data.live === undefined) next.live = previous.live;
   if (data.publish === undefined) next.publish = previous.publish;
+  if (data.previous_jobs === undefined) next.previous_jobs = previous.previous_jobs;
+  if (data.job_number === undefined) next.job_number = previous.job_number;
+  if (data.max_jobs === undefined) next.max_jobs = previous.max_jobs;
+  if (data.continuation === undefined) next.continuation = previous.continuation;
   return next;
 }

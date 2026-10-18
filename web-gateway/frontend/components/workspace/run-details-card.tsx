@@ -18,6 +18,7 @@ import {
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
 import { runPeriodLabel } from "@/lib/jobs/run-period-label";
+import { waitingSince } from "@/lib/workspace/job-runs";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import { useNow } from "@/lib/workspace/use-now";
 import { cn } from "@/lib/utils";
@@ -135,12 +136,14 @@ function TimeRows({ job }: { job: Job }) {
   const started = view.slurm_start ?? startedAt;
   const ended = view.slurm_end ?? completedAt;
   const ending = ["COMPLETED", "FAILED", "CANCELLED"].includes(status);
-  const waited = secondsBetween(submittedAt, started);
+  // A continued job waited from the end of the job before it, not from the first submit.
+  const waitStart = waitingSince(view.previous_jobs, submittedAt);
+  const waited = secondsBetween(waitStart, started);
   const ran = ending ? secondsBetween(started, ended) : null;
   // Still queued: how long so far, from the clock.
   const waiting =
     started === null && !ending && now !== null
-      ? secondsBetween(submittedAt, new Date(now).toISOString())
+      ? secondsBetween(waitStart, new Date(now).toISOString())
       : null;
   const cancelRequested = view.cancel_requested_at ?? job.cancel_requested_at;
 

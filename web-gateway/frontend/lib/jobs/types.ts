@@ -36,7 +36,14 @@ export type FailureCause =
   | "cancelled_by_user"
   | "cancelled_by_system"
   | "lost"
-  | "outcome_missing";
+  | "outcome_missing"
+  | "continuation_failed"
+  | "run_state_incomplete"
+  | "run_incomplete";
+
+/** Why a `timeout` was not continued in a next job (ADR 0037): the job saved
+ *  no new state, or the simulation had used all the jobs it may have. */
+export type TimeoutDetail = "no_new_state" | "job_limit";
 
 /** Set on FAILED and CANCELLED. `excerpt` is the WBM log tail for the WBM
  *  causes and the stderr tail for the others. */
@@ -45,6 +52,9 @@ export interface JobFailure {
   phase: string | null;
   message: string;
   excerpt: string | null;
+  /** Set on a `timeout`: why it was not continued (`TimeoutDetail`). Absent
+   *  on other causes and on a verdict written before it existed. */
+  detail?: TimeoutDetail | null;
 }
 
 /** `purged`: Anvil's 30-day scratch purge removed the simulation's work directory. */
@@ -83,6 +93,48 @@ export interface JobVerdictFields {
   cancel_requested_by_email: string | null;
   files: FilesState | null;
   output: OutputManifest | null;
+}
+
+// ─── A simulation run by more than one job (ADR 0037) ───────────────────────
+
+/** A job of the simulation that has already ended. Oldest first in
+ *  `JobRunFields.previous_jobs`. `state_saved_at` is when WBM last saved its
+ *  run state in that job; null when it saved none. */
+export interface PreviousJob {
+  /** 1-based, in the order the jobs ran. */
+  number: number;
+  slurm_job_id: string | null;
+  /** SLURM's own word, e.g. `TIMEOUT`. */
+  slurm_state: string | null;
+  slurm_start: string | null;
+  slurm_end: string | null;
+  state_saved_at: string | null;
+}
+
+/** Set while the gateway is submitting the next job of a simulation, after
+ *  SLURM stopped the last one at its time limit with a saved state: the
+ *  status is `SUBMITTED` and there is no SLURM id yet. `number` is the job
+ *  being submitted, `tries` how many submits did not go through so far. */
+export interface Continuation {
+  number: number;
+  requested_at: string;
+  tries: number;
+}
+
+/** What says a simulation was run by several jobs. On both `Job` (GET
+ *  /jobs/{id}) and `JobStatusResponse` (GET /jobs/{id}/status). `slurm_*` and
+ *  `slurm_job_id` on those are the job running now, or the one that ran last. */
+export interface JobRunFields {
+  /** Jobs that already ended, oldest first; empty for a simulation run by
+   *  one job. */
+  previous_jobs: PreviousJob[];
+  /** 1-based: the job running now, or the one that ran last; null for a
+   *  draft. */
+  job_number: number | null;
+  /** How many jobs one simulation may use. */
+  max_jobs: number;
+  /** Non-null while the next job is being submitted. */
+  continuation: Continuation | null;
 }
 
 // ─── Publishing a draft as a snapshot (ADR 0031) ─────────────────────────────
@@ -286,7 +338,7 @@ export interface JobStatsResponse {
   cancelled: number;
 }
 
-export interface Job extends JobVerdictFields {
+export interface Job extends JobVerdictFields, JobRunFields {
   id: string;
   sim_id: string;
   user_id: string;
@@ -384,7 +436,10 @@ export interface JobLive {
   progress: JobProgress | null;
 }
 
-export interface JobStatusResponse extends JobVerdictFields {
+/** The run fields are optional here: a partial answer (the cancel route's, the
+ *  page's own copy of the job) may leave them out, and the view keeps what it
+ *  holds. */
+export interface JobStatusResponse extends JobVerdictFields, Partial<JobRunFields> {
   job_id: string;
   sim_id: string | null;
   status: JobStatus;

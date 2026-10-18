@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   ANVIL_SHARED_MB_PER_CORE,
+  automaticJobCount,
   automaticWalltimeLabel,
   describeComputeSummary,
   describeCoresBelowRecommended,
   describeHours,
   describeSlurmTime,
+  describeJobCount,
+  describeJobCountShort,
   describeWalltimeBelowReference,
-  describeWalltimeOverLimit,
-  describeWalltimeOverLimitShort,
   effectiveCompute,
   formatSlurmTime,
   withHeadroom,
@@ -20,7 +21,6 @@ import {
   sharedMemoryGb,
   submitBlockedReason,
   validateSlurmConfig,
-  walltimeOverLimit,
 } from "@/lib/jobs/compute";
 
 describe("parseSlurmTime", () => {
@@ -85,28 +85,38 @@ describe("a recommendation over the limit for one job", () => {
   const unset = { cores: null, walltime: null };
   const snapshot = (walltime: string) => ({ cores: 16, walltime });
 
-  // The same cases as tests/test_job_script.py: the two sides must agree.
+  // The recommendation with headroom, divided by what one job may use, rounded
+  // up (ADR 0037). A run over the limit is not refused: it is continued.
   it.each([
-    ["111:30:00", 111 * 3600 + 30 * 60],
-    ["96:00:01", 96 * 3600 + 1],
-    ["96:00:00", null],
-    ["80:00:00", null],
+    ["111:30:00", 2], // 167 h 15 min
+    ["96:00:00", 2], // 144 h
+    ["80:00:00", 2], // 120 h
+    ["64:00:00", null], // exactly 96 h: one job
+    ["63:59:59", null],
+    ["64:00:01", 2],
+    ["192:00:00", 3], // 288 h
     ["4:30:00", null],
     ["15:00", null],
     ["not a time", null],
-  ])("%s", (walltime, over) => {
-    expect(walltimeOverLimit(unset, snapshot(walltime))).toBe(over);
-    // A walltime the draft chose is not refused.
-    expect(walltimeOverLimit({ cores: null, walltime: "02:00:00" }, snapshot(walltime))).toBeNull();
+  ])("%s asks for %s jobs", (walltime, jobs) => {
+    expect(automaticJobCount(unset, snapshot(walltime))?.jobs ?? null).toBe(jobs);
   });
 
-  it("is not known without the snapshot", () => {
-    expect(walltimeOverLimit(unset, null)).toBeNull();
+  it("is nothing when the draft sets its own walltime, or without the snapshot", () => {
+    expect(automaticJobCount({ cores: null, walltime: "02:00:00" }, snapshot("111:30:00"))).toBeNull();
+    expect(automaticJobCount(unset, null)).toBeNull();
   });
 
-  it("says how long the reference simulation took, what one job may use, and what to do", () => {
-    expect(describeWalltimeOverLimit(111 * 3600 + 30 * 60)).toBe(
-      "This model snapshot's reference simulation took about 111 h 30 min, more than the 96 h one job may use. Shorten the run period, or set a walltime yourself (the simulation may be stopped when time runs out)."
+  it("carries the recommendation it is based on", () => {
+    expect(automaticJobCount(unset, snapshot("111:30:00"))).toEqual({ jobs: 2, seconds: 111 * 3600 + 30 * 60 });
+  });
+
+  it("says how many jobs, what they are based on, and that each carries on", () => {
+    expect(describeJobCount({ jobs: 2, seconds: 111 * 3600 + 30 * 60 })).toBe(
+      "This simulation may run as up to 2 jobs of 96 h each (the reference simulation took about 111 h 30 min, plus 50%). Each job continues where the last one stopped."
+    );
+    expect(describeJobCountShort(3)).toBe(
+      "May run as up to 3 jobs of 96 h each; each continues where the last one stopped."
     );
   });
 
@@ -324,19 +334,18 @@ describe("a run that post-processes", () => {
     ...(postProcessingWalltime ? { postProcessingWalltime } : {}),
   });
 
-  // The same cases as tests/test_job_script.py: the two sides must agree.
   it.each([
-    ["80:00:00", "20:00:00", true, 100 * 3600],
-    ["80:00:00", "20:00:00", false, null],
-    ["80:00:00", "16:00:00", true, null],
-    ["80:00:00", "16:00:01", true, 96 * 3600 + 1],
-    ["80:00:00", undefined, true, null],
-    ["111:30:00", "1:00:00", true, 112 * 3600 + 30 * 60],
+    ["80:00:00", "20:00:00", true, 2], // 100 h, 150 h with headroom
+    ["80:00:00", "20:00:00", false, 2], // 80 h alone: 120 h with headroom
+    ["40:00:00", "20:00:00", true, null], // 60 h: 90 h with headroom
+    ["40:00:00", "20:00:00", false, null],
+    ["50:00:00", "20:00:00", true, 2], // 70 h: 105 h with headroom
+    ["50:00:00", undefined, true, null], // post-processing not measured
     ["15:00", "1:00:00", true, null],
-  ])("%s + %s, post-processing %s", (walltime, step, postProcessing, over) => {
-    expect(walltimeOverLimit(unset, snapshot(walltime, step), postProcessing)).toBe(over);
-    // A walltime the draft chose is not refused.
-    expect(walltimeOverLimit({ cores: null, walltime: "02:00:00" }, snapshot(walltime, step), postProcessing)).toBeNull();
+  ])("%s + %s, post-processing %s asks for %s jobs", (walltime, step, postProcessing, jobs) => {
+    expect(automaticJobCount(unset, snapshot(walltime, step), postProcessing)?.jobs ?? null).toBe(jobs);
+    // A walltime the draft chose is a walltime of its own.
+    expect(automaticJobCount({ cores: null, walltime: "02:00:00" }, snapshot(walltime, step), postProcessing)).toBeNull();
   });
 
   it("adds the post-processing time only when the run has it and it was measured", () => {
@@ -378,19 +387,16 @@ describe("a run that post-processes", () => {
     });
   });
 
-  it("names the post-processing in the labels and the over-limit sentences", () => {
+  it("names the post-processing in the labels and the job count sentence", () => {
     expect(automaticWalltimeLabel(false, "summary", true)).toBe(
       "model snapshot's recommendation + post-processing + 50%"
     );
     expect(automaticWalltimeLabel(false, "placeholder", true)).toBe("recommended + post-processing + 50%");
     expect(automaticWalltimeLabel(true, "summary", true)).toBe("the limit for one job");
-    expect(describeWalltimeOverLimit(100 * 3600, 20 * 3600)).toContain(
-      "reference simulation took about 80 h, and its post-processing about 20 h more"
+    expect(describeJobCount({ jobs: 2, seconds: 100 * 3600 }, true)).toContain(
+      "reference simulation and its post-processing took about 100 h"
     );
-    expect(describeWalltimeOverLimitShort(100 * 3600, 20 * 3600)).toContain(
-      "post-processing took about 100 h together"
-    );
-    expect(describeWalltimeOverLimitShort(111 * 3600)).not.toContain("post-processing");
+    expect(describeJobCount({ jobs: 2, seconds: 111 * 3600 })).not.toContain("post-processing");
   });
 
   it("says Custom with the post-processing in the automatic walltime", () => {

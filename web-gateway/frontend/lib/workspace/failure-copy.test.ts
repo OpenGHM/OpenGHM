@@ -31,6 +31,9 @@ const ALL_CAUSES: Record<FailureCause, true> = {
   cancelled_by_system: true,
   lost: true,
   outcome_missing: true,
+  continuation_failed: true,
+  run_state_incomplete: true,
+  run_incomplete: true,
 };
 
 describe("FAILURE_COPY", () => {
@@ -104,6 +107,16 @@ describe("FAILURE_COPY", () => {
     expect(copy.tone).toBe("danger");
   });
 
+  it("words the three causes of a run continued in several jobs (ADR 0037)", () => {
+    expect(FAILURE_COPY.continuation_failed.title).toBe("The next job couldn't be submitted");
+    expect(FAILURE_COPY.continuation_failed.body).toMatch(/time limit/);
+    expect(FAILURE_COPY.continuation_failed.nextStep).toBe("contact_admin");
+    expect(FAILURE_COPY.run_state_incomplete.title).toBe("The saved run state is incomplete");
+    expect(FAILURE_COPY.run_state_incomplete.nextStep).toBe("resubmit");
+    expect(FAILURE_COPY.run_incomplete.title).toBe("WBM stopped before the end of the run");
+    expect(FAILURE_COPY.run_incomplete.tone).toBe("danger");
+  });
+
   it("offers a new draft for every step except none", () => {
     expect(offersNewDraft("none")).toBe(false);
     expect(offersNewDraft("admin_fixes_setup")).toBe(true);
@@ -130,6 +143,17 @@ describe("failureCopyFor", () => {
   it("is the cause's copy for a known cause, and the unrecorded copy without a verdict", () => {
     expect(failureCopyFor(failure("timeout"))).toBe(FAILURE_COPY.timeout);
     expect(failureCopyFor(null)).toBe(UNRECORDED_FAILURE_COPY);
+  });
+
+  it("tells a timeout that used all its jobs to shorten the run, not to ask for a longer walltime", () => {
+    const used = failureCopyFor({ cause: "timeout", detail: "job_limit" });
+    expect(used.title).toBe(FAILURE_COPY.timeout.title);
+    expect(used.body).toMatch(/used all the jobs/);
+    expect(used.body).toMatch(/shorter run period/);
+    expect(used.nextStep).toBe("new_draft");
+    // A job that saved no new state, and a verdict without a detail, read as a timeout always did.
+    expect(failureCopyFor({ cause: "timeout", detail: "no_new_state" })).toBe(FAILURE_COPY.timeout);
+    expect(failureCopyFor({ cause: "timeout", detail: null })).toBe(FAILURE_COPY.timeout);
   });
 
   it("is a generic copy, not undefined, for a cause the frontend does not know", () => {

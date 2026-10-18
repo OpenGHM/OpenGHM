@@ -312,17 +312,22 @@ export async function deleteDraft(jobId: string): Promise<ActionResult<null>> {
  * Read one log of a job by byte offset (ADR 0027). Without `offset` the read
  * is the tail: it starts `limit` bytes before the end, at a line start. With
  * one it continues from there, and `next_offset` of the answer is the next
- * `offset`. A missing file is `exists: false`, not a failure.
+ * `offset`. A missing file is `exists: false`, not a failure. `job` is the job
+ * of a simulation run by several (ADR 0037) whose stdout or stderr is read;
+ * without it the backend reads the current job's. The `wbm` stream is one file
+ * across jobs and is read without one.
  */
 export async function fetchJobLog(
   jobId: string,
   stream: LogStream,
   offset?: number,
-  limit?: number
+  limit?: number,
+  job?: number
 ): Promise<ActionResult<JobLogChunk>> {
   const params: Record<string, string | number> = { stream };
   if (offset !== undefined) params.offset = offset;
   if (limit !== undefined) params.limit = limit;
+  if (job !== undefined && stream !== "wbm") params.job = job;
   return run(async (client) => {
     const res = await client.get<JobLogChunk>(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/logs`,
