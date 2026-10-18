@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { workspaceSession } from "@/lib/auth-guard";
@@ -11,6 +12,8 @@ import { fetchDatasetById } from "@/lib/repository/actions";
 import type { Dataset } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import { parseStep } from "@/lib/workspace/draft-wizard";
+
+export const metadata: Metadata = { title: "New snapshot | OpenGHM" };
 
 /**
  * A new snapshot draft, before it exists (ADR 0028): the draft wizard on a

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { workspaceSession } from "@/lib/auth-guard";
@@ -6,12 +7,21 @@ import { Footer } from "@/components/landing/footer";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { JobDetail } from "@/components/workspace/job-detail";
 import { fetchMe } from "@/lib/account/actions";
-import { fetchJob } from "@/lib/jobs/actions";
+import { displayName } from "@/lib/jobs/display-name";
+import { getJob } from "@/lib/jobs/detail-data";
 import { runsClimatology, submitBlockedReason } from "@/lib/jobs/compute";
 import { fetchDatasetById } from "@/lib/repository/actions";
 import type { Dataset } from "@/lib/repository/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 import { parseStep, recommendedComputeFor } from "@/lib/workspace/draft-wizard";
+
+/** The tab's title: the snapshot draft's name, as the page calls it. A draft that
+ *  cannot be read (not signed in, not found) gets the generic one; the page says why. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const result = await getJob(id).catch(() => null);
+  return { title: result?.ok ? `${displayName(result.data)} | OpenGHM` : "Snapshot draft | OpenGHM" };
+}
 
 /**
  * A job of the signed-in user, as the backend has it. A DRAFT opens the draft
@@ -32,7 +42,7 @@ export default async function JobDetailPage({
   const access = await workspaceSession();
   if ("signedOut" in access) return <SignInRequired reason={access.signedOut} here={here} />;
 
-  const result = await fetchJob(id);
+  const result = await getJob(id);
   if (!result.ok) {
     if (result.reason === "session_expired") return <SignInRequired reason="expired" here={here} />;
     if (result.reason === "not_found") notFound();

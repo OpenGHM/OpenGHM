@@ -93,7 +93,7 @@ describe("a create that fails", () => {
     const { saver } = deps({ derive });
     expect(await saver.save("s", base(), CTX)).toEqual({ ok: false, failure: { reason: "session_expired" } });
     expect(await saver.save("s", base(), CTX)).toEqual({ ok: false, failure: { reason: "error", message: SNAPSHOT_GONE } });
-    expect(await saver.save("s", base(), CTX)).toEqual({ ok: false, failure: { reason: "error", message: "network down" } });
+    expect(await saver.save("s", base(), CTX)).toEqual({ ok: false, failure: { reason: "error", message: "Couldn't save the snapshot draft." } });
   });
 
   it("tries to create again on the next save, since nothing exists", async () => {
@@ -135,7 +135,7 @@ describe("a create that works and a fill that does not", () => {
     const { saver } = deps({ update });
     const local = { ...base(), name: "Run A" };
     expect(await saver.save("s", local, CTX)).toMatchObject({ ok: true, patchError: "Your session has expired.", notSaved: ["name"] });
-    expect(await saver.save("s", local, CTX)).toMatchObject({ ok: true, patchError: "network down", notSaved: ["name"] });
+    expect(await saver.save("s", local, CTX)).toMatchObject({ ok: true, patchError: "Couldn't reach the server.", notSaved: ["name"] });
   });
 
   it("does not create a second draft on a retry: it only sends what still differs", async () => {
@@ -231,7 +231,7 @@ describe("saves that overlap", () => {
 describe("describeNotSaved", () => {
   it("says the draft exists and which settings are missing, in the wizard's words", () => {
     expect(describeNotSaved(["start", "cores"])).toBe(
-      "The draft was saved, but these settings weren't: Start date, Cores. Open it to set them again."
+      "The snapshot draft was saved, but these settings weren't: Start date, Cores. Open it to set them again."
     );
   });
 });

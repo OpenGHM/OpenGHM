@@ -162,7 +162,7 @@ function InitSettingsList({ settings }: { settings: PostProcessingSettings }) {
         <SettingRow
           label="Forks"
           initKey="Forks"
-          note="A run that post-processes uses its job's cores instead."
+          note="A run that post-processes uses the simulation's cores instead."
         >
           {settings.forks === null ? "Not set (WBM's default is 8)" : settings.forks}
         </SettingRow>

@@ -66,7 +66,7 @@ export function CancelJobDialog({
     if (pending) return;
     if (preview) {
       onOpenChange(false);
-      toast.info("Preview data — there is no real job to cancel.");
+      toast.info("Preview data — there is no real simulation to cancel.");
       return;
     }
     setBusy(true);

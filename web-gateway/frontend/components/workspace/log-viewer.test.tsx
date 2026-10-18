@@ -67,7 +67,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const box = () => screen.getByRole("log", { name: "Job logs" });
+const box = () => screen.getByRole("log", { name: "Simulation logs" });
 
 const polled = (status: JobStatus): { ok: true; data: JobStatusResponse } => ({
   ok: true,
@@ -178,10 +178,40 @@ describe("LogViewer with fixture text", () => {
     expect(writeText).toHaveBeenCalledWith("──── Job output ────\no\n──── WBM log ────\nw\n──── Messages ────\nm");
   });
 
+  describe("a long run of file counters", () => {
+    const counters = Array.from({ length: 32 }, (_, i) => `  ${(i + 1) * 1000}/32959 files`);
+    const stderr = ["before", ...counters, "downloaded 34, skipped 0, failed 0"].join("\n");
+
+    it("folds into its last line, keeps the file's line numbers, and expands on request", () => {
+      render(viewer("COMPLETED", { previewLogs: { stderr } }));
+      expect(box().textContent).toContain("… 31 progress lines hidden");
+      expect(box().textContent).toContain("32000/32959 files");
+      expect(box().textContent).not.toContain("1000/32959 files");
+      // before = 1, the last counter is line 33, the summary line 34.
+      expect([...box().querySelectorAll("[data-line-number]")].map((g) => g.textContent)).toEqual(["1", "33", "34"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Show" }));
+      expect(box().textContent).toContain("1000/32959 files");
+      expect(box().querySelectorAll("[data-line-number]")).toHaveLength(34);
+      fireEvent.click(screen.getByRole("button", { name: "Hide" }));
+      expect(box().textContent).not.toContain("1000/32959 files");
+    });
+
+    it("is still all there when copied", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+      render(viewer("COMPLETED", { previewLogs: { stderr } }));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copy logs text" })));
+      const copied = writeText.mock.calls[0][0] as string;
+      expect(copied).toContain("  1000/32959 files\n  2000/32959 files");
+      expect(copied.split("\n")).toContain("  32000/32959 files");
+    });
+  });
+
   it("waits for SLURM without a box while the job is queued", async () => {
     render(viewer("PENDING"));
     await tick(30_000);
-    expect(screen.getByText("Logs appear here once SLURM starts the job.")).toBeTruthy();
+    expect(screen.getByText("Logs appear here once SLURM starts the simulation.")).toBeTruthy();
     expect(screen.queryByRole("log")).toBeNull();
     expect(fetchJobLog).not.toHaveBeenCalled();
   });
@@ -348,7 +378,7 @@ describe("LogViewer reading", () => {
     );
     for (let i = 0; i < 4; i++) await tick(0);
     expect(box().textContent).toContain(
-      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+      "Nothing was written to stderr. SLURM stopped this simulation (see the log excerpt in the failure card); the WBM log shows how far it got."
     );
   });
 

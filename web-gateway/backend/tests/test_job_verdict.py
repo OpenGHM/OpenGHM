@@ -717,6 +717,22 @@ def test_out_of_memory_says_to_add_cores_or_shorten_the_run():
     assert "more cores" in msg and "1.9 GB" in msg and "shorter run period" in msg
 
 
+def test_out_of_memory_says_how_much_memory_the_cores_gave():
+    msg = verdict("OUT_OF_MEMORY", outcome=None, cores=1).failure.message
+    assert "had 1 core," in msg and "about 1.9 GB in all" in msg
+    assert "Start a new snapshot draft with more cores" in msg
+    msg = verdict("OUT_OF_MEMORY", outcome=None, cores=64).failure.message
+    assert "had 64 cores" in msg and "about 121.3 GB in all" in msg
+
+
+@pytest.mark.parametrize("code", [137, 247])
+def test_a_killed_run_says_how_much_memory_the_cores_gave(code):
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": code}}, staged=True,
+                 wbm={"log": None, "all_done": False, "markers": [], "tail": []})
+    assert "had 2 cores" in verdict("FAILED", outcome=rec, cores=2).failure.message
+    assert "about 3.8 GB in all" in verdict("FAILED", outcome=None, slurm_exit_code=f"{code}:0", cores=2).failure.message
+
+
 def test_a_timeout_while_fetching_is_worded_for_the_fetch():
     rec = record(phase="fetch", signal="TERM", steps={"fetch": {"exit_code": None}}, staged=False)
     v = verdict("TIMEOUT", outcome=rec, walltime_seconds=4 * 3600)

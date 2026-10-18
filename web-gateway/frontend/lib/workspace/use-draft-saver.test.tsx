@@ -600,7 +600,7 @@ describe("no answer, a 5xx, a timeout", () => {
     const { result, name } = setup();
     name("Run");
     await save(result);
-    expect(result.current.state).toEqual({ kind: "failed", message: "network down" });
+    expect(result.current.state).toEqual({ kind: "failed", message: "Couldn't reach the server." });
     await save(result);
     expect(result.current.state).toEqual({ kind: "failed", message: "failed without a status" });
     await save(result);

@@ -29,5 +29,5 @@ export function stoppedMessage(input: {
   if (!isTerminalStatus(status) || !failure || !SLURM_STOPPED.has(failure.cause)) return null;
   const seeExcerpt = failure.excerpt ? " (see the log excerpt in the failure card)" : "";
   const progress = wbmLog ? "; the WBM log shows how far it got" : "";
-  return `Nothing was written to stderr. SLURM stopped this job${seeExcerpt}${progress}.`;
+  return `Nothing was written to stderr. SLURM stopped this simulation${seeExcerpt}${progress}.`;
 }

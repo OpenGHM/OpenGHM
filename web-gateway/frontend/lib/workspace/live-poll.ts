@@ -45,7 +45,7 @@ export function describePollError(
   if (failure.code === "backend_unreachable") return "Couldn't reach the gateway";
   const status = failure.status;
   if (status === 502 || status === 503 || status === 504) return "Couldn't reach Anvil";
-  return "Couldn't check the job's status";
+  return "Couldn't check the simulation's status";
 }
 
 /** Everything a status response carries except the ids; `live` is always set. */

@@ -1,11 +1,11 @@
 "use client";
 
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LogStream } from "@/lib/jobs/types";
-import type { LogRow } from "@/lib/workspace/log-sections";
+import { foldProgress, type LogRow } from "@/lib/workspace/log-sections";
 import type { LineSeverity } from "@/lib/workspace/log-severity";
 
 /** How close to the bottom counts as "at the bottom", in px. */
@@ -79,10 +79,33 @@ const LogRowView = memo(function LogRowView({ kind, number, text, severity, retr
   );
 });
 
+/** The mark where a run of file-counter lines is folded, with the button that
+ *  shows or hides them. */
+function FoldMark({ hidden, expanded, onToggle }: { hidden: number; expanded: boolean; onToggle: () => void }) {
+  const lines = `${hidden.toLocaleString("en-US")} progress ${hidden === 1 ? "line" : "lines"}`;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 px-[18px] text-hero-subtle italic">
+      <span>{expanded ? `${lines} shown` : `… ${lines} hidden`}</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-expanded={expanded}
+        onClick={onToggle}
+        className="my-1 min-h-10 border-white/20 bg-white/10 text-xs text-hero-text not-italic hover:bg-white/15 hover:text-white sm:min-h-8"
+      >
+        {expanded ? "Hide" : "Show"}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * The rows, dark and monospace, with a line-number gutter. It follows the end
  * of the log while the reader is at the bottom; scrolling up pauses that, and
- * "Jump to latest" (with how many rows came since) resumes it.
+ * "Jump to latest" (with how many rows came since) resumes it. A run of
+ * file-counter lines is folded into its last line, with a button to show them
+ * (`foldProgress`); the rows it is given are still the whole log.
  */
 export function LogBlock({
   rows,
@@ -96,13 +119,23 @@ export function LogBlock({
   const scrollRef = useRef<HTMLDivElement>(null);
   // The row count when following was paused; null while following.
   const [pausedAt, setPausedAt] = useState<number | null>(null);
-  const totalRef = useRef(rows.length);
+  const items = useMemo(() => foldProgress(rows), [rows]);
+  // The folds the reader opened, by `FoldedRow.key`.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const totalRef = useRef(items.length);
 
   useLayoutEffect(() => {
-    totalRef.current = rows.length;
+    totalRef.current = items.length;
     const el = scrollRef.current;
     if (el && pausedAt === null) el.scrollTop = el.scrollHeight;
-  }, [rows, pausedAt]);
+  }, [items, pausedAt]);
+
+  const toggle = (key: string) =>
+    setOpened((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   const onScroll = () => {
     const el = scrollRef.current;
@@ -116,7 +149,7 @@ export function LogBlock({
     if (row.kind === "line") widest = Math.max(widest, row.number);
   }
   const digits = String(widest).length;
-  const newRows = pausedAt === null ? 0 : Math.max(0, rows.length - pausedAt);
+  const newRows = pausedAt === null ? 0 : Math.max(0, items.length - pausedAt);
 
   return (
     <div className="relative">
@@ -131,18 +164,40 @@ export function LogBlock({
         onScroll={onScroll}
         className="relative max-h-[440px] min-h-24 overflow-auto rounded-[14px] bg-hero py-4 font-mono text-[12.5px] leading-[1.75] text-hero-text outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        {rows.map((row, i) => (
-          <LogRowView
-            key={i}
-            kind={row.kind}
-            number={row.kind === "line" ? row.number : 0}
-            text={row.text}
-            severity={row.kind === "line" ? row.severity : null}
-            retry={row.kind === "note" ? row.retry : undefined}
-            onRetry={onRetry}
-            digits={digits}
-          />
-        ))}
+        {items.map((row, i) => {
+          if (row.kind === "folded") {
+            const expanded = opened.has(row.key);
+            return (
+              <div key={i}>
+                <FoldMark hidden={row.rows.length} expanded={expanded} onToggle={() => toggle(row.key)} />
+                {expanded &&
+                  row.rows.map((line) => (
+                    <LogRowView
+                      key={line.number}
+                      kind="line"
+                      number={line.number}
+                      text={line.text}
+                      severity={line.severity}
+                      onRetry={onRetry}
+                      digits={digits}
+                    />
+                  ))}
+              </div>
+            );
+          }
+          return (
+            <LogRowView
+              key={i}
+              kind={row.kind}
+              number={row.kind === "line" ? row.number : 0}
+              text={row.text}
+              severity={row.kind === "line" ? row.severity : null}
+              retry={row.kind === "note" ? row.retry : undefined}
+              onRetry={onRetry}
+              digits={digits}
+            />
+          );
+        })}
       </div>
       {pausedAt !== null && (
         <Button

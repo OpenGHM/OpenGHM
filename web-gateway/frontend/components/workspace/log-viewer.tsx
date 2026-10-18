@@ -142,7 +142,7 @@ export function LogViewer({ previewLogs }: { previewLogs?: Partial<Record<LogStr
             <p className="max-w-sm text-sm text-muted-foreground">{box.message}</p>
           </div>
         )}
-        {box.kind === "rows" && <LogBlock rows={box.rows} label="Job logs" onRetry={logs.retry} />}
+        {box.kind === "rows" && <LogBlock rows={box.rows} label="Simulation logs" onRetry={logs.retry} />}
 
         {sessionExpired && <SessionExpiredBanner />}
     </section>

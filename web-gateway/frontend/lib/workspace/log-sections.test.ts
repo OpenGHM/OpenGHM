@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendText, EMPTY_LOG_TEXT } from "@/lib/workspace/log-lines";
 import {
   failureReasonLines,
+  foldProgress,
   lineRows,
   markReason,
   rowsToText,
@@ -76,5 +77,41 @@ describe("the reason a failed job gives", () => {
     expect(marked.map((r) => r.text)).toEqual(text);
     const same = rows("a");
     expect(markReason(same, new Set())).toBe(same);
+  });
+});
+
+describe("foldProgress", () => {
+  const counters = (n: number) => Array.from({ length: n }, (_, i) => `  ${(i + 1) * 1000}/32959 files`);
+
+  it("folds a run of counter lines into its last line, which keeps its number", () => {
+    const folded = foldProgress(rows("before", ...counters(5), "after"));
+    expect(folded.map((r) => r.kind)).toEqual(["line", "folded", "line", "line"]);
+    const fold = folded[1];
+    if (fold.kind !== "folded") throw new Error("not folded");
+    expect(fold.rows.map((r) => r.number)).toEqual([2, 3, 4, 5]);
+    expect(folded[2]).toMatchObject({ number: 6, text: "  5000/32959 files" });
+  });
+
+  it("leaves a short run, and lines that are not counters, alone", () => {
+    const input = rows("a", ...counters(2), "b", "12/34 files and more");
+    expect(foldProgress(input)).toEqual(input);
+  });
+
+  it("folds each run on its own, and names a run by its block and first line", () => {
+    const input: LogRow[] = [
+      { kind: "separator", text: "──── Messages ────" },
+      ...rows(...counters(3), "x", ...counters(4)),
+    ];
+    const folded = foldProgress(input);
+    expect(folded.filter((r) => r.kind === "folded").map((r) => (r.kind === "folded" ? r.key : ""))).toEqual([
+      "──── Messages ────:1",
+      "──── Messages ────:5",
+    ]);
+  });
+
+  it("does not change what Copy takes", () => {
+    const input = rows(...counters(6));
+    foldProgress(input);
+    expect(rowsToText(input).split("\n")).toHaveLength(6);
   });
 });

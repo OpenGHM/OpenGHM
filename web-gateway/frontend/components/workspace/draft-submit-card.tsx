@@ -189,10 +189,8 @@ export function DraftSubmitCard({
       thrown = true;
       // A thrown error is the request itself failing (for example the 60 s
       // timeout), not an answer from the backend: say what is known.
-      message =
-        err instanceof Error
-          ? `Could not confirm the submit: ${err.message}. Check My snapshot drafts before trying again.`
-          : "Could not confirm the submit. Check My snapshot drafts before trying again.";
+      console.error("Submitting a snapshot draft failed", err);
+      message = "Could not confirm the submit. Check My snapshot drafts before trying again.";
     }
     setError(message);
     if (thrown && checkSubmitted) {
@@ -289,13 +287,13 @@ export function DraftSubmitCard({
             <Button asChild className="min-h-10 w-full font-semibold">
               {/* A plain link on purpose: a full page load always shows the
                   server's current page, which is what is out of step here. */}
-              <a href={openJobHref}>Open the job page</a>
+              <a href={openJobHref}>Open the simulation page</a>
             </Button>
           </div>
         ) : (
           <p role="status" className="flex items-center gap-2 text-sm font-medium text-success">
             <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
-            Submitted — opening the job page…
+            Submitted — opening the simulation page…
           </p>
         )
       ) : (

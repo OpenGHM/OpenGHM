@@ -93,11 +93,34 @@ _MESSAGE: dict[str, str] = {
 
 #: Memory comes with the cores on Anvil's `shared` partition, at most 1896 MiB
 #: a core (`MaxMemPerCPU`, gateway.md §5): so the lever on a job that ran out
-#: of memory is its cores, or the length of the run.
-_MORE_CORES = (
-    "Memory comes with the cores on Anvil's shared partition, about 1.9 GB each: "
-    "submit again with more cores, or with a shorter run period."
-)
+#: of memory is its cores, or the length of the run. The frontend states the
+#: same figure as `ANVIL_SHARED_MB_PER_CORE` (lib/jobs/compute.ts).
+ANVIL_SHARED_MB_PER_CORE = 1896
+
+
+def _gb(megabytes: int) -> str:
+    """`1.9`, `121.3`: GB (1 GB = 1000 MB) with one decimal."""
+    return f"{megabytes / 1000:.1f}"
+
+
+def _more_cores(cores: int | None) -> str:
+    """What to do about a job that ran out of memory, with how much memory it
+    had when its cores are known (`classify`'s `cores`)."""
+    per_core = f"about {_gb(ANVIL_SHARED_MB_PER_CORE)} GB each"
+    if cores is not None and cores > 0:
+        what = (
+            f"This simulation had {cores} {'core' if cores == 1 else 'cores'}, and memory comes with "
+            f"the cores on Anvil's shared partition ({per_core}), so about "
+            f"{_gb(cores * ANVIL_SHARED_MB_PER_CORE)} GB in all. "
+        )
+    else:
+        what = f"Memory comes with the cores on Anvil's shared partition, {per_core}. "
+    return (
+        f"{what}Start a new snapshot draft with more cores for more memory, or with a "
+        "shorter run period."
+    )
+
+
 #: Exit codes of a process SLURM or the kernel killed with SIGKILL: 128 + 9,
 #: and the same signal as a shell reports it from a container runtime.
 _KILLED_EXIT_CODES = (137, 247)
@@ -142,14 +165,15 @@ def classify(
     missing: bool,
     slurm_exit_code: str | None = None,
     walltime_seconds: int | None = None,
+    cores: int | None = None,
 ) -> Verdict:
     """The verdict on a job that is over.
 
     `slurm_state` is SLURM's raw state, and is ignored when `missing`: SLURM
     has no record of the job, which is rule 4. `outcome` is the parsed
     `outcome.json` or None, and `stderr_tail` the end of the job's stderr.
-    `slurm_exit_code` (`137:0`, sacct's form) and `walltime_seconds` (what the
-    job asked SLURM for) only sharpen a message. Raises ValueError for a state
+    `slurm_exit_code` (`137:0`, sacct's form), `walltime_seconds` and `cores`
+    (what the job asked SLURM for) only sharpen a message. Raises ValueError for a state
     that is not an ending, because a job that is still going has no verdict
     yet. Anything else a record does to it is `outcome_missing`.
     """
@@ -161,7 +185,7 @@ def classify(
     if missing:
         if record is None:
             return _fail("lost", phase=None, excerpt=excerpt)
-        return _judge(record, None, stderr_tail, excerpt)
+        return _judge(record, None, stderr_tail, excerpt, cores=cores)
 
     head = slurm_state_head(slurm_state)
     if head == "CANCELLED":
@@ -169,9 +193,9 @@ def classify(
         return Verdict("CANCELLED", _failure(cause, phase, excerpt=excerpt))
     if head in _KILLED_BY_SLURM:
         cause = _KILLED_BY_SLURM[head]
-        return _fail(cause, phase=phase, excerpt=excerpt, state=head, walltime=walltime_seconds)
+        return _fail(cause, phase=phase, excerpt=excerpt, state=head, walltime=walltime_seconds, cores=cores)
     if head in _EXITED:
-        return _judge(record, head, stderr_tail, excerpt, killed=killed and head == "FAILED")
+        return _judge(record, head, stderr_tail, excerpt, killed=killed and head == "FAILED", cores=cores)
     raise ValueError(f"{slurm_state!r} is not a state a job ends in")
 
 
@@ -201,11 +225,14 @@ def _judge(
     excerpt: str | None,
     *,
     killed: bool = False,
+    cores: int | None = None,
 ) -> Verdict:
     """Rule 3 on a record that may be anything: a shape this gateway cannot
     read is as good as no record."""
     try:
-        return _from_record(record, slurm_state=slurm_state, stderr_tail=stderr_tail, excerpt=excerpt, killed=killed)
+        return _from_record(
+            record, slurm_state=slurm_state, stderr_tail=stderr_tail, excerpt=excerpt, killed=killed, cores=cores
+        )
     except _Malformed as exc:
         logger.warning("outcome.json is not the record the job body writes: %s", exc)
     except Exception:
@@ -249,9 +276,10 @@ def _from_record(
     stderr_tail: str,
     excerpt: str | None,
     killed: bool = False,
+    cores: int | None = None,
 ) -> Verdict:
     if record is None:
-        return _fail("outcome_missing", phase=None, excerpt=excerpt, detail="killed" if killed else None)
+        return _fail("outcome_missing", phase=None, excerpt=excerpt, detail="killed" if killed else None, cores=cores)
 
     # A requeued run did nothing but say so; the failure is the first attempt's.
     restarts = record.get("restart_count")
@@ -293,6 +321,7 @@ def _from_record(
             excerpt=_wbm_excerpt(excerpt, wbm_tail),
             detail=_last_paragraph(excerpt),
             code=code,
+            cores=cores,
         )
     if fetch is None or run is None:
         return _fail("outcome_missing", phase=phase, excerpt=excerpt, detail="stopped_before_run")
@@ -342,10 +371,11 @@ def _fail(
     code: int | None = None,
     state: str | None = None,
     walltime: int | None = None,
+    cores: int | None = None,
 ) -> Verdict:
     return Verdict(
         "FAILED",
-        _failure(cause, phase, excerpt=excerpt, detail=detail, code=code, state=state, walltime=walltime),
+        _failure(cause, phase, excerpt=excerpt, detail=detail, code=code, state=state, walltime=walltime, cores=cores),
     )
 
 
@@ -358,12 +388,13 @@ def _failure(
     code: int | None = None,
     state: str | None = None,
     walltime: int | None = None,
+    cores: int | None = None,
 ) -> JobFailure:
     phase = _PHASE.get(cause, phase)
     return JobFailure(
         cause=cause,
         phase=phase,
-        message=_message(cause, detail=detail, code=code, state=state, phase=phase, walltime=walltime),
+        message=_message(cause, detail=detail, code=code, state=state, phase=phase, walltime=walltime, cores=cores),
         excerpt=excerpt,
     )
 
@@ -376,6 +407,7 @@ def _message(
     state: str | None,
     phase: str | None = None,
     walltime: int | None = None,
+    cores: int | None = None,
 ) -> str:
     if cause == "gateway_setup":
         return (
@@ -392,7 +424,7 @@ def _message(
         return f"The toolkit refused to start this simulation: {detail}. Check the snapshot's settings and submit again."
     if cause == "wbm_error":
         if code in _KILLED_EXIT_CODES:
-            return f"WBM was killed (exit code {code}), most likely because it ran out of memory. {_MORE_CORES}"
+            return f"WBM was killed (exit code {code}), most likely because it ran out of memory. {_more_cores(cores)}"
         if detail:
             return f"WBM stopped with an error (exit code {code}): {detail}"
         return (
@@ -437,7 +469,7 @@ def _message(
             f"(up to {MAX_WALLTIME_SECONDS // 3600} h), or with a shorter run period."
         )
     if cause == "out_of_memory":
-        return f"The job ran out of memory and Anvil stopped it. {_MORE_CORES}"
+        return f"The simulation ran out of memory and Anvil stopped it. {_more_cores(cores)}"
     if cause == "node_failure" and state:
         return f"Anvil lost the job (SLURM state {state}). This is not a problem with your input. Submit again."
     if cause == "outcome_missing":
@@ -448,7 +480,7 @@ def _message(
         if detail == "killed":
             return (
                 "The job was killed and did not report a result; most likely it ran out of "
-                f"memory. {_MORE_CORES}"
+                f"memory. {_more_cores(cores)}"
             )
         if detail == "malformed":
             return "The job reported a result this gateway cannot read. Its logs may show why."

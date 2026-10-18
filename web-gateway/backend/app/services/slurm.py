@@ -541,12 +541,12 @@ async def _move(
     return True
 
 
-async def _walltime_seconds(doc: dict) -> int | None:
-    """The walltime the job asked SLURM for, in seconds, worked out the way the
-    submit worked it out: the draft's own, else the snapshot's recommendation
-    (plus its post-processing time when the run post-processed) with headroom.
-    The job stores neither. None when it cannot be told (the snapshot is gone,
-    say): a message then says less, not something false."""
+async def _requested_compute(doc: dict) -> tuple[int | None, int | None]:
+    """`(cores, walltime in seconds)` the job asked SLURM for, worked out the way
+    the submit worked it out: the draft's own, else the snapshot's recommendation
+    (the walltime plus its post-processing time when the run post-processed, with
+    headroom). The job stores neither. `(None, None)` when it cannot be told (the
+    snapshot is gone, say): a message then says less, not something false."""
     try:
         config = SlurmConfig(**(doc.get("slurm_config") or {}))
         parameters = JobParameters(**(read_stored_parameters(doc.get("parameters")) or {}))
@@ -555,10 +555,11 @@ async def _walltime_seconds(doc: dict) -> int | None:
         snapshot = (envelope or {}).get("document") or {}
         rules = await run_start.read_init_rules(snapshot, dataset_id)
         post_processing = runs_climatology(parameters, rules.post_processing if rules else None)
-        return parse_slurm_time(resolve_compute(config, snapshot, post_processing)[1])
+        cores, walltime = resolve_compute(config, snapshot, post_processing)
+        return cores, parse_slurm_time(walltime)
     except Exception as exc:
-        logger.info("Job %s: could not work out its walltime: %s", doc.get("_id"), exc)
-        return None
+        logger.info("Job %s: could not work out what it asked SLURM for: %s", doc.get("_id"), exc)
+        return None, None
 
 
 async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None, missing: bool) -> bool:
@@ -582,6 +583,12 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
         return False
     doc = fresh
 
+    # Only a message about walltime or memory is sharper for what the job asked for.
+    cores, walltime_seconds = (
+        await _requested_compute(doc)
+        if slurm_state_head(slurm_state) in ("TIMEOUT", "OUT_OF_MEMORY", "FAILED")
+        else (None, None)
+    )
     verdict = classify(
         slurm_state=slurm_state,
         cancel_requested=bool(doc.get("cancel_requested_at")),
@@ -589,7 +596,8 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
         stderr_tail=stderr_tail,
         missing=missing,
         slurm_exit_code=info.exit_code if info else None,
-        walltime_seconds=await _walltime_seconds(doc) if slurm_state_head(slurm_state) == "TIMEOUT" else None,
+        walltime_seconds=walltime_seconds,
+        cores=cores,
     )
     now = datetime.now(timezone.utc)
     slurm_start = _as_utc(info.start_time) if info else None

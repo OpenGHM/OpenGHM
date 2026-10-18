@@ -58,7 +58,7 @@ export function CompletedResults({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          This job finished before the gateway recorded what it wrote, so its file count and size are
+          This simulation finished before the gateway recorded what it wrote, so its file count and size are
           not shown.
         </p>
       )}

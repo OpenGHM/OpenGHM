@@ -103,10 +103,9 @@ export function DeleteDraftDialog({
         toast.error(result.message);
       }
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? `Could not confirm the delete: ${err.message}. The snapshot draft may still exist.`
-          : "Could not confirm the delete. The snapshot draft may still exist.";
+      // What went wrong is for the console; the person is told what is known.
+      console.error("Deleting a snapshot draft failed", err);
+      const message = "Could not confirm the delete. The snapshot draft may still exist.";
       onOpenChange(false);
       onError?.(message);
       toast.error(message);

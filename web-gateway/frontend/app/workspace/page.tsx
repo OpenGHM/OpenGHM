@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,7 +18,6 @@ import { ListEmptyCard } from "@/components/workspace/list-card";
 import { ListToolbar } from "@/components/workspace/list-toolbar";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { fetchJobs, fetchJobStats } from "@/lib/jobs/actions";
-import { runNotes } from "@/lib/jobs/run-notes";
 import {
   PAGE_SIZES,
   listHref,
@@ -27,6 +27,8 @@ import {
   type ListSort,
 } from "@/lib/jobs/filters";
 import { AlertCircle, ArrowUpDown, Play, Plus } from "lucide-react";
+
+export const metadata: Metadata = { title: "My snapshot drafts | OpenGHM" };
 
 export default async function WorkspacePage({
   searchParams,
@@ -104,9 +106,6 @@ async function DraftList({
     redirect(listHref(statusFilter, jobData.total_pages, view));
   }
 
-  // Whether a simulation is shorter than its snapshot's coverage needs the snapshot,
-  // which the job does not carry: read here, once per distinct snapshot.
-  const notes = jobData ? await runNotes(jobData.items) : {};
   const hasRows = !!jobData && jobData.items.length > 0;
 
   return (
@@ -172,7 +171,6 @@ async function DraftList({
         <div className="mt-4 flex flex-col gap-3.5">
           <DraftTable
             jobs={jobData.items}
-            runNotes={notes}
             moreThanOnePage={jobData.total_pages > 1}
           />
 

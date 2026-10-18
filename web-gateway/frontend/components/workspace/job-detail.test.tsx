@@ -50,8 +50,7 @@ function before(a: HTMLElement, b: HTMLElement) {
 describe("the detail page", () => {
   it("titles the page with the snapshot draft's name and puts the breadcrumb in the header", () => {
     renderDetail("completed");
-    const job = previewDraftJob("completed");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("WBM simulation as tutorial: [Global] · 2001");
     expect(screen.getByRole("link", { name: "My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
     expect(screen.queryByText("Back to snapshot drafts")).toBeNull();
   });

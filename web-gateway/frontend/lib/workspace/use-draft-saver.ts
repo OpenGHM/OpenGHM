@@ -181,11 +181,8 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
       try {
         result = await updateDraft(latest.jobId, patch);
       } catch (error) {
-        result = {
-          ok: false,
-          reason: "error",
-          message: error instanceof Error ? error.message : "Couldn't reach the server.",
-        };
+        console.error("Saving a snapshot draft failed", error);
+        result = { ok: false, reason: "error", message: "Couldn't reach the server." };
       }
 
       if (result.ok) {

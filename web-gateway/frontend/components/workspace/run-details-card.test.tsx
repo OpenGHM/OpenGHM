@@ -179,7 +179,8 @@ describe("the run details card: what the page says once", () => {
   it("has the run period, the Slurm job and the run id", () => {
     const job = previewDraftJob("completed");
     details(job, null);
-    expect(value("Run period")).toBe(`${job.parameters.temporal_range_start} → ${job.parameters.temporal_range_end}`);
+    // 2001-01-01 to 2001-12-31 is one whole year, written as the list writes it.
+    expect(value("Run period")).toBe("2001");
     expect(value("Slurm job")).toBe(`#${job.slurm_job_id}`);
     expect(value("Run ID")).toBe(job.sim_id);
   });

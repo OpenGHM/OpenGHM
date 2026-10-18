@@ -2,7 +2,9 @@
  * The rows of the Logs box, as data. The three Anvil files carry no shared
  * timestamps, so they cannot be interleaved: they are laid end to end in the
  * order they happen. A line is shown exactly as it was written; colour is the
- * only thing added to it. All of it is pure and tested.
+ * only thing added to it, and a long run of file-counter lines is folded on
+ * screen (`foldProgress`) but never in the text Copy takes. All of it is pure
+ * and tested.
  */
 import type { LogStream } from "@/lib/jobs/types";
 import { displayLines, type LogText } from "@/lib/workspace/log-lines";
@@ -75,4 +77,60 @@ export function markReason(rows: LineRow[], reason: Set<string>): LineRow[] {
 /** What Copy puts on the clipboard: the box's text, one row to a line. */
 export function rowsToText(rows: LogRow[]): string {
   return rows.map((row) => row.text).join("\n");
+}
+
+/** The fetch's counter, `  1000/32959 files`: a line that says the same thing
+ *  as the one before it. Older toolkit installs print it to a log, one line per
+ *  thousand files. */
+export const PROGRESS_LINE = /^\s*\d+\/\d+ files\s*$/;
+
+/** Fewer counter lines in a row than this are left alone. */
+const MIN_PROGRESS_RUN = 3;
+
+/** A run of counter lines folded into its last line. `rows` are the hidden
+ *  ones, in order; the last line follows the fold as an ordinary row. `key`
+ *  names the run (its block and first line number) so an expanded fold stays
+ *  expanded while the log grows. */
+export interface FoldedRow {
+  kind: "folded";
+  key: string;
+  rows: LineRow[];
+}
+
+export type LogItem = LogRow | FoldedRow;
+
+/**
+ * The rows as they are drawn: each run of three or more consecutive counter
+ * lines becomes a `folded` row holding all but the last, then the last line,
+ * so "1000/32959 files" ... "32000/32959 files" reads as the final count and a
+ * "31 progress lines hidden" mark. Line numbers are the file's: the last line
+ * keeps its own. The input is not changed, and `rowsToText` of it is still the
+ * whole log.
+ */
+export function foldProgress(rows: LogRow[]): LogItem[] {
+  const out: LogItem[] = [];
+  let block = "";
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (row.kind === "separator") block = row.text;
+    if (row.kind !== "line" || !PROGRESS_LINE.test(row.text)) {
+      out.push(row);
+      continue;
+    }
+    let end = i;
+    while (end + 1 < rows.length) {
+      const next = rows[end + 1];
+      if (next.kind !== "line" || !PROGRESS_LINE.test(next.text)) break;
+      end++;
+    }
+    const run = rows.slice(i, end + 1) as LineRow[];
+    if (run.length < MIN_PROGRESS_RUN) {
+      out.push(...run);
+    } else {
+      out.push({ kind: "folded", key: `${block}:${run[0].number}`, rows: run.slice(0, -1) });
+      out.push(run[run.length - 1]);
+    }
+    i = end;
+  }
+  return out;
 }

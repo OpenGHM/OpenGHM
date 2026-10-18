@@ -156,7 +156,7 @@ describe("the box before there is anything", () => {
   it("waits for SLURM while the job is queued", () => {
     expect(buildLogBox({ states: blank, status: "PENDING", files: null, failure: null })).toEqual({
       kind: "empty",
-      message: "Logs appear here once SLURM starts the job.",
+      message: "Logs appear here once SLURM starts the simulation.",
     });
   });
 
@@ -164,7 +164,7 @@ describe("the box before there is anything", () => {
     const gone = { ...INITIAL_STREAM, loaded: true };
     expect(buildLogBox({ states: { wbm: gone, stdout: gone, stderr: gone }, status: "COMPLETED", files: "purged", failure: null })).toEqual({
       kind: "empty",
-      message: "Anvil purged this job's files after 30 days untouched.",
+      message: "Anvil purged this simulation's files after 30 days untouched.",
     });
   });
 });
@@ -178,13 +178,13 @@ describe("an empty Messages after SLURM stopped the job", () => {
 
   it("explains itself in one line under the Messages separator", () => {
     expect(messagesNote(build({ stderr: "" }, { status: "FAILED", failure: oom }))).toBe(
-      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+      "Nothing was written to stderr. SLURM stopped this simulation (see the log excerpt in the failure card); the WBM log shows how far it got."
     );
   });
 
   it("does not point to a WBM log that is missing", () => {
     expect(messagesNote(build({ stderr: "", wbm: undefined }, { status: "FAILED", failure: oom }))).toBe(
-      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card)."
+      "Nothing was written to stderr. SLURM stopped this simulation (see the log excerpt in the failure card)."
     );
   });
 

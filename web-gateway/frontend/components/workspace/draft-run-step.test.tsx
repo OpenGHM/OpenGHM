@@ -1034,7 +1034,7 @@ describe("the draft run step: the Post-processing choice", () => {
         ["ClimatologyClimatology", "On (default)"],
         ["Multi-year climatologyTA_multi_year_start, TA_multi_year_timestep", "Not set"],
         ["Polygon aggregationPolygon_Aggregation", "Not set"],
-        ["ForksForks", "8A run that post-processes uses its job's cores instead."],
+        ["ForksForks", "8A run that post-processes uses the simulation's cores instead."],
       ]);
     });
 

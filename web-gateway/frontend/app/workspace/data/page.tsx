@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { workspaceSession } from "@/lib/auth-guard";
 import { SignInRequired } from "@/components/workspace/sign-in-required";
@@ -9,6 +10,8 @@ import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { MY_DATA_PATH } from "@/lib/workspace/my-data";
 
 const HERE = MY_DATA_PATH;
+
+export const metadata: Metadata = { title: "Snapshots & Inputs | OpenGHM" };
 
 export default async function MyDataPage() {
   const access = await workspaceSession();

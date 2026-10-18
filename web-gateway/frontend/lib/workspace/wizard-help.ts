@@ -165,8 +165,8 @@ const REVIEW: HelpTopic = {
     list(
       "Submit to Anvil saves the draft first, then asks you to confirm what it holds. Confirming starts a SLURM job on Anvil that fetches the snapshot and runs WBM with the OpenGHM toolkit. It spends compute time.",
       "If the snapshot already publishes results for these settings, a Published results card lists the files to download. Run anyway repeats a published result, to check that it reproduces, and asks you to confirm.",
-      `The simulation's output stays on Anvil scratch, and the job page shows where. Anvil deletes files that are not used for ${RETENTION_DAYS} days, so copy what you need.`,
-      "When the simulation has completed, its job page offers to publish it as a snapshot in the Data Repository. A published snapshot is public and cannot be changed."
+      `The simulation's output stays on Anvil scratch, and the simulation page shows where. Anvil deletes files that are not used for ${RETENTION_DAYS} days, so copy what you need.`,
+      "When the simulation has completed, its simulation page offers to publish it as a snapshot in the Data Repository. A published snapshot is public and cannot be changed."
     ),
   ],
 };

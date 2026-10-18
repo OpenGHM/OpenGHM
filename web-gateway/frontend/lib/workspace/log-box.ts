@@ -42,10 +42,10 @@ export function buildLogBox(input: {
   const all = LOG_SOURCES.map((s) => states[s.stream]);
 
   if (!logsReadable(status) && all.every((s) => isEmptyText(s.text))) {
-    return { kind: "empty", message: "Logs appear here once SLURM starts the job." };
+    return { kind: "empty", message: "Logs appear here once SLURM starts the simulation." };
   }
   if (files === "purged" && all.every((s) => s.loaded && !s.exists)) {
-    return { kind: "empty", message: "Anvil purged this job's files after 30 days untouched." };
+    return { kind: "empty", message: "Anvil purged this simulation's files after 30 days untouched." };
   }
   if (all.every((s) => !s.loaded)) return { kind: "loading" };
 

@@ -209,9 +209,10 @@ export function describeWalltimeBelowReference(
  *
  *  This is the `shared` partition only, which is where the gateway submits
  *  (`ANVIL_PARTITION` in web-gateway/backend/app/core/config.py). It is advice
- *  for `describeCoresBelowRecommended`, not a rule: the backend does not know it
- *  and does not enforce it. Nothing else depends on it; if Anvil changes the
- *  figure, change it here. */
+ *  for `describeCoresBelowRecommended`, not a rule: the backend does not enforce
+ *  it. It only quotes the same figure (`ANVIL_SHARED_MB_PER_CORE` in its
+ *  app/services/job_verdict.py) in the failure message of a simulation that ran
+ *  out of memory; if Anvil changes it, change both. */
 export const ANVIL_SHARED_MB_PER_CORE = 1896;
 
 /** Memory for `cores` cores on the shared partition, in GB (1 GB = 1000 MB)

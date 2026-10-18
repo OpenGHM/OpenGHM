@@ -70,7 +70,12 @@ function isRefusal(status: number | undefined): boolean {
   return status !== undefined && status >= 400 && status < 500 && ![401, 404, 408, 409, 429].includes(status);
 }
 
-const messageOf = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
+/** What a thrown error says to the person: the fixed sentence. The error itself
+ *  is for the console, not for them. */
+const messageOf = (error: unknown, fallback: string) => {
+  console.error(fallback, error);
+  return fallback;
+};
 
 export function createNewDraftSaver(deps: SaveNewDraftDeps) {
   // The stored draft as the server last answered, once there is one.
@@ -84,7 +89,7 @@ export function createNewDraftSaver(deps: SaveNewDraftDeps) {
       try {
         created = await deps.derive(datasetId);
       } catch (error) {
-        return { ok: false, failure: { reason: "error", message: messageOf(error, "Couldn't save the draft.") } };
+        return { ok: false, failure: { reason: "error", message: messageOf(error, "Couldn't save the snapshot draft.") } };
       }
       if (!created.ok) {
         if (created.reason === "session_expired") return { ok: false, failure: { reason: "session_expired" } };
@@ -114,7 +119,7 @@ export function createNewDraftSaver(deps: SaveNewDraftDeps) {
         break;
       }
       if (result.reason === "not_found") {
-        patchError = "The draft no longer exists.";
+        patchError = "The snapshot draft no longer exists.";
         break;
       }
       if (!isRefusal(result.status)) {
@@ -152,5 +157,5 @@ export function createNewDraftSaver(deps: SaveNewDraftDeps) {
 
 /** The sentence for the toast of a draft that was saved without some settings. */
 export function describeNotSaved(fields: readonly DraftField[]): string {
-  return `The draft was saved, but these settings weren't: ${fields.map((f) => FIELD_LABELS[f]).join(", ")}. Open it to set them again.`;
+  return `The snapshot draft was saved, but these settings weren't: ${fields.map((f) => FIELD_LABELS[f]).join(", ")}. Open it to set them again.`;
 }

@@ -37,13 +37,11 @@ function job(id: string, status: Job["status"], over: Partial<Job> = {}): Job {
   } as Job;
 }
 
-const NOTES = { b: "Run 2000–2005" };
-
 const items = () => within(screen.getByRole("list", { name: "Snapshot drafts" })).getAllByRole("listitem");
 
 describe("the snapshot draft list", () => {
   it("is a stack of row cards under a mono header, not a table", () => {
-    render(<DraftTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "RUNNING")]} />);
     expect(screen.queryByRole("table")).toBeNull();
     expect(items()).toHaveLength(1);
     const list = screen.getByRole("list", { name: "Snapshot drafts" });
@@ -70,7 +68,7 @@ describe("the snapshot draft list", () => {
   });
 
   it("makes the whole row a link: the name's link is stretched over it", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} />);
     const row = items()[0];
     const link = within(row).getByRole("link", { name: "Run a" });
     expect(link.getAttribute("href")).toBe("/workspace/a");
@@ -84,7 +82,7 @@ describe("the snapshot draft list", () => {
 
   it("puts the title of the snapshot under the name, in one line with the whole title on hover", () => {
     const title = "WBM v1.0.0 Global_tracking snapshot draft for 'Water balance model (WBM) v.1.0.0': [Global] [2000-2009]";
-    render(<DraftTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED", { dataset_title: title })]} />);
     // The version is the chip's; the title keeps what is left of it, and hangs whole on hover.
     const line = within(items()[0]).getByText(title.replace("v1.0.0 ", ""));
     expect(line.getAttribute("title")).toBe(title);
@@ -103,7 +101,7 @@ describe("the snapshot draft list", () => {
 
   it("keeps a long draft name to one line and puts the whole name on hover", () => {
     const name = "A draft named like a paper title: ".repeat(8).trim();
-    render(<DraftTable jobs={[job("a", "COMPLETED", { about: { name } })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED", { about: { name } })]} />);
     const link = within(items()[0]).getByRole("link", { name });
     expect(link.getAttribute("title")).toBe(name);
     expect(link.className).toContain("truncate");
@@ -111,20 +109,19 @@ describe("the snapshot draft list", () => {
   });
 
   it("makes up no name for the snapshot: nothing but its title and the run note is there", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} />);
     expect(items()[0].textContent).not.toMatch(/WBM \d|Global|Regional/);
   });
 
-  it("says the run period in its own mono column: the run note when it ran less than the snapshot covers, else its dates", () => {
-    const parameters = { temporal_range_start: "2000-01-01", temporal_range_end: "2001-12-31" } as Job["parameters"];
-    render(<DraftTable jobs={[job("a", "COMPLETED", { parameters }), job("b", "FAILED", { parameters })]} runNotes={NOTES} />);
+  it("says the run period in its own mono column, one year as that year, in the one format", () => {
+    const range = { temporal_range_start: "2000-01-01", temporal_range_end: "2001-12-31" } as Job["parameters"];
+    const year = { temporal_range_start: "2000-01-01", temporal_range_end: "2000-12-31" } as Job["parameters"];
+    render(<DraftTable jobs={[job("a", "COMPLETED", { parameters: range }), job("b", "FAILED", { parameters: year })]} />);
     const whole = within(items()[0]).getByText("2000–2001");
     expect(whole.className).toContain("font-mono");
-    expect(within(items()[0]).queryByText(/Run 2000/)).toBeNull();
-    const note = within(items()[1]).getByText(/Run 2000–2005/);
-    expect(note.className).toContain("font-mono");
-    // The note is not repeated after the snapshot's title.
-    expect(note.closest("p")).toBeNull();
+    expect(within(items()[0]).getByText("Run period", { exact: false }).className).toContain("sr-only");
+    expect(within(items()[1]).getByText("2000").className).toContain("font-mono");
+    expect(items()[1].textContent).not.toMatch(/Run 2000/);
   });
 
   it("shows a dash for a draft with no run period yet", () => {
@@ -133,19 +130,19 @@ describe("the snapshot draft list", () => {
   });
 
   it("does not print a Model Snapshot badge on every row", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED"), job("b", "FAILED")]} />);
     expect(screen.queryByText("Model Snapshot")).toBeNull();
   });
 
   it("keeps the row, with the title and no run note, for a job with no note", () => {
-    render(<DraftTable jobs={[job("z", "COMPLETED")]} runNotes={{}} />);
+    render(<DraftTable jobs={[job("z", "COMPLETED")]} />);
     expect(within(items()[0]).getByRole("link", { name: "Run z" })).toBeTruthy();
     expect(within(items()[0]).getByText("Dataset one")).toBeTruthy();
     expect(within(items()[0]).queryByText(/Run 2/)).toBeNull();
   });
 
   it("shows the status as a tinted pill with a dot, in its colour, not as a bordered badge", () => {
-    render(<DraftTable jobs={[job("a", "FAILED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "FAILED")]} />);
     const word = within(items()[0]).getByText("Failed");
     expect(word.className).toContain("text-status-failed");
     expect(word.className).toContain("bg-status-failed/10");
@@ -155,57 +152,78 @@ describe("the snapshot draft list", () => {
   });
 
   it("prints the update time as a TimeStamp with its absolute time on hover", () => {
-    render(<DraftTable jobs={[job("a", "RUNNING")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "RUNNING")]} />);
     const time = items()[0].querySelector("time");
     expect(time?.getAttribute("datetime")).toBe("2026-09-30T12:00:00Z");
     expect(time?.getAttribute("title")).toBeTruthy();
   });
 
   it("falls back to the creation time for a job that has never been updated", () => {
-    render(<DraftTable jobs={[job("a", "DRAFT", { updated_at: null })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "DRAFT", { updated_at: null })]} />);
     expect(items()[0].querySelector("time")?.getAttribute("datetime")).toBe("2026-09-30T10:00:00Z");
   });
 
   it("stacks on a phone with the same markup: one list, no second copy and no table", () => {
-    render(<DraftTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "RUNNING"), job("b", "DRAFT")]} />);
     expect(screen.getAllByRole("list", { name: "Snapshot drafts" })).toHaveLength(1);
     // Name and meta, then status and time, with Delete beside them; from sm up they are columns.
     expect(items()[0].className).toContain("lg:grid-cols-[");
     expect(items()[0].className).toContain("grid-cols-[minmax(0,1fr)_auto]");
   });
 
-  it("names an untitled draft 'Untitled draft', with the start of its id apart and muted", () => {
+  it("names an unnamed draft by its snapshot's short title and run period, with its run id apart and muted", () => {
     render(
       <DraftTable
-        jobs={[job("0123456789abcdef", "DRAFT", { about: null, slug: null, sim_id: "" })]}
-        runNotes={NOTES}
+        jobs={[
+          job("0123456789abcdef", "COMPLETED", {
+            about: null,
+            slug: null,
+            sim_id: "sim-20261002-6b5577",
+            dataset_title: "WBM v2.0.0 CONUS tutorial simulation, 2000–2001",
+            parameters: { temporal_range_start: "2000-01-01", temporal_range_end: "2000-12-31" } as Job["parameters"],
+          }),
+        ]}
       />
     );
     const row = items()[0];
-    expect(within(row).getByRole("link", { name: "Untitled draft" })).toBeTruthy();
-    const id = within(row).getByText("01234567");
+    expect(within(row).getByRole("link", { name: "WBM CONUS tutorial simulation · 2000" })).toBeTruthy();
+    const id = within(row).getByText("sim-20261002-6b5577");
     expect(id.className).toContain("font-mono");
     expect(id.className).toContain("text-muted-foreground");
-    // The delete button still names the draft in full.
+  });
+
+  it("names a draft that was never submitted the same way, with the start of its own id apart", () => {
+    render(<DraftTable jobs={[job("0123456789abcdef", "DRAFT", { about: null, slug: null, sim_id: "" })]} />);
+    const row = items()[0];
+    expect(within(row).getByRole("link", { name: "Dataset one" })).toBeTruthy();
+    expect(within(row).getByText("01234567").className).toContain("font-mono");
+  });
+
+  it("says Untitled draft only when there is no snapshot title to name it by", () => {
+    render(<DraftTable jobs={[job("0123456789abcdef", "DRAFT", { about: null, slug: null, sim_id: "", dataset_title: "" })]} />);
+    const row = items()[0];
+    expect(within(row).getByRole("link", { name: "Untitled draft" })).toBeTruthy();
     expect(within(row).getByRole("button", { name: "Delete snapshot draft Untitled (01234567)" })).toBeTruthy();
   });
 
-  it("names an untitled job by its slug, then its sim id", () => {
+  it("names an unnamed job by its slug first, and finds it by its run id too", () => {
     render(
-      <DraftTable
-        jobs={[job("a", "DRAFT", { about: null, slug: "my-slug" }), job("b", "DRAFT", { about: null })]}
-        runNotes={NOTES}
-      />
+      <DraftSearchProvider>
+        <DraftSearchInput />
+        <DraftTable jobs={[job("a", "DRAFT", { about: null, slug: "my-slug" }), job("b", "DRAFT", { about: null })]} />
+      </DraftSearchProvider>
     );
     expect(screen.getByRole("link", { name: "my-slug" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "sim-b" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Dataset one" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "sim-b" } });
+    expect(items()).toHaveLength(1);
   });
 
   it("offers a visible Delete on a draft and an ended job, never on an active one, and no menu", () => {
     render(
       <DraftTable
         jobs={[job("a", "RUNNING"), job("b", "DRAFT"), job("c", "FAILED"), job("d", "COMPLETING")]}
-        runNotes={NOTES}
+       
       />
     );
     expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
@@ -216,7 +234,7 @@ describe("the snapshot draft list", () => {
   });
 
   it("keeps Delete above the row's link, muted until hover or focus", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} />);
     const button = screen.getByRole("button", { name: "Delete snapshot draft Run a" });
     expect(button.className).toContain("z-10");
     expect(button.className).toContain("text-muted-foreground");
@@ -225,7 +243,7 @@ describe("the snapshot draft list", () => {
   });
 
   it("opens the delete confirmation from a row's button without navigating", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete snapshot draft Run a" }));
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     expect(screen.getByText("Delete this snapshot draft?")).toBeTruthy();
@@ -237,7 +255,7 @@ describe("the list's search", () => {
     return render(
       <DraftSearchProvider>
         <DraftSearchInput />
-        <DraftTable jobs={jobs} runNotes={NOTES} moreThanOnePage={moreThanOnePage} />
+        <DraftTable jobs={jobs} moreThanOnePage={moreThanOnePage} />
       </DraftSearchProvider>
     );
   }
@@ -277,7 +295,7 @@ describe("the list's search", () => {
   });
 
   it("is left alone when the table is rendered without a search box", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED")]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED")]} />);
     expect(items()).toHaveLength(1);
   });
 });
@@ -286,7 +304,7 @@ describe("a published snapshot draft in the list", () => {
   const ID = "9f2c41d07be6a35c8e10d4f7a2b96c3e5d08a1f47c6b29e3d5a07b8c1e4f6a92";
 
   it("reads Published, linking to its snapshot, above the row's own link", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("published") })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("published") })]} />);
     const row = items()[0];
     const published = within(row).getByRole("link", { name: "Published" });
     expect(published.getAttribute("href")).toBe(`/repository/${ID}`);
@@ -298,7 +316,7 @@ describe("a published snapshot draft in the list", () => {
   });
 
   it("reads Publishing, with no link, while its publish runs", () => {
-    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("publishing") })]} runNotes={NOTES} />);
+    render(<DraftTable jobs={[job("a", "COMPLETED", { publish: fakePublish("publishing") })]} />);
     const row = items()[0];
     expect(within(row).getByText("Publishing")).toBeTruthy();
     expect(within(row).getAllByRole("link")).toHaveLength(1);
@@ -312,7 +330,7 @@ describe("a published snapshot draft in the list", () => {
           job("b", "COMPLETED", { publish: null }),
           job("c", "COMPLETED"),
         ]}
-        runNotes={NOTES}
+       
       />
     );
     for (const row of items()) {

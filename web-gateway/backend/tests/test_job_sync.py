@@ -1096,6 +1096,23 @@ def test_the_walltime_of_a_climatology_draft_includes_its_post_processing_time(d
     assert ("already the 96 h maximum" in message) is maximum
 
 
+def test_an_out_of_memory_job_is_told_how_much_memory_its_cores_gave(db, anvil, job):
+    job["slurm_config"] = {"cores": 4, "walltime": "06:00:00"}
+    anvil.found["12345"] = info("OUT_OF_MEMORY", "failed")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert "had 4 cores" in message and "about 7.6 GB in all" in message
+
+
+def test_an_out_of_memory_job_with_the_snapshot_gone_is_still_told_to_add_cores(db, anvil, job):
+    job["slurm_config"] = {"cores": None, "walltime": None}
+    del db.datasets.docs["ds-1"]
+    anvil.found["12345"] = info("OUT_OF_MEMORY", "failed")
+    sweep()
+    message = db.jobs.docs["job-1"]["failure"]["message"]
+    assert "more cores" in message and "had" not in message
+
+
 def test_a_timeout_whose_snapshot_is_gone_still_gets_a_verdict(db, anvil, job):
     del db.datasets.docs["ds-1"]
     anvil.found["12345"] = info("TIMEOUT", "timeout")

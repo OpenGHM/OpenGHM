@@ -17,19 +17,19 @@ describe("stoppedMessage", () => {
 
   it.each<FailureCause>(["out_of_memory", "timeout"])("does not read like nothing went wrong for %s", (cause) => {
     expect(stoppedMessage({ ...base, failure: stopped(cause) })).toBe(
-      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card); the WBM log shows how far it got."
+      "Nothing was written to stderr. SLURM stopped this simulation (see the log excerpt in the failure card); the WBM log shows how far it got."
     );
   });
 
   it("drops the pointer to the excerpt when the card has none", () => {
     expect(stoppedMessage({ ...base, failure: stopped("out_of_memory", null) })).toBe(
-      "Nothing was written to stderr. SLURM stopped this job; the WBM log shows how far it got."
+      "Nothing was written to stderr. SLURM stopped this simulation; the WBM log shows how far it got."
     );
   });
 
   it("does not send the reader to a WBM log known to be missing", () => {
     expect(stoppedMessage({ ...base, failure: stopped("timeout"), wbmLog: false })).toBe(
-      "Nothing was written to stderr. SLURM stopped this job (see the log excerpt in the failure card)."
+      "Nothing was written to stderr. SLURM stopped this simulation (see the log excerpt in the failure card)."
     );
   });
 

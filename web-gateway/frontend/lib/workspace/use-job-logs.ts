@@ -115,7 +115,7 @@ export function useJobLogs({
             stream: which,
             message:
               result.reason === "not_found"
-                ? "This job no longer exists."
+                ? "This simulation no longer exists."
                 : result.message || "Couldn't read the log.",
           });
           return result.reason === "not_found" ? "stop" : "error";

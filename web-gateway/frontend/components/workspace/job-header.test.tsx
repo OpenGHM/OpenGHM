@@ -127,8 +127,8 @@ describe("the header", () => {
 
   it("titles the page with the snapshot draft's name, with the status beside it", () => {
     renderHeader("running");
-    const job = previewDraftJob("running");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(job.sim_id);
+    // No name of its own: the snapshot's short title and the run period, not the run id.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("WBM simulation as tutorial: [Global] · 2001");
     expect(screen.getByText("Running")).toBeTruthy();
   });
 
@@ -174,7 +174,12 @@ describe("the header", () => {
   });
 
   it("sets an auto id in mono and a name its owner gave in the page's own face", () => {
-    renderHeader("completed");
+    const noTitle = previewDraftJob("completed", { overrides: { dataset_title: "" } });
+    render(
+      <LiveJobProvider jobId={noTitle.id} initialStatus={noTitle.status} initialData={{}} preview>
+        <JobHeader job={noTitle} preview />
+      </LiveJobProvider>
+    );
     expect(screen.getByRole("heading", { level: 1 }).firstElementChild?.className).toContain("font-mono");
     cleanup();
     const job = previewDraftJob("completed", { overrides: { about: { name: "My CONUS run" } } });

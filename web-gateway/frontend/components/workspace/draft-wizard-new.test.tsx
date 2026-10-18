@@ -259,7 +259,7 @@ describe("Save as draft", () => {
     expect(deriveDraft).toHaveBeenCalledWith(dataset.id);
     expect(updateDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
     expect(toast.error).not.toHaveBeenCalled();
   });
 
@@ -332,7 +332,7 @@ describe("Save as draft", () => {
     fireEvent.click(saveButtons()[0]);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=run"));
     expect(toast.error).toHaveBeenCalledWith(
-      "The draft was saved, but these settings weren't: Name. Open it to set them again."
+      "The snapshot draft was saved, but these settings weren't: Name. Open it to set them again."
     );
     expect(toast.success).not.toHaveBeenCalled();
   });
@@ -435,7 +435,7 @@ describe("leaving a new snapshot draft", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/repository"));
     expect(deriveDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -546,7 +546,7 @@ describe("leaving a new snapshot draft with the browser's Back and Forward", () 
     await waitFor(() => expect(at()).toBe("/workspace"));
     expect(deriveDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("new-1", { about: { name: "Colorado", description: null } });
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
@@ -678,7 +678,7 @@ describe("Submit from Review", () => {
     wizard({ step: "review" });
     confirm(await openSubmitDialog());
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=review"));
-    expect(toast.error).toHaveBeenCalledWith("Your draft was saved, but it was not submitted. Anvil said no");
+    expect(toast.error).toHaveBeenCalledWith("Your snapshot draft was saved, but it was not submitted. Anvil said no");
     expect(deriveDraft).toHaveBeenCalledTimes(1);
   });
 
@@ -709,7 +709,7 @@ describe("Submit from Review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit to Anvil" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(toast.error.mock.calls[0][0]).toContain("The draft was created, but its settings could not be saved");
+    expect(toast.error.mock.calls[0][0]).toContain("The snapshot draft was created, but its settings could not be saved");
 
     const dialog = await openSubmitDialog();
     expect(dialog).toBeTruthy();

@@ -6,6 +6,7 @@ import type {
   PublishFailureCause,
   PublishRetry,
 } from "@/lib/jobs/types";
+import { sharedMemoryGb } from "@/lib/jobs/compute";
 
 /** What the person can do about it. The card turns this into a sentence
  *  (`NEXT_STEP_COPY`) and the buttons it offers. */
@@ -40,7 +41,7 @@ export interface FailureCopy {
 export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   fetch_failed: {
     title: "The model snapshot couldn't be downloaded",
-    body: "The job could not fetch the model snapshot's files onto Anvil, so WBM never started.",
+    body: "The simulation could not fetch the model snapshot's files onto Anvil, so WBM never started.",
     nextStep: "resubmit",
     tone: "danger",
   },
@@ -58,7 +59,7 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   wbm_error: {
     title: "WBM stopped with an error",
-    body: "WBM started and then exited with an error. The job's logs say what it reported.",
+    body: "WBM started and then exited with an error. The simulation's logs say what it reported.",
     nextStep: "new_draft",
     tone: "danger",
   },
@@ -76,31 +77,31 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   timeout: {
     title: "Ran out of time",
-    body: "The job hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil. Try a longer walltime, or a shorter run period if the walltime is already at its limit.",
+    body: "The simulation hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil. Try a longer walltime, or a shorter run period if the walltime is already at its limit.",
     nextStep: "resubmit_longer_walltime",
     tone: "warning",
   },
   out_of_memory: {
     title: "Ran out of memory",
-    body: "WBM needed more memory than the job was given, and Anvil stopped it. Try more cores (each has about 1.9 GB) or a shorter run period.",
+    body: `WBM needed more memory than the simulation was given, and Anvil stopped it. Memory comes with cores (about ${sharedMemoryGb(1)} GB each), so start a new snapshot draft with more cores, or a shorter run period.`,
     nextStep: "new_draft",
     tone: "warning",
   },
   node_failure: {
-    title: "Anvil lost the job",
-    body: "The node running this job failed, or Anvil took it back. This was not caused by your input.",
+    title: "Anvil lost the simulation",
+    body: "The node running this simulation failed, or Anvil took it back. This was not caused by your input.",
     nextStep: "resubmit",
     tone: "neutral",
   },
   lost: {
-    title: "Anvil has no record of this job",
-    body: "Anvil no longer knows this job and it left no result behind, so the gateway cannot say whether it ran.",
+    title: "Anvil has no record of this simulation",
+    body: "Anvil no longer knows this simulation and it left no result behind, so the gateway cannot say whether it ran.",
     nextStep: "contact_admin",
     tone: "neutral",
   },
   outcome_missing: {
-    title: "The job ended without reporting a result",
-    body: "Anvil says the job finished, but it did not write the record that says whether WBM succeeded, so the gateway cannot call it a success.",
+    title: "The simulation ended without reporting a result",
+    body: "Anvil says the simulation finished, but it did not write the record that says whether WBM succeeded, so the gateway cannot call it a success.",
     nextStep: "contact_admin",
     tone: "neutral",
   },
@@ -123,7 +124,7 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
  *  title and the verdict's own `message`, never a crash. */
 export const UNKNOWN_FAILURE_COPY: FailureCopy = {
   title: "The simulation ended with a problem",
-  body: "This snapshot draft ended in a way this page has no wording for. The job's logs may say more.",
+  body: "This snapshot draft ended in a way this page has no wording for. The simulation's logs may say more.",
   nextStep: "new_draft",
   tone: "danger",
 };
@@ -159,7 +160,7 @@ export function offersNewDraft(step: NextStep): boolean {
  *  causes. The card shows the reason the job stored, if any, in place of `body`. */
 export const UNRECORDED_FAILURE_COPY: FailureCopy = {
   title: "The simulation failed",
-  body: "This job failed before the gateway recorded why. The job's logs may say more.",
+  body: "This simulation failed before the gateway recorded why. Its logs may say more.",
   nextStep: "new_draft",
   tone: "danger",
 };

@@ -84,12 +84,14 @@ function isAnsweredRefusal(failure: ActionFailure): boolean {
 }
 
 /** What the header calls a draft: the list's `displayName` rule applied to the
- *  name being typed (then the slug, the run id, `Untitled (<id8>)`), so a draft
- *  reads the same in the list and here. Follows the input on every keystroke.
- *  `Untitled (<id8>)` is only this display fallback: it is never stored and
- *  never put in the Name input, which stays empty until the user names it. */
+ *  name being typed (then the slug, the run id, `Untitled (<id8>)`), without the
+ *  name the list makes of the snapshot's title: an unnamed draft is said to be
+ *  unnamed here, where its name is being typed. Follows the input on every
+ *  keystroke. `Untitled (<id8>)` is only this display fallback: it is never
+ *  stored and never put in the Name input, which stays empty until the user
+ *  names it. */
 function liveName(name: string, job: Job): string {
-  return displayName({ ...job, about: { name: name.trim() } });
+  return displayName({ ...job, about: { name: name.trim() }, dataset_title: undefined });
 }
 
 /** The path of the wizard without its query: what its own step links share. */
@@ -419,7 +421,7 @@ function WizardBody({
     if (result === null || !result.ok) return false;
     writeDraftCache(result.job);
     if (result.notSaved.length > 0) toast.error(describeNotSaved(result.notSaved));
-    else toast.success("Draft saved");
+    else toast.success("Snapshot draft saved");
     setDeparting(true);
     guard.stay();
     if (go === null) router.replace(stepHref(result.job.id, step));
@@ -452,7 +454,7 @@ function WizardBody({
       toast.error(`Saved, but these settings weren't: ${result.withheld.map((f) => FIELD_LABELS[f]).join(", ")}.`);
       return false;
     }
-    toast.success("Draft saved");
+    toast.success("Snapshot draft saved");
     return true;
   };
   const saveStoredAndGo = async (go: LeaveTarget) => {
@@ -501,7 +503,7 @@ function WizardBody({
     const result = await newDraft.ensureSaved(local);
     if (!result.ok) return { ok: false };
     if (result.patchError !== null) {
-      toast.error(`The draft was created, but its settings could not be saved: ${result.patchError}`);
+      toast.error(`The snapshot draft was created, but its settings could not be saved: ${result.patchError}`);
       return { ok: false };
     }
     return { ok: true, job: result.job, withheld: result.notSaved };
@@ -509,7 +511,7 @@ function WizardBody({
   const newSubmit = async (opts?: { rerun?: boolean }): Promise<ActionResult<Job>> => {
     submitFailure.current = null;
     const id = newDraft.created()?.id;
-    if (!id) return { ok: false, reason: "error", message: "The draft was not created." };
+    if (!id) return { ok: false, reason: "error", message: "The snapshot draft was not created." };
     const result = opts ? await submitDraft(id, opts) : await submitDraft(id);
     if (!result.ok) {
       submitFailure.current = result;
@@ -538,8 +540,8 @@ function WizardBody({
           ? describeSubmitFailure(failure)
           : failure.reason === "session_expired"
             ? "Your session has expired."
-            : "The draft no longer exists.";
-    toast.error(`Your draft was saved, but it was not submitted.${why ? ` ${why}` : ""}`);
+            : "The snapshot draft no longer exists.";
+    toast.error(`Your snapshot draft was saved, but it was not submitted.${why ? ` ${why}` : ""}`);
     setDeparting(true);
     router.replace(stepHref(created.id, "review"));
   };
@@ -660,7 +662,7 @@ function WizardBody({
       >
         {newDraft.error?.reason === "session_expired" && <SessionExpiredBanner className="w-full sm:max-w-md" />}
         {newDraft.error?.reason === "error" && (
-          <ActionError>Couldn&apos;t save the draft: {newDraft.error.message}</ActionError>
+          <ActionError>Couldn&apos;t save the snapshot draft: {newDraft.error.message}</ActionError>
         )}
         {deleteExpired && <SessionExpiredBanner className="w-full sm:max-w-md" />}
         {deleteError && <ActionError>{deleteError}</ActionError>}
@@ -769,7 +771,7 @@ function WizardBody({
             >
               <p className="flex items-start gap-2 font-medium">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                This draft was deleted
+                This snapshot draft was deleted
               </p>
               <Button
                 asChild

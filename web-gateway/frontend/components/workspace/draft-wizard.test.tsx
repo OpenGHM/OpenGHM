@@ -519,7 +519,7 @@ describe("saving is a button", () => {
     expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
     expect(screen.getByText("Saved", { exact: false, ignore: HELP_ASIDE })).toBeTruthy();
     expect(screen.queryByText("Unsaved changes")).toBeNull();
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
     expect(readDraftCache("job-1")?.about).toEqual({ name: "Colorado" });
   });
 
@@ -752,7 +752,7 @@ describe("leaving a stored draft", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/repository"));
     expect(updateDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
   });
 
   it("stays when the save fails: the dialog closes, the edit and the failure are on the page", async () => {
@@ -837,7 +837,7 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     await waitFor(() => expect(at()).toBe("/workspace"));
     expect(updateDraft).toHaveBeenCalledTimes(1);
     expect(updateDraft).toHaveBeenCalledWith("job-1", { about: { name: "Colorado", description: null } });
-    expect(toast.success).toHaveBeenCalledWith("Draft saved");
+    expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved");
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -883,7 +883,7 @@ describe("leaving a stored draft with the browser's Back and Forward", () => {
     wizard({ step: "run" });
     type("Colorado");
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Draft saved"));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Snapshot draft saved"));
     await press(-1);
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(at()).toBe("/workspace");
@@ -947,7 +947,7 @@ describe("when the draft cannot be saved", () => {
     wizard({ step: "run" });
     type("Colorado");
     pressSave();
-    expect(await screen.findByText("This draft was deleted")).toBeTruthy();
+    expect(await screen.findByText("This snapshot draft was deleted")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Go to My snapshot drafts" }).getAttribute("href")).toBe("/workspace");
     expect(screen.getByText("Not saved")).toBeTruthy();
   });
@@ -1217,7 +1217,7 @@ describe("submitting", () => {
     confirm(await openSubmitDialog());
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/job-1"));
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Submitted — opening the job page…")).toBeTruthy();
+    expect(screen.getByText("Submitted — opening the simulation page…")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -1299,7 +1299,7 @@ describe("after a submit went through: the page that does not follow", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
     await waitFor(() => expect(replace).toHaveBeenCalled());
     expect(screen.queryByText(/QOSMaxWallDurationPerJobLimit/)).toBeNull();
-    expect(screen.getByText("Submitted — opening the job page…")).toBeTruthy();
+    expect(screen.getByText("Submitted — opening the simulation page…")).toBeTruthy();
     view.unmount();
   });
 
@@ -1317,7 +1317,7 @@ describe("after a submit went through: the page that does not follow", () => {
     expect(fetchJob).toHaveBeenCalledWith("job-1");
     expect(assign).toHaveBeenCalledTimes(1);
     expect(assign).toHaveBeenCalledWith(PAGE);
-    expect(screen.queryByRole("link", { name: "Open the job page" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open the simulation page" })).toBeNull();
   });
 
   it("never navigates when the wizard has gone away", async () => {
@@ -1365,19 +1365,19 @@ describe("after a submit went through: the page that does not follow", () => {
     await advance(2_500 + 3 * 2_000);
     expect(fetchJob).toHaveBeenCalledTimes(4);
     expect(assign).not.toHaveBeenCalled();
-    expect(screen.getByRole("link", { name: "Open the job page" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open the simulation page" })).toBeTruthy();
   });
 
-  it("gives up after 3 retries and links to the job page instead", async () => {
+  it("gives up after 3 retries and links to the simulation page instead", async () => {
     await submitAndStay();
     fetchJob.mockResolvedValue({ ok: true, data: JOB });
     await advance(2_500 + 2_000 + 2_000);
-    expect(screen.queryByRole("link", { name: "Open the job page" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open the simulation page" })).toBeNull();
     await advance(2_000);
     expect(fetchJob).toHaveBeenCalledTimes(4);
     expect(assign).not.toHaveBeenCalled();
     expect(screen.getByText(/The submit went through but this page did not update\./)).toBeTruthy();
-    const link = screen.getByRole("link", { name: "Open the job page" });
+    const link = screen.getByRole("link", { name: "Open the simulation page" });
     expect(link.getAttribute("href")).toBe(PAGE);
     // And it stops asking.
     await advance(30_000);

@@ -210,7 +210,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:125",
     failure: {
       phase: "run",
-      message: "The job ran out of memory and Anvil stopped it. Reduce what the simulation asks for or request more resources, then submit again.",
+      message: "The simulation ran out of memory and Anvil stopped it. This simulation had 1 core, and memory comes with the cores on Anvil's shared partition (about 1.9 GB each), so about 1.9 GB in all. Start a new snapshot draft with more cores for more memory, or with a shorter run period.",
       excerpt: null,
     },
   },

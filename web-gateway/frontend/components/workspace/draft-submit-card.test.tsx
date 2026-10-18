@@ -198,7 +198,7 @@ describe("DraftSubmitCard: the stale error", () => {
     await waitFor(() => expect(onSubmitted).toHaveBeenCalled());
     expect(stale()).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the job page…");
+    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the simulation page…");
     expect(screen.queryByRole("button", { name: "Submit to Anvil" })).toBeNull();
     expect(screen.queryByText(/Submitting saves your changes first/)).toBeNull();
   });
@@ -231,12 +231,12 @@ describe("DraftSubmitCard: after it went through", () => {
     fireEvent.click(confirmButton());
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     const status = screen.getByRole("status");
-    expect(status.textContent).toBe("Submitted — opening the job page…");
+    expect(status.textContent).toBe("Submitted — opening the simulation page…");
     expect(status.querySelector("svg.animate-spin, svg[class*='animate-spin']")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("offers a plain link to the job page when the wizard says the page did not follow", async () => {
+  it("offers a plain link to the simulation page when the wizard says the page did not follow", async () => {
     const view = card();
     await openDialog();
     fireEvent.click(confirmButton());
@@ -256,9 +256,9 @@ describe("DraftSubmitCard: after it went through", () => {
       />
     );
     expect(screen.getByRole("status").textContent).toContain("The submit went through but this page did not update.");
-    const link = screen.getByRole("link", { name: "Open the job page" });
+    const link = screen.getByRole("link", { name: "Open the simulation page" });
     expect(link.getAttribute("href")).toBe("/workspace/job-1");
-    expect(screen.queryByText(/opening the job page…/)).toBeNull();
+    expect(screen.queryByText(/opening the simulation page…/)).toBeNull();
   });
 });
 
@@ -308,7 +308,7 @@ describe("DraftSubmitCard: submitting", () => {
     expect(calls).toEqual(["flush", "suspend", "submitting:true", "submit"]);
     expect(submit).toHaveBeenCalledWith("job-1");
     expect(onSubmitFailed).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toContain("Submitted — opening the job page…");
+    expect(screen.getByRole("status").textContent).toContain("Submitted — opening the simulation page…");
   });
 
   it("says where a field comes from the snapshot's recommendation", async () => {
@@ -409,8 +409,10 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
   it("says when the request itself failed and that My snapshot drafts should be checked", async () => {
     await confirmWith(new Error("timeout of 60000ms exceeded"));
     const text = screen.getByRole("alert").textContent ?? "";
-    expect(text).toContain("Could not confirm the submit: timeout of 60000ms exceeded.");
+    expect(text).toContain("Could not confirm the submit. Check My snapshot drafts before trying again.");
     expect(text).toContain("Check My snapshot drafts");
+    // The exception's own text is for the console, not for the person.
+    expect(text).not.toContain("60000ms");
   });
 
   it("checks the server after a lost answer, and takes the success path when the job is no longer a draft", async () => {
@@ -422,7 +424,7 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     await waitFor(() => expect(onSubmitted).toHaveBeenCalledWith(SUBMITTED));
     expect(checkSubmitted).toHaveBeenCalledWith("job-1");
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the job page…");
+    expect(screen.getByRole("status").textContent).toBe("Submitted — opening the simulation page…");
     // Never unlocked, never told the submit failed.
     expect(onSubmitFailed).not.toHaveBeenCalled();
     expect(calls).toEqual(["flush", "suspend", "submitting:true"]);
@@ -436,7 +438,7 @@ describe("DraftSubmitCard: a submit that does not go through", () => {
     await openDialog();
     fireEvent.click(confirmButton());
     await waitFor(() => expect(checkSubmitted).toHaveBeenCalled());
-    expect(screen.getByRole("alert").textContent).toContain("Could not confirm the submit: timeout.");
+    expect(screen.getByRole("alert").textContent).toContain("Could not confirm the submit. Check My snapshot drafts before trying again.");
     expect(submitButton().disabled).toBe(true);
     answer(null);
     await waitFor(() => expect(onSubmitFailed).toHaveBeenCalled());

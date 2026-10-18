@@ -26,7 +26,7 @@ import { displayStatus, type DisplayStatus } from "@/lib/jobs/display-status";
 import { displayName, listName } from "@/lib/jobs/display-name";
 import { ClampedName, clampClass } from "@/components/common/clamped-name";
 import { draftSource } from "@/lib/jobs/draft-source";
-import { runPeriodLabel } from "@/lib/jobs/run-note";
+import { runPeriodLabel } from "@/lib/jobs/run-period-label";
 import { splitVersion } from "@/lib/jobs/title-version";
 import { HUE } from "@/lib/jobs/status-hue";
 import { kindLabel } from "@/lib/repository/catalogue-format";
@@ -90,11 +90,13 @@ function PublishedOrStatus({ job }: { job: Job }) {
 
 /**
  * The snapshot drafts as a stack of row cards, each a link to the snapshot
- * draft: a tile with the status's glyph; the name (mono when it is an auto id
- * like `sim-…`) with, under it, a chip with the snapshot's version and the
- * title of the snapshot it is based on (one line, cut with an ellipsis, the
- * whole title on hover); the period it ran (the run note when the simulation
- * is shorter than the snapshot's coverage, else its dates); its status, when
+ * draft: a tile with the status's glyph; the name (a draft nobody named reads
+ * as its snapshot's short title and run period) with, under it, a chip with
+ * the snapshot's version and the title of the snapshot it is based on (one
+ * line, cut with an ellipsis, the whole title on hover), or, for a draft
+ * nobody named, its run id, mono and muted, since its name already says the
+ * snapshot; the period it ran (`runPeriodLabel`, the one format
+ * the simulation page uses too); its status, when
  * it was last updated, and a visible Delete once it can be deleted. From `lg`
  * up the rows sit in columns under a mono header; below it each row is two
  * lines (name, then period, status and time, Delete beside them), so nothing
@@ -108,13 +110,9 @@ function PublishedOrStatus({ job }: { job: Job }) {
  */
 export function DraftTable({
   jobs,
-  runNotes = {},
   moreThanOnePage = false,
 }: {
   jobs: Job[];
-  /** "Run 2000–2005", by job id, for the jobs that ran less than their snapshot
-   *  covers (`runNotes`, built on the server from the snapshots' coverage). */
-  runNotes?: Record<string, string>;
   /** The list continues on other pages; a search says it only looked at this one. */
   moreThanOnePage?: boolean;
 }) {
@@ -122,7 +120,7 @@ export function DraftTable({
   const expire = () => setSessionExpired(true);
   const { query, setQuery } = useDraftSearch();
 
-  const rows = jobs.filter((job) => matchesQuery(displayName(job), query));
+  const rows = jobs.filter((job) => matchesQuery(`${displayName(job)} ${job.sim_id ?? ""}`, query));
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -159,8 +157,7 @@ export function DraftTable({
               const shown = listName(job);
               const source = draftSource(job);
               const { version, rest } = splitVersion(source.title);
-              const runNote = runNotes[job.id];
-              const period = runNote ?? runPeriodLabel(job.parameters?.temporal_range_start, job.parameters?.temporal_range_end);
+              const period = runPeriodLabel(job.parameters?.temporal_range_start, job.parameters?.temporal_range_end);
               const status = displayStatus(job);
               // A published draft is done, and its tile says so.
               const Glyph = job.publish?.state === "published" ? Check : GLYPH[status];
@@ -190,7 +187,6 @@ export function DraftTable({
                         >
                           {shown.text}
                         </Link>
-                        {shown.id && <span className="shrink-0 font-mono text-xs text-muted-foreground">{shown.id}</span>}
                       </p>
                       <p className="mt-1.5 flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
                         {version && (
@@ -198,10 +194,16 @@ export function DraftTable({
                             {version}
                           </span>
                         )}
+                        {/* A name made from the snapshot's title already says which snapshot
+                            it came from, so the row says which run it is instead. */}
                         {source.kind !== "snapshot" && <span className="shrink-0">{kindLabel(source.kind)} ·</span>}
-                        <ClampedName lines={1} title={source.title}>
-                          {rest}
-                        </ClampedName>
+                        {shown.id ? (
+                          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{shown.id}</span>
+                        ) : (
+                          <ClampedName lines={1} title={source.title}>
+                            {rest}
+                          </ClampedName>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -210,7 +212,7 @@ export function DraftTable({
                     <span className="order-3 font-mono text-[13px] leading-snug text-foreground/85 lg:order-none">
                       {period ? (
                         <>
-                          {!runNote && <span className="sr-only">Run period </span>}
+                          <span className="sr-only">Run period </span>
                           {period}
                         </>
                       ) : (

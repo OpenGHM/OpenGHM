@@ -324,7 +324,7 @@ describe("Review, for a new snapshot draft that is not saved", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit to Anvil" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace/new-1?step=review"));
     expect(toast.error).toHaveBeenCalledWith(
-      expect.stringContaining("Your draft was saved, but it was not submitted. The model snapshot already publishes these results")
+      expect.stringContaining("Your snapshot draft was saved, but it was not submitted. The model snapshot already publishes these results")
     );
   });
 });

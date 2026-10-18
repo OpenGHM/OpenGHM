@@ -17,6 +17,7 @@ import {
 } from "@/lib/jobs/compute";
 import type { Job } from "@/lib/jobs/types";
 import { isTerminalStatus } from "@/lib/jobs/types";
+import { runPeriodLabel } from "@/lib/jobs/run-period-label";
 import { secondsBetween, shortDuration } from "@/lib/workspace/timeline";
 import { useNow } from "@/lib/workspace/use-now";
 import { cn } from "@/lib/utils";
@@ -254,7 +255,7 @@ export function RunDetailsCard({
             </Link>
           </InfoRow>
           <InfoRow mono label="Run period">
-            {parameters.temporal_range_start} &rarr; {parameters.temporal_range_end}
+            {runPeriodLabel(parameters.temporal_range_start, parameters.temporal_range_end) ?? "\u2014"}
             {periodFill && (
               <span aria-hidden="true" className="relative mt-2 block h-1.5 rounded-md bg-muted">
                 <span

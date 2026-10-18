@@ -45,8 +45,8 @@ describe("describePollError", () => {
     expect(describePollError({ status: 502 })).toBe("Couldn't reach Anvil");
     expect(describePollError({ status: 504 })).toBe("Couldn't reach Anvil");
     expect(describePollError({ thrown: true })).toBe("Couldn't reach the gateway");
-    expect(describePollError({ status: 500 })).toBe("Couldn't check the job's status");
-    expect(describePollError({})).toBe("Couldn't check the job's status");
+    expect(describePollError({ status: 500 })).toBe("Couldn't check the simulation's status");
+    expect(describePollError({})).toBe("Couldn't check the simulation's status");
     expect(describePollError({ code: "backend_unreachable" })).toBe("Couldn't reach the gateway");
   });
 });

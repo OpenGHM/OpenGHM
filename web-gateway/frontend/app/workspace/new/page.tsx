@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { pathWithQuery } from "@/lib/auth-redirect";
 import { isUnauthorizedError, redirectToSignIn, workspaceSession } from "@/lib/auth-guard";
 import { SignInRequired } from "@/components/workspace/sign-in-required";
@@ -11,6 +12,8 @@ import { fetchJobs } from "@/lib/jobs/actions";
 import { fetchModelInputIds, fetchSnapshots } from "@/lib/repository/actions";
 import { parsePickerFilters, toURLSearchParams } from "@/lib/repository/url-filters";
 import type { CatalogueResponse } from "@/lib/repository/types";
+
+export const metadata: Metadata = { title: "New snapshot | OpenGHM" };
 
 /**
  * Step 1 of the draft wizard (ADR 0028): choose a model snapshot. The server

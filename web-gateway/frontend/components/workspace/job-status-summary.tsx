@@ -277,7 +277,7 @@ function useHeadline(job: Job, viewerEmail: string | null, shown: DisplayStatus)
     case "RUNNING":
       return { Icon: Loader2, title: "Running", sub: null };
     case "COMPLETING":
-      return { Icon: Loader2, title: "Completing", sub: "SLURM is finishing the job." };
+      return { Icon: Loader2, title: "Completing", sub: "SLURM is finishing the simulation." };
     case "CANCELLING":
       return {
         Icon: Ban,

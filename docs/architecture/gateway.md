@@ -194,10 +194,14 @@ built by the same code, with an empty `id`, and stores nothing and writes no
 audit event. The new-snapshot-draft screen shows it until the user saves, so the
 defaults stay defined in the backend. A copy takes the snapshot,
 slug, `about` (a name it has gets " (copy)"; one it lacks stays absent), model
-input, parameters and compute, and nothing of the simulation. A new draft has no name:
-"Untitled (<first 8 of the id>)" is what the header and the list show for one,
-computed in the frontend and never stored, and the wizard asks for the name at
-the top of Run settings.
+input, parameters and compute, and nothing of the simulation. A new draft has no name,
+and none is stored for it: the name is a label, with no uniqueness rule, and it is
+not a path, a SLURM name or the run id (`sim_id`). What the list and a simulation's
+page show for one is made in the frontend (`defaultName`): the snapshot's short
+title (version and years left out) and the run period, "WBM CONUS tutorial
+simulation · 2000–2001", with the run id beside it in the list. The wizard says
+"Untitled (<first 8 of the id>)" while the draft is unnamed, and asks for the name
+at the top of Run settings.
 
 `PATCH /api/v1/jobs/{id}` writes only while `status` is `DRAFT`: the update's
 own filter carries the status, so once it has moved past `DRAFT`, or a submit
@@ -914,7 +918,10 @@ when stderr is a terminal, so a batch job's stderr holds real messages only.
 The Logs panel is one box that lays the three files end to end in the order
 they happen (they share no timestamps): the job output, the WBM log, the
 messages, each block opened by a `──── Job output ────` separator line, each
-file's lines exactly as written and numbered as in the file. The only things
+file's lines exactly as written and numbered as in the file. A run of three or
+more `N/M files` counter lines is folded on screen into its last line, with a
+"… N progress lines hidden" mark and a Show button (`foldProgress`); Copy and
+Download still give every line. The only other things
 the box adds are its own separator, note and Retry lines, and colour: lines
 that look like errors are red and warnings amber (`log-severity.ts`, a word
 list, colour only), plus a failed job's reason as the failure card quotes it.
@@ -1001,8 +1008,10 @@ and one byte that is not UTF-8 emptied it.
 
 The message names the lever the owner has. `out_of_memory`, and a run killed with
 exit code 137 or 247 (SLURM's `137:0`, `247:0` or signal 9 when it left no record),
-say memory comes with cores (about 1.9 GB each on `shared`): more cores or a
-shorter run period. `timeout` says it by phase (while fetching, or before WBM
+say memory comes with cores (about 1.9 GB each on `shared`, `ANVIL_SHARED_MB_PER_CORE`)
+and how much memory the simulation had, its cores times that, from the cores it asked
+for (worked out as `resolve_compute` does; the message says less when the
+snapshot is gone): start a new snapshot draft with more cores, or a shorter run period. `timeout` says it by phase (while fetching, or before WBM
 finished) and, when the walltime the job asked for was already 96 h, to shorten
 the run period instead of a longer walltime. A fetch step that exits 64 to 78
 (sysexits, what `flock` answers with for a lock directory or a toolkit that is
