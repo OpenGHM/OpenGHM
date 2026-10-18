@@ -144,7 +144,7 @@ def db(monkeypatch) -> FakeDB:
         cleanup_calls.append(("scancel_by_name", sim_id))
         return True
 
-    async def remove_failed_submit_dirs(sim_id: str) -> None:
+    async def remove_failed_submit_dirs(sim_id: str, keep=()) -> None:
         cleanup_calls.append(("remove_failed_submit_dirs", sim_id))
 
     cleanup_calls: list[tuple[str, str]] = []

@@ -292,50 +292,11 @@ def test_headroom_is_half_again_in_slurms_format_and_never_over_the_limit(
     assert job_script.with_headroom(recommended) == with_headroom
 
 
-# The same numbers as `lib/jobs/compute.test.ts`: the two sides must agree.
-@pytest.mark.parametrize(
-    "recommended, over",
-    [
-        ("111:30:00", 111 * 3600 + 30 * 60),
-        ("96:00:01", 96 * 3600 + 1),
-        ("96:00:00", None),  # exactly the limit still fits
-        ("80:00:00", None),
-        ("4:30:00", None),
-        ("15:00", None),
-        ("not a time", None),  # `resolve_compute` reports that one
-    ],
-)
-def test_a_recommendation_over_the_limit_is_found_only_when_the_draft_sets_none(recommended, over):
-    snapshot = {"simulation": {"recommendedCompute": {"cores": 16, "walltime": recommended}}}
-    assert job_script.walltime_over_limit(SlurmConfig(), snapshot) == over
-    # A walltime the draft chose is its own business (the PATCH holds it to 96 h).
-    assert job_script.walltime_over_limit(SlurmConfig(walltime="02:00:00"), snapshot) is None
-
-
 def _recommending(walltime, step=None):
     compute = {"cores": 16, "walltime": walltime}
     if step is not None:
         compute["postProcessingWalltime"] = step
     return {"simulation": {"recommendedCompute": compute}}
-
-
-# The same numbers as `lib/jobs/compute.test.ts`: the two sides must agree.
-@pytest.mark.parametrize(
-    "walltime, step, post_processing, over",
-    [
-        ("80:00:00", "20:00:00", True, 100 * 3600),   # the run fits, the sum does not
-        ("80:00:00", "20:00:00", False, None),        # not post-processing: the run alone
-        ("80:00:00", "16:00:00", True, None),         # exactly the limit still fits
-        ("80:00:00", "16:00:01", True, 96 * 3600 + 1),
-        ("80:00:00", None, True, None),               # not measured: the run alone
-        ("111:30:00", "1:00:00", True, 112 * 3600 + 30 * 60),
-        ("15:00", "1:00:00", True, None),
-    ],
-)
-def test_the_limit_applies_to_the_run_and_its_post_processing_together(walltime, step, post_processing, over):
-    snapshot = _recommending(walltime, step)
-    assert job_script.walltime_over_limit(SlurmConfig(), snapshot, post_processing) == over
-    assert job_script.walltime_over_limit(SlurmConfig(walltime="02:00:00"), snapshot, post_processing) is None
 
 
 def test_the_recommended_walltime_adds_the_post_processing_time_only_when_the_run_has_it():
@@ -367,24 +328,6 @@ def test_a_run_post_processes_when_the_draft_asks_or_asks_nothing_and_the_snapsh
         temporal_range_start="2000-01-01", temporal_range_end="2000-12-31", post_processing=draft
     )
     assert job_script.runs_climatology(parameters, own) is expected
-
-
-def test_a_snapshot_without_a_recommendation_is_not_over_the_limit():
-    assert job_script.walltime_over_limit(SlurmConfig(), {"simulation": {}}) is None
-
-
-@pytest.mark.parametrize(
-    "seconds, text",
-    [
-        (111 * 3600 + 30 * 60, "111 h 30 min"),
-        (4 * 3600, "4 h"),
-        (22 * 60 + 30, "22 min 30 s"),
-        (15 * 60, "15 min"),
-        (45, "45 s"),
-    ],
-)
-def test_a_duration_is_written_in_hours_for_a_person(seconds, text):
-    assert job_script.describe_hours(seconds) == text
 
 
 # ---- what the toolkit cannot do yet -----------------------------------------

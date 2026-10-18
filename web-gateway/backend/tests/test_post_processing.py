@@ -658,20 +658,17 @@ def test_a_snapshot_whose_own_climatology_has_no_measurement_asks_for_its_wallti
     assert _walltime_in(sent[0]) == "22:30"
 
 
-def test_a_climatology_draft_over_the_limit_with_its_post_processing_is_refused(client, db, draft, monkeypatch, sent):
+def test_a_climatology_draft_over_the_limit_with_its_post_processing_is_capped_not_refused(
+    client, db, draft, monkeypatch, sent
+):
+    """The run alone fits, the sum (100 h) does not: one job asks for 96 h and the
+    run continues in the next (ADR 0037)."""
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
-    _recommend(db, "80:00:00", "20:00:00")  # the run alone fits, the sum is 100 h
+    _recommend(db, "80:00:00", "20:00:00")
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
-    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
-    assert r.status_code == 422
-    detail = r.json()["detail"]
-    assert detail["code"] == "walltime_over_limit"
-    assert "80 h" in detail["message"] and "post-processing about 20 h" in detail["message"]
-    assert "96 h" in detail["message"]
-    assert detail["recommended_seconds"] == 100 * 3600
-    assert detail["post_processing_seconds"] == 20 * 3600
-    assert db.jobs.docs["job-1"]["status"] == "DRAFT"
-    assert sent == []
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+    assert _walltime_in(sent[0]) == "96:00:00"
+    assert db.jobs.docs["job-1"]["status"] == "SUBMITTED"
 
 
 @pytest.mark.parametrize("value", [None, "standard"])
@@ -681,16 +678,6 @@ def test_the_same_snapshot_without_climatology_is_not_over_the_limit(client, db,
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
     assert _walltime_in(sent[0]) == "96:00:00"
-
-
-def test_a_run_over_the_limit_without_post_processing_keeps_its_message(client, db, draft, monkeypatch, sent):
-    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
-    _recommend(db, "111:30:00")
-    r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
-    detail = r.json()["detail"]
-    assert detail["code"] == "walltime_over_limit"
-    assert "post-processing" not in detail["message"]
-    assert detail["post_processing_seconds"] == 0
 
 
 # ---- run_overrides and the job body --------------------------------------------------------

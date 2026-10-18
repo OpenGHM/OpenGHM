@@ -8,13 +8,16 @@ Mongo. The first rule that matches wins:
 1. SLURM says `CANCELLED`: `cancelled_by_user` if the gateway recorded a
    cancel request, else `cancelled_by_system`.
 2. SLURM killed the job (`TIMEOUT`, `OUT_OF_MEMORY`, `NODE_FAIL` and kin): its
-   own cause. The script was killed, so its record is absent or cut short.
+   own cause. The script was killed, so its record is absent or cut short. A
+   `TIMEOUT` the gateway did not continue (ADR 0037) says why in `detail`:
+   `no_new_state` or `job_limit` (the caller decides, `classify` words it).
 3. SLURM says the script exited (`COMPLETED`, `FAILED`, `SPECIAL_EXIT`): the
    record decides, first failing fact first. A record with a `restart_count`
    above 0 is a run SLURM requeued after a node failure, which the body
    refuses to repeat (`job_script._REQUEUE_GUARD`): `node_failure`. Then the
-   fetch step (`gateway_setup`, `fetch_failed`), then the run step: a run
-   that was not staged is `run_refused`; one that was staged and whose
+   fetch step (`gateway_setup`, `fetch_failed`), then the run step: the
+   toolkit's own exit codes first, 64 (`run_state_incomplete`) and 65
+   (`run_incomplete`), then a run that was not staged is `run_refused`; one that was staged and whose
    `post_processing.ok` is false (WBM finished, the post-processing its init
    asks for did not) is `post_processing_failed`; any other staged run that
    did not exit 0 is `wbm_error`. Then the silent failures of a run that
@@ -64,6 +67,8 @@ _PHASE: dict[str, str] = {
     "gateway_setup": "fetch",
     "run_refused": "run",
     "wbm_error": "run",
+    "run_state_incomplete": "run",
+    "run_incomplete": "run",
     "post_processing_failed": "run",
     "wbm_silent_failure": "check",
 }
@@ -121,6 +126,13 @@ def _more_cores(cores: int | None) -> str:
     )
 
 
+#: The toolkit's `sim run` exit codes for a run it did not hand to WBM or did not
+#: believe (ADR 0037): 64, the run state in the work directory was not all written
+#: by one save, so a rerun is refused before WBM starts; 65, WBM exited 0 but its
+#: log stops before the run's last day.
+_RUN_STATE_INCOMPLETE = 64
+_RUN_INCOMPLETE = 65
+
 #: Exit codes of a process SLURM or the kernel killed with SIGKILL: 128 + 9,
 #: and the same signal as a shell reports it from a container runtime.
 _KILLED_EXIT_CODES = (137, 247)
@@ -166,6 +178,8 @@ def classify(
     slurm_exit_code: str | None = None,
     walltime_seconds: int | None = None,
     cores: int | None = None,
+    timeout_reason: str | None = None,
+    jobs_ran: int = 1,
 ) -> Verdict:
     """The verdict on a job that is over.
 
@@ -173,7 +187,10 @@ def classify(
     has no record of the job, which is rule 4. `outcome` is the parsed
     `outcome.json` or None, and `stderr_tail` the end of the job's stderr.
     `slurm_exit_code` (`137:0`, sacct's form), `walltime_seconds` and `cores`
-    (what the job asked SLURM for) only sharpen a message. Raises ValueError for a state
+    (what the job asked SLURM for) only sharpen a message, and so do `timeout_reason`
+    (`no_new_state` or `job_limit`: why a `TIMEOUT` was not continued, ADR 0037,
+    decided by the caller, which has to look at the work directory) and `jobs_ran`
+    (how many jobs ran the simulation, this one included). Raises ValueError for a state
     that is not an ending, because a job that is still going has no verdict
     yet. Anything else a record does to it is `outcome_missing`.
     """
@@ -193,7 +210,16 @@ def classify(
         return Verdict("CANCELLED", _failure(cause, phase, excerpt=excerpt))
     if head in _KILLED_BY_SLURM:
         cause = _KILLED_BY_SLURM[head]
-        return _fail(cause, phase=phase, excerpt=excerpt, state=head, walltime=walltime_seconds, cores=cores)
+        return _fail(
+            cause,
+            phase=phase,
+            excerpt=excerpt,
+            state=head,
+            walltime=walltime_seconds,
+            cores=cores,
+            detail=timeout_reason if cause == "timeout" else None,
+            jobs_ran=jobs_ran,
+        )
     if head in _EXITED:
         return _judge(record, head, stderr_tail, excerpt, killed=killed and head == "FAILED", cores=cores)
     raise ValueError(f"{slurm_state!r} is not a state a job ends in")
@@ -306,6 +332,15 @@ def _from_record(
         return _fail("fetch_failed", excerpt=_fetch_excerpt(excerpt), code=code)
     if run is not None and run.get("exit_code") not in (None, 0):
         code = run["exit_code"]
+        if code == _RUN_STATE_INCOMPLETE:
+            return _fail("run_state_incomplete", excerpt=excerpt, code=code)
+        if code == _RUN_INCOMPLETE:
+            return _fail(
+                "run_incomplete",
+                excerpt=_wbm_excerpt(excerpt, wbm_tail),
+                detail=_openghm_message(excerpt),
+                code=code,
+            )
         if not record.get("staged"):
             return _fail("run_refused", excerpt=excerpt, detail=_openghm_message(excerpt), code=code)
         post = _failed_post_processing(record)
@@ -372,10 +407,21 @@ def _fail(
     state: str | None = None,
     walltime: int | None = None,
     cores: int | None = None,
+    jobs_ran: int = 1,
 ) -> Verdict:
     return Verdict(
         "FAILED",
-        _failure(cause, phase, excerpt=excerpt, detail=detail, code=code, state=state, walltime=walltime, cores=cores),
+        _failure(
+            cause,
+            phase,
+            excerpt=excerpt,
+            detail=detail,
+            code=code,
+            state=state,
+            walltime=walltime,
+            cores=cores,
+            jobs_ran=jobs_ran,
+        ),
     )
 
 
@@ -389,13 +435,26 @@ def _failure(
     state: str | None = None,
     walltime: int | None = None,
     cores: int | None = None,
+    jobs_ran: int = 1,
 ) -> JobFailure:
     phase = _PHASE.get(cause, phase)
     return JobFailure(
         cause=cause,
         phase=phase,
-        message=_message(cause, detail=detail, code=code, state=state, phase=phase, walltime=walltime, cores=cores),
+        message=_message(
+            cause,
+            detail=detail,
+            code=code,
+            state=state,
+            phase=phase,
+            walltime=walltime,
+            cores=cores,
+            jobs_ran=jobs_ran,
+        ),
         excerpt=excerpt,
+        # Only a timeout's detail is part of the API: the others are wording
+        # for `_message`.
+        detail=detail if cause == "timeout" else None,
     )
 
 
@@ -408,6 +467,7 @@ def _message(
     phase: str | None = None,
     walltime: int | None = None,
     cores: int | None = None,
+    jobs_ran: int = 1,
 ) -> str:
     if cause == "gateway_setup":
         return (
@@ -431,6 +491,15 @@ def _message(
             f"WBM stopped with an error (exit code {code}). The last lines of its "
             "log show what it was doing."
         )
+    if cause == "run_state_incomplete":
+        return (
+            "A job was stopped while WBM was saving its state, so the saved state is not all from "
+            "one save and the simulation cannot be continued. Submit it again from a new "
+            "snapshot draft."
+        )
+    if cause == "run_incomplete":
+        stopped = "WBM exited without an error but stopped before the run's last day"
+        return f"{stopped}: {detail}." if detail else f"{stopped}."
     if cause == "post_processing_failed":
         head = (
             "WBM's run finished and its daily, monthly and yearly output is complete, but the "
@@ -459,15 +528,7 @@ def _message(
                 "WBM started. Fetches wait for each other, so this happens when Anvil is "
                 "busy. Submit again."
             )
-        if walltime is not None and walltime >= MAX_WALLTIME_SECONDS:
-            return (
-                f"The simulation hit its walltime before WBM finished, and that was already the "
-                f"{MAX_WALLTIME_SECONDS // 3600} h maximum. Shorten the run period and submit again."
-            )
-        return (
-            "The simulation hit its walltime before WBM finished. Submit again with a longer walltime "
-            f"(up to {MAX_WALLTIME_SECONDS // 3600} h), or with a shorter run period."
-        )
+        return _timeout_message(walltime=walltime, reason=detail, jobs_ran=jobs_ran)
     if cause == "out_of_memory":
         return f"The simulation ran out of memory and Anvil stopped it. {_more_cores(cores)}"
     if cause == "node_failure" and state:
@@ -491,6 +552,68 @@ def _message(
             )
         return "The simulation ended without reporting a result. Its logs may show why."
     return _MESSAGE[cause]
+
+
+def _timeout_message(*, walltime: int | None, reason: str | None, jobs_ran: int) -> str:
+    """A `TIMEOUT` after the fetch. `reason` is why it was not continued
+    (ADR 0037): `job_limit` (the simulation used all the jobs it may) or
+    `no_new_state` (WBM saved no complete state during the job, which WBM does at
+    the end of each simulated year, so there is nothing to carry on from); None
+    when no continuation was considered (a job from before them). A simulation
+    that already ran as several jobs is not told to shorten the run period as
+    though one job was all it had."""
+    hours = MAX_WALLTIME_SECONDS // 3600
+    lever = (
+        "Shorten the run period and submit again."
+        if walltime is not None and walltime >= MAX_WALLTIME_SECONDS
+        else f"Submit again with a longer walltime (up to {hours} h), or with a shorter run period."
+    )
+    if jobs_ran > 1:
+        ran = f"This simulation ran as {jobs_ran} jobs."
+        if reason == "job_limit":
+            return (
+                f"{ran} That is the most one simulation may use, and the last job hit its walltime "
+                "before WBM finished. Shorten the run period (fewer years need fewer jobs), or ask "
+                "an administrator whether the limit can be raised."
+            )
+        if reason == "no_new_state":
+            return (
+                f"{ran} The last one hit its walltime before WBM saved a new state to continue "
+                f"from, so it could not be continued. {lever}"
+            )
+        return f"{ran} The last one hit its walltime before WBM finished. {lever}"
+    if reason == "job_limit":
+        return (
+            "The simulation hit its walltime before WBM finished, and one simulation may use only "
+            f"{jobs_ran} job. Shorten the run period and submit again."
+        )
+    if reason == "no_new_state":
+        return (
+            "The simulation hit its walltime before WBM finished, and before it saved a state to "
+            f"continue from in another job, so it was not continued. {lever}"
+        )
+    if walltime is not None and walltime >= MAX_WALLTIME_SECONDS:
+        return (
+            f"The simulation hit its walltime before WBM finished, and that was already the "
+            f"{hours} h maximum. {lever}"
+        )
+    return f"The simulation hit its walltime before WBM finished. {lever}"
+
+
+def continuation_failure(why: str) -> JobFailure:
+    """The verdict on a simulation whose next job Anvil would not take, or could not
+    be asked for (ADR 0037): a job ran it up to its time limit and WBM saved a
+    state to continue from, but the continuation was never queued. Named here, with
+    the other causes; `why` is a sentence saying what went wrong."""
+    return JobFailure(
+        cause="continuation_failed",
+        phase="submit",
+        message=(
+            f"The simulation ran out of time and WBM saved a state to continue from, but the next job "
+            f"could not be queued. {why} What WBM wrote so far is on Anvil."
+        ),
+        excerpt=None,
+    )
 
 
 def _stderr_excerpt(stderr_tail: str) -> str | None:

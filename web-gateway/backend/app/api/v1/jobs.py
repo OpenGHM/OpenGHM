@@ -36,7 +36,6 @@ from app.core.roles import Permission
 from app.models.job import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
-    MAX_WALLTIME_SECONDS,
     TERMINAL_STATUSES,
     JobListResponse,
     JobLogResponse,
@@ -55,6 +54,7 @@ from app.models.job import (
     SubmitRequest,
     read_stored_parameters,
     real_time,
+    run_fields,
     verdict_fields,
 )
 from app.models.user import TokenPayload
@@ -190,6 +190,7 @@ def _doc_to_response(
         last_submit_error=doc.get("last_submit_error"),
         publish=doc.get("publish"),
         **verdict_fields(doc),
+        **run_fields(doc),
     )
 
 
@@ -209,6 +210,7 @@ def _status_response(doc: dict, live: dict | None = None) -> JobStatusResponse:
         live=live,
         publish=doc.get("publish"),
         **verdict_fields(doc),
+        **run_fields(doc),
     )
 
 
@@ -758,12 +760,7 @@ _ANVIL_UNREACHABLE = (
 def _sbatch_refusal_message(
     exc: Exception, unchanged: str = "Your draft is unchanged.", *, advice: bool = True
 ) -> str:
-    detail = also = ""
-    if isinstance(exc, SbatchError):
-        detail = (exc.stderr or exc.stdout or "").strip()
-        also = f"{exc.stderr}\n{exc.stdout}"
-    explained = sbatch_refusal.explain(detail or str(exc), also, advice=advice)
-    return f"{sbatch_refusal.sentence(explained)} {unchanged}"
+    return sbatch_refusal.refusal_message(exc, unchanged, advice=advice)
 
 
 async def _record_refusal(job_id: str, user_id: str, exc: HTTPException) -> None:
@@ -896,33 +893,6 @@ async def submit_simulation(
         post_processing = job_script.runs_climatology(
             job.parameters, rules.post_processing if rules else None
         )
-        over = job_script.walltime_over_limit(job.slurm_config, snapshot, post_processing)
-        if over is not None:
-            extra = (
-                job_script.parse_slurm_time(job_script.post_processing_walltime(snapshot) or "0")
-                if post_processing
-                else 0
-            )
-            took = (
-                f"{job_script.describe_hours(over - extra)}, and its post-processing about "
-                f"{job_script.describe_hours(extra)} more"
-                if extra
-                else job_script.describe_hours(over)
-            )
-            raise _error(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "walltime_over_limit",
-                "This model snapshot's reference simulation took about "
-                f"{took}, and one job may use at most "
-                f"{MAX_WALLTIME_SECONDS // 3600} h. Shorten the run period, "
-                + ("turn post-processing off, " if extra else "")
-                + "or set a walltime yourself (a simulation that needs longer may be "
-                "stopped when time runs out).",
-                recommended_seconds=over,
-                post_processing_seconds=extra,
-                limit_seconds=MAX_WALLTIME_SECONDS,
-            )
-
         await _refuse_unaligned_start(
             job.dataset_id, snapshot, job.parameters.temporal_range_start
         )
@@ -942,8 +912,10 @@ async def submit_simulation(
                 job.parameters, snapshot, rules.post_processing if rules else None
             )
             # What sbatch is asked for (`--time`), told to the toolkit too so the
-            # spool lease lasts as long as the job can.
-            _, walltime = slurm.resolve_compute(job.slurm_config, snapshot, post_processing)
+            # spool lease lasts as long as the job can. A recommendation over one
+            # job's 96 h is capped there (`with_headroom`): the run continues in
+            # a next job when SLURM stops it (ADR 0037).
+            cores, walltime = slurm.resolve_compute(job.slurm_config, snapshot, post_processing)
             body = job_script.render_job_body(
                 snapshot_id=job.dataset_id,
                 sim_id=sim_id,
@@ -972,6 +944,9 @@ async def submit_simulation(
                 "slurm_job_name": sim_id,
                 "toolkit": toolkit,
                 "work_dir": work_dir,
+                # What this submit sends, kept for the continuation (ADR 0037):
+                # the next job runs this same script with these same cores and walltime.
+                "submit_script": {"body": body, "cores": cores, "walltime": walltime},
                 "status_reason": None,
                 "updated_at": now,
             },
@@ -1498,7 +1473,9 @@ async def _cancel_orphans_of(doc: dict) -> None:
 async def _remove_files_of(doc: dict) -> list[str]:
     """Remove a finished job's directories on Anvil, or say why they were not.
     Whatever goes wrong, the document stays."""
-    if doc.get("files") == "purged" or not (doc.get("remote_job_dir") or doc.get("work_dir")):
+    if doc.get("files") == "purged" or not (
+        doc.get("remote_job_dir") or doc.get("work_dir") or doc.get("previous_jobs")
+    ):
         return []  # nothing recorded, or Anvil already removed it
     try:
         return await slurm.remove_job_files(doc)
@@ -1694,6 +1671,10 @@ async def cancel_job(
         }
         if job_script.is_valid_id(doc.get("sim_id")):
             update["$addToSet"] = {"orphan_sim_ids": doc["sim_id"]}
+        # A continuation between two jobs is cancelled here too (ADR 0037): the next
+        # job will not be submitted, and one that was is scancelled by name (every
+        # earlier job has ended, so the name reaches only it).
+        update["$unset"] = {"continuation": ""}
         immediate = (
             await db.jobs.update_one(
                 {"_id": job_id, "status": doc["status"], "slurm_job_id": None}, update
@@ -1790,6 +1771,34 @@ def _job_changed() -> HTTPException:
 _ANVIL_LOG_UNREACHABLE = "Anvil could not be reached, so the log could not be read. Try again in a few minutes."
 _DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
+_JOB_PARAM = Query(
+    None,
+    ge=1,
+    description="Which job of a simulation that ran as several (1-based); omitted: the current "
+    "job. stdout and stderr belong to a job; the WBM log is one file for the whole simulation and "
+    "ignores it.",
+)
+
+
+def _log_doc(doc: dict, stream: str, job: int | None) -> dict:
+    """The job document the log readers should read for `job` (ADR 0037): `doc`
+    itself for the current job, for no number, or for the WBM log (one file across
+    jobs); the view of an earlier job (`slurm.job_view`) otherwise. A number past
+    the jobs that exist is 404 `job_not_found`."""
+    if job is None or stream == "wbm":
+        return doc
+    current = len(doc.get("previous_jobs") or []) + 1
+    if job == current:
+        return doc
+    view = slurm.job_view(doc, job) if job < current else None
+    if view is None:
+        raise _error(
+            status.HTTP_404_NOT_FOUND,
+            "job_not_found",
+            f"This simulation has run {current} job{'' if current == 1 else 's'}; there is no job {job}.",
+        )
+    return view
+
 
 @router.get("/{job_id}/logs", response_model=JobLogResponse)
 async def get_job_logs(
@@ -1798,9 +1807,11 @@ async def get_job_logs(
     offset: int | None = Query(None, ge=0, description="Byte to start at; omitted: the end of the file"),
     # At least 4: a chunk never ends inside a UTF-8 sequence (up to 3 bytes held back).
     limit: int = Query(settings.JOB_LOG_READ_DEFAULT_BYTES, ge=4, le=settings.JOB_LOG_READ_MAX_BYTES),
+    job: int | None = _JOB_PARAM,
     user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
 ):
     doc = await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
+    doc = _log_doc(doc, stream, job)
     try:
         chunk = await slurm.read_log(doc, stream, offset, limit)
     except Exception as exc:
@@ -1813,11 +1824,13 @@ async def get_job_logs(
 async def download_job_log(
     job_id: str,
     stream: LogStream,
+    job: int | None = _JOB_PARAM,
     user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
 ):
     doc = await _get_job_for(job_id, user, Permission.JOB_VIEW_ANY)
+    shown = _log_doc(doc, stream, job)
     try:
-        path = await slurm.log_path(doc, stream)
+        path = await slurm.log_path(shown, stream)
         first = await slurm.read_log_bytes(path, 0, _DOWNLOAD_CHUNK_BYTES) if path else None
     except Exception as exc:
         logger.warning("Log download failed for %s (%s): %s", job_id, stream, exc)
@@ -1853,11 +1866,13 @@ async def download_job_log(
 
     # The file's name comes from the job, not the request; an id is always a safe one.
     name = doc["sim_id"] if job_script.is_valid_id(doc.get("sim_id")) else job_id
+    # A log of one job of several says which; the WBM log is the simulation's.
+    which = f"-job{job}" if job is not None and stream != "wbm" and (doc.get("previous_jobs")) else ""
     return StreamingResponse(
         body(),
         media_type="text/plain; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{name}-{stream}.log"',
+            "Content-Disposition": f'attachment; filename="{name}{which}-{stream}.log"',
             "Content-Length": str(size),
         },
     )

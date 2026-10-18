@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
+from app.core.config import settings
 from app.models.generated.snapshot import OpenGHMCitationBlock
 from app.models.partial import _partial_model
 
@@ -68,9 +69,12 @@ FailureCause = Literal[
     "wbm_error",
     "post_processing_failed",
     "wbm_silent_failure",
+    "run_state_incomplete",
+    "run_incomplete",
     "timeout",
     "out_of_memory",
     "node_failure",
+    "continuation_failed",
     "cancelled_by_user",
     "cancelled_by_system",
     "lost",
@@ -220,6 +224,59 @@ class ToolkitRef(BaseModel):
     commit: str
 
 
+class SubmitScript(BaseModel):
+    """What the first submit of a simulation sent to SLURM, kept so a continuation
+    submits the same script (ADR 0037): the rendered job body and the cores and
+    walltime the spec asked for. A job stored before continuations has none, and
+    is never continued."""
+
+    body: str
+    cores: int
+    walltime: str
+
+
+class PreviousJob(BaseModel):
+    """A job that ran a simulation and was continued by the next one: slurmly's
+    ids and paths (for its logs, and for a delete to remove its directory) and
+    what SLURM said about it. `state_saved_at` is when the complete run state
+    the next job resumed from was saved."""
+
+    number: int
+    slurm_job_id: str
+    internal_job_id: str | None = None
+    remote_job_dir: str | None = None
+    remote_script_path: str | None = None
+    stdout_path: str | None = None
+    stderr_path: str | None = None
+    slurm_start: datetime | None = None
+    slurm_end: datetime | None = None
+    slurm_state: str | None = None
+    slurm_exit_code: str | None = None
+    state_saved_at: datetime | None = None
+
+
+class PreviousJobSummary(BaseModel):
+    """A `PreviousJob` as the API shows it: no paths."""
+
+    number: int
+    slurm_job_id: str
+    slurm_state: str | None = None
+    slurm_start: datetime | None = None
+    slurm_end: datetime | None = None
+    state_saved_at: datetime | None = None
+
+
+class Continuation(BaseModel):
+    """The next job of a simulation, between the moment the gateway decided to
+    continue it and the moment SLURM accepted it (ADR 0037): `number` is the
+    job to come, `tries` the submits whose answer was lost. Cleared once the job
+    has a SLURM id."""
+
+    number: int
+    requested_at: datetime
+    tries: int = 0
+
+
 class SubmitError(BaseModel):
     """Why the last submit of a draft did not reach SLURM. The draft stays a
     DRAFT; this is what the UI shows next to it, and every later refusal of a
@@ -228,7 +285,7 @@ class SubmitError(BaseModel):
     `anvil_not_configured`, `internal_error`, `submit_interrupted` (a submit
     the gateway lost track of; the sweep returned the draft), or one of the
     4xx codes a submit answers with before it is claimed
-    (`answered_by_published`, `unsupported_fields`, `walltime_over_limit`,
+    (`answered_by_published`, `unsupported_fields`,
     `run_start_not_aligned`, `run_dates_outside_aggregation`,
     `invalid_parameters`, `active_job_limit`, ...)."""
 
@@ -246,6 +303,11 @@ class JobFailure(BaseModel):
     phase: str | None = None
     message: str
     excerpt: str | None = None
+    #: A finer reason within the cause, for the causes that have one: `timeout`
+    #: carries `no_new_state` (the job saved no state to continue from) or
+    #: `job_limit` (the simulation used all the jobs it may) when it was judged
+    #: for a continuation (ADR 0037); null otherwise.
+    detail: str | None = None
 
 
 class PublishFailure(BaseModel):
@@ -372,6 +434,15 @@ class JobDB(BaseModel):
     # On a draft: a `sim_id` whose submit may have reached SLURM without the
     # gateway learning of it, and whose `scancel --name` has not yet worked.
     orphan_sim_ids: list[str] = Field(default_factory=list)
+
+    # A run longer than one job (ADR 0037). `submit_script` is what the first
+    # submit sent; `previous_jobs` the jobs SLURM stopped at their time limit
+    # that a later job continued, oldest first (the fields above describe the
+    # job running now, or the last one); `continuation` is set while the next
+    # job is being submitted.
+    submit_script: SubmitScript | None = None
+    previous_jobs: list[PreviousJob] = Field(default_factory=list)
+    continuation: Continuation | None = None
 
     # Timestamps
     created_at: datetime
@@ -530,7 +601,36 @@ def verdict_fields(doc: dict) -> dict:
     }
 
 
-class JobResponse(JobVerdictFields):
+class JobRunFields(BaseModel):
+    """What ADR 0037 adds to a job, on both `JobResponse` and `JobStatusResponse`:
+    the earlier jobs of a simulation that ran as several, which job this one is
+    and how many it may use, and the next job while it is being submitted."""
+
+    previous_jobs: list[PreviousJobSummary] = Field(default_factory=list)
+    #: 1-based: the job running now, or the one that ran last. Null on a draft.
+    job_number: int | None = None
+    #: The most jobs this simulation may use: the setting for a draft and for a
+    #: job that stored its script, 1 for one that did not (it is never continued).
+    max_jobs: int = 1
+    continuation: Continuation | None = None
+
+
+def run_fields(doc: dict) -> dict:
+    """The `JobRunFields` of a job document, for a response to be built with."""
+    earlier = [
+        PreviousJobSummary(**entry) for entry in doc.get("previous_jobs") or [] if isinstance(entry, dict)
+    ]
+    draft = doc.get("status") == "DRAFT"
+    continuable = draft or doc.get("submit_script") is not None
+    return {
+        "previous_jobs": earlier,
+        "job_number": None if draft else len(earlier) + 1,
+        "max_jobs": settings.JOB_MAX_JOBS_PER_SIMULATION if continuable else 1,
+        "continuation": doc.get("continuation"),
+    }
+
+
+class JobResponse(JobVerdictFields, JobRunFields):
     """Single job detail returned to the frontend."""
 
     model_config = {"protected_namespaces": ()}
@@ -614,7 +714,7 @@ class JobLive(BaseModel):
     progress: JobProgress | None = None
 
 
-class JobStatusResponse(JobVerdictFields):
+class JobStatusResponse(JobVerdictFields, JobRunFields):
     """Lightweight status for polling."""
 
     job_id: str

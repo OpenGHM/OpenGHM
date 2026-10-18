@@ -74,7 +74,7 @@ import shlex
 from dataclasses import dataclass
 from datetime import date
 
-from app.models.job import MAX_WALLTIME_SECONDS, JobParameters, SlurmConfig
+from app.models.job import MAX_WALLTIME_SECONDS, JobParameters
 
 
 class SubmitInputError(ValueError):
@@ -520,9 +520,9 @@ def with_headroom(walltime: str) -> str:
     `80:00:00` becomes `96:00:00`. A simulation of the v2 snapshot took 13:49 of its
     recommended 15:00, so the bare recommendation leaves no room. Applied only
     to a snapshot's value; a walltime the user chose is sent as given.
-    A recommendation that is itself over the limit cannot be run in one job:
-    `walltime_over_limit` is how a submit finds that out. Mirrored by
-    `withHeadroom` in the frontend's lib/jobs/compute.ts."""
+    A recommendation that is itself over the limit cannot be run in one job; the
+    job asks for the cap and the run continues in the next job when SLURM stops it
+    (ADR 0037). Mirrored by `withHeadroom` in the frontend's lib/jobs/compute.ts."""
     seconds = (parse_slurm_time(walltime) * 3 + 1) // 2
     return format_slurm_time(min(seconds, MAX_WALLTIME_SECONDS))
 
@@ -567,45 +567,6 @@ def recommended_walltime(snapshot: dict, post_processing: bool = False) -> str |
     if extra is None:
         return str(walltime)
     return format_slurm_time(seconds + parse_slurm_time(extra))
-
-
-def walltime_over_limit(
-    slurm_config: SlurmConfig, snapshot: dict, post_processing: bool = False
-) -> int | None:
-    """The snapshot's recommended walltime, in seconds, when a submit of this
-    draft would have to ask for more than one job may use: the draft has no
-    walltime of its own and the recommendation alone is over
-    `MAX_WALLTIME_SECONDS`. When the run `post_processing` (`runs_climatology`)
-    the recommendation includes the post-processing time
-    (`recommended_walltime`), the sum `resolve_compute` gives headroom to. None
-    otherwise, including when the snapshot says nothing or something that is
-    not a SLURM time (`resolve_compute` reports that). A walltime the draft
-    chose is never refused here; the PATCH validator already holds it to the
-    limit. Mirrored by `submitProblems` in the frontend's
-    lib/workspace/draft-state.ts."""
-    if slurm_config.walltime:
-        return None
-    try:
-        recommended = recommended_walltime(snapshot, post_processing)
-        if recommended is None:
-            return None
-        seconds = parse_slurm_time(recommended)
-    except SubmitInputError:
-        return None
-    return seconds if seconds > MAX_WALLTIME_SECONDS else None
-
-
-def describe_hours(seconds: int) -> str:
-    """"111 h 30 min", "4 h", "22 min 30 s": a duration for a person, in hours
-    however long it is, the way the limit is written. Mirrored by
-    `describeHours` in the frontend's lib/jobs/compute.ts."""
-    h, rest = divmod(seconds, 3600)
-    m, s = divmod(rest, 60)
-    if h:
-        return f"{h} h {m} min" if m else f"{h} h"
-    if m:
-        return f"{m} min {s} s" if s else f"{m} min"
-    return f"{s} s"
 
 
 # ---------------------------------------------------------------------------

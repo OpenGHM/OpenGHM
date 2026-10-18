@@ -134,6 +134,7 @@ and 0012 were folded into 0010.
 | [0034](decisions/0034-community-content-lives-in-the-gateway-database.md) | Community-page content lives in the gateway's database, and its files in GridFS | accepted |
 | [0035](decisions/0035-cilogon-is-ordinary-sso.md) | CILogon is ordinary single sign-on: a matching email connects, a connected identity signs in | accepted |
 | [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted |
+| [0037](decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md) | A run longer than one job continues in the next job, from WBM's last saved state | accepted |
 
 ## Missions
 

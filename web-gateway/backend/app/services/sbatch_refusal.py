@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import re
 
+from slurmly.exceptions import SbatchError
+
 from app.models.job import MAX_WALLTIME_SECONDS
 
 # Reason codes are matched whole and without regard to case, anywhere in the
@@ -94,3 +96,14 @@ def explain(detail: str, also: str = "", *, advice: bool = True) -> str:
     shown = detail.strip()
     shown = shown[: _UNKNOWN_CHARS - 1].rstrip() + "…" if len(shown) > _UNKNOWN_CHARS else shown
     return sentence(f"SLURM refused the job: {shown}" if shown else "SLURM refused the job")
+
+
+def refusal_message(exc: Exception, unchanged: str = "Your draft is unchanged.", *, advice: bool = True) -> str:
+    """`explain` for the exception a refused submit raised (`SbatchError` carries
+    SLURM's stderr and stdout, anything else only its text), then `unchanged`."""
+    detail = also = ""
+    if isinstance(exc, SbatchError):
+        detail = (exc.stderr or exc.stdout or "").strip()
+        also = f"{exc.stderr}\n{exc.stdout}"
+    explained = explain(detail or str(exc), also, advice=advice)
+    return f"{sentence(explained)} {unchanged}"

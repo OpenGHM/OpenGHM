@@ -815,3 +815,99 @@ def test_a_failed_job_with_no_record_and_a_kill_exit_code_is_probably_out_of_mem
 
 def test_a_completed_job_is_not_called_killed_by_its_exit_code():
     assert "memory" not in verdict("COMPLETED", outcome=None, slurm_exit_code="0:9").failure.message
+
+
+# ---- ADR 0037: a run that continues across jobs ---------------------------------
+
+
+def _run_exit(code: int, *, err: str, staged: bool = True):
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": code}}, staged=staged,
+                 wbm={"log": "wbm_output/x/wbm_test.log", "all_done": False, "markers": [],
+                      "tail": ["File wbm_2000.nc (2000-03-01"]})
+    return verdict("FAILED", outcome=rec, err=err)
+
+
+def test_exit_64_is_a_run_state_written_by_two_saves():
+    v = _run_exit(64, err=stderr("openghm: the run state in /w/WBM_run_state was not all written by one save"))
+    assert v.status == "FAILED"
+    assert v.failure.cause == "run_state_incomplete"
+    assert v.failure.phase == "run"
+    assert "stopped while WBM was saving its state" in v.failure.message
+    assert "cannot be continued" in v.failure.message
+    assert v.failure.excerpt.startswith("openghm: the run state")
+
+
+def test_exit_65_is_wbm_stopping_before_the_runs_last_day():
+    err = stderr("openghm: WBM stopped on 2000-03-01, before the run's end 2000-12-31")
+    v = _run_exit(65, err=err)
+    assert v.failure.cause == "run_incomplete"
+    assert v.failure.phase == "run"
+    assert v.failure.message.startswith("WBM exited without an error but stopped before the run's last day")
+    assert "WBM stopped on 2000-03-01, before the run's end 2000-12-31" in v.failure.message
+    assert "File wbm_2000.nc (2000-03-01" in v.failure.excerpt  # the WBM log's tail is shown
+
+
+def test_exit_65_without_the_toolkits_line_still_says_what_happened():
+    v = _run_exit(65, err="")
+    assert v.failure.cause == "run_incomplete"
+    assert v.failure.message == "WBM exited without an error but stopped before the run's last day."
+
+
+@pytest.mark.parametrize("code", [64, 65])
+def test_the_new_exit_codes_win_even_when_the_run_was_not_staged(code):
+    v = _run_exit(code, err="", staged=False)
+    assert v.failure.cause in ("run_state_incomplete", "run_incomplete")
+
+
+def test_the_new_exit_codes_do_not_change_the_fetch_steps_setup_range():
+    rec = record(phase="fetch", steps={"fetch": {"exit_code": 64}}, staged=False)
+    assert verdict("FAILED", outcome=rec).failure.cause == "gateway_setup"
+
+
+def test_a_timeout_not_continued_for_want_of_a_state_says_so_and_carries_the_detail():
+    v = verdict("TIMEOUT", outcome=None, walltime_seconds=4 * 3600, timeout_reason="no_new_state")
+    assert v.failure.cause == "timeout" and v.failure.detail == "no_new_state"
+    assert "before it saved a state to continue from" in v.failure.message
+    assert "longer walltime (up to 96 h)" in v.failure.message
+
+
+def test_a_timeout_with_no_state_at_the_maximum_walltime_says_to_shorten_the_period():
+    v = verdict("TIMEOUT", outcome=None, walltime_seconds=96 * 3600, timeout_reason="no_new_state")
+    assert "before it saved a state" in v.failure.message
+    assert "Shorten the run period" in v.failure.message and "longer walltime" not in v.failure.message
+
+
+def test_a_timeout_at_the_job_limit_says_the_limit_was_reached():
+    v = verdict("TIMEOUT", outcome=None, jobs_ran=5, timeout_reason="job_limit")
+    assert v.failure.detail == "job_limit"
+    assert v.failure.message.startswith("This simulation ran as 5 jobs. That is the most one simulation may use")
+    assert "ask an administrator" in v.failure.message
+
+
+def test_a_continued_simulation_is_not_told_to_shorten_the_period_as_its_only_remedy():
+    v = verdict("TIMEOUT", outcome=None, jobs_ran=2, timeout_reason="no_new_state", walltime_seconds=30 * 3600)
+    assert v.failure.message.startswith("This simulation ran as 2 jobs.")
+    assert "longer walltime (up to 96 h)" in v.failure.message
+    # The same words without a reason (a verdict read from before): still about the jobs.
+    assert verdict("TIMEOUT", outcome=None, jobs_ran=3).failure.message.startswith("This simulation ran as 3 jobs.")
+
+
+def test_a_timeout_nobody_considered_continuing_has_no_detail_and_keeps_its_words():
+    v = verdict("TIMEOUT", outcome=None)
+    assert v.failure.detail is None
+    assert v.failure.message.startswith("The simulation hit its walltime before WBM finished.")
+
+
+def test_other_causes_carry_no_detail():
+    rec = record(phase="run", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": 2}}, staged=True)
+    assert verdict("FAILED", outcome=rec, err=stderr("x")).failure.detail is None
+    assert verdict("OUT_OF_MEMORY", outcome=None, timeout_reason="no_new_state").failure.detail is None
+
+
+def test_a_continuation_that_could_not_be_queued_is_its_own_cause():
+    from app.services.job_verdict import continuation_failure
+
+    failure = continuation_failure("SLURM refused the job: invalid account.")
+    assert failure.cause == "continuation_failed"
+    assert "next job could not be queued" in failure.message
+    assert "SLURM refused the job: invalid account." in failure.message

@@ -17,6 +17,8 @@ import json
 import logging
 import posixpath
 import shlex
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,7 +30,7 @@ from slurmly import (
     get_preset,
 )
 from slurmly.cleanup import assert_safe_to_remove
-from slurmly.exceptions import InvalidConfig
+from slurmly.exceptions import InvalidConfig, InvalidJobSpec, SbatchError
 from pymongo.errors import DuplicateKeyError
 from slurmly.models import JobInfo
 from slurmly.slurm.commands import build_sacct_json_many
@@ -47,16 +49,17 @@ from app.models.job import (
     real_time,
 )
 from app.models.repository import build_envelope
-from app.services import job_live, publish, run_start
+from app.services import job_live, publish, run_start, sbatch_refusal
 from app.services.job_script import (
     SubmitInputError,
     is_valid_id,
     parse_slurm_time,
     recommended_walltime,
     runs_climatology,
+    toolkit_paths,
     with_headroom,
 )
-from app.services.job_verdict import classify, slurm_state_head
+from app.services.job_verdict import classify, continuation_failure, slurm_state_head
 
 logger = logging.getLogger(__name__)
 
@@ -244,8 +247,22 @@ def build_job_spec(
     `post_processing` is whether the run will post-process, which the walltime
     allows for (`resolve_compute`)."""
     cores, walltime = resolve_compute(job.slurm_config, snapshot, post_processing)
-    return JobSpec(
+    return _run_spec(
+        job_id=job.id,
+        dataset_id=job.dataset_id,
         name=job.slurm_job_name or job.sim_id or job.id,
+        body=body,
+        cores=cores,
+        walltime=walltime,
+    )
+
+
+def _run_spec(*, job_id: str, dataset_id: str, name: str, body: str, cores: int, walltime: str) -> JobSpec:
+    """The one place a run's `JobSpec` is put together, so the first submit and a
+    continuation (ADR 0037) ask SLURM for the same partition, account, QOS and
+    execution profile."""
+    return JobSpec(
+        name=name,
         command_template=body,
         partition=settings.ANVIL_PARTITION,
         account=settings.ANVIL_ACCOUNT or None,
@@ -253,7 +270,24 @@ def build_job_spec(
         cpus_per_task=cores,
         time_limit=walltime,
         execution_profile=settings.ANVIL_EXECUTION_PROFILE,
-        metadata={"openghm_job_id": job.id, "dataset_id": job.dataset_id},
+        metadata={"openghm_job_id": job_id, "dataset_id": dataset_id},
+    )
+
+
+def build_continuation_spec(doc: dict) -> JobSpec:
+    """The spec of a simulation's next job (ADR 0037), from what its first submit
+    stored (`submit_script`: the body, cores and walltime it sent) and not from the
+    snapshot or the draft, which may have changed: the same name (`sim_id`, which
+    every job of a simulation shares), the same script, the same toolkit. Raises
+    `KeyError` or `ValueError` for a document with no usable script."""
+    script = doc["submit_script"]
+    return _run_spec(
+        job_id=doc["_id"],
+        dataset_id=doc["dataset_id"],
+        name=doc.get("slurm_job_name") or doc["sim_id"],
+        body=script["body"],
+        cores=int(script["cores"]),
+        walltime=str(script["walltime"]),
     )
 
 
@@ -280,6 +314,23 @@ async def submit_job(
     logger.info(
         "Job %s submitted → slurm=%s remote=%s",
         job.id,
+        submitted.slurm_job_id,
+        submitted.remote_job_dir,
+    )
+    return submitted
+
+
+async def submit_continuation(doc: dict) -> SubmittedJob:
+    """Submit the next job of the simulation in `doc` as a batch job (ADR 0037).
+    Transport only, like `submit_job`: the caller owns the document and decides
+    from the exception what happened (`SbatchError` and `InvalidJobSpec`: SLURM or
+    slurmly said no; anything else: the answer may have been lost)."""
+    spec = build_continuation_spec(doc)
+    client = await get_slurm_client()
+    submitted: SubmittedJob = await client.submit(spec)
+    logger.info(
+        "Job %s continued → slurm=%s remote=%s",
+        doc["_id"],
         submitted.slurm_job_id,
         submitted.remote_job_dir,
     )
@@ -507,16 +558,20 @@ async def _move(
     *,
     unset: tuple[str, ...] = (),
     cause: str | None = None,
+    only_if: dict[str, Any] | None = None,
 ) -> bool:
     """Write `fields` to a job only if it is still in the status `doc` was
-    read in, so a cancel, a submit or another sweep that moved it first is not
-    overwritten. Returns whether the write happened. A change of status is
-    audit-logged, once: only the writer that won it gets here."""
+    read in (and, with `only_if`, still matches that too), so a cancel, a submit
+    or another sweep that moved it first is not overwritten. Returns whether the
+    write happened. A change of status is audit-logged, once: only the writer
+    that won it gets here."""
     now = datetime.now(timezone.utc)
     update: dict[str, Any] = {"$set": {**fields, "updated_at": now}}
     if unset:
         update["$unset"] = {key: "" for key in unset}
-    result = await get_db().jobs.update_one({"_id": doc["_id"], "status": doc["status"]}, update)
+    result = await get_db().jobs.update_one(
+        {"_id": doc["_id"], "status": doc["status"], **(only_if or {})}, update
+    )
     if result.matched_count == 0:
         logger.info("Job %s left %s while it was being updated; leaving it", doc["_id"], doc["status"])
         return False
@@ -546,7 +601,14 @@ async def _requested_compute(doc: dict) -> tuple[int | None, int | None]:
     the submit worked it out: the draft's own, else the snapshot's recommendation
     (the walltime plus its post-processing time when the run post-processed, with
     headroom). The job stores neither. `(None, None)` when it cannot be told (the
-    snapshot is gone, say): a message then says less, not something false."""
+    snapshot is gone, say): a message then says less, not something false. A job
+    that kept its script (ADR 0037) knows what it asked for, and says so."""
+    script = doc.get("submit_script")
+    if isinstance(script, dict):
+        try:
+            return int(script["cores"]), parse_slurm_time(str(script["walltime"]))
+        except (KeyError, TypeError, ValueError, SubmitInputError):
+            pass  # not a script this gateway wrote: work it out as for an old job
     try:
         config = SlurmConfig(**(doc.get("slurm_config") or {}))
         parameters = JobParameters(**(read_stored_parameters(doc.get("parameters")) or {}))
@@ -566,7 +628,22 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
     """Reach the verdict on a job that is over (or that SLURM has forgotten)
     and store it with everything it rests on. Reads `outcome.json` and the end
     of stderr over SSH; if either cannot be read, nothing is written and the
-    next tick tries again. Returns whether a verdict was written."""
+    next tick tries again. Returns whether a verdict was written.
+
+    A job SLURM stopped at its time limit may not get one at all: when WBM saved a
+    newer state during it, the simulation is continued in a next job instead
+    (`_consider_continuing`, ADR 0037), and the job only becomes `previous_jobs`.
+    Otherwise it ends `timeout`, with the reason it was not continued."""
+    timeout_reason: str | None = None
+    if not missing and slurm_state_head(slurm_state) == "TIMEOUT" and doc.get("submit_script"):
+        try:
+            considered = await _consider_continuing(doc, info)
+        except StateUnreadable as exc:
+            logger.warning("Job %s: could not tell whether it can be continued yet: %s", doc["_id"], exc)
+            return False
+        if considered in (_CONTINUED, _MOVED):
+            return considered == _CONTINUED
+        timeout_reason = considered  # None, `job_limit` or `no_new_state`
     try:
         outcome = await read_outcome(doc["remote_job_dir"]) if doc.get("remote_job_dir") else None
         stderr_tail = await _stderr_tail(doc)
@@ -598,6 +675,8 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
         slurm_exit_code=info.exit_code if info else None,
         walltime_seconds=walltime_seconds,
         cores=cores,
+        timeout_reason=timeout_reason,
+        jobs_ran=len(doc.get("previous_jobs") or []) + 1,
     )
     now = datetime.now(timezone.utc)
     slurm_start = _as_utc(info.start_time) if info else None
@@ -627,6 +706,396 @@ async def _conclude(doc: dict, *, slurm_state: str | None, info: JobInfo | None,
         unset=("missing_since",),
         cause=verdict.failure.cause if verdict.failure else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# a run longer than one job (ADR 0037)
+# ---------------------------------------------------------------------------
+#
+# A job SLURM stops at its time limit, when WBM saved a newer complete state
+# during it, is not a failure: the next job runs the same script on the same work
+# directory and WBM resumes. The ended job moves to `previous_jobs`, the document
+# goes back to SUBMITTED with a `continuation`, and the next job is submitted.
+# Every write below is a compare-and-set, and no path leaves two SLURM jobs for
+# one simulation or one nobody tracks: a submit whose answer was lost is
+# scancelled by name (`sim_id`, shared by every job of a simulation, which is safe
+# only because the earlier jobs have all ended) before any other submit is made.
+
+#: What `_consider_continuing` answers besides a reason a TIMEOUT was not continued.
+_CONTINUED = "continued"
+_MOVED = "moved"  # another writer moved the job first: leave it to them
+
+#: The toolkit's `sim state` reads a few files; this is only a ceiling.
+_STATE_TIMEOUT_SECONDS = 60
+
+
+class StateUnreadable(Exception):
+    """Anvil could not be asked what state the work directory holds (a transport
+    failure). That says nothing about the run: nothing is written, and the next
+    tick asks again."""
+
+
+@dataclass(frozen=True)
+class RunState:
+    """What `openghm sim state` said: `state` is `none`, `resumable` or
+    `inconsistent`, or None when the toolkit could not say (it has no such
+    command, or could not read the work directory); `saved_at` is when the
+    resumable state was saved."""
+
+    state: str | None
+    saved_at: datetime | None = None
+
+
+async def read_run_state(doc: dict) -> RunState:
+    """Ask the simulation's own pinned toolkit what its work directory holds:
+    `<toolkit.home>/bin/openghm sim state <work_dir> --json`, which prints `{"state",
+    "saved_at", "wbm_id"}` and exits 0 whenever it could look, 2 when it could not.
+
+    Only a transport failure raises (`StateUnreadable`). Anything else the toolkit
+    does is an answer: an install from before `sim state` (click's "no such
+    command" is exit 2), a work directory it cannot read, output that is not what
+    it prints. All of them are `RunState(None)`, which means "not continued" and
+    is judged once, never retried: a toolkit that cannot say will not be able to
+    on the next tick either."""
+    toolkit = doc.get("toolkit") or {}
+    work_dir = _wbm_work_dir(doc)
+    if not toolkit.get("home") or work_dir is None:
+        return RunState(None)
+    try:
+        openghm, _ = toolkit_paths(toolkit["home"])
+    except SubmitInputError:
+        return RunState(None)
+    command = " ".join(shlex.quote(word) for word in [openghm, "sim", "state", work_dir, "--json"])
+    try:
+        result = await run_remote(
+            command, operation="sim_state", retry_safe=True, timeout=_STATE_TIMEOUT_SECONDS
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise StateUnreadable(str(exc) or type(exc).__name__) from exc
+    if result.exit_status is None or result.exit_status == 255:
+        # 255 is ssh's own failure, not the toolkit's: it never ran.
+        raise StateUnreadable(f"the command did not run (exit {result.exit_status})")
+    if result.exit_status != 0:
+        logger.warning(
+            "sim state of %s exited %s, so it is not continued: %s",
+            work_dir,
+            result.exit_status,
+            (result.stderr or "").strip()[-200:],
+        )
+        return RunState(None)
+    try:
+        answer = json.loads(result.stdout)
+        state = answer["state"]
+    except (ValueError, KeyError, TypeError):
+        logger.warning("sim state of %s printed no usable JSON: %.200r", work_dir, result.stdout)
+        return RunState(None)
+    if state not in ("none", "resumable", "inconsistent"):
+        logger.warning("sim state of %s answered with state %r", work_dir, state)
+        return RunState(None)
+    saved_at = _as_utc(answer.get("saved_at")) if isinstance(answer, dict) else None
+    return RunState(state, saved_at)
+
+
+async def _consider_continuing(doc: dict, info: JobInfo | None) -> str | None:
+    """A job of `doc` that SLURM ended with `TIMEOUT`: continue it, or say why not.
+    Returns `_CONTINUED`, `_MOVED` (another writer got there first), `job_limit`
+    (the simulation has used all the jobs it may), `no_new_state` (the work
+    directory holds no complete state saved after this job started, or the
+    toolkit could not say), or None (a cancel was asked: the timeout stands as it
+    is, as it does for any job that ends before its cancel). Raises
+    `StateUnreadable` when Anvil could not be asked, which writes nothing."""
+    fresh = await get_db().jobs.find_one({"_id": doc["_id"]})
+    if fresh is None or fresh.get("status") != doc["status"]:
+        logger.info("Job %s left %s while it was being judged; leaving it", doc["_id"], doc["status"])
+        return _MOVED
+    doc = fresh
+    if doc.get("cancel_requested_at"):
+        return None
+    jobs_ran = len(doc.get("previous_jobs") or []) + 1
+    if jobs_ran >= settings.JOB_MAX_JOBS_PER_SIMULATION:
+        return "job_limit"
+
+    state = await read_run_state(doc)
+    started = (_as_utc(info.start_time) if info else None) or _as_utc(doc.get("slurm_start"))
+    if state.state != "resumable" or state.saved_at is None or started is None or state.saved_at <= started:
+        return "no_new_state"
+
+    after = await _start_continuation(doc, info, state.saved_at)
+    if after is None:
+        return _MOVED
+    if after.get("status") == "SUBMITTED" and not after.get("slurm_job_id"):
+        await _submit_continuation_of(after)
+    return _CONTINUED
+
+
+async def _start_continuation(doc: dict, info: JobInfo | None, saved_at: datetime) -> dict | None:
+    """The one compare-and-set that continues a simulation: the ended job goes
+    onto `previous_jobs`, the current-job fields are cleared, and the document is
+    SUBMITTED with a `continuation` and no SLURM id, as a draft's claim leaves it.
+    It matches only the job as `doc` read it (status, SLURM id) with no cancel
+    asked, so a second tick, a cancel and a delete each lose or win it cleanly.
+    Returns the document as written, or None when it did not match."""
+    now = datetime.now(timezone.utc)
+    ran = len(doc.get("previous_jobs") or []) + 1
+    ended = {
+        "number": ran,
+        "slurm_job_id": str(doc["slurm_job_id"]),
+        "internal_job_id": doc.get("internal_job_id"),
+        "remote_job_dir": doc.get("remote_job_dir"),
+        "remote_script_path": doc.get("remote_script_path"),
+        "stdout_path": doc.get("stdout_path"),
+        "stderr_path": doc.get("stderr_path"),
+        "slurm_start": (_as_utc(info.start_time) if info else None) or _as_utc(doc.get("slurm_start")),
+        "slurm_end": _as_utc(info.end_time) if info else None,
+        "slurm_state": "TIMEOUT",
+        "slurm_exit_code": (info.exit_code if info else None) or doc.get("slurm_exit_code"),
+        "state_saved_at": saved_at,
+    }
+    result = await get_db().jobs.update_one(
+        {
+            "_id": doc["_id"],
+            "status": doc["status"],
+            "slurm_job_id": doc["slurm_job_id"],
+            "cancel_requested_at": None,
+        },
+        {
+            "$set": {
+                "status": "SUBMITTED",
+                "slurm_job_id": None,
+                "internal_job_id": None,
+                "remote_job_dir": None,
+                "remote_script_path": None,
+                "stdout_path": None,
+                "stderr_path": None,
+                "slurmly_submitted_at": None,
+                "continuation": {"number": ran + 1, "requested_at": now, "tries": 0},
+                "updated_at": now,
+            },
+            "$unset": {
+                "slurm_state": "",
+                "slurm_exit_code": "",
+                "slurm_start": "",
+                "slurm_end": "",
+                "missing_since": "",
+            },
+            "$push": {"previous_jobs": ended},
+        },
+    )
+    if result.matched_count == 0:
+        logger.info("Job %s changed while it was being continued; leaving it", doc["_id"])
+        return None
+    await log_event(
+        "job_continued",
+        actor_id=SYSTEM_ACTOR,
+        target_id=doc["_id"],
+        category=AuditCategory.JOB,
+        detail={
+            "sim_id": doc.get("sim_id"),
+            "number": ran + 1,
+            "after_slurm_job_id": str(doc["slurm_job_id"]),
+            "state_saved_at": saved_at.isoformat(),
+            "user_id": doc.get("user_id"),
+        },
+    )
+    return await get_db().jobs.find_one({"_id": doc["_id"]})
+
+
+def _previous_dirs(doc: dict) -> list[str]:
+    """The slurmly directories of the jobs that ran `doc` before the current one."""
+    return [
+        entry["remote_job_dir"]
+        for entry in doc.get("previous_jobs") or []
+        if isinstance(entry, dict) and entry.get("remote_job_dir")
+    ]
+
+
+async def _submit_continuation_of(doc: dict) -> None:
+    """Submit the next job of `doc`, which `_start_continuation` has written
+    (SUBMITTED, no SLURM id, a `continuation`), and settle what the answer was.
+
+    - SLURM or slurmly said no (`SbatchError`, `InvalidJobSpec`): the simulation
+      FAILED, `continuation_failed`, with SLURM's reason. Retrying a refusal would
+      get the same one.
+    - The answer was lost (a transport failure, a timeout, anything unexpected):
+      a job may exist, so it is scancelled by name and the document stays SUBMITTED
+      with no SLURM id and one more try counted; the sweep tries again later
+      (`reconcile_interrupted_submits`).
+    - A SLURM id: written with a compare-and-set on SUBMITTED. If a cancel moved the
+      job meanwhile, the new job is scancelled, as the submit route does.
+
+    Never raises for what Anvil or SLURM did."""
+    try:
+        # Checked before anything is sent: a script that cannot be turned into a
+        # job is a plain failure, while anything raised after sbatch ran may
+        # have started one (below).
+        build_continuation_spec(doc)
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.error("Job %s: its stored script cannot be submitted: %s", doc["_id"], exc)
+        await _fail_continuation(doc, "The job script the first job ran was not kept in a form this gateway can use.")
+        return
+    try:
+        submitted = await submit_continuation(doc)
+    except asyncio.CancelledError:
+        raise
+    except (SbatchError, InvalidJobSpec) as exc:
+        logger.warning("Job %s: SLURM refused its continuation: %s", doc["_id"], exc)
+        why = sbatch_refusal.refusal_message(exc, "", advice=False).strip()
+        if isinstance(exc, SbatchError) and is_valid_id(doc.get("sim_id")):
+            # slurmly made its directory before sbatch said no. Found by name, so
+            # the directories of the jobs that did run are kept.
+            await remove_failed_submit_dirs(doc["sim_id"], keep=_previous_dirs(doc))
+        await _fail_continuation(doc, why)
+        return
+    except Exception as exc:
+        logger.warning("Job %s: the answer to its continuation was lost: %s", doc["_id"], exc)
+        await _continuation_answer_lost(doc)
+        return
+
+    try:
+        recorded = await get_db().jobs.update_one(
+            {"_id": doc["_id"], "status": "SUBMITTED", "slurm_job_id": None},
+            {
+                "$set": {
+                    "slurm_job_id": submitted.slurm_job_id,
+                    "internal_job_id": submitted.internal_job_id,
+                    "remote_job_dir": submitted.remote_job_dir,
+                    "remote_script_path": submitted.remote_script_path,
+                    "stdout_path": submitted.stdout_path,
+                    "stderr_path": submitted.stderr_path,
+                    "slurmly_submitted_at": submitted.submitted_at,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+                "$unset": {"continuation": ""},
+            },
+        )
+    except Exception:
+        # SLURM has the job and its id could not be written (the database is
+        # down). Nothing tracks it: scancel it by name, and if that cannot run
+        # either, the sweep does before it submits anything again.
+        logger.exception("Job %s: its continuation took %s but the id was not recorded", doc["_id"], submitted.slurm_job_id)
+        await _continuation_answer_lost(doc)
+        return
+    if recorded.matched_count == 0:
+        await _cancel_unwanted_continuation(doc, submitted)
+
+
+async def _cancel_unwanted_continuation(doc: dict, submitted: SubmittedJob) -> None:
+    """A cancel moved the job between `_start_continuation` and SLURM's answer:
+    the next job exists on Anvil and its owner already said no to it. It is
+    scancelled by its id (by the name, kept for the orphan pass, if that fails),
+    and its directories are written onto the cancelled document so a delete removes
+    them."""
+    db = get_db()
+    logger.warning("Job %s left SUBMITTED during its continuation; cancelling %s", doc["_id"], submitted.slurm_job_id)
+    try:
+        await cancel_job(submitted.slurm_job_id)
+    except Exception as exc:
+        logger.error("scancel of unwanted %s failed: %s", submitted.slurm_job_id, exc)
+        if is_valid_id(doc.get("sim_id")):
+            await db.jobs.update_one({"_id": doc["_id"]}, {"$addToSet": {"orphan_sim_ids": doc["sim_id"]}})
+    await db.jobs.update_one(
+        {"_id": doc["_id"], "status": "CANCELLED"},
+        {
+            "$set": {
+                "slurm_job_id": submitted.slurm_job_id,
+                "internal_job_id": submitted.internal_job_id,
+                "remote_job_dir": submitted.remote_job_dir,
+                "remote_script_path": submitted.remote_script_path,
+                "stdout_path": submitted.stdout_path,
+                "stderr_path": submitted.stderr_path,
+                "slurmly_submitted_at": submitted.submitted_at,
+            }
+        },
+    )
+
+
+async def _continuation_answer_lost(doc: dict) -> None:
+    """A continuation submit whose answer was lost: scancel by name whatever it
+    started (best effort: `reconcile_interrupted_submits` scancels again before it
+    submits anew), remove the leftover directory when that worked, and count the
+    try. The count is a compare-and-set on the number the caller read, so two
+    writers do not count one try twice."""
+    sim_id = doc.get("sim_id")
+    if is_valid_id(sim_id):
+        try:
+            if await scancel_by_name(sim_id):
+                await remove_failed_submit_dirs(sim_id, keep=_previous_dirs(doc))
+        except Exception as exc:
+            logger.warning("scancel --name=%s failed: %s", sim_id, exc)
+    tries = (doc.get("continuation") or {}).get("tries") or 0
+    try:
+        await get_db().jobs.update_one(
+            {"_id": doc["_id"], "status": "SUBMITTED", "slurm_job_id": None, "continuation.tries": tries},
+            {"$set": {"continuation.tries": tries + 1, "updated_at": datetime.now(timezone.utc)}},
+        )
+    except Exception as exc:
+        logger.warning("Job %s: could not count a lost continuation try: %s", doc["_id"], exc)
+
+
+async def _fail_continuation(doc: dict, why: str) -> bool:
+    """End a simulation whose next job could not be queued: FAILED,
+    `continuation_failed`. Conditional on the job still being SUBMITTED with no
+    SLURM id, so a cancel or a job recorded meanwhile is not overwritten."""
+    failure = continuation_failure(why)
+    return await _move(
+        doc,
+        {
+            "status": "FAILED",
+            "status_reason": failure.message,
+            "failure": failure.model_dump(),
+            "completed_at": datetime.now(timezone.utc),
+            "files": "present",  # the work directory holds what the jobs wrote
+        },
+        unset=("continuation",),
+        cause=failure.cause,
+        only_if={"slurm_job_id": None},
+    )
+
+
+async def _reconcile_continuation(doc: dict) -> None:
+    """A continuation whose submit the gateway lost track of (the process died,
+    or the answer was lost) and that has waited `JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS`.
+    Unlike a first submit it is never given back as a draft: earlier jobs ran this
+    simulation. The sweep claims it (a write on `updated_at`, so one writer wins),
+    scancels by name whatever an earlier try may have started, and only when that
+    worked submits again, so there are never two jobs. After
+    `JOB_CONTINUATION_MAX_TRIES` lost answers it fails `continuation_failed`; if
+    the scancel of that last try cannot run, the name goes to `orphan_sim_ids`,
+    which is safe now that nothing will be submitted again."""
+    db = get_db()
+    claimed = await db.jobs.update_one(
+        {"_id": doc["_id"], "status": "SUBMITTED", "slurm_job_id": None, "updated_at": doc.get("updated_at")},
+        {"$set": {"updated_at": datetime.now(timezone.utc)}},
+    )
+    if claimed.matched_count == 0:
+        return  # another writer has it, or it has moved on
+    sim_id = doc.get("sim_id")
+    cancelled = False
+    if is_valid_id(sim_id):
+        try:
+            cancelled = await scancel_by_name(sim_id)
+        except Exception as exc:
+            logger.warning("scancel --name=%s failed: %s", sim_id, exc)
+        if cancelled:
+            await remove_failed_submit_dirs(sim_id, keep=_previous_dirs(doc))
+    tries = (doc.get("continuation") or {}).get("tries") or 0
+    fresh = await db.jobs.find_one({"_id": doc["_id"]})
+    if fresh is None or fresh.get("status") != "SUBMITTED" or fresh.get("slurm_job_id"):
+        return
+    if tries >= settings.JOB_CONTINUATION_MAX_TRIES:
+        if is_valid_id(sim_id) and not cancelled:
+            await db.jobs.update_one({"_id": doc["_id"]}, {"$addToSet": {"orphan_sim_ids": sim_id}})
+        logger.warning("Job %s: its continuation was never accepted after %d tries", doc["_id"], tries)
+        await _fail_continuation(
+            fresh,
+            f"Anvil did not answer {tries} times in a row when the next job was submitted.",
+        )
+        return
+    if not cancelled:
+        return  # an earlier try may be alive; submit nothing until it is gone
+    await _submit_continuation_of(fresh)
 
 
 async def confirm_absent(ids: list[str]) -> tuple[dict[str, JobInfo], set[str]]:
@@ -950,7 +1419,8 @@ async def return_to_draft(
         await db.jobs.update_one({"_id": job_id}, {"$addToSet": {"orphan_sim_ids": orphan_sim_id}})
     now = datetime.now(timezone.utc)
     result = await db.jobs.update_one(
-        {"_id": job_id, "status": "SUBMITTED", **(only_if or {})},
+        # A simulation that already ran a job is never a draft again (ADR 0037).
+        {"_id": job_id, "status": "SUBMITTED", "previous_jobs": {"$exists": False}, **(only_if or {})},
         {
             "$set": {
                 "status": "DRAFT",
@@ -958,7 +1428,7 @@ async def return_to_draft(
                 "last_submit_error": {"code": code, "message": message, "at": now},
                 "updated_at": now,
             },
-            "$unset": {"sim_id": "", "toolkit": "", "work_dir": ""},
+            "$unset": {"sim_id": "", "toolkit": "", "work_dir": "", "submit_script": ""},
         },
     )
     return result.matched_count == 1
@@ -976,7 +1446,11 @@ async def reconcile_interrupted_submits() -> None:
     any submit takes) is cancelled by name, its leftover directory removed, and
     the draft returned with `last_submit_error` `submit_interrupted`. If the
     scancel cannot run, the name goes to `orphan_sim_ids` and `clear_orphans`
-    retries it."""
+    retries it.
+
+    A job that already ran (`previous_jobs`, a `continuation`) is a continuation
+    whose submit was lost, not a draft's: it is submitted again instead
+    (`_reconcile_continuation`, ADR 0037), and never returned to a draft."""
     db = get_db()
     due_before = datetime.now(timezone.utc) - timedelta(seconds=settings.JOB_SUBMIT_INTERRUPTED_AFTER_SECONDS)
     stuck = [doc async for doc in db.jobs.find({"status": "SUBMITTED", "slurm_job_id": None})]
@@ -985,7 +1459,10 @@ async def reconcile_interrupted_submits() -> None:
         if updated is not None and updated > due_before:
             continue  # a submit that may still be running
         try:
-            await _reconcile_interrupted(doc)
+            if doc.get("continuation") or doc.get("previous_jobs"):
+                await _reconcile_continuation(doc)
+            else:
+                await _reconcile_interrupted(doc)
         except Exception as exc:
             logger.warning("Interrupted submit of job %s: %s", doc["_id"], exc)
 
@@ -1037,12 +1514,17 @@ async def clear_orphans() -> None:
                 logger.warning("Orphan %s of job %s: %s", sim_id, doc["_id"], exc)
 
 
-async def remove_failed_submit_dirs(sim_id: str) -> None:
+async def remove_failed_submit_dirs(sim_id: str, keep: Iterable[str] = ()) -> None:
     """Remove slurmly's job directory left by a submit sbatch refused. slurmly
     creates it before sbatch runs and never learns of it again, and the
     gateway never got its path, so it is found by its `metadata.json` naming
     the attempt's `sim_id`. Best-effort: a failure is logged and nothing else
-    changes."""
+    changes.
+
+    Every job of a simulation that was continued carries the same name, so the
+    directories of the jobs that did run (`keep`, their `previous_jobs`) are
+    left alone: the name finds them too."""
+    kept = {path.rstrip("/") for path in keep}
     base = _resolve_remote_base_dir().rstrip("/")
     try:
         client = await get_slurm_client()
@@ -1054,7 +1536,7 @@ async def remove_failed_submit_dirs(sim_id: str) -> None:
         )
         for line in found.stdout.splitlines():
             directory = posixpath.dirname(line.strip())
-            if not directory:
+            if not directory or directory.rstrip("/") in kept:
                 continue
             result = await client.cleanup_remote_job_dir(_job_at(directory))
             if result.errors:
@@ -1353,12 +1835,29 @@ def removable_paths(doc: dict) -> tuple[str | None, str | None]:
     return remote_dir, work_dir
 
 
+def previous_job_dirs(doc: dict) -> list[str]:
+    """The slurmly directories of the jobs that ran a continued simulation before
+    the current one (`previous_jobs`), each checked as `removable_paths` checks
+    the current one. Raises `RefusedPath` for one outside the allow-list."""
+    directories = _previous_dirs(doc)
+    for directory in directories:
+        try:
+            assert_safe_to_remove(directory, remote_base_dir=_resolve_remote_base_dir())
+        except InvalidConfig as exc:
+            raise RefusedPath(str(exc)) from exc
+        _job_at(directory)
+    return directories
+
+
 async def remove_job_files(doc: dict) -> list[str]:
-    """Remove a finished job's two directories from Anvil and return what was
-    removed. Every path is checked before anything is touched. Raises
-    `RefusedPath` (nothing removed), `CleanupFailed` (Anvil said no), and
-    whatever the transport raises when Anvil cannot be reached."""
+    """Remove a finished job's directories from Anvil and return what was
+    removed: the work directory, slurmly's directory of the current job, and
+    slurmly's directory of every job that ran before it (ADR 0037). Every path is
+    checked before anything is touched. Raises `RefusedPath` (nothing removed),
+    `CleanupFailed` (Anvil said no), and whatever the transport raises when Anvil
+    cannot be reached."""
     remote_dir, work_dir = removable_paths(doc)
+    earlier = previous_job_dirs(doc)
     removed: list[str] = []
     if work_dir:
         quoted = shlex.quote(work_dir)
@@ -1381,6 +1880,14 @@ async def remove_job_files(doc: dict) -> list[str]:
         if outcome.errors:
             raise CleanupFailed("; ".join(outcome.errors))
         removed.extend(outcome.removed)
+    errors: list[str] = []
+    for directory in earlier:
+        client = await get_slurm_client()
+        outcome = await client.cleanup_remote_job_dir(_job_at(directory))
+        errors.extend(outcome.errors)
+        removed.extend(outcome.removed)
+    if errors:
+        raise CleanupFailed("; ".join(errors))
     return removed
 
 
@@ -1644,6 +2151,32 @@ async def log_path(doc: dict, stream: str) -> str | None:
     return found
 
 
+def job_view(doc: dict, number: int) -> dict | None:
+    """`doc` as it was while job `number` of the simulation was the current one:
+    that job's slurmly ids and paths (`previous_jobs`), for the log readers, which
+    only read those and the status. None when no such earlier job exists (the
+    current job is `doc` itself). An earlier job has ended, so the view is
+    terminal: its files are complete, which is all `read_log` uses the status for."""
+    for entry in doc.get("previous_jobs") or []:
+        if isinstance(entry, dict) and entry.get("number") == number:
+            return {
+                **doc,
+                "status": "COMPLETED",
+                **{
+                    key: entry.get(key)
+                    for key in (
+                        "slurm_job_id",
+                        "internal_job_id",
+                        "remote_job_dir",
+                        "remote_script_path",
+                        "stdout_path",
+                        "stderr_path",
+                    )
+                },
+            }
+    return None
+
+
 async def read_log(doc: dict, stream: str, offset: int | None, limit: int) -> dict[str, Any]:
     """One chunk of the job's `stream` log, for the logs route: `exists`,
     `data`, `offset`, `next_offset`, `size` and `eof` (`parse_log_read`).
@@ -1660,7 +2193,9 @@ async def read_log(doc: dict, stream: str, offset: int | None, limit: int) -> di
             return _absent(offset)
         return parse_log_read(stdout, offset=offset, terminal=terminal)
 
-    return await job_live.shared(("log", doc["_id"], stream, offset, limit, terminal), read)
+    # The path is part of the key: the jobs of a simulation share its id and its
+    # streams, and differ only in where their files are.
+    return await job_live.shared(("log", doc["_id"], stream, path, offset, limit, terminal), read)
 
 
 def _absent(offset: int | None) -> dict[str, Any]:

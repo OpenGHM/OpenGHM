@@ -283,22 +283,20 @@ def _recommend(db, walltime: str):
     db.datasets.docs["ds-1"]["document"]["simulation"]["recommendedCompute"]["walltime"] = walltime
 
 
-def test_a_recommendation_over_the_limit_is_refused_before_anvil_is_called(
+def test_a_recommendation_over_the_limit_is_submitted_at_the_cap_and_the_script_is_kept(
     client, db, draft, sent
 ):
+    """ADR 0037: the Global snapshot's 111 h 30 min no longer refuses the submit.
+    The job asks for one job's maximum, and the run continues in the next job."""
     _recommend(db, "111:30:00")  # the Global_tracking snapshot
     response = client.post(SUBMIT, headers=HEADERS)
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert detail["code"] == "walltime_over_limit"
-    assert "111 h 30 min" in detail["message"] and "96 h" in detail["message"]
-    assert "shorten the run period" in detail["message"].lower()
-    assert detail["recommended_seconds"] == 111 * 3600 + 30 * 60
-    assert detail["limit_seconds"] == 96 * 3600
+    assert response.status_code == 202
+    (call,) = sent
+    assert slurm.build_job_spec(call[0], call[1], call[2]).time_limit == "96:00:00"
     stored = db.jobs.docs["job-1"]
-    assert stored["status"] == "DRAFT"
-    assert stored["last_submit_error"]["code"] == "walltime_over_limit"
-    assert sent == []  # no SSH, no SLURM
+    assert stored["status"] == "SUBMITTED" and "last_submit_error" not in stored
+    # What was sent is stored, to be sent again by a continuation.
+    assert stored["submit_script"] == {"body": call[2], "cores": 16, "walltime": "96:00:00"}
 
 
 def test_a_walltime_the_draft_chose_is_not_refused_whatever_the_recommendation(
@@ -883,15 +881,6 @@ def _assert_error_is(db, code: str, status: str = "DRAFT"):
     assert stored["status"] == status
     assert stored["last_submit_error"]["code"] == code, stored["last_submit_error"]
     assert stored["last_submit_error"]["message"] != STALE["message"]
-
-
-def test_a_refusal_before_anvil_replaces_the_stale_reason_walltime(client, db, draft):
-    _stale(db)
-    _recommend(db, "111:30:00")
-    assert client.post(SUBMIT, headers=HEADERS).status_code == 422
-    _assert_error_is(db, "walltime_over_limit")
-    got = client.get("/api/v1/jobs/job-1", headers=HEADERS).json()
-    assert got["last_submit_error"]["code"] == "walltime_over_limit"
 
 
 def test_unsupported_fields_replaces_the_stale_reason(client, db, draft):
