@@ -776,6 +776,194 @@ def test_a_job_that_changed_status_meanwhile_is_not_written(db, anvil, settled_f
     assert db.jobs.docs["job-1"].get("slurm_end") is None
 
 
+# ---- the same for the jobs a simulation ran before the current one (ADR 0037) --
+
+
+def earlier_job(number: int = 1, slurm_id: str = "11111", **extra) -> dict:
+    """An entry of `previous_jobs` as `_start_continuation` writes it when the
+    verdict came from a squeue row: no end time, start or exit code."""
+    entry = {
+        "number": number,
+        "slurm_job_id": slurm_id,
+        "internal_job_id": f"slurmly-0000000{number}",
+        "remote_job_dir": f"{REMOTE_BASE}/jobs/slurmly-0000000{number}",
+        "slurm_start": None,
+        "slurm_end": None,
+        "slurm_state": "TIMEOUT",
+        "slurm_exit_code": None,
+        "recorded_at": now() - timedelta(seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS + 5),
+    }
+    entry.update(extra)
+    return entry
+
+
+def timeout_row(slurm_id: str = "11111", **kw) -> JobInfo:
+    return info(
+        "TIMEOUT", "timeout", slurm_id=slurm_id, exit_code=kw.pop("exit_code", "0:15"),
+        start_time=kw.pop("start_time", "2026-09-30T10:00:00Z"),
+        end_time=kw.pop("end_time", "2026-10-04T10:00:00Z"), **kw
+    )
+
+
+@pytest.fixture
+def running_its_second_job(db, anvil):
+    """A simulation whose first job was cut at its time limit and settled from a
+    squeue row, and whose second job (12345) is running."""
+    db.jobs.docs["job-1"] = make_sent_job(
+        "job-1", "owner", "RUNNING", slurm_state="RUNNING",
+        slurm_start=datetime(2026, 10, 4, 10, 1, tzinfo=timezone.utc), previous_jobs=[earlier_job()],
+    )
+    return db.jobs.docs["job-1"]
+
+
+def test_an_earlier_job_gets_its_end_while_the_simulation_runs_its_next_job(db, anvil, running_its_second_job):
+    before = {k: v for k, v in running_its_second_job.items() if k != "previous_jobs"}
+    anvil.found["11111"] = timeout_row()
+    backfill()
+    stored = db.jobs.docs["job-1"]
+    (earlier,) = stored["previous_jobs"]
+    assert earlier["slurm_end"].isoformat().startswith("2026-10-04T10:00:00")
+    assert earlier["slurm_start"].isoformat().startswith("2026-09-30T10:00:00")
+    assert earlier["slurm_exit_code"] == "0:15"
+    assert earlier["slurm_state"] == "TIMEOUT" and earlier["slurm_job_id"] == "11111"
+    assert "slurm_end_tries" not in earlier and "slurm_end_tried_at" not in earlier
+    # The running job, the status and the write time of the document are not touched.
+    assert {k: v for k, v in stored.items() if k != "previous_jobs"} == before
+    assert anvil.lookups == [["11111"]]
+    anvil.lookups.clear()
+    backfill()
+    assert anvil.lookups == []  # nothing left to ask about
+
+
+def test_earlier_jobs_are_each_filled_with_their_own_row_in_one_lookup(db, anvil, running_its_second_job):
+    running_its_second_job["previous_jobs"] = [
+        earlier_job(1, "11111"),
+        earlier_job(2, "22222", slurm_end=datetime(2026, 10, 5, tzinfo=timezone.utc)),  # already has one
+        earlier_job(3, "33333"),
+    ]
+    anvil.found["11111"] = timeout_row("11111", end_time="2026-10-01T10:00:00Z")
+    anvil.found["33333"] = timeout_row("33333", end_time="2026-10-03T10:00:00Z")
+    backfill()
+    one, two, three = db.jobs.docs["job-1"]["previous_jobs"]
+    assert one["slurm_end"].isoformat().startswith("2026-10-01T10:00:00")
+    assert two["slurm_end"] == datetime(2026, 10, 5, tzinfo=timezone.utc)
+    assert three["slurm_end"].isoformat().startswith("2026-10-03T10:00:00")
+    assert anvil.lookups == [["11111", "33333"]]
+
+
+def test_one_lookup_serves_a_settled_job_and_an_earlier_job_together(db, anvil, settled_from_squeue):
+    db.jobs.docs["job-2"] = make_sent_job(
+        "job-2", "owner", "RUNNING", slurm_job_id="12346", previous_jobs=[earlier_job()]
+    )
+    anvil.found["12345"] = info("COMPLETED", "succeeded")
+    anvil.found["11111"] = timeout_row()
+    anvil.lookups.clear()
+    backfill()
+    assert len(anvil.lookups) == 1 and sorted(anvil.lookups[0]) == ["11111", "12345"]
+    assert db.jobs.docs["job-1"]["slurm_end"] is not None  # the top-level path still works
+    assert db.jobs.docs["job-2"]["previous_jobs"][0]["slurm_end"] is not None
+
+
+def test_a_squeue_row_for_an_earlier_job_is_a_spent_try_not_a_fill(db, anvil, running_its_second_job):
+    anvil.found["11111"] = squeue_row("TIMEOUT", "timeout").model_copy(update={"slurm_job_id": "11111"})
+    backfill()
+    (earlier,) = db.jobs.docs["job-1"]["previous_jobs"]
+    assert earlier["slurm_end"] is None and earlier["slurm_start"] is None and earlier["slurm_exit_code"] is None
+    assert earlier["slurm_end_tries"] == 1 and earlier["slurm_end_tried_at"] is not None
+
+
+def test_a_sacct_row_for_a_job_still_going_is_a_spent_try_too(db, anvil, running_its_second_job):
+    anvil.found["11111"] = info("RUNNING", "running", slurm_id="11111")
+    backfill()
+    (earlier,) = db.jobs.docs["job-1"]["previous_jobs"]
+    assert earlier["slurm_end"] is None and earlier["slurm_end_tries"] == 1
+
+
+def test_an_earlier_job_start_and_exit_code_already_stored_are_kept(db, anvil, running_its_second_job):
+    earlier = running_its_second_job["previous_jobs"][0]
+    earlier["slurm_start"] = datetime(2026, 9, 30, 9, 0, tzinfo=timezone.utc)
+    earlier["slurm_exit_code"] = "0:9"
+    anvil.found["11111"] = timeout_row()
+    backfill()
+    (stored,) = db.jobs.docs["job-1"]["previous_jobs"]
+    assert stored["slurm_end"].isoformat().startswith("2026-10-04T10:00:00")
+    assert stored["slurm_start"] == datetime(2026, 9, 30, 9, 0, tzinfo=timezone.utc)
+    assert stored["slurm_exit_code"] == "0:9"
+
+
+def test_an_earlier_job_that_only_just_moved_there_is_not_asked_about_yet(db, anvil, running_its_second_job):
+    running_its_second_job["previous_jobs"][0]["recorded_at"] = now() - timedelta(seconds=10)
+    backfill()
+    assert anvil.lookups == []
+
+
+def test_an_earlier_job_recorded_long_ago_is_not_asked_about(db, anvil, running_its_second_job):
+    running_its_second_job["previous_jobs"][0]["recorded_at"] = now() - timedelta(
+        seconds=settings.JOB_END_BACKFILL_WINDOW_SECONDS + 60
+    )
+    backfill()
+    assert anvil.lookups == []
+
+
+def test_an_entry_from_before_recorded_at_has_tries_but_no_window(db, anvil, running_its_second_job):
+    del running_its_second_job["previous_jobs"][0]["recorded_at"]
+    anvil.found["11111"] = timeout_row()
+    backfill()
+    assert db.jobs.docs["job-1"]["previous_jobs"][0]["slurm_end"] is not None
+
+
+def test_the_tries_for_an_earlier_job_are_bounded_and_counted_per_entry(db, anvil, running_its_second_job):
+    running_its_second_job["previous_jobs"] = [earlier_job(1, "11111"), earlier_job(2, "22222")]
+    anvil.found["22222"] = timeout_row("22222")  # the second answers at once
+    old = timedelta(seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS + 5)
+    for n in range(settings.JOB_END_BACKFILL_MAX_TRIES):
+        anvil.found.pop("11111", None)  # absent from sacct, or still a squeue row
+        if n % 2:
+            anvil.found["11111"] = squeue_row("TIMEOUT", "timeout").model_copy(update={"slurm_job_id": "11111"})
+        backfill()
+        first, _ = db.jobs.docs["job-1"]["previous_jobs"]
+        assert first["slurm_end_tries"] == n + 1
+        first["slurm_end_tried_at"] = now() - old
+    asked = [ids for ids in anvil.lookups if "11111" in ids]
+    assert len(asked) == settings.JOB_END_BACKFILL_MAX_TRIES
+    backfill()
+    assert [ids for ids in anvil.lookups if "11111" in ids] == asked  # given up on
+    first, second = db.jobs.docs["job-1"]["previous_jobs"]
+    assert first["slurm_end"] is None and second["slurm_end"] is not None
+
+
+def test_an_earlier_job_waits_the_retry_interval_between_tries(db, anvil, running_its_second_job):
+    backfill()
+    backfill()  # the first try was just now
+    assert len(anvil.lookups) == 1
+
+
+def test_a_failed_lookup_costs_an_earlier_job_no_try(db, anvil, running_its_second_job):
+    anvil.lookup_error = SSHTransportError("connection reset")
+    backfill()
+    assert "slurm_end_tries" not in db.jobs.docs["job-1"]["previous_jobs"][0]
+    anvil.lookup_error = None
+    anvil.found["11111"] = timeout_row()
+    backfill()
+    assert db.jobs.docs["job-1"]["previous_jobs"][0]["slurm_end"] is not None
+
+
+def test_an_earlier_job_that_got_its_end_meanwhile_is_not_written_again(db, anvil, running_its_second_job, monkeypatch):
+    anvil.found["11111"] = timeout_row()
+    real = anvil.client.get_jobs
+
+    async def get_jobs_then_fill(ids, **kw):
+        found = await real(ids, **kw)
+        db.jobs.docs["job-1"]["previous_jobs"][0]["slurm_end"] = datetime(2026, 10, 4, 9, 59, tzinfo=timezone.utc)
+        return found
+
+    monkeypatch.setattr(anvil.client, "get_jobs", get_jobs_then_fill)
+    backfill()
+    (earlier,) = db.jobs.docs["job-1"]["previous_jobs"]
+    assert earlier["slurm_end"] == datetime(2026, 10, 4, 9, 59, tzinfo=timezone.utc)
+    assert earlier["slurm_start"] is None and "slurm_end_tries" not in earlier
+
+
 # ---- mission 2026-10-06: a submit the gateway lost track of --------------------
 
 

@@ -173,7 +173,9 @@ class Settings(BaseSettings):
     # JOB_END_BACKFILL_RETRY_SECONDS (so it is out of squeue) and then again
     # that long after each try that found no end time, at most
     # JOB_END_BACKFILL_MAX_TRIES times, and only for a job that ended within
-    # JOB_END_BACKFILL_WINDOW_SECONDS. It never changes the verdict.
+    # JOB_END_BACKFILL_WINDOW_SECONDS. It never changes the verdict. The same
+    # holds for each earlier job of a simulation (`previous_jobs`), with the tries
+    # counted on the entry and the window counted from `recorded_at`.
     JOB_END_BACKFILL_WINDOW_SECONDS: int = 86400
     JOB_END_BACKFILL_RETRY_SECONDS: int = 300
     JOB_END_BACKFILL_MAX_TRIES: int = 5

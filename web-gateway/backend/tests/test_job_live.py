@@ -381,6 +381,36 @@ def test_a_long_line_is_cut():
     assert len(progress("File a.nc (2000-02-02) " + "x" * 500)["line"]) == 200
 
 
+# A continued run: the WBM log is one file every job of the simulation appends to,
+# and each WBM start prints a line like this near the top of its run (ADR 0037).
+STARTED = "The job started on 2026-10-18 at 09:30:12."
+CUT_AT = "File wbm_2001.nc (2001-06-22) Balance=(0.00,0.00,0.00,   8.20,  109.09,   0.81,  0.00, 0.00,0.00) Spool+=2"
+RESUMED = "File wbm_2001.nc (2001-01-02) Balance=(0.00,0.00,0.00,   8.20,  109.09,   0.81,  0.00, 0.00,0.00) Spool+=2"
+
+
+def test_a_job_that_has_printed_no_day_yet_has_no_progress_not_the_one_before_it():
+    text = f"The job started on 2026-10-14 at 08:00:00.\n{SPINUP}\n{CUT_AT}\n{STARTED}\nPrevious run state files are read!\n"
+    assert progress(text) is None
+
+
+def test_the_new_jobs_first_day_replaces_the_one_the_earlier_job_was_cut_at():
+    text = f"{SPINUP}\n{CUT_AT}\n{STARTED}\nPrevious run state files are read!\n{RESUMED}\n"
+    got = progress(text)
+    assert got["date"] == "2001-01-02" and got["line"] == RESUMED
+    assert got["fraction"] == pytest.approx(368 / 731)
+
+
+def test_a_start_line_beyond_the_tail_leaves_the_last_day_as_it_is():
+    # A tail that holds only day lines: read as before.
+    assert progress(f"{SPINUP}\n{CUT_AT}\n")["date"] == "2001-06-22"
+    assert progress(f"{CUT_AT}\n{RESUMED}\n")["date"] == "2001-01-02"
+
+
+def test_the_first_start_of_a_simulation_is_no_progress_until_its_first_day():
+    assert progress(f"{STARTED}\nReading inputs\n") is None
+    assert progress(f"{STARTED}\n{SPINUP}\n")["phase"] == "spinup"
+
+
 def running(db, doc_id="job-1"):
     db.users.docs["owner"] = make_user("owner", can_run_simulations=True)
     db.jobs.docs[doc_id] = make_sent_job(doc_id, "owner", "RUNNING")
@@ -405,6 +435,20 @@ def test_the_status_route_carries_live_and_progress(client, db, slow_lookup, clo
     assert body["live"]["progress"]["date"] == "2001-12-22"
     assert body["live"]["checked_at"].endswith("Z")
     assert body["live"]["time_limit_seconds"] is None
+
+
+def test_the_status_route_reports_no_progress_right_after_a_continued_job_starts(
+    client, db, slow_lookup, clock, monkeypatch
+):
+    running(db)
+    run(job_live.slurm_info(["12345"]))
+
+    async def read_log(doc, stream, offset, limit):
+        return chunk(f"{SPINUP}\n{CUT_AT}\n{STARTED}\n")
+
+    monkeypatch.setattr(slurm, "read_log", read_log)
+    body = client.get("/api/v1/jobs/job-1/status", headers=token_for("owner")).json()
+    assert body["live"] is not None and body["live"]["progress"] is None
 
 
 def test_no_live_before_slurm_has_been_heard(client, db, monkeypatch):

@@ -253,6 +253,13 @@ class PreviousJob(BaseModel):
     slurm_state: str | None = None
     slurm_exit_code: str | None = None
     state_saved_at: datetime | None = None
+    # When the gateway moved it here (it saw it over). A job SLURM was asked
+    # about from a squeue row has no `slurm_end`; the sweep fills it from sacct
+    # (`slurm.backfill_slurm_end`) within a window from this time, counting its
+    # tries on the entry.
+    recorded_at: datetime | None = None
+    slurm_end_tries: int | None = None
+    slurm_end_tried_at: datetime | None = None
 
 
 class PreviousJobSummary(BaseModel):

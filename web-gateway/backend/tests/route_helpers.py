@@ -63,6 +63,39 @@ def _assign(doc: dict, key: str, value: Any) -> None:
     doc[last] = value
 
 
+def _targets(doc: dict, key: str, array_filters: list[dict] | None) -> list[tuple[dict, str]]:
+    """The (container, last key) places a dotted update path writes to. A
+    `$[name]` step stands for every element of the list before it that matches
+    the `array_filters` entry whose keys start with `name.`; like Mongo, it is an
+    error to use one without a filter."""
+    places: list[tuple[dict, str]] = []
+    *parents, last = key.split(".")
+
+    def walk(node: Any, rest: list[str]) -> None:
+        if not rest:
+            if isinstance(node, dict):
+                places.append((node, last))
+            return
+        head, tail = rest[0], rest[1:]
+        if head.startswith("$[") and head.endswith("]"):
+            name = head[2:-1]
+            conditions = {
+                k[len(name) + 1 :]: v
+                for f in array_filters or []
+                for k, v in f.items()
+                if k.startswith(name + ".")
+            }
+            assert conditions, f"fake Mongo: no array filter for {head}"
+            for element in node if isinstance(node, list) else []:
+                if isinstance(element, dict) and _matches(element, conditions):
+                    walk(element, tail)
+        elif isinstance(node, dict):
+            walk(node.setdefault(head, {}), tail)
+
+    walk(doc, parents)
+    return places
+
+
 def _matches(doc: dict, query: dict) -> bool:
     for key, cond in query.items():
         found = _lookup(doc, key)
@@ -80,6 +113,10 @@ def _matches(doc: dict, query: dict) -> bool:
                     ok = value is not None and value >= arg
                 elif op == "$lt":
                     ok = value is not None and value < arg
+                elif op == "$elemMatch":
+                    ok = isinstance(value, list) and any(
+                        isinstance(e, dict) and _matches(e, arg) for e in value
+                    )
                 elif op == "$regex":
                     ok = isinstance(value, str) and re.search(arg, value) is not None
                 else:
@@ -169,16 +206,33 @@ class FakeCollection:
             raise DuplicateKeyError(f"E11000 duplicate key error: {{ _id: {doc['_id']!r} }}")
         self.docs[doc["_id"]] = bson_roundtrip(doc)
 
-    async def update_one(self, query: dict, update: dict, upsert: bool = False):
+    async def update_one(
+        self, query: dict, update: dict, upsert: bool = False, array_filters: list[dict] | None = None
+    ):
         assert set(update) <= {"$set", "$unset", "$addToSet", "$pull", "$push"}, (
             "fake Mongo: only $set, $unset, $addToSet, $pull and $push are supported"
         )
         for doc in self.docs.values():
             if _matches(doc, query):
+                # As Mongo does, find every element a `$[name]` stands for before
+                # anything is written: a filter must not see this update's own writes.
+                places = {
+                    key: _targets(doc, key, array_filters)
+                    for key in [*update.get("$set", {}), *update.get("$unset", {})]
+                    if "$[" in key
+                }
                 for key, value in update.get("$set", {}).items():
-                    _assign(doc, key, bson_roundtrip(value))
+                    if key in places:
+                        for container, last in places[key]:
+                            container[last] = bson_roundtrip(value)
+                    else:
+                        _assign(doc, key, bson_roundtrip(value))
                 for key in update.get("$unset", {}):
-                    doc.pop(key, None)
+                    if key in places:
+                        for container, last in places[key]:
+                            container.pop(last, None)
+                    else:
+                        doc.pop(key, None)
                 for key, item in update.get("$addToSet", {}).items():
                     items = doc.setdefault(key, [])
                     item = bson_roundtrip(item)

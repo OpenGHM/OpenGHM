@@ -852,6 +852,8 @@ async def _start_continuation(doc: dict, info: JobInfo | None, saved_at: datetim
         "slurm_state": "TIMEOUT",
         "slurm_exit_code": (info.exit_code if info else None) or doc.get("slurm_exit_code"),
         "state_saved_at": saved_at,
+        # When the gateway saw it over: starts the window of its end-time backfill.
+        "recorded_at": now,
     }
     result = await get_db().jobs.update_one(
         {
@@ -1274,6 +1276,37 @@ async def sync_active_jobs() -> None:
             logger.warning("Sweep: job %s failed: %s", doc["_id"], exc)
 
 
+def _sacct_end_fields(info: JobInfo | None, stored: dict) -> dict[str, Any]:
+    """The end time, start time and exit code a sacct row gives `stored` (a job
+    document or a `previous_jobs` entry), for the ones it has none of. A squeue
+    row, a row for a job still going and no row at all give nothing."""
+    fields: dict[str, Any] = {}
+    if info is not None and info.source == "sacct" and info.lifecycle in _ENDED_LIFECYCLES:
+        for key, value in (
+            ("slurm_end", _as_utc(info.end_time)),
+            ("slurm_start", _as_utc(info.start_time)),
+            ("slurm_exit_code", info.exit_code or None),
+        ):
+            if value and stored.get(key) is None:
+                fields[key] = value
+    return fields
+
+
+def _end_backfill_due(stored: dict, base: Any, now: datetime) -> bool:
+    """Whether a record with no end time is to be asked about now: it has tries
+    left, it ended within the window (when `base` says when), and it has been
+    over, or untried, for the retry interval."""
+    if (stored.get("slurm_end_tries") or 0) >= settings.JOB_END_BACKFILL_MAX_TRIES:
+        return False
+    base = _as_utc(base)
+    if base is not None and now - base > timedelta(seconds=settings.JOB_END_BACKFILL_WINDOW_SECONDS):
+        return False
+    waited_since = _as_utc(stored.get("slurm_end_tried_at")) or base
+    return waited_since is None or now - waited_since >= timedelta(
+        seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS
+    )
+
+
 async def backfill_slurm_end() -> None:
     """Give a job settled from a squeue row the end time (and start time and
     exit code) only sacct has. The verdict and `completed_at` are never touched.
@@ -1283,10 +1316,19 @@ async def backfill_slurm_end() -> None:
     has been over for `JOB_END_BACKFILL_RETRY_SECONDS` and again that long after
     each try, in one batched lookup per tick, at most `JOB_END_BACKFILL_MAX_TRIES`
     times. Only a sacct row counts: a squeue row still lingering is a try spent.
-    A lookup that fails costs no try."""
+    A lookup that fails costs no try.
+
+    The same holds for every entry of `previous_jobs` (ADR 0037) with no
+    `slurm_end`, whatever status the simulation has now, since it may be running
+    its next job: the entry moved there when the gateway saw the job over
+    (`recorded_at`, which starts its window and its first wait), and the tries are
+    counted on the entry (`slurm_end_tries`, `slurm_end_tried_at`), each entry
+    bounded by `JOB_END_BACKFILL_MAX_TRIES` on its own. An entry written before
+    `recorded_at` existed has no window, only the tries. Its writes are
+    conditional on that entry's `slurm_end` still being empty, and do not touch
+    the document's `updated_at`."""
     db = get_db()
     now = datetime.now(timezone.utc)
-    retry = timedelta(seconds=settings.JOB_END_BACKFILL_RETRY_SECONDS)
     cutoff = now - timedelta(seconds=settings.JOB_END_BACKFILL_WINDOW_SECONDS)
     due: list[dict] = []
     async for doc in db.jobs.find(
@@ -1298,32 +1340,36 @@ async def backfill_slurm_end() -> None:
             "completed_at": {"$gte": cutoff},
         }
     ):
-        if (doc.get("slurm_end_tries") or 0) >= settings.JOB_END_BACKFILL_MAX_TRIES:
-            continue
-        waited_since = _as_utc(doc.get("slurm_end_tried_at")) or _as_utc(doc.get("completed_at"))
-        if waited_since is not None and now - waited_since >= retry:
+        if _end_backfill_due(doc, doc.get("completed_at"), now):
             due.append(doc)
-    if not due:
+    due_previous: list[tuple[dict, dict]] = []
+    async for doc in db.jobs.find({"previous_jobs": {"$elemMatch": {"slurm_end": None}}}):
+        for entry in doc.get("previous_jobs") or []:
+            if (
+                isinstance(entry, dict)
+                and entry.get("slurm_end") is None
+                and entry.get("slurm_job_id")
+                and entry.get("number") is not None
+                and _end_backfill_due(entry, entry.get("recorded_at"), now)
+            ):
+                due_previous.append((doc, entry))
+    if not due and not due_previous:
         return
 
-    ids = [str(doc["slurm_job_id"]) for doc in due]
+    ids = list(
+        dict.fromkeys(
+            [str(doc["slurm_job_id"]) for doc in due]
+            + [str(entry["slurm_job_id"]) for _, entry in due_previous]
+        )
+    )
     try:
         found = await job_live.slurm_info(ids, refresh=True)
     except Exception as exc:
         logger.warning("End-time backfill: lookup of %d jobs failed, skipping this tick: %s", len(ids), exc)
         return
 
-    for doc, slurm_id in zip(due, ids):
-        info = found.get(slurm_id)
-        fields: dict[str, Any] = {}
-        if info is not None and info.source == "sacct" and info.lifecycle in _ENDED_LIFECYCLES:
-            for key, value in (
-                ("slurm_end", _as_utc(info.end_time)),
-                ("slurm_start", _as_utc(info.start_time)),
-                ("slurm_exit_code", info.exit_code or None),
-            ):
-                if value and doc.get(key) is None:
-                    fields[key] = value
+    for doc in due:
+        fields = _sacct_end_fields(found.get(str(doc["slurm_job_id"])), doc)
         update: dict[str, Any] = {"$set": {**fields, "updated_at": now}}
         if "slurm_end" in fields:
             update["$unset"] = {"slurm_end_tries": "", "slurm_end_tried_at": ""}
@@ -1338,6 +1384,31 @@ async def backfill_slurm_end() -> None:
             )
         except Exception as exc:
             logger.warning("End-time backfill: job %s failed: %s", doc["_id"], exc)
+
+    for doc, entry in due_previous:
+        fields = _sacct_end_fields(found.get(str(entry["slurm_job_id"])), entry)
+        prefix = "previous_jobs.$[e]."
+        update = {"$set": {prefix + key: value for key, value in fields.items()}}
+        if "slurm_end" in fields:
+            update["$unset"] = {prefix + "slurm_end_tries": "", prefix + "slurm_end_tried_at": ""}
+        else:
+            update["$set"][prefix + "slurm_end_tries"] = (entry.get("slurm_end_tries") or 0) + 1
+            update["$set"][prefix + "slurm_end_tried_at"] = now
+        try:
+            # Conditional on this entry's end time still being empty.
+            await db.jobs.update_one(
+                {
+                    "_id": doc["_id"],
+                    "previous_jobs": {"$elemMatch": {"number": entry["number"], "slurm_end": None}},
+                },
+                update,
+                array_filters=[{"e.number": entry["number"], "e.slurm_end": None}],
+            )
+        except Exception as exc:
+            logger.warning(
+                "End-time backfill: job %s, earlier job %s failed: %s",
+                doc["_id"], entry["slurm_job_id"], exc,
+            )
 
 
 async def update_job_status(job_id: str) -> dict[str, Any]:

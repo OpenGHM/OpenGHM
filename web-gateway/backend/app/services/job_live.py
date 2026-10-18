@@ -256,6 +256,10 @@ async def live_state(doc: dict) -> dict | None:
 
 _SPINUP_RE = re.compile(r"^Spinup (\d+)/(\d+) \((\d{4}-\d{2}-\d{2})\)")
 _RUN_RE = re.compile(r"^File \S+ \((\d{4}-\d{2}-\d{2})\)")
+# Each WBM start prints this near the top of its run. The log is one file that
+# every job of a simulation appends to (ADR 0037), so what precedes the last such
+# line belongs to an earlier job.
+_START_RE = re.compile(r"^\s*The job started on \d{4}-\d{2}-\d{2} at \d{2}:\d{2}:\d{2}")
 
 
 def _date(value: Any) -> date | None:
@@ -270,9 +274,16 @@ def parse_progress(
 ) -> dict | None:
     """Progress from the last line of `text` that WBM's per-day output has the
     shape of (ADR 0027), or None when there is none. The fraction is given for
-    the run phase only, from the simulation's first and last day."""
+    the run phase only, from the simulation's first and last day.
+
+    Only lines after the last `The job started on` line count: a job that
+    continues a run appends to the log of the one before, and until it prints a
+    day of its own the last day in the log is where the earlier job was cut. A
+    `text` with no such line (a tail that starts after it) is read as it is."""
     start, end = _date(run_start), _date(run_end)
     for line in reversed(text.splitlines()):
+        if _START_RE.match(line):
+            return None  # this job has not printed a day yet
         loop = loops = None
         if match := _SPINUP_RE.match(line):
             phase, loop, loops = "spinup", int(match[1]), int(match[2])

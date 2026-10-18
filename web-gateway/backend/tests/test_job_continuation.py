@@ -228,6 +228,7 @@ def test_a_timeout_after_a_newer_state_is_continued_and_queued(db, anvil, submit
     assert "failure" not in stored and stored.get("completed_at") is None
     # The ended job is on record, with everything a log reader and a delete need.
     (ended,) = stored["previous_jobs"]
+    assert abs(now() - ended.pop("recorded_at")) < timedelta(minutes=1)  # when it was seen over
     assert ended == {
         "number": 1,
         "slurm_job_id": "12345",
