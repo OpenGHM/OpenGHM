@@ -48,6 +48,12 @@ def client_ip(x_internal_auth: str | None, x_client_ip: str | None) -> str | Non
     secret configured, there is no IP: counting by the pod's address would put
     every user in one bucket and let fifty wrong guesses lock everyone out.
 
+    Only a public internet address counts. A non-public one (private,
+    loopback, link-local, shared CGNAT, documentation ranges) is the cluster's
+    or a proxy's, never a person's, so it gets no IP counter: counting it would
+    put everyone behind that proxy in one bucket. An IPv4-mapped IPv6 address
+    is judged, and keyed, as the IPv4 address it wraps.
+
     An IPv6 address is keyed by its /64, the smallest block one subscriber
     holds, so rotating through the low bits does not slip the limit.
     """
@@ -59,6 +65,10 @@ def client_ip(x_internal_auth: str | None, x_client_ip: str | None) -> str | Non
     try:
         address = ipaddress.ip_address(x_client_ip.strip())
     except ValueError:
+        return None
+    if address.version == 6 and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    if not address.is_global:
         return None
     if address.version == 6:
         return str(ipaddress.ip_network(f"{address}/64", strict=False))

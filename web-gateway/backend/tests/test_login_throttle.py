@@ -16,7 +16,7 @@ from app.core import login_throttle
 from app.core.login_throttle import EMAIL_LIMIT, IP_LIMIT, WINDOW
 
 PASSWORD = "a-long-password-1"
-TRUSTED = {"X-Internal-Auth": SSO_SECRET, "X-Client-IP": "203.0.113.7"}
+TRUSTED = {"X-Internal-Auth": SSO_SECRET, "X-Client-IP": "128.210.7.7"}
 
 
 @pytest.fixture(autouse=True)
@@ -177,7 +177,7 @@ def test_another_ip_is_not_blocked(auth_client, db):
     add_user(db)
     for i in range(IP_LIMIT):
         attempt(auth_client, f"guess{i}@example.org", headers=TRUSTED)
-    other = {**TRUSTED, "X-Client-IP": "203.0.113.8"}
+    other = {**TRUSTED, "X-Client-IP": "128.210.7.8"}
     assert attempt(auth_client, password=PASSWORD, headers=other).status_code == 200
 
 
@@ -226,8 +226,8 @@ def test_an_ip_throttle_is_audited_as_one(auth_client, db):
 @pytest.mark.parametrize(
     "headers",
     [
-        {"X-Client-IP": "203.0.113.7"},
-        {"X-Internal-Auth": "wrong", "X-Client-IP": "203.0.113.7"},
+        {"X-Client-IP": "128.210.7.7"},
+        {"X-Internal-Auth": "wrong", "X-Client-IP": "128.210.7.7"},
         {"X-Internal-Auth": SSO_SECRET},
         {"X-Internal-Auth": SSO_SECRET, "X-Client-IP": "not-an-ip"},
     ],
@@ -246,16 +246,51 @@ def test_with_no_secret_configured_no_address_is_believed(auth_client, db, monke
 def test_an_unproven_header_cannot_spend_someone_elses_ip(auth_client, db):
     for i in range(IP_LIMIT):
         attempt(auth_client, f"guess{i}@example.org", headers=TRUSTED)
-    spoofed = {"X-Client-IP": "203.0.113.7"}
+    spoofed = {"X-Client-IP": "128.210.7.7"}
     assert attempt(auth_client, "nobody@example.org", headers=spoofed).status_code == 401
 
 
 def test_an_ipv6_address_counts_by_its_64(auth_client):
     ip = login_throttle.client_ip
-    first = ip(SSO_SECRET, "2001:db8:1:2:aaaa::1")
-    assert first == ip(SSO_SECRET, "2001:db8:1:2:bbbb::9")
-    assert first != ip(SSO_SECRET, "2001:db8:1:3::1")
-    assert ip(SSO_SECRET, "203.0.113.7") == "203.0.113.7"
+    first = ip(SSO_SECRET, "2607:f8b0:4004:c1b:aaaa::1")
+    assert first == "2607:f8b0:4004:c1b::/64"
+    assert first == ip(SSO_SECRET, "2607:f8b0:4004:c1b:bbbb::9")
+    assert first != ip(SSO_SECRET, "2607:f8b0:4004:c1c::1")
+    assert ip(SSO_SECRET, "128.210.7.7") == "128.210.7.7"
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "10.42.14.0",  # the Anvil Cloud ingress's SNAT address
+        "127.0.0.1",
+        "::1",
+        "192.168.1.5",
+        "169.254.1.1",
+        "100.64.0.1",  # shared CGNAT
+        "203.0.113.7",  # documentation range
+        "fe80::1",
+        "fd00::1",
+        "2001:db8::1",  # documentation range
+        "::ffff:10.42.14.0",  # IPv4-mapped, private
+    ],
+)
+def test_a_non_public_address_is_never_a_client(address):
+    assert login_throttle.client_ip(SSO_SECRET, address) is None
+
+
+def test_an_ipv4_mapped_public_address_is_keyed_as_the_ipv4(auth_client):
+    assert login_throttle.client_ip(SSO_SECRET, "::ffff:128.210.7.7") == "128.210.7.7"
+
+
+@pytest.mark.parametrize("address", ["10.42.14.0", "127.0.0.1", "::1"])
+def test_a_proxy_address_does_not_lock_everyone_out(auth_client, db, address):
+    add_user(db)
+    proxy = {**TRUSTED, "X-Client-IP": address}
+    for i in range(IP_LIMIT + 5):
+        assert attempt(auth_client, f"guess{i}@example.org", headers=proxy).status_code == 401
+    assert {d["kind"] for d in db.login_failures.docs.values()} == {"email"}
+    assert attempt(auth_client, password=PASSWORD, headers=proxy).status_code == 200
 
 
 def test_a_failure_document_carries_its_own_expiry(auth_client, db):

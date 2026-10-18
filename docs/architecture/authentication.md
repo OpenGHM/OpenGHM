@@ -131,8 +131,9 @@ sign-in call passes it in `X-Client-IP` (the last `X-Forwarded-For` entry) toget
 with `INTERNAL_SERVICE_SECRET`, and the backend believes it only with that proof.
 Without it there is no IP counter, only the email one, because counting the pod's
 address would let fifty bad guesses lock out everyone. An IPv6 client is keyed by
-its /64. Open: whether the Ingress hands the frontend the real client address in
-`X-Forwarded-For` has not been checked against a cluster.
+its /64, and only a public address counts. On Anvil Cloud (checked 2026-10-18 on
+dev) the ingress gives every request `X-Forwarded-For: 10.42.14.0`, a cluster
+address, so there only the per-email limit applies.
 
 **An email address is lowercased wherever it is taken or stored.** Every request
 model that carries one uses `LowercaseEmail`
