@@ -1727,7 +1727,7 @@ async def cancel_job(
             raise _error(
                 status.HTTP_502_BAD_GATEWAY,
                 "cancel_failed",
-                "Anvil could not be asked to cancel the job, so it is still running. Try again.",
+                "Anvil could not be asked to cancel the simulation, so it is still running. Try again.",
             )
 
     await log_event(

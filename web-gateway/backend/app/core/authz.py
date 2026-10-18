@@ -175,7 +175,7 @@ async def require_submitter(user: CurrentUser) -> TokenPayload:
         if active >= limit:
             raise _refuse(
                 "active_job_limit",
-                f"You already have {active} active jobs (the limit is {limit}). "
+                f"You already have {active} active simulations (the limit is {limit}). "
                 "Wait for one to finish or cancel one, then try again.",
                 status.HTTP_429_TOO_MANY_REQUESTS,
                 active=active,

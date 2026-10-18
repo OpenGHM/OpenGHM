@@ -77,16 +77,16 @@ _MESSAGE: dict[str, str] = {
         "unavailable."
     ),
     "node_failure": (
-        "Anvil lost the job. This is not a problem with your input. Submit "
+        "Anvil lost this simulation. This is not a problem with your input. Submit "
         "again."
     ),
     "cancelled_by_user": "This simulation was cancelled from OpenGHM.",
     "cancelled_by_system": (
-        "Anvil or an administrator cancelled this job. It was not cancelled "
+        "Anvil or an administrator cancelled this simulation. It was not cancelled "
         "from OpenGHM."
     ),
     "lost": (
-        "Anvil has no record of this job any more, and it left no result "
+        "Anvil has no record of this simulation any more, and it left no result "
         "behind. Submit again."
     ),
 }
@@ -455,41 +455,41 @@ def _message(
     if cause == "timeout":
         if phase == "fetch":
             return (
-                "The job hit its walltime while it was still fetching the snapshot, before the "
-                "simulation started. Fetches wait for each other, so this happens when Anvil is "
+                "The simulation hit its walltime while it was still fetching the snapshot, before "
+                "WBM started. Fetches wait for each other, so this happens when Anvil is "
                 "busy. Submit again."
             )
         if walltime is not None and walltime >= MAX_WALLTIME_SECONDS:
             return (
-                f"The job hit its walltime before WBM finished, and that was already the "
+                f"The simulation hit its walltime before WBM finished, and that was already the "
                 f"{MAX_WALLTIME_SECONDS // 3600} h maximum. Shorten the run period and submit again."
             )
         return (
-            "The job hit its walltime before WBM finished. Submit again with a longer walltime "
+            "The simulation hit its walltime before WBM finished. Submit again with a longer walltime "
             f"(up to {MAX_WALLTIME_SECONDS // 3600} h), or with a shorter run period."
         )
     if cause == "out_of_memory":
         return f"The simulation ran out of memory and Anvil stopped it. {_more_cores(cores)}"
     if cause == "node_failure" and state:
-        return f"Anvil lost the job (SLURM state {state}). This is not a problem with your input. Submit again."
+        return f"Anvil lost this simulation (SLURM state {state}). This is not a problem with your input. Submit again."
     if cause == "outcome_missing":
         if detail == "interrupted":
-            return "The job was stopped part-way, and did not report a result."
+            return "The simulation was stopped part-way, and did not report a result."
         if detail == "stopped_before_run":
-            return "The job ended before it ran the simulation, and did not report a result."
+            return "The simulation ended before WBM ran, and did not report a result."
         if detail == "killed":
             return (
-                "The job was killed and did not report a result; most likely it ran out of "
+                "The simulation was killed and did not report a result; most likely it ran out of "
                 f"memory. {_more_cores(cores)}"
             )
         if detail == "malformed":
-            return "The job reported a result this gateway cannot read. Its logs may show why."
+            return "The simulation reported a result this gateway cannot read. Its logs may show why."
         if detail and detail.startswith("disagree:"):
             return (
-                f"SLURM says the job ended {detail[9:]}, but the job's own record says it "
+                f"SLURM says the job ended {detail[9:]}, but the simulation's own record says it "
                 "succeeded. Check the logs before using its output."
             )
-        return "The job ended without reporting a result. Its logs may show why."
+        return "The simulation ended without reporting a result. Its logs may show why."
     return _MESSAGE[cause]
 
 

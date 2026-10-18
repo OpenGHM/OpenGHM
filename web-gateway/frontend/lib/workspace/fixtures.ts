@@ -201,7 +201,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:0",
     failure: {
       phase: "run",
-      message: "The job hit its walltime of 00:15:00 while WBM was still running",
+      message: "The simulation hit its walltime of 00:15:00 while WBM was still running",
       excerpt: "  2001-08 .. done\n  2001-09 .. done\n  2001-10 ..",
     },
   },
@@ -219,7 +219,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:0",
     failure: {
       phase: null,
-      message: "The node the job ran on failed",
+      message: "The node the simulation ran on failed",
       excerpt: null,
     },
   },
@@ -228,7 +228,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: null,
     failure: {
       phase: null,
-      message: "SLURM has had no record of this job for 10 minutes and it left no result",
+      message: "SLURM has had no record of this simulation for 10 minutes and it left no result",
       excerpt: null,
     },
   },
@@ -237,7 +237,7 @@ const FAILURE_FIXTURES: Record<
     slurm_exit_code: "0:0",
     failure: {
       phase: null,
-      message: "SLURM says the job completed, but it wrote no result record",
+      message: "SLURM says the job completed, but the simulation wrote no result record",
       excerpt: "slurmstepd: error: could not write to the job directory",
     },
   },

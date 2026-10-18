@@ -395,7 +395,7 @@ def test_a_script_that_never_reached_the_run_is_outcome_missing():
     rec = record(phase="fetch", steps={}, staged=False)
     v = verdict("FAILED", outcome=rec)
     assert v.failure.cause == "outcome_missing"
-    assert "before it ran" in v.failure.message
+    assert "before WBM ran" in v.failure.message
 
 
 def test_a_signal_over_otherwise_good_steps_is_outcome_missing():

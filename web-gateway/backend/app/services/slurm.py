@@ -921,8 +921,8 @@ async def scancel_by_name(sim_id: str) -> bool:
 
 
 SUBMIT_INTERRUPTED = (
-    "The submit was interrupted before the gateway learned what Anvil answered, so any job "
-    "it started was cancelled. Your draft is unchanged. Submit again."
+    "The submit was interrupted before the gateway learned what Anvil answered, so any "
+    "simulation it started was cancelled. Your draft is unchanged. Submit again."
 )
 
 
