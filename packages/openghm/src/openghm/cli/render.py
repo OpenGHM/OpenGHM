@@ -8,6 +8,7 @@ Rich based on ``--json`` and TTY.
 from __future__ import annotations
 
 import json
+import signal
 import sys
 from typing import Optional
 
@@ -107,6 +108,22 @@ def _render_dry_run(console: Console, command: str, ctx: RuntimeContext, built: 
     )
 
 
+def _killed_by_signal(command: str, code: int) -> Optional[str]:
+    """Why a run that exited ``code`` < 0 has nothing to show: ``subprocess`` reports
+    a child killed by signal N as ``-N``, and a killed process prints nothing."""
+    if code >= 0:
+        return None
+    try:
+        name = signal.Signals(-code).name
+    except ValueError:
+        name = None
+    who = "WBM" if command == "sim run" else "The process"
+    head = f"{who} was killed by signal {-code}" + (f" ({name})." if name else ".")
+    if code == -signal.SIGKILL:
+        return head + " On a cluster this is usually the out-of-memory killer."
+    return head
+
+
 def _render_result(console: Console, command: str, built: BuiltCommand, result: RunResult) -> None:
     code = result.exit_code or 0
     ok = code == 0
@@ -119,6 +136,11 @@ def _render_result(console: Console, command: str, built: BuiltCommand, result: 
         if body:
             body.append("\n")
         body.append(result.stderr.rstrip("\n"), style="red")
+    killed = _killed_by_signal(command, code)
+    if killed:
+        if body:
+            body.append("\n")
+        body.append(killed, style="red")
     console.print(Panel(body if body else Text(""), title=title, title_align="left",
                         border_style="green" if ok else "red"))
 

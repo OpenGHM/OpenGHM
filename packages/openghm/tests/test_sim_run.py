@@ -288,6 +288,33 @@ def test_cli_sim_run_a_corrupt_sidecar_does_not_turn_exit_0_into_a_traceback(tmp
     assert "warning: could not record the exit code" in out.output
 
 
+def _killed_run(tmp_path, monkeypatch, code):
+    from openghm.cli import main as cli_main
+    from openghm.types import RunResult
+
+    monkeypatch.setattr(cli_main, "run_command", lambda built, **kw: RunResult(
+        dry_run=False, argv=built.argv, display=built.display, exit_code=code))
+    return _run_cli(tmp_path, "--spool", "fresh")
+
+
+def test_cli_sim_run_killed_by_sigkill_says_so_instead_of_an_empty_panel(tmp_path, monkeypatch):
+    out = _killed_run(tmp_path, monkeypatch, -9)
+    assert "exit -9" in out.output
+    assert "WBM was killed by signal 9 (SIGKILL)." in out.output
+    assert "out-of-memory killer" in out.output
+
+
+def test_cli_sim_run_killed_by_another_signal_names_it_without_blaming_memory(tmp_path, monkeypatch):
+    out = _killed_run(tmp_path, monkeypatch, -15)
+    assert "WBM was killed by signal 15 (SIGTERM)." in out.output
+    assert "out-of-memory" not in out.output
+
+
+def test_cli_sim_run_with_an_ordinary_failure_adds_no_signal_line(tmp_path, monkeypatch):
+    out = _killed_run(tmp_path, monkeypatch, 3)
+    assert "exit 3" in out.output and "killed by signal" not in out.output
+
+
 # ── post-processing: PostProcessing => { Run => 1 } ───────────────────────────
 #
 # `sim run` holds the init at Run => 0 while WBM runs, runs PostProcessing.pl itself afterwards, and
