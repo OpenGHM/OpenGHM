@@ -775,10 +775,9 @@ SLURM is asked for `--cpus-per-task` and `--time`:
   once, and the same string is `sbatch --time` and `sim run --walltime`. A
   walltime the draft chose is used as written, post-processing or not, and it
   is not scaled by the run period or the cores either;
-- a submit refuses a draft with none of its own when that recommendation (the
-  sum, for a run that post-processes) is over 96 h: `422 walltime_over_limit`,
-  whose message names the post-processing when it contributes
-  (`walltime_over_limit`, which shares the rule with `resolve_compute`);
+- a recommendation over 96 h is not refused: the job asks for 96 h, and a run
+  that needs longer continues in further jobs (below, "A run longer than one
+  job");
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
@@ -834,13 +833,6 @@ submitting.
   `run_dates_outside_aggregation`, with `fields` (`start`, `end` or both),
   `aggregation_start_year`, `latest_start` and `earliest_end`, and a message that
   names the allowed range. A window that cannot be read blocks nothing.
-- A draft with no walltime of its own whose snapshot's recommended walltime is
-  by itself over 96 h, which no single job can run: 422 `walltime_over_limit`,
-  before any SSH or SLURM call. Its message gives the reference simulation's time and
-  says to shorten the run period or set a walltime. A walltime the draft set is
-  sent as given and is not refused here. The frontend mirrors both rules
-  (`withHeadroom`, `submitProblems`): Run settings shows a one-line warning with a
-  "Why?", and the submit area on Review lists the problem and keeps Submit off.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name
@@ -860,7 +852,7 @@ submitting.
 After a refusal the draft goes **back to DRAFT**, with `last_submit_error`
 `{code, message, at}`. Every refusal of a submit replaces it, the ones before
 the claim included (`answered_by_published`, `unsupported_fields`,
-`walltime_over_limit`, `post_processing_unavailable`, the run-date refusals, `anvil_not_configured`, an
+`post_processing_unavailable`, the run-date refusals, `anvil_not_configured`, an
 account that may not run, the active-job limit), so a reopened draft never shows
 the reason of an earlier try; the claim itself clears it. A refusal's message always
 ends in a full stop (`sbatch_refusal.sentence`), so "Your draft is unchanged."
@@ -984,6 +976,40 @@ results path. From `xl` (1280 px) the page is a grid like the wizard's
 20 rem aside beside the status summary, the publish card and the Logs, which
 scrolls with the page; below `xl` it follows the status summary in the page.
 
+**A run longer than one job** ([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md)).
+The first submit stores what it sent, `submit_script {body, cores, walltime}`. When
+SLURM ends a job with `TIMEOUT`, `_conclude` first asks whether to continue it
+(`_consider_continuing`): not when a cancel was asked, not once
+`JOB_MAX_JOBS_PER_SIMULATION` (5) jobs have run it (`job_limit`), and otherwise only
+when `<toolkit home>/bin/openghm sim state <work dir> --json`, run over SSH with the
+simulation's own pinned toolkit, answers `resumable` with a `saved_at` later than
+that job's SLURM start. Any other answer, an exit other than SSH's 255 included
+(a toolkit without the command), is `no_new_state`; a call that could not run
+writes nothing and the next tick asks again. To continue, one compare-and-set
+moves the ended job onto `previous_jobs` (SLURM id, slurmly directory and log
+paths, start, end, state, exit code, `state_saved_at`), clears the current job's
+fields and sets the simulation `SUBMITTED` with `continuation {number,
+requested_at, tries}`; the stored script is then submitted again under the same
+job name (`sim_id`) and the same partition, account and QOS. A refusal by sbatch
+fails the simulation `continuation_failed`. A lost answer scancels by name and
+counts a try; `reconcile_interrupted_submits` retries such a continuation (claiming
+it, and submitting only after its scancel by name worked) instead of giving the
+draft back, and fails it after `JOB_CONTINUATION_MAX_TRIES` (5). The toolkit does
+the rest on the work directory (its README, "Rerunning a simulation"): WBM resumes
+from its last saved 31 December, and `sim run` exits 64 for a state no single save
+wrote (`run_state_incomplete`) and 65 when WBM exited 0 short of `Run_End`
+(`run_incomplete`). A cancel between two jobs ends the simulation `CANCELLED` and
+leaves the name to the orphan pass; delete removes every earlier job's slurmly
+directory too; the stdout and stderr log routes take `?job=<number>`, while WBM's
+log is one file that every job appends to. Responses carry `previous_jobs` (without
+paths), `job_number`, `max_jobs` and `continuation`. The wizard shows a
+recommendation over 96 h as up to N jobs of 96 h (`automaticJobCount`), the
+simulation page shows "Job N of at most M" and the earlier jobs, and the log viewer
+has a job picker. Verified on Anvil on 2026-10-18 with the v2 tutorial: a job cut
+at its 8-minute limit (SLURM 21479856) was continued (21479888) and the run's
+daily output was identical to the published files; a 2-minute job that saved no
+state ended `timeout` (`no_new_state`).
+
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`
 and the stderr tail once, and `web-gateway/backend/app/services/job_verdict.py`'s `classify`
@@ -1012,8 +1038,10 @@ say memory comes with cores (about 1.9 GB each on `shared`, `ANVIL_SHARED_MB_PER
 and how much memory the simulation had, its cores times that, from the cores it asked
 for (worked out as `resolve_compute` does; the message says less when the
 snapshot is gone): start a new snapshot draft with more cores, or a shorter run period. `timeout` says it by phase (while fetching, or before WBM
-finished) and, when the walltime the job asked for was already 96 h, to shorten
-the run period instead of a longer walltime. A fetch step that exits 64 to 78
+finished); a job that was not continued (below) says why, with `detail`
+`no_new_state` (no state saved during the job: a longer walltime, up to 96 h, or a
+shorter period) or `job_limit` (every job a simulation may use has run: a shorter
+period). A fetch step that exits 64 to 78
 (sysexits, what `flock` answers with for a lock directory or a toolkit that is
 not there) is its own cause, `gateway_setup` (phase `fetch`), not `fetch_failed`:
 the gateway's Anvil setup is at fault, not the snapshot. The message says to tell
@@ -1054,7 +1082,16 @@ once the job has been over for `JOB_END_BACKFILL_RETRY_SECONDS` (300) and again
 that long after each try, at most `JOB_END_BACKFILL_MAX_TRIES` (5) times. Only
 a sacct row counts; it sets `slurm_end`, and `slurm_start` and
 `slurm_exit_code` if they are empty, and nothing else: the verdict and
-`completed_at` stay as they were. A lookup that fails costs no try.
+`completed_at` stay as they were. A lookup that fails costs no try. An earlier
+job of a continued simulation (`previous_jobs`) is settled from a squeue row too,
+so each entry with no `slurm_end` is filled the same way, whatever the
+simulation's status, in the same lookup: its window and first wait count from the
+entry's `recorded_at`, its tries are its own, and the write matches that entry
+alone (by `number`, with `slurm_end` still empty).
+
+Live progress reads only the day lines after the last `The job started on …` line
+WBM prints at each start, so a continued job shows no simulated date until it has
+one, rather than the day the job before it was cut.
 
 **Cancel** records `cancel_requested_at` and runs `scancel`; the status stays
 until SLURM reports `CANCELLED`, and the UI shows *Cancelling*. A job with no
