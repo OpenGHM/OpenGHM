@@ -102,6 +102,57 @@ describe("the header's phone menu", () => {
   });
 });
 
+describe("the header's account menu", () => {
+  const trigger = () => screen.getByRole("button", { name: /Ada/ });
+
+  it("is a menu button that is closed until it is used", () => {
+    signedIn("user");
+    render(<Header />);
+    expect(trigger().getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens on a click, with My Profile and Sign out in it", () => {
+    signedIn("user");
+    render(<Header />);
+    fireEvent.pointerDown(trigger(), { button: 0, ctrlKey: false });
+    const menu = within(screen.getByRole("menu"));
+    expect(trigger().getAttribute("aria-expanded")).toBe("true");
+    expect(menu.getByRole("menuitem", { name: "My Profile" }).getAttribute("href")).toBe("/dashboard/profile");
+    expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeTruthy();
+    expect(menu.queryByRole("menuitem", { name: "Admin" })).toBeNull();
+  });
+
+  it.each(["Enter", " ", "ArrowDown"])("opens from the keyboard with %j", (key) => {
+    signedIn("user");
+    render(<Header />);
+    trigger().focus();
+    fireEvent.keyDown(trigger(), { key });
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
+
+  it("closes on Escape", () => {
+    signedIn("user");
+    render(<Header />);
+    fireEvent.pointerDown(trigger(), { button: 0, ctrlKey: false });
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("adds Admin for an admin, and signs out as the phone menu does", async () => {
+    signedIn("admin");
+    revokeSession.mockResolvedValue(undefined);
+    render(<Header />);
+    fireEvent.pointerDown(trigger(), { button: 0, ctrlKey: false });
+    const menu = within(screen.getByRole("menu"));
+    expect(menu.getByRole("menuitem", { name: "Admin" }).getAttribute("href")).toBe("/admin");
+    fireEvent.click(menu.getByRole("menuitem", { name: "Sign out" }));
+    await vi.waitFor(() => expect(signOut).toHaveBeenCalledWith({ callbackUrl: "/" }));
+    expect(revokeSession).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("the header's current-page highlight", () => {
   function current(): string[] {
     const nav = screen.getByRole("navigation", { name: "Main" });

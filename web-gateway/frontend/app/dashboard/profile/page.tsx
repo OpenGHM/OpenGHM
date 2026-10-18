@@ -1,5 +1,6 @@
-import { auth, cilogonConfigured } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { cilogonConfigured } from "@/lib/auth";
+import { requireSession } from "@/lib/auth-guard";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { AccountCard } from "@/components/dashboard/account-card";
@@ -7,17 +8,18 @@ import { SessionsCard } from "@/components/dashboard/sessions-card";
 import { EmailVerificationBanner } from "@/components/dashboard/email-verification-banner";
 import { SsoResultToast } from "@/components/dashboard/sso-result-toast";
 import { fetchMe, fetchMySessions } from "@/lib/account/actions";
-import type { SessionListResponse } from "@/lib/account/types";
 
-const EMPTY_SESSIONS: SessionListResponse = { items: [] };
+export const metadata: Metadata = {
+  title: "My Profile | OpenGHM",
+};
 
 export default async function ProfilePage({
   searchParams,
 }: {
   searchParams: Promise<{ sso?: string | string[] }>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/auth/signin");
+  // Sign-in returns here. Also signed out: a session whose token refresh failed.
+  await requireSession("/dashboard/profile");
   const { sso } = await searchParams;
 
   const [profile, sessionsResult] = await Promise.allSettled([
@@ -26,7 +28,8 @@ export default async function ProfilePage({
   ]);
 
   const userProfile = profile.status === "fulfilled" ? profile.value : null;
-  const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value : EMPTY_SESSIONS;
+  // A failed lookup is not "no sessions": the card says it could not load them.
+  const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value.items : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -47,7 +50,7 @@ export default async function ProfilePage({
           <>
             <div className="grid gap-6 md:grid-cols-2">
               <AccountCard profile={userProfile} cilogonEnabled={cilogonConfigured} />
-              <SessionsCard sessions={sessions.items} />
+              <SessionsCard sessions={sessions} />
             </div>
           </>
         ) : (

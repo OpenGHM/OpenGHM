@@ -9,6 +9,42 @@ import { Label } from "@/components/ui/label";
 import { AuthNotice, AuthShell } from "@/components/auth/auth-shell";
 import { Recaptcha } from "@/components/auth/recaptcha";
 
+/** The shortest password the form accepts. */
+const MIN_PASSWORD_LENGTH = 8;
+
+const FIELD_LABELS: Record<string, string> = {
+  email: "Email",
+  password: "Password",
+  name: "Name",
+  organization: "Organization",
+  recaptcha_token: "CAPTCHA",
+};
+
+/**
+ * What a refused registration says, from the backend's answer. FastAPI sends
+ * `detail` as a string for the refusals the endpoint raises itself (a failed
+ * CAPTCHA is a 400 with one) and as a list of `{ loc, msg }` for a request
+ * body it rejected (422). 409 (taken) is handled before this is called.
+ */
+export function registrationError(status: number, body: unknown): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return status === 502 ? "Unable to connect to the server. Please try again." : detail.trim();
+  }
+  if (Array.isArray(detail)) {
+    const lines = detail
+      .map((item: { loc?: unknown[]; msg?: unknown }) => {
+        if (typeof item?.msg !== "string") return null;
+        const field = item.loc?.[item.loc.length - 1];
+        const label = typeof field === "string" ? FIELD_LABELS[field] : undefined;
+        return label ? `${label}: ${item.msg}` : item.msg;
+      })
+      .filter((line): line is string => line !== null);
+    if (lines.length > 0) return lines.join(" ");
+  }
+  return `Registration failed (error ${status}). Please try again.`;
+}
+
 /**
  * The form half of /auth/register. Split out of page.tsx so the site key can
  * be read from server env there and handed down as a prop: it is public by
@@ -27,20 +63,25 @@ export function RegisterForm({ siteKey }: { siteKey: string }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [linkPending, setLinkPending] = useState(false);
   const router = useRouter();
+  // Shown as soon as the confirm field has been left, and kept current while
+  // either field is edited, rather than only after a submit.
+  const mismatch = confirmTouched && confirmPassword !== password;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      // The message is the one under the confirm field.
+      setConfirmTouched(true);
       return;
     }
-    if (password.length < 8) {
+    if (password.length < MIN_PASSWORD_LENGTH) {
       setError("Password must be at least 8 characters.");
       return;
     }
@@ -68,7 +109,8 @@ export function RegisterForm({ siteKey }: { siteKey: string }) {
         return;
       }
       if (!res.ok) {
-        setError("Registration failed. Please try again.");
+        const body = await res.json().catch(() => null);
+        setError(registrationError(res.status, body));
         return;
       }
 
@@ -151,10 +193,13 @@ export function RegisterForm({ siteKey }: { siteKey: string }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min. 8 characters"
               required
               autoComplete="new-password"
+              aria-describedby="password-help"
             />
+            <p id="password-help" className="text-xs text-muted-foreground">
+              At least {MIN_PASSWORD_LENGTH} characters.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm password</Label>
@@ -163,13 +208,24 @@ export function RegisterForm({ siteKey }: { siteKey: string }) {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="••••••••"
+              onBlur={() => setConfirmTouched(true)}
               required
               autoComplete="new-password"
+              aria-invalid={mismatch || undefined}
+              aria-describedby={mismatch ? "confirm-password-error" : undefined}
             />
+            {mismatch && (
+              <p id="confirm-password-error" className="text-xs text-destructive">
+                Passwords do not match.
+              </p>
+            )}
           </div>
           <Recaptcha siteKey={siteKey} onVerify={setRecaptchaToken} />
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           <Button type="submit" size="xl" className="w-full" disabled={loading}>
             {loading ? "Creating account..." : "Create account"}
           </Button>

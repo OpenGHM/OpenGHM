@@ -74,7 +74,9 @@ export function AccountCard({
     setEditing(false);
   }
 
-  function handleChangePassword() {
+  function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (pending) return;
     setPasswordError("");
     if (newPassword !== confirmPassword) {
       setPasswordError("Passwords do not match.");
@@ -191,7 +193,18 @@ export function AccountCard({
         {profile.has_password && (
           <div className="border-t border-border pt-5">
             {showPasswordForm ? (
-              <div className="space-y-3">
+              <form onSubmit={handleChangePassword} className="space-y-3">
+                {/* Gives a password manager the account this password belongs to. */}
+                <input
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  value={profile.email}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className="sr-only"
+                />
                 <div className="space-y-1.5">
                   <Label htmlFor="current-password">Current password</Label>
                   <Input
@@ -226,13 +239,14 @@ export function AccountCard({
                 {passwordError && <p className="text-xs text-destructive">{passwordError}</p>}
                 <div className="flex gap-2">
                   <Button
+                    type="submit"
                     size="sm"
-                    onClick={handleChangePassword}
                     disabled={pending || !currentPassword || !newPassword}
                   >
                     Change password
                   </Button>
                   <Button
+                    type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => {
@@ -247,7 +261,7 @@ export function AccountCard({
                     Cancel
                   </Button>
                 </div>
-              </div>
+              </form>
             ) : (
               <Button size="sm" variant="outline" onClick={() => setShowPasswordForm(true)}>
                 Change password

@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { SignInForm } from "./signin-form";
+
+export const metadata: Metadata = {
+  title: "Sign In | OpenGHM",
+};
 
 // These log in via real email/password against seeded DB accounts (see
 // deploy/local/mongo/init-mongo.js) — not the X-Mock-Role bypass. The accounts

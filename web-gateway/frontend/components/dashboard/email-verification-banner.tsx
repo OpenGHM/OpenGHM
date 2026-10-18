@@ -6,14 +6,15 @@ import { toast } from "sonner";
 import { resendVerificationEmail } from "@/lib/auth-actions";
 
 export function EmailVerificationBanner() {
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
 
   async function handleResend() {
     setStatus("sending");
     const result = await resendVerificationEmail();
     setMessage(result.message);
-    setStatus("sent");
+    // A failed resend keeps the button, so the visitor can try again.
+    setStatus(result.ok ? "sent" : "error");
     if (result.ok) toast.success(result.message);
     else toast.error(result.message);
   }
@@ -29,13 +30,20 @@ export function EmailVerificationBanner() {
       {status === "sent" ? (
         <span className="shrink-0 text-muted-foreground">{message}</span>
       ) : (
-        <button
-          onClick={handleResend}
-          disabled={status === "sending"}
-          className="inline-flex min-h-10 shrink-0 items-center font-medium text-warning underline hover:text-foreground disabled:opacity-50"
-        >
-          {status === "sending" ? "Sending..." : "Resend verification email"}
-        </button>
+        <span className="flex flex-wrap items-center gap-x-3">
+          {status === "error" && (
+            <span role="alert" className="text-destructive">
+              {message}
+            </span>
+          )}
+          <button
+            onClick={handleResend}
+            disabled={status === "sending"}
+            className="inline-flex min-h-10 shrink-0 items-center font-medium text-warning underline hover:text-foreground disabled:opacity-50"
+          >
+            {status === "sending" ? "Sending..." : status === "error" ? "Try again" : "Resend verification email"}
+          </button>
+        </span>
       )}
     </div>
   );

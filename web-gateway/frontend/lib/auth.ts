@@ -21,6 +21,22 @@ class LinkPendingSignin extends CredentialsSignin {
   code = "link_pending";
 }
 
+/**
+ * Thrown by the password provider's authorize() when the backend says the
+ * account is deactivated. The backend (POST /auth/login) only reveals this
+ * after the password was correct, so naming it leaks nothing a wrong email or
+ * wrong password does not already hide. The sign-in form reads `code` off the
+ * client-side `signIn({ redirect: false })` result.
+ */
+class DeactivatedSignin extends CredentialsSignin {
+  code = "deactivated";
+}
+
+/** Thrown when the login request is refused with 429 (a proxy or the backend). */
+class RateLimitedSignin extends CredentialsSignin {
+  code = "rate_limited";
+}
+
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8100";
 
 // Refresh this many ms before the backend's stated expiry, so a request
@@ -174,7 +190,16 @@ export const authConfig: NextAuthConfig = {
             }),
           });
 
-          if (!res.ok) return null;
+          if (res.status === 429) throw new RateLimitedSignin();
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+              if (typeof body?.detail === "string" && /deactivated/i.test(body.detail)) {
+                throw new DeactivatedSignin();
+              }
+            }
+            return null;
+          }
 
           const data = (await res.json()) as BackendAuthResponse;
           return {
@@ -186,7 +211,8 @@ export const authConfig: NextAuthConfig = {
             refreshToken: data.refresh_token,
             expiresIn: data.expires_in,
           } as BackendUser;
-        } catch {
+        } catch (err) {
+          if (err instanceof DeactivatedSignin || err instanceof RateLimitedSignin) throw err;
           return null;
         }
       },

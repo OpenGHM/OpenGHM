@@ -119,7 +119,10 @@ otherwise be two accounts. `main.py` lowercases the addresses stored before that
 at every startup (`app/core/account_startup.py`). Two accounts that would collide
 once lowercased are left exactly as they are, and a warning names both ids.
 
-Sign-in goes through NextAuth's credentials provider, server-side. The other
+Sign-in goes through NextAuth's credentials provider, server-side. A refusal
+reaches the sign-in page as one line for a wrong email or password alike; only
+two reasons are named, as the `code` of the refusal: `deactivated` (the backend
+says so only after the password was right) and `rate_limited` (a 429). The other
 five — register, verify-email, forgot-password, reset-password, confirm-link —
 run before a session exists and post to the frontend's own
 `/api/public-auth/<action>` Route Handler, which forwards them

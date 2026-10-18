@@ -1,7 +1,12 @@
 import { auth } from "@/lib/auth";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminRoleProvider } from "@/components/admin/admin-nav";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { Footer } from "@/components/landing/footer";
+import { PageBody, PageHero } from "@/components/layout/page-hero";
+import { Button } from "@/components/ui/button";
+import { signInPath } from "@/lib/auth-redirect";
 
 export default async function AdminLayout({
   children,
@@ -9,14 +14,32 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (!session) redirect("/auth/signin");
+  if (!session) redirect(signInPath("/admin"));
 
   // Defense in depth, not the real gate — the backend enforces this on
   // every request below (Permission.USER_VIEW_ANY / USER_MANAGE / etc).
-  // This redirect only exists so a user/guest doesn't land on a page that
-  // would just show them a wall of 403s.
+  // This only exists so a user/guest doesn't land on a page that would just
+  // show them a wall of 403s; it says so, rather than sending them home unexplained.
   if (session.user.role !== "admin" && session.user.role !== "staff") {
-    redirect("/");
+    return (
+      <div className="flex min-h-screen flex-col">
+        <PageHero size="page" eyebrow="Admin console" title="Admin console" />
+        <PageBody className="flex-1">
+          <section className="rounded-card bg-card px-6 py-14 text-center shadow-raised">
+            <h2 className="text-xl font-[650] tracking-[-0.01em] text-foreground">
+              You do not have access to the admin console
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground text-pretty">
+              It is for OpenGHM admins and staff. If you think you should have access, ask an administrator.
+            </p>
+            <Button asChild size="lg" className="mt-5">
+              <Link href="/">Back to home</Link>
+            </Button>
+          </section>
+        </PageBody>
+        <Footer />
+      </div>
+    );
   }
 
   // The frame (sidebar, phone top bar) lives here, so it stays mounted while

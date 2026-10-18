@@ -214,3 +214,38 @@ describe("whether CILogon is configured", () => {
     expect((mod.authConfig.providers as { id?: string }[]).some((p) => p.id === "cilogon")).toBe(false);
   });
 });
+
+describe("the email-and-password sign-in", () => {
+  type Authorize = (c: Record<string, string>, r?: unknown) => Promise<unknown>;
+  const authorize = (authConfig.providers[0] as unknown as { authorize: Authorize }).authorize;
+  const creds = { email: "ada@purdue.edu", password: "pw-123456" };
+
+  it("signs in with the backend's tokens", async () => {
+    answer(200, {
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 60,
+      user: { id: "u1", email: "ada@purdue.edu", name: "Ada", role: "user" },
+    });
+    expect(await authorize(creds)).toMatchObject({ id: "u1", accessToken: "a", refreshToken: "r" });
+  });
+
+  it("answers a wrong email or password with null, which the form words generically", async () => {
+    answer(401, { detail: "Invalid email or password" });
+    expect(await authorize(creds)).toBeNull();
+    answer(500, {});
+    expect(await authorize(creds)).toBeNull();
+    fetchMock.mockRejectedValue(new Error("connect ECONNREFUSED"));
+    expect(await authorize(creds)).toBeNull();
+  });
+
+  it("names a deactivated account, which the backend only does after a correct password", async () => {
+    answer(401, { detail: "This account has been deactivated. Contact an administrator." });
+    await expect(authorize(creds)).rejects.toMatchObject({ code: "deactivated" });
+  });
+
+  it("names a refusal for too many attempts", async () => {
+    answer(429, { detail: "Too many requests" });
+    await expect(authorize(creds)).rejects.toMatchObject({ code: "rate_limited" });
+  });
+});

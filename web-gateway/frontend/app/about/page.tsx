@@ -5,6 +5,7 @@ import { Footer } from "@/components/landing/footer";
 import { PanelDots, SectionEyebrow, SectionTitle } from "@/components/landing/section-parts";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
 import { Button } from "@/components/ui/button";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -92,8 +93,6 @@ const FUNDING_LOGOS = [
   { src: "/images/logos/purdue.svg", alt: "Purdue University" },
   { src: "/images/logos/unh.svg", alt: "University of New Hampshire" },
 ];
-
-const CONTACT_EMAIL = "info@openghm.org";
 
 /** The PI and Co-PI get the dark avatar and the filled role pill. */
 const LEAD_ROLES = ["PI", "Co-PI"];

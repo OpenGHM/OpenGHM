@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import { RegisterForm } from "./register-form";
+
+export const metadata: Metadata = {
+  title: "Create Account | OpenGHM",
+};
 
 // Read at request time, not build time. Without this the page prerenders as
 // static and bakes in whatever RECAPTCHA_SITE_KEY the *builder* had — the same

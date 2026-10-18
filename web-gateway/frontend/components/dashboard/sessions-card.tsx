@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { toast } from "sonner";
 import { Monitor } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,39 +33,49 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
+/**
+ * The signed-in devices. `sessions` is `null` when the list could not be
+ * loaded, which is not the same as having none: the card then says so and
+ * offers to try again, instead of claiming there are no active sessions.
+ */
+export function SessionsCard({ sessions }: { sessions: SessionEntry[] | null }) {
+  const router = useRouter();
+
+  if (sessions === null) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Signed-in devices</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p role="alert" className="text-sm text-destructive">
+            Couldn&apos;t load your sessions.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => router.refresh()}>
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <SessionList sessions={sessions} />;
+}
+
+function SessionList({ sessions }: { sessions: SessionEntry[] }) {
   const [items, setItems] = useState(sessions);
-  const [pending, startTransition] = useTransition();
-  const [signingOutAll, setSigningOutAll] = useState(false);
-
-  function handleRevoke(sessionId: string) {
-    startTransition(async () => {
-      const result = await revokeMySession(sessionId);
-      if (result.ok) {
-        setItems((prev) => prev.filter((s) => s.id !== sessionId));
-        toast.success("Device signed out.");
-      } else {
-        toast.error("Failed to sign out that device.");
-      }
-    });
-  }
-
-  async function handleLogoutAll() {
-    setSigningOutAll(true);
-    await logoutAllSessions();
-    toast.success("Signed out of every device.");
-    // logout-all kills the current session too, so router.refresh() would
-    // just hit a dead token — sign out client-side instead.
-    await signOut({ callbackUrl: "/" });
-  }
+  // The device a "Sign out" is about to act on, until the dialog is answered.
+  const [revokeTarget, setRevokeTarget] = useState<SessionEntry | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [logoutAllOpen, setLogoutAllOpen] = useState(false);
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Signed-in devices</CardTitle>
         {items.length > 1 && (
-          <Button variant="ghost" size="sm" onClick={handleLogoutAll} disabled={signingOutAll}>
-            {signingOutAll ? "Signing out..." : "Sign out everywhere"}
+          <Button variant="ghost" size="sm" onClick={() => setLogoutAllOpen(true)}>
+            Sign out everywhere
           </Button>
         )}
       </CardHeader>
@@ -98,8 +109,10 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={pending}
-                  onClick={() => handleRevoke(s.id)}
+                  onClick={() => {
+                    setRevokeTarget(s);
+                    setRevokeOpen(true);
+                  }}
                   className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                   Sign out
@@ -112,6 +125,36 @@ export function SessionsCard({ sessions }: { sessions: SessionEntry[] }) {
           <p className="text-xs text-muted-foreground">You&apos;re only signed in on this device.</p>
         )}
       </CardContent>
+
+      <ConfirmActionDialog
+        open={revokeOpen}
+        onOpenChange={setRevokeOpen}
+        title="Sign out this device?"
+        description="Whoever is using it will need to sign in again."
+        detail={revokeTarget ? describeDevice(revokeTarget.user_agent) : undefined}
+        confirmLabel="Sign out device"
+        pendingLabel="Signing out…"
+        successMessage="Device signed out."
+        failureMessage="Failed to sign out that device."
+        onConfirm={async () => (revokeTarget ? revokeMySession(revokeTarget.id) : { ok: false })}
+        onDone={() => {
+          if (revokeTarget) setItems((prev) => prev.filter((s) => s.id !== revokeTarget.id));
+        }}
+      />
+      <ConfirmActionDialog
+        open={logoutAllOpen}
+        onOpenChange={setLogoutAllOpen}
+        title="Sign out everywhere?"
+        description="Every device, including this one, is signed out. You will need to sign in again."
+        confirmLabel="Sign out everywhere"
+        pendingLabel="Signing out…"
+        successMessage="Signed out of every device."
+        failureMessage="Couldn't sign out of every device. Try again."
+        onConfirm={logoutAllSessions}
+        // logout-all kills the current session too, so router.refresh() would
+        // just hit a dead token — sign out client-side instead.
+        onDone={() => void signOut({ callbackUrl: "/" })}
+      />
     </Card>
   );
 }

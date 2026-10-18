@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown, LogOut, Menu, UserCircle, ShieldCheck } from "lucide-react";
-import { useState, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import type { UserRole } from "@/lib/auth.types";
 import { revokeSession } from "@/lib/auth-actions";
@@ -63,7 +62,7 @@ const NAV_LINK_ACTIVE = "bg-white font-[550] text-foreground";
 const NAV_LINK_OFF = "inline-flex cursor-default items-center gap-1.5 text-hero-foreground-muted/70";
 // The current item in the phone menu, which is a light popover rather than the navy pill.
 const MENU_ACTIVE = "bg-secondary font-semibold text-secondary-foreground";
-// A row in the Resources and account popovers.
+// A row in the account menu.
 const POPOVER_ITEM =
   "flex items-center gap-2 rounded-lg px-3 py-2 text-[14px] font-medium text-foreground transition-colors hover:bg-accent hover:text-primary";
 
@@ -80,21 +79,11 @@ const POPOVER_ITEM =
  * overflows rather than breaking "Data Repository" onto two lines.
  */
 export function Header({ variant = "standalone" }: { variant?: "overlay" | "standalone" }) {
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { data: session } = useSession();
   const pathname = usePathname();
   // Off on a deployment that only shows the repository: the item stays, marked
   // and not a link (lib/features.ts).
   const { workspace } = useSiteFeatures();
-
-  const handleUserMenuEnter = () => {
-    if (userMenuTimeoutRef.current) clearTimeout(userMenuTimeoutRef.current);
-    setUserMenuOpen(true);
-  };
-  const handleUserMenuLeave = () => {
-    userMenuTimeoutRef.current = setTimeout(() => setUserMenuOpen(false), 100);
-  };
 
   return (
     <header
@@ -158,62 +147,63 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
 
         {/* Auth section */}
         {session?.user ? (
-          <div
-            className="relative hidden shrink-0 lg:block"
-            onMouseEnter={handleUserMenuEnter}
-            onMouseLeave={handleUserMenuLeave}
-          >
-            <button
-              aria-expanded={userMenuOpen}
-              className="flex items-center gap-2 rounded-full border border-white/15 bg-white/6 py-[5px] pr-3.5 pl-[5px] text-[15px] font-medium text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow"
-            >
-              <UserAvatar
-                name={session.user.name}
-                email={session.user.email}
-                tone="brand"
-                className="size-[34px] text-[11px] font-bold"
-              />
-              {/* The name shows only from xl: at lg the row has no room for it beside
-                  the Coming soon chips. Below xl it is still the button's name. */}
-              <span className="sr-only xl:not-sr-only xl:max-w-[120px] xl:truncate">{session.user.name ?? session.user.email}</span>
-              <ChevronDown
-                size={14}
-                className={`transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {userMenuOpen && (
-              <div className="absolute right-0 top-full z-30 w-56 pt-2">
-                <div className="rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg">
-                  <div className="mb-1 border-b border-border px-3 py-2">
-                    <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
-                    <p className="text-xs font-medium text-muted-foreground">{ROLE_LABELS[session.user.role]}</p>
-                  </div>
-                  <Link href="/dashboard/profile" className={POPOVER_ITEM}>
-                    <UserCircle size={14} />
-                    My Profile
-                  </Link>
-                  {(session.user.role === "admin" || session.user.role === "staff") && (
-                    <Link href="/admin" className={POPOVER_ITEM}>
-                      <ShieldCheck size={14} />
-                      Admin
-                    </Link>
-                  )}
-                  <button
-                    onClick={() => {
-                      // Best-effort backend revoke, then always clear the
-                      // client session regardless of whether it succeeded.
-                      void revokeSession().finally(() => signOut({ callbackUrl: "/" }));
-                    }}
-                    className={`${POPOVER_ITEM} w-full hover:text-destructive`}
-                  >
-                    <LogOut size={14} />
-                    Sign out
-                  </button>
-                </div>
+          // A menu that opens on click and from the keyboard (Enter, Space, ArrowDown), and
+          // closes on Escape or a click outside: a tablet at lg width has no hover.
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="group hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/6 py-[5px] pr-3.5 pl-[5px] text-[15px] font-medium text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hero-eyebrow lg:flex"
+              >
+                <UserAvatar
+                  name={session.user.name}
+                  email={session.user.email}
+                  tone="brand"
+                  className="size-[34px] text-[11px] font-bold"
+                />
+                {/* The name shows only from xl: at lg the row has no room for it beside
+                    the Coming soon chips. Below xl it is still the button's name. */}
+                <span className="sr-only xl:not-sr-only xl:max-w-[120px] xl:truncate">{session.user.name ?? session.user.email}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  size={14}
+                  className="transition-transform duration-200 group-data-[state=open]:rotate-180"
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-2xl">
+              <div className="mb-1 border-b border-border px-3 py-2">
+                <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
+                <p className="text-xs font-medium text-muted-foreground">{ROLE_LABELS[session.user.role]}</p>
               </div>
-            )}
-          </div>
+              <DropdownMenuItem asChild className={POPOVER_ITEM}>
+                <Link href="/dashboard/profile">
+                  <UserCircle size={14} />
+                  My Profile
+                </Link>
+              </DropdownMenuItem>
+              {(session.user.role === "admin" || session.user.role === "staff") && (
+                <DropdownMenuItem asChild className={POPOVER_ITEM}>
+                  <Link href="/admin">
+                    <ShieldCheck size={14} />
+                    Admin
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                variant="destructive"
+                className={`${POPOVER_ITEM} hover:text-destructive`}
+                onSelect={() => {
+                  // Best-effort backend revoke, then always clear the
+                  // client session regardless of whether it succeeded.
+                  void revokeSession().finally(() => signOut({ callbackUrl: "/" }));
+                }}
+              >
+                <LogOut size={14} />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : (
           <Link
             href="/auth/signin"

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthNotice } from "@/components/auth/auth-shell";
 import { safeCallbackUrl } from "@/lib/auth-redirect";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 type DevAccount = { label: string; email: string; password: string };
 
@@ -20,6 +21,23 @@ const SSO_REFUSALS: Record<string, string> = {
   failed: "CILogon sign-in didn't work. Try again, or sign in with your email and password.",
 };
 
+/**
+ * What a refused password sign-in says. `code` is the one lib/auth.ts's
+ * authorize() sets when the backend named a reason; anything else, a wrong
+ * email and a wrong password alike, gets the same line so the form cannot be
+ * used to find out which addresses have accounts.
+ */
+function passwordSignInError(code: string | null | undefined): string {
+  switch (code) {
+    case "deactivated":
+      return `This account is deactivated. Contact the OpenGHM team at ${CONTACT_EMAIL}.`;
+    case "rate_limited":
+      return "Too many attempts. Try again in a few minutes.";
+    default:
+      return "Invalid email or password.";
+  }
+}
+
 function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +47,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
   const searchParams = useSearchParams();
   const registered = searchParams.get("registered");
   const reset = searchParams.get("reset");
+  const passwordChanged = searchParams.get("passwordChanged");
   // Why a CILogon sign-in was refused (lib/auth.ts `signIn` sends it here),
   // or NextAuth's own `error` when it failed before that callback ran — e.g.
   // CILogon answering the callback with `error=token_expired` after its login
@@ -62,7 +81,7 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
     });
 
     if (result?.error) {
-      setError("Invalid email or password.");
+      setError(passwordSignInError(result.code));
     } else {
       router.push(callbackUrl);
     }
@@ -87,9 +106,17 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
 
   return (
     <div className="space-y-5">
-      {registered && <AuthNotice tone="success">Account created successfully. Please sign in.</AuthNotice>}
+      {registered && (
+        <AuthNotice tone="success">
+          Account created. Sign in, and verify your email address with the link we sent you before
+          you run simulations.
+        </AuthNotice>
+      )}
       {reset && (
         <AuthNotice tone="success">Password reset. Please sign in with your new password.</AuthNotice>
+      )}
+      {passwordChanged && (
+        <AuthNotice tone="success">Your password was changed. Sign in with the new password.</AuthNotice>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -125,7 +152,11 @@ function SignInFormInner({ devAccounts }: { devAccounts: DevAccount[] }) {
             Forgot password?
           </Link>
         </p>
-        {(error || ssoRefusal) && <p className="text-sm text-destructive">{error || ssoRefusal}</p>}
+        {(error || ssoRefusal) && (
+          <p role="alert" className="text-sm text-destructive">
+            {error || ssoRefusal}
+          </p>
+        )}
         <Button type="submit" size="xl" className="w-full" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </Button>
