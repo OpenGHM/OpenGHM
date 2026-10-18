@@ -64,6 +64,7 @@ export function DraftDeleteButton({
         isDraft={isDraft}
         workDir={job.work_dir}
         remoteJobDir={job.remote_job_dir}
+        earlierJobs={job.previous_jobs?.length ?? 0}
         files={job.files}
         onDeleted={() => router.refresh()}
         onSessionExpired={onSessionExpired}

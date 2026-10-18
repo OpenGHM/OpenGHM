@@ -17,6 +17,7 @@ export function JobDeleteButton({
   isDraft,
   workDir,
   remoteJobDir,
+  earlierJobs,
   files,
   preview = false,
   onOpen,
@@ -31,6 +32,8 @@ export function JobDeleteButton({
   workDir: string | null;
   /** slurmly's directory: the batch script and its logs. */
   remoteJobDir: string | null;
+  /** How many earlier jobs of the simulation ended before this one. */
+  earlierJobs?: number;
   files: FilesState | null;
   /** Fixture data: there is no real job behind `jobId`. */
   preview?: boolean;
@@ -76,6 +79,7 @@ export function JobDeleteButton({
         isDraft={isDraft}
         workDir={workDir}
         remoteJobDir={remoteJobDir}
+        earlierJobs={earlierJobs}
         files={files}
         preview={preview}
         onError={onError}

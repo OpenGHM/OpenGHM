@@ -64,6 +64,22 @@ describe("the delete dialog", () => {
     expect(screen.getByText("This can't be undone.")).toBeTruthy();
   });
 
+  it("says nothing about earlier jobs for a simulation run by one job", () => {
+    setup({ earlierJobs: 0 });
+    expect(screen.queryByText(/earlier/)).toBeNull();
+  });
+
+  it("says the job directory of one earlier job goes too", () => {
+    setup({ earlierJobs: 1 });
+    expect(screen.getByText(/…and the job directories of the 1 earlier job$/)).toBeTruthy();
+    expect(screen.getByText("/anvil/scratch/u/jobs/j1")).toBeTruthy();
+  });
+
+  it("says the job directories of two earlier jobs go too", () => {
+    setup({ earlierJobs: 2 });
+    expect(screen.getByText(/…and the job directories of the 2 earlier jobs$/)).toBeTruthy();
+  });
+
   it("says a draft is only removed", () => {
     setup({ isDraft: true, workDir: null, remoteJobDir: null });
     expect(screen.getByText("Delete this snapshot draft?")).toBeTruthy();

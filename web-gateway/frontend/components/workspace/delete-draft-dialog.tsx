@@ -37,6 +37,7 @@ export function DeleteDraftDialog({
   isDraft,
   workDir,
   remoteJobDir,
+  earlierJobs = 0,
   files,
   preview = false,
   onDeleted,
@@ -52,6 +53,9 @@ export function DeleteDraftDialog({
   workDir: string | null;
   /** slurmly's directory: the batch script and its logs. */
   remoteJobDir: string | null;
+  /** How many earlier jobs of the simulation ended before this one (ADR
+   *  0037); their job directories go too. */
+  earlierJobs?: number;
   files: FilesState | null;
   /** Fixture data: there is no real job behind `jobId`. */
   preview?: boolean;
@@ -74,8 +78,13 @@ export function DeleteDraftDialog({
 
   const paths = [
     workDir && { label: "Output directory", path: workDir, purged: files === "purged" },
-    remoteJobDir && { label: "Job directory (script and logs)", path: remoteJobDir, purged: false },
-  ].filter((p): p is { label: string; path: string; purged: boolean } => Boolean(p));
+    remoteJobDir && {
+      label: "Job directory (script and logs)",
+      path: remoteJobDir,
+      purged: false,
+      earlier: earlierJobs > 0,
+    },
+  ].filter((p): p is { label: string; path: string; purged: boolean; earlier?: boolean } => Boolean(p));
 
   const confirm = async () => {
     if (pending) return;
@@ -146,6 +155,12 @@ export function DeleteDraftDialog({
                           <dd className="mt-0.5 break-all font-mono text-xs text-foreground">
                             {p.path}
                           </dd>
+                          {p.earlier ? (
+                            <dd className="mt-1 text-xs text-muted-foreground">
+                              …and the job directories of the {earlierJobs} earlier{" "}
+                              {earlierJobs === 1 ? "job" : "jobs"}
+                            </dd>
+                          ) : null}
                         </div>
                       ))}
                     </dl>

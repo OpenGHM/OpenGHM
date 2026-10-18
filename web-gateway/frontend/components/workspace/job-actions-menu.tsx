@@ -41,6 +41,7 @@ export function JobActionsMenu({
   offersDuplicate,
   workDir,
   remoteJobDir,
+  earlierJobs,
   files,
   preview = false,
   onDeleteOpen,
@@ -54,6 +55,8 @@ export function JobActionsMenu({
   offersDuplicate: boolean;
   workDir: string | null;
   remoteJobDir: string | null;
+  /** How many earlier jobs of the simulation ended before this one. */
+  earlierJobs?: number;
   files: FilesState | null;
   preview?: boolean;
   /** The delete dialog is about to open: the caller clears an earlier failure. */
@@ -132,6 +135,7 @@ export function JobActionsMenu({
         isDraft={false}
         workDir={workDir}
         remoteJobDir={remoteJobDir}
+        earlierJobs={earlierJobs}
         files={files}
         preview={preview}
         onError={onDeleteError}
