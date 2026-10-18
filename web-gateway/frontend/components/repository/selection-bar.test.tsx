@@ -13,7 +13,7 @@ const file = (name: string, size: number): TreeFile => ({
   path: `d/${name}`,
   size,
   lastModified: "2026-10-01T00:00:00Z",
-  url: `https://s3.example/${name}`,
+  url: `https://s3.example/openghm/snapshots/abc/d/${name}`,
   previewable: false,
 });
 const folder = (name: string): TreeFolder => ({ name, path: `d/${name}/` });
@@ -133,11 +133,51 @@ describe("the selection bar", () => {
     tick("Select deep/");
     expect(
       await screen.findByText(
-        "The selection is 3.0 GB, over the 500 MB limit for a ZIP. Select less, or use an S3 tool."
+        "The selection is 3.0 GB, over the 500 MB limit for a ZIP. Select less, or use the S3 command below."
       )
     ).toBeTruthy();
     expect(download().disabled).toBe(true);
     expect(screen.getByRole("status").textContent).toBe("2 selected · 3.0 GB");
+  });
+
+  it("over the limit, shows the S3 command for just what is ticked, with a copy button", async () => {
+    answer({ "d/deep/": summary(3 * 1024 ** 3, { fits: false }) });
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    render(<Harness />);
+    tick("Select a.nc");
+    tick("Select deep/");
+    const command =
+      'aws s3 sync --no-sign-request --endpoint-url https://s3.example s3://openghm/snapshots/abc/d/ ./d --exclude "*" --include "a.nc" --include "deep/*"';
+    expect(await screen.findByText(command)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy S3 command" }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(command);
+  });
+
+  it("shows no S3 command while the selection fits, or while it is only being checked", async () => {
+    answer({ "d/deep/": summary(10) });
+    render(<Harness />);
+    tick("Select deep/");
+    expect(screen.queryByRole("button", { name: "Copy S3 command" })).toBeNull();
+    await screen.findByText(/10 B/);
+    expect(screen.queryByRole("button", { name: "Copy S3 command" })).toBeNull();
+    expect(screen.queryByText(/S3 command below/)).toBeNull();
+  });
+
+  it("keeps the old wording and shows no command when the viewed folder's URL is not known", async () => {
+    answer({ "d/deep/": summary(3 * 1024 ** 3, { fits: false }) });
+    function Bare() {
+      const selection = useTreeSelection("snapshot", "snap-1", "d/");
+      return (
+        <>
+          <SelectionBar kind="snapshot" id="snap-1" folder="d/" files={[]} selection={selection} />
+          <TreeBrowserTable pathname="/x" folder="d/" folders={FOLDERS} files={[]} selection={selection} />
+        </>
+      );
+    }
+    render(<Bare />);
+    tick("Select deep/");
+    await screen.findByText("The selection is 3.0 GB, over the 500 MB limit for a ZIP. Select less, or use an S3 tool.");
+    expect(screen.queryByRole("button", { name: "Copy S3 command" })).toBeNull();
   });
 
   it("adds up to the limit across folders and files: each fits, the two together do not", async () => {

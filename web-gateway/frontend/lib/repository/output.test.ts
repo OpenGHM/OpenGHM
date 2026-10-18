@@ -119,6 +119,14 @@ describe("a folder at once", () => {
       "aws s3 sync --no-sign-request --endpoint-url https://s3.anvil.rcac.purdue.edu s3://openghm/snapshots/abc/wbm_output/G/ ./wbm_output"
     );
   });
+
+  it("can be narrowed to some entries, and quotes a key that came escaped in the URL", () => {
+    expect(
+      s3SyncCommand("https://s3.example/openghm/snapshots/my%20run/", "", "./my run", ["daily/*", "a.nc"])
+    ).toBe(
+      'aws s3 sync --no-sign-request --endpoint-url https://s3.example "s3://openghm/snapshots/my run/" "./my run" --exclude "*" --include "daily/*" --include "a.nc"'
+    );
+  });
 });
 
 describe("a refusal", () => {

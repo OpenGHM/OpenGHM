@@ -673,7 +673,10 @@ with a checkbox (the header's ticks the rows loaded so far), and a bar over the
 table totals what is ticked: files at their listed size, a ticked folder by its
 `…/files/folder` summary, asked once per folder while the view is open. Over
 500 MiB, or with a folder the summary could list only in part, the bar's
-**Download ZIP** is off and says so before anyone clicks. Otherwise it submits
+**Download ZIP** is off and says so before anyone clicks, and the bar gives the
+anonymous `aws s3 sync` that copies the ticked entries instead: the folder
+itself when one folder is ticked, else the viewed folder with an
+`--exclude "*"` and one `--include` per entry, so the tree is kept. Otherwise it submits
 a hidden form to the archive route, aimed at a hidden frame in which a refusal
 the backend still gives is read and shown in the bar.
 

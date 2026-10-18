@@ -247,14 +247,48 @@ export function subsetCommand({
   return `openghm output subset --snapshot ${snapshotId} --var ${variable} --resolution ${resolution} --start ${start} --end ${end}${bbox} --format nc --out ${filename}`;
 }
 
+/** Text in double quotes, with the `\`, `"`, `$` and backtick that would still mean something to the shell escaped. */
+function quoted(text: string): string {
+  return `"${text.replace(/[\\"$`]/g, "\\$&")}"`;
+}
+
+/** A shell word as it can be pasted: bare when it is plain, else quoted. */
+function shellWord(text: string): string {
+  return /^[\w./@%+=:,-]+$/.test(text) ? text : quoted(text);
+}
+
+/**
+ * Where a public path-style URL (`https://<endpoint>/<bucket>/<key>`) lives on
+ * S3: the endpoint to name with `--endpoint-url`, the bucket, and the key as
+ * the object store spells it, which is the URL's path with its escapes undone.
+ * The one place a tree's URL is taken apart for an S3 command.
+ */
+function s3Location(url: string): { endpoint: string; bucket: string; key: string } {
+  const parsed = new URL(url);
+  const [bucket, ...key] = parsed.pathname.replace(/^\//, "").split("/");
+  const unescape = (segment: string) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  };
+  return { endpoint: parsed.origin, bucket, key: key.map(unescape).join("/") };
+}
+
 /**
  * `aws s3 sync` of a folder of the tree, anonymously. `treeUrl` is the tree's
- * public path-style URL (`https://<endpoint>/<bucket>/snapshots/<id>/`).
+ * public path-style URL (`https://<endpoint>/<bucket>/snapshots/<id>/`) and
+ * `path` the folder under it. `only` narrows the sync to the entries it names
+ * (`daily/*`, `a.nc`): everything is excluded, then those are included, each
+ * pattern in double quotes so the shell leaves its `*` and any odd character
+ * in a name alone.
  */
-export function s3SyncCommand(treeUrl: string, path: string, into: string): string {
-  const url = new URL(treeUrl);
-  const [bucket, ...key] = url.pathname.replace(/^\//, "").split("/");
-  return `aws s3 sync --no-sign-request --endpoint-url ${url.origin} s3://${bucket}/${key.join("/")}${path} ${into}`;
+export function s3SyncCommand(treeUrl: string, path: string, into: string, only: string[] = []): string {
+  const { endpoint, bucket, key } = s3Location(treeUrl);
+  const source = shellWord(`s3://${bucket}/${key}${path}`);
+  const filters = only.length > 0 ? ` --exclude "*"${only.map((p) => ` --include ${quoted(p)}`).join("")}` : "";
+  return `aws s3 sync --no-sign-request --endpoint-url ${endpoint} ${source} ${shellWord(into)}${filters}`;
 }
 
 // ─── Answers ─────────────────────────────────────────────────────────────────

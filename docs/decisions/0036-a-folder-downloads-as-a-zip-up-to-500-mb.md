@@ -52,8 +52,9 @@ traffic in and out.
 
 - A handful of files, or a folder such as a time step's yearly output or a
   model input's small folders, comes down in one click. The large ones, daily
-  output and raw model inputs, still need an S3 tool, and the page says so as
-  soon as one is checked.
+  output and raw model inputs, still need an S3 tool. As soon as one is
+  checked, the page says so and gives the `aws s3 sync` command for what is
+  checked.
 - Every byte of a ZIP crosses the cluster twice, once from Anvil S3 into the
   backend and once out through the ingress. The size limit and the concurrency
   limit are what keep that affordable. Raising either is a decision to revisit,

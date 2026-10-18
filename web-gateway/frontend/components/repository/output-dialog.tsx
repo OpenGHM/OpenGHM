@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, Copy, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import { SWATCHES } from "@/components/repository/output-variables-table";
 import { useFolderListing } from "@/components/repository/tree-browser";
+import { CopyButton, S3Command } from "@/components/repository/s3-command";
 import { SelectionBar } from "@/components/repository/selection-bar";
 import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
 import { useTreeSelection } from "@/components/repository/use-tree-selection";
@@ -60,32 +61,6 @@ const FOCUS = "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 /** The time step folders of the output, yearly first. */
 export function stepFolders(output: OutputFolder[]): OutputFolder[] {
   return OUTPUT_RESOLUTIONS.flatMap((r) => output.filter((f) => f.name === r));
-}
-
-function CopyButton({ text, label, tone }: { text: string; label: string; tone: "solid" | "quiet" }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label={`Copy ${label}`}
-      onClick={() =>
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
-        })
-      }
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-[9px] font-semibold transition-colors",
-        FOCUS,
-        tone === "solid"
-          ? "bg-primary px-3 py-2 text-[12.5px] text-primary-foreground hover:bg-primary-hover"
-          : "bg-card px-2.5 py-[5px] text-xs text-primary hover:bg-secondary"
-      )}
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
 }
 
 /**
@@ -944,20 +919,7 @@ function FilesTab({ snapshotId, treeUrl, output }: { snapshotId: string; treeUrl
             All output files →
           </button>
         </div>
-        <div className="flex flex-col gap-2">
-          <span className="text-[12.5px] font-semibold">
-            With any S3 tool <span className="font-normal text-muted-foreground">· no account needed</span>
-          </span>
-          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-background py-1.5 pr-1.5 pl-3.5">
-            <code className="min-w-0 flex-1 overflow-x-auto font-mono text-[13px] whitespace-nowrap [scrollbar-width:none]">
-              <span aria-hidden="true" className="text-primary">
-                ${" "}
-              </span>
-              {sync}
-            </code>
-            <CopyButton text={sync} label="S3 command" tone="solid" />
-          </div>
-        </div>
+        <S3Command command={sync} />
       </div>
     </div>
   );

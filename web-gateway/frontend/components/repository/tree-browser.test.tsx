@@ -402,7 +402,8 @@ describe("TreeBrowser selection", () => {
     setup();
     await screen.findByText("metadata.json");
     fireEvent.click(box("Select wbm_output/"));
-    await screen.findByText("The selection is 7.0 GB, over the 500 MB limit for a ZIP. Select less, or use an S3 tool.");
+    await screen.findByText("The selection is 7.0 GB, over the 500 MB limit for a ZIP. Select less, or use the S3 command below.");
+    expect(screen.getByRole("button", { name: "Copy S3 command" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "Download ZIP" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("link", { name: "wbm_init/" }));
     await screen.findByText("a.init");

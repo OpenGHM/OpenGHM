@@ -1,4 +1,6 @@
 import type { FolderSummary, TreeFile } from "@/lib/repository/types";
+import { s3SyncCommand } from "@/lib/repository/output";
+import { treeBaseUrl } from "@/lib/repository/tree-browse";
 import { formatBytes } from "@/lib/workspace/format";
 
 /**
@@ -68,4 +70,62 @@ export function selectionTotals(
   else if (failed.length > 0) status = "failed";
   else if (checking) status = "checking";
   return { count: names.length, bytes, limit, status, failed };
+}
+
+/**
+ * The public URL of the folder being viewed (`folder` is `""` at the tree's
+ * root, else ends with `/`). The loaded files know the tree's base URL; failing
+ * that, a ticked folder's summary carries its own URL, which is the viewed
+ * folder's plus its name. Null when neither has been loaded.
+ */
+function viewedFolderUrl(
+  folder: string,
+  names: string[],
+  files: TreeFile[],
+  sizes: Record<string, FolderSize | undefined>
+): string | null {
+  const base = treeBaseUrl(files);
+  if (base) return base + folder;
+  for (const name of names) {
+    const size = sizes[name];
+    if (name.endsWith("/") && size?.status === "ready") {
+      for (const spelled of [name, encodeURI(name)]) {
+        if (size.summary.url.endsWith(spelled)) return size.summary.url.slice(0, -spelled.length);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The `aws s3 sync` that brings down what is ticked, for a selection too big
+ * for one ZIP. One folder is synced as it is, into a folder of its name. Any
+ * other selection syncs the viewed folder with filters that let only the
+ * ticked entries through (a folder as `name/*`, a file by its name), into a
+ * folder named for the viewed one (the artifact `id` at the tree's root), so
+ * the layout under it is kept. Null while the viewed folder's URL is not known,
+ * and then there is no command to show.
+ */
+export function selectionS3Command({
+  id,
+  folder,
+  names,
+  files,
+  sizes,
+}: {
+  id: string;
+  folder: string;
+  names: string[];
+  files: TreeFile[];
+  sizes: Record<string, FolderSize | undefined>;
+}): string | null {
+  if (names.length === 0) return null;
+  const url = viewedFolderUrl(folder, names, files, sizes);
+  if (!url) return null;
+  if (names.length === 1 && names[0].endsWith("/")) {
+    return s3SyncCommand(url, names[0], `./${names[0].slice(0, -1)}`);
+  }
+  const into = folder.split("/").filter(Boolean).pop() ?? id;
+  const only = names.map((name) => (name.endsWith("/") ? `${name}*` : name));
+  return s3SyncCommand(url, "", `./${into}`, only);
 }

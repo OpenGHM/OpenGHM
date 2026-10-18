@@ -2,7 +2,8 @@
 
 import { useId, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { limitLabel, selectionTotals } from "@/lib/repository/selection";
+import { limitLabel, selectionS3Command, selectionTotals } from "@/lib/repository/selection";
+import { S3Command } from "@/components/repository/s3-command";
 import { archiveRoute } from "@/lib/repository/tree-browse";
 import type { TreeFile, TreeKind } from "@/lib/repository/types";
 import type { TreeSelection } from "@/components/repository/use-tree-selection";
@@ -29,7 +30,9 @@ function refusalIn(frame: HTMLIFrameElement): string | null {
  * how big they are, and **Download ZIP** for them (**Clear** unticks them). The
  * total is the files' listed sizes and each ticked folder's summary, "checking
  * size…" until it comes. Over the limit (before compression) the button is off
- * and the reason is written right here, before anyone clicks.
+ * and the reason is written right here, before anyone clicks, with the S3
+ * command that brings down just what is ticked, for as long as the viewed
+ * folder's URL is known to write it.
  *
  * The download is a hidden form POSTed to the gateway, so the browser itself
  * takes the response to disk as it arrives (no `fetch`, no blob in memory) and
@@ -62,11 +65,14 @@ export function SelectionBar({
   const totals = selectionTotals(names, files, sizes);
   const limit = limitLabel(totals.limit);
   const size = formatBytes(totals.bytes);
+  const tooBig = totals.status === "incomplete" || totals.status === "over";
+  const command = tooBig ? selectionS3Command({ id, folder, names, files, sizes }) : null;
+  const advice = command ? "Select less, or use the S3 command below." : "Select less, or use an S3 tool.";
   const note =
     totals.status === "incomplete"
-      ? `The selection holds too many files to check against the ${limit} limit for a ZIP. Select less, or use an S3 tool.`
+      ? `The selection holds too many files to check against the ${limit} limit for a ZIP. ${advice}`
       : totals.status === "over"
-        ? `The selection is ${size}, over the ${limit} limit for a ZIP. Select less, or use an S3 tool.`
+        ? `The selection is ${size}, over the ${limit} limit for a ZIP. ${advice}`
         : null;
 
   return (
@@ -118,6 +124,7 @@ export function SelectionBar({
         </button>
       </div>
       {note && <p className="text-[13px] text-pretty text-muted-foreground">{note}</p>}
+      {command && <S3Command command={command} />}
       {totals.status === "failed" &&
         totals.failed.map((name) => (
           <p key={name} className="text-[13px] text-muted-foreground">
