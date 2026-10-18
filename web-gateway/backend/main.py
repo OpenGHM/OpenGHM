@@ -14,7 +14,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
 from app.api.v1 import users as users_router
 from app.api.v1 import wbm_output as wbm_output_router
-from app.core import account_startup, pending_sso, sessions
+from app.core import account_startup, login_throttle, pending_sso, sessions
 from app.core.config import settings
 from app.core.database import close_db, get_client, get_db
 from app.core.roles import Role
@@ -129,6 +129,12 @@ async def lifespan(app: FastAPI):
     # app.core.pending_sso) — a user who never finishes the "fill in your
     # missing email" step shouldn't leave a row behind forever.
     await db[pending_sso.COLLECTION].create_index("expires_at", expireAfterSeconds=0)
+
+    # Failed password sign-ins (app.core.login_throttle): counted by
+    # (kind, key) on every POST /auth/login, reaped by the same TTL pattern
+    # once past the throttle window.
+    await db[login_throttle.COLLECTION].create_index([("kind", 1), ("key", 1)])
+    await db[login_throttle.COLLECTION].create_index("expires_at", expireAfterSeconds=0)
 
     # Startup: flag any user documents with a non-canonical role. A doc that
     # doesn't parse as one of the four current Role values will 500 the

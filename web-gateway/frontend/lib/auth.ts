@@ -5,6 +5,7 @@ import Credentials from "next-auth/providers/credentials";
 import { cookies, headers } from "next/headers";
 import "./auth.types";
 import type { UserRole } from "./auth.types";
+import { clientIp } from "./client-ip";
 import { SSO_CONNECT_COOKIE, readConnectCookie } from "./sso-connect";
 
 /**
@@ -170,11 +171,21 @@ export const authConfig: NextAuthConfig = {
       async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const ip = clientIp(request?.headers?.get("x-forwarded-for"));
         try {
           const res = await fetch(`${BACKEND_URL}/api/v1/auth/login`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              // The backend counts failed sign-ins per client IP and believes
+              // the address only with the internal secret (it has no Ingress,
+              // so otherwise every user would look like this server).
+              ...(ip && process.env.INTERNAL_SERVICE_SECRET
+                ? {
+                    "X-Internal-Auth": process.env.INTERNAL_SERVICE_SECRET,
+                    "X-Client-IP": ip,
+                  }
+                : {}),
               // Forward the browser's UA so the backend can label the
               // session (see app/core/sessions.py). This fetch originates
               // on the Next.js server, so without forwarding it the

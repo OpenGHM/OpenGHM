@@ -316,7 +316,7 @@ class TestLowercasedEmails:
         "model, extra",
         [
             ("LoginRequest", {"password": "x"}),
-            ("RegisterRequest", {"password": "x", "name": "N"}),
+            ("RegisterRequest", {"password": "a-long-password-1", "name": "N"}),
             ("ForgotPasswordRequest", {}),
             ("CompleteSsoSignupRequest", {"completion_token": "t", "name": "N"}),
             ("SsoLoginRequest", {"external_id": "e", "provider": "cilogon"}),

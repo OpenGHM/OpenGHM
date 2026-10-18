@@ -47,7 +47,18 @@ function ResetPasswordForm() {
       });
 
       if (!res.ok) {
-        setError("This reset link is invalid or has expired. Request a new one.");
+        // 422 is the backend refusing the password itself (its list of field
+        // errors carries the rule); anything else is the link.
+        const rule =
+          res.status === 422
+            ? ((await res.json().catch(() => null)) as { detail?: { msg?: unknown }[] } | null)
+                ?.detail?.[0]?.msg
+            : undefined;
+        setError(
+          typeof rule === "string"
+            ? `Password: ${rule}.`
+            : "This reset link is invalid or has expired. Request a new one."
+        );
         return;
       }
 

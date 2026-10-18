@@ -111,6 +111,29 @@ strict mode.
 bcrypt hashes; `POST /auth/register` behind reCAPTCHA when a key is configured;
 verification email and password reset by emailed token.
 
+**A chosen password is at least 8 characters, and the API enforces it.** Register,
+reset-password and change-password all take theirs as `NewPassword`
+(`web-gateway/backend/app/models/user.py`), so a short one is a 422 whose error
+reads "must be at least 8 characters" for the `password` or `new_password` field.
+The forms check the same length first, for a quicker answer.
+
+**Failed password sign-ins are throttled in Mongo.** `POST /auth/login` records
+each wrong password, and each attempt for an address with no password account, in
+`login_failures` (`app/core/login_throttle.py`; a TTL index on `expires_at` reaps
+them). Within 15 minutes, 10 failures for one email, or 50 for one client IP, make
+the next attempt a 429 before the password is looked at, so a correct one does not
+get through; blocked attempts are not counted and are audited as `login_throttled`
+with the reason. A correct sign-in clears its email's failures, not the IP's.
+An unknown address counts like a wrong password, so the throttle does not reveal
+which accounts exist. CILogon sign-in neither counts nor is counted. The IP is the
+browser's, not the frontend pod's: the backend has no Ingress, so the frontend's
+sign-in call passes it in `X-Client-IP` (the last `X-Forwarded-For` entry) together
+with `INTERNAL_SERVICE_SECRET`, and the backend believes it only with that proof.
+Without it there is no IP counter, only the email one, because counting the pod's
+address would let fifty bad guesses lock out everyone. An IPv6 client is keyed by
+its /64. Open: whether the Ingress hands the frontend the real client address in
+`X-Forwarded-For` has not been checked against a cluster.
+
 **An email address is lowercased wherever it is taken or stored.** Every request
 model that carries one uses `LowercaseEmail`
 (`web-gateway/backend/app/models/user.py`), because `users.email` is the unique

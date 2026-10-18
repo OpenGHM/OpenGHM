@@ -244,6 +244,31 @@ describe("the email-and-password sign-in", () => {
     await expect(authorize(creds)).rejects.toMatchObject({ code: "deactivated" });
   });
 
+  it("tells the backend which address it came from, proving the claim with the internal secret", async () => {
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "shh");
+    answer(401, {});
+    const request = { headers: new Headers({ "x-forwarded-for": "1.2.3.4, 203.0.113.7" }) };
+    await authorize(creds, request);
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      "X-Internal-Auth": "shh",
+      "X-Client-IP": "203.0.113.7",
+    });
+    vi.unstubAllEnvs();
+  });
+
+  it("sends no address when it has no proof to give with it, or none to give", async () => {
+    answer(401, {});
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "");
+    await authorize(creds, { headers: new Headers({ "x-forwarded-for": "203.0.113.7" }) });
+    vi.stubEnv("INTERNAL_SERVICE_SECRET", "shh");
+    await authorize(creds, { headers: new Headers() });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.headers).not.toHaveProperty("X-Client-IP");
+      expect(init.headers).not.toHaveProperty("X-Internal-Auth");
+    }
+    vi.unstubAllEnvs();
+  });
+
   it("names a refusal for too many attempts", async () => {
     answer(429, { detail: "Too many requests" });
     await expect(authorize(creds)).rejects.toMatchObject({ code: "rate_limited" });

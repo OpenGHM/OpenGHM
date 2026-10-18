@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
-from app.core import pending_sso, sessions
+from app.core import login_throttle, pending_sso, sessions
 from app.core.audit import log_event
 from app.core.config import settings
 from app.core.database import get_db
@@ -168,11 +168,31 @@ async def _issue_tokens(
 async def login(
     body: LoginRequest,
     user_agent: str | None = Header(default=None, alias="User-Agent"),
+    x_internal_auth: str | None = Header(default=None),
+    x_client_ip: str | None = Header(default=None),
 ):
     db = get_db()
+    ip = login_throttle.client_ip(x_internal_auth, x_client_ip)
+
+    # Before the password is looked at, so a correct one does not get through
+    # while the address or the IP is over its failures (app.core.login_throttle).
+    # The reason is audited, never shown: the person is told only to wait.
+    blocked = await login_throttle.blocked_by(db, body.email, ip)
+    if blocked:
+        await log_event(
+            "login_throttled",
+            actor_id="anonymous",
+            detail={"attempted_email": body.email, "reason": f"too_many_failures_for_{blocked}"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many sign-in attempts. Try again in a few minutes.",
+        )
+
     user = await db.users.find_one({"email": body.email})
 
     if not user or not user.get("password_hash"):
+        await login_throttle.record_failure(db, body.email, ip)
         await log_event(
             "login_failed", actor_id="anonymous", detail={"attempted_email": body.email}
         )
@@ -182,6 +202,7 @@ async def login(
         )
 
     if not verify_password(body.password, user["password_hash"]):
+        await login_throttle.record_failure(db, body.email, ip)
         await log_event(
             "login_failed",
             actor_id=str(user["_id"]),
@@ -192,6 +213,8 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+
+    await login_throttle.clear_email(db, body.email)
 
     if not user.get("is_active", True):
         await log_event(
@@ -589,12 +612,6 @@ async def change_password(
     instead, since logging a user out of the request where they just
     changed their own password would be surprising.
     """
-    if len(body.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters.",
-        )
-
     db = get_db()
     user = await db.users.find_one({"_id": current_user.sub})
     if user is None:

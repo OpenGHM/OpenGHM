@@ -76,6 +76,14 @@ describe("registrationError", () => {
     ).toBe("Email: value is not a valid email address Name: Field required");
   });
 
+  it("words the backend's password rule as a sentence about the Password field", () => {
+    expect(
+      registrationError(422, {
+        detail: [{ loc: ["body", "password"], msg: "must be at least 8 characters" }],
+      })
+    ).toBe("Password: must be at least 8 characters");
+  });
+
   it("says the server could not be reached for a 502", () => {
     expect(registrationError(502, { detail: "Backend unreachable" })).toBe(
       "Unable to connect to the server. Please try again."

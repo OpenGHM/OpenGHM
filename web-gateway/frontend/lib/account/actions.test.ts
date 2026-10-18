@@ -9,7 +9,7 @@ vi.mock("next/headers", () => ({ cookies: async () => cookieStore }));
 vi.mock("@/lib/auth", () => ({ auth: currentSession }));
 vi.mock("@/lib/api-client", () => ({ getApiClient: async () => client }));
 
-import { connectCilogon, disconnectCilogon } from "@/lib/account/actions";
+import { changePassword, connectCilogon, disconnectCilogon } from "@/lib/account/actions";
 import { SSO_CONNECT_COOKIE } from "@/lib/sso-connect";
 
 afterEach(() => {
@@ -86,5 +86,35 @@ describe("disconnectCilogon", () => {
   it("falls back to a message of its own when the backend gave none", async () => {
     client.delete.mockRejectedValue(new Error("network"));
     expect(await disconnectCilogon()).toEqual({ ok: false, message: "Could not disconnect CILogon." });
+  });
+});
+
+describe("changePassword", () => {
+  it("says what the backend refused with, when it is a sentence", async () => {
+    client.post.mockRejectedValue(refused("Current password is incorrect"));
+    expect(await changePassword("old", "new-password-1")).toEqual({
+      ok: false,
+      message: "Current password is incorrect",
+    });
+  });
+
+  it("reads the rule out of the field errors of a rejected new password", async () => {
+    client.post.mockRejectedValue({
+      response: {
+        data: { detail: [{ loc: ["body", "new_password"], msg: "must be at least 8 characters" }] },
+      },
+    });
+    expect(await changePassword("old", "short")).toEqual({
+      ok: false,
+      message: "Password: must be at least 8 characters.",
+    });
+  });
+
+  it("falls back to a generic line when there is nothing to read", async () => {
+    client.post.mockRejectedValue(new Error("down"));
+    expect(await changePassword("old", "new-password-1")).toEqual({
+      ok: false,
+      message: "Failed to change password.",
+    });
   });
 });

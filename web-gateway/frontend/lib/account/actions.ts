@@ -50,10 +50,20 @@ export async function changePassword(
     });
     return { ok: true };
   } catch (err) {
-    const detail =
-      (err as { response?: { data?: { detail?: string } } })?.response?.data
-        ?.detail ?? "Failed to change password.";
-    return { ok: false, message: detail };
+    // A string for the refusals the route raises (wrong current password); a
+    // list of field errors when the backend rejects the new password itself.
+    const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data
+      ?.detail;
+    const rule = Array.isArray(detail) ? (detail[0] as { msg?: unknown } | undefined)?.msg : null;
+    return {
+      ok: false,
+      message:
+        typeof detail === "string"
+          ? detail
+          : typeof rule === "string"
+            ? `Password: ${rule}.`
+            : "Failed to change password.",
+    };
   }
 }
 

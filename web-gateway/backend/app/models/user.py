@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, EmailStr, Field
+from pydantic_core import PydanticCustomError
 from datetime import datetime
 
 from app.core.roles import RoleField
@@ -11,6 +12,26 @@ from app.core.roles import RoleField
 # model that takes an address uses this, so what is stored and what is looked
 # up are both lowercase.
 LowercaseEmail = Annotated[EmailStr, AfterValidator(str.lower)]
+
+# The one rule for a password someone chooses: registration, a reset link and
+# a change all take theirs through `NewPassword`. The frontend checks the same
+# length for a quicker answer, but this is the check that holds. It is a
+# custom error so the 422 reads "must be at least 8 characters" for the field
+# the form names, not pydantic's "Value error, ..." wrapping.
+MIN_PASSWORD_LENGTH = 8
+
+
+def _long_enough(value: str) -> str:
+    if len(value) < MIN_PASSWORD_LENGTH:
+        raise PydanticCustomError(
+            "password_too_short",
+            "must be at least {min_length} characters",
+            {"min_length": MIN_PASSWORD_LENGTH},
+        )
+    return value
+
+
+NewPassword = Annotated[str, AfterValidator(_long_enough)]
 
 
 class TokenPayload(BaseModel):
@@ -109,7 +130,7 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: LowercaseEmail
-    password: str
+    password: NewPassword
     name: str
     organization: str | None = None
     # Verified server-side against Google's siteverify API before the
@@ -255,7 +276,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str
+    new_password: NewPassword
 
 
 class VerifyEmailRequest(BaseModel):
@@ -264,7 +285,7 @@ class VerifyEmailRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: NewPassword
 
 
 class ConfirmLinkRequest(BaseModel):
