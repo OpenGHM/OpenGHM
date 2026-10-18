@@ -52,7 +52,7 @@ describe("dates in the admin pages are <time> elements", () => {
     expect(container.querySelector("time")?.textContent).toMatch(/2026/);
   });
 
-  it("the jobs table prints Submitted", () => {
+  it("the jobs table prints Submitted, and for a never-submitted draft says so with its creation time", () => {
     const job = {
       id: "j1",
       sim_id: "sim-1",
@@ -61,9 +61,15 @@ describe("dates in the admin pages are <time> elements", () => {
       status: "COMPLETED",
       slurm_job_id: "123",
       created_at: WHEN,
+      submitted_at: "2026-10-01T08:00:00Z",
       cancel_requested_at: null,
     } as unknown as Job;
-    const { container } = render(<AdminJobsTable jobs={[job]} />);
+    const { container, rerender } = render(<AdminJobsTable jobs={[job]} />);
+    expect(times(container)).toEqual(["2026-10-01T08:00:00Z"]);
+    expect(screen.queryByText(/Not submitted/)).toBeNull();
+
+    rerender(<AdminJobsTable jobs={[{ ...job, status: "DRAFT", submitted_at: null }]} />);
+    expect(screen.getByText(/Not submitted/)).toBeTruthy();
     expect(times(container)).toEqual([WHEN]);
   });
 
@@ -210,7 +216,7 @@ describe("the empty states", () => {
       </>
     );
     expect(screen.getByText("No users match these filters.")).toBeTruthy();
-    expect(screen.getByText("No jobs match these filters.")).toBeTruthy();
+    expect(screen.getByText("No simulations match these filters.")).toBeTruthy();
     expect(screen.getByText("No events to show.")).toBeTruthy();
   });
 });

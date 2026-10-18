@@ -4,7 +4,7 @@ touch, plus document and token builders for route-level tests.
 The fake covers exactly what the routes call — `find_one`, `find` (its cursor sorts, skips, limits, iterates and `to_list`s), `insert_one`
 (a second document with the same `_id` raises `DuplicateKeyError`),
 `update_one` (`$set`, `$unset`, `$addToSet`, `$pull`; `upsert=True` creates the document from the query's equalities and the `$set`), `delete_one`, `delete_many`,
-`count_documents` — with equality, `$in`, `$ne`, `$exists`, `$gte` and `$regex` matching,
+`count_documents` — with equality, `$in`, `$ne`, `$exists`, `$gte`, `$lt` and `$regex` matching,
 on a dotted path (`publish.state`) as well as a plain key. It is not a Mongo emulator: a route that starts using
 another operator fails loudly here instead of silently matching nothing.
 
@@ -78,6 +78,8 @@ def _matches(doc: dict, query: dict) -> bool:
                     ok = (found is not _ABSENT) == arg
                 elif op == "$gte":
                     ok = value is not None and value >= arg
+                elif op == "$lt":
+                    ok = value is not None and value < arg
                 elif op == "$regex":
                     ok = isinstance(value, str) and re.search(arg, value) is not None
                 else:

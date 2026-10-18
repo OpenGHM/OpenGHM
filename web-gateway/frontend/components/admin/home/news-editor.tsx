@@ -133,9 +133,9 @@ export function NewsEditor({ post }: { post: NewsPost | null }) {
               </select>
             )}
           </Field>
-          <Field id={id("date")} label="Date" hint="The newest dates show first. Use YYYY-MM-DD." error={errors.date}>
+          <Field id={id("date")} label="Date" hint="The newest dates show first." error={errors.date}>
             {(p) => (
-              <Input {...p} value={form.date} autoComplete="off" placeholder="2026-10-10" onChange={(e) => set({ date: e.target.value })} />
+              <Input {...p} type="date" value={form.date} onChange={(e) => set({ date: e.target.value })} />
             )}
           </Field>
         </div>

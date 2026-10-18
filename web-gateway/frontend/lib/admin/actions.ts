@@ -6,7 +6,7 @@ import type { UserRole } from "@/lib/auth.types";
 import type { ActionResult, JobStatsResponse } from "@/lib/jobs/types";
 import type { SessionListResponse } from "@/lib/account/types";
 import type {
-  AuditCategory,
+  AuditFilters,
   AuditLogListResponse,
   AdminUser,
   AdminUserDetail,
@@ -16,6 +16,8 @@ import type {
   SystemInfoResponse,
   AnvilScratchResponse,
   SpoolClearResponse,
+  UserLabel,
+  UserLabels,
 } from "@/lib/admin/types";
 
 /**
@@ -113,13 +115,42 @@ export async function updateUser(
 
 export async function fetchAuditLog(
   page: number = 1,
-  category?: AuditCategory
+  filters: AuditFilters = {},
+  pageSize: number = 50
 ): Promise<AuditLogListResponse> {
   const client = await getApiClient();
   const res = await client.get<AuditLogListResponse>("/api/v1/admin/audit-log", {
-    params: { page, page_size: 50, ...(category ? { category } : {}) },
+    params: {
+      page,
+      page_size: pageSize,
+      ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.actor_id ? { actor_id: filters.actor_id } : {}),
+      ...(filters.date_from ? { date_from: filters.date_from } : {}),
+      ...(filters.date_to ? { date_to: filters.date_to } : {}),
+    },
   });
   return res.data;
+}
+
+/**
+ * Name and email for the users among `ids`, in one call (the job list's
+ * owners, the audit log's actors and targets), keyed by id. An id that is no
+ * user (a job id, `system`) is absent. A failure gives an empty map: the table
+ * then shows the ids it was given, which is true if less friendly, and the
+ * list itself has already told the page about an expired session.
+ */
+export async function fetchUserLabels(ids: string[]): Promise<UserLabels> {
+  const unique = [...new Set(ids.filter(Boolean))].slice(0, 100);
+  if (unique.length === 0) return {};
+  try {
+    const client = await getApiClient();
+    const res = await client.get<{ items: UserLabel[] }>("/api/v1/admin/user-labels", {
+      params: { ids: unique },
+    });
+    return Object.fromEntries(res.data.items.map((u) => [u.id, u]));
+  } catch {
+    return {};
+  }
 }
 
 /** Site-wide job stats — user_id="*" requires Permission.JOB_VIEW_ANY

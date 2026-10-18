@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InlineError } from "@/components/admin/admin-states";
 import { AdminPage } from "@/components/admin/admin-page";
 import { NewsEditor } from "@/components/admin/home/news-editor";
 import { fetchAdminNews } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
+
+export const metadata: Metadata = { title: "Edit news post | OpenGHM Admin" };
 
 export default async function EditNewsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

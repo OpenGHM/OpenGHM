@@ -1,12 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { AdminPage } from "@/components/admin/admin-page";
 import { InlineError } from "@/components/admin/admin-states";
 import { AdminJobsTable } from "@/components/admin/admin-jobs-table";
+import { Person } from "@/components/admin/person";
 import { ServerPagination } from "@/components/shared/server-pagination";
+import { fetchUserLabels } from "@/lib/admin/actions";
+import { loadOrSignIn } from "@/lib/admin/load";
+import { pathWithQuery } from "@/lib/auth-redirect";
 import { fetchJobs } from "@/lib/jobs/actions";
 import { STATUS_TABS } from "@/lib/jobs/filters";
 import type { JobListResponse } from "@/lib/jobs/types";
+
+export const metadata: Metadata = { title: "Simulations | OpenGHM Admin" };
 
 const EMPTY_JOBS: JobListResponse = { items: [], total_count: 0, page: 1, total_pages: 1 };
 
@@ -20,14 +27,18 @@ export default async function AdminJobsPage({
   const statusFilter = params.status || undefined;
   const userId = params.user_id || undefined;
 
-  const jobsResult = await fetchJobs(page, statusFilter, userId || "*").catch(() => null);
+  const jobsResult = await loadOrSignIn(pathWithQuery("/admin/jobs", params), () =>
+    fetchJobs(page, statusFilter, userId || "*")
+  );
   const jobData = jobsResult ?? EMPTY_JOBS;
+  // One call names every owner on the page, and the filtered user too.
+  const owners = await fetchUserLabels([...jobData.items.map((j) => j.user_id), ...(userId ? [userId] : [])]);
 
   return (
-    <AdminPage title="Jobs" description="Snapshot drafts across every user.">
+    <AdminPage title="Simulations" description="Snapshot drafts and their simulations across every user.">
       {userId && (
-        <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-          Filtered to user <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs break-all">{userId}</code>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          Filtered to user <Person id={userId} labels={owners} className="text-foreground" />
           <Link href="/admin/jobs" className="inline-flex min-h-10 items-center text-primary hover:underline sm:min-h-0">
             Clear
           </Link>
@@ -61,10 +72,10 @@ export default async function AdminJobsPage({
       <Card>
         <CardContent className="pt-6">
           {jobsResult === null ? (
-            <InlineError title="Couldn't load jobs." />
+            <InlineError title="Couldn't load simulations." />
           ) : (
             <>
-              <AdminJobsTable jobs={jobData.items} />
+              <AdminJobsTable jobs={jobData.items} owners={owners} />
               <ServerPagination
                 page={page}
                 totalPages={jobData.total_pages}

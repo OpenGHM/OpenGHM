@@ -53,7 +53,7 @@ describe("the sidebar nav", () => {
     renderNav("admin");
     const console = screen.getByRole("group", { name: "Console" });
     expect(within(console).getAllByRole("link").map((a) => a.textContent)).toEqual([
-      "Overview", "Users", "Jobs", "Audit log", "System",
+      "Overview", "Users", "Simulations", "Audit log", "System",
     ]);
     const community = screen.getByRole("group", { name: "Community" });
     expect(within(community).getAllByRole("link").map((a) => a.textContent)).toEqual([

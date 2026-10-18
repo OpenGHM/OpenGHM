@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +9,16 @@ import { UserRoleStatusCard } from "@/components/admin/user-role-status-card";
 import { UserSessionsTable } from "@/components/admin/user-sessions-table";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { DraftCard } from "@/components/jobs/draft-card";
-import { fetchUserDetail, fetchUserSessions, fetchAuditLog } from "@/lib/admin/actions";
+import { fetchUserDetail, fetchUserSessions, fetchAuditLog, fetchUserLabels } from "@/lib/admin/actions";
+import { auditHref } from "@/lib/admin/audit-href";
+import { signInIfUnauthorized } from "@/lib/admin/load";
 import { fetchJobs } from "@/lib/jobs/actions";
 import type { SessionListResponse } from "@/lib/account/types";
+
+export const metadata: Metadata = { title: "User | OpenGHM Admin" };
+
+const VIEW_ALL =
+  "inline-flex min-h-10 items-center text-sm text-primary hover:underline sm:min-h-0";
 
 const EMPTY_SESSIONS: SessionListResponse = { items: [] };
 
@@ -28,18 +37,18 @@ export default async function AdminUserDetailPage({
   const [sessionsResult, jobsResult, auditResult] = await Promise.allSettled([
     isAdmin ? fetchUserSessions(id) : Promise.resolve(EMPTY_SESSIONS),
     fetchJobs(1, undefined, id),
-    fetchAuditLog(1),
+    fetchAuditLog(1, { actor_id: id }, 5),
   ]);
+  signInIfUnauthorized(`/admin/users/${id}`, [sessionsResult, jobsResult, auditResult]);
 
   const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value : EMPTY_SESSIONS;
   const recentJobs = jobsResult.status === "fulfilled" ? jobsResult.value.items.slice(0, 5) : [];
-  // No actor-filter param exists on the audit-log endpoint yet — filter the
-  // first page in memory rather than adding server-side pagination for a
-  // per-user slice that's rarely more than a handful of rows.
-  const userAuditEntries =
-    auditResult.status === "fulfilled"
-      ? auditResult.value.items.filter((e) => e.actor_id === id || e.target_id === id).slice(0, 5)
-      : [];
+  // What this user did, newest first: the backend filters by actor, so the
+  // slice is the user's own however busy the site is.
+  const userAuditEntries = auditResult.status === "fulfilled" ? auditResult.value.items : [];
+  const people = await fetchUserLabels(
+    userAuditEntries.flatMap((e) => [e.actor_id, ...(e.target_id ? [e.target_id] : [])])
+  );
 
   return (
     <AdminPage
@@ -89,7 +98,14 @@ export default async function AdminUserDetailPage({
                   Their snapshot drafts will appear here once they start one.
                 </EmptyState>
               ) : (
-                recentJobs.map((job) => <DraftCard key={job.id} job={job} />)
+                <>
+                  {recentJobs.map((job) => (
+                    <DraftCard key={job.id} job={job} />
+                  ))}
+                  <Link href={`/admin/jobs?user_id=${encodeURIComponent(id)}`} className={VIEW_ALL}>
+                    View all
+                  </Link>
+                </>
               )}
             </CardContent>
           </Card>
@@ -102,7 +118,14 @@ export default async function AdminUserDetailPage({
               {auditResult.status === "rejected" ? (
                 <InlineError title="Couldn't load this user's activity." />
               ) : (
-                <AuditLogTable entries={userAuditEntries} showFilters={false} />
+                <>
+                  <AuditLogTable entries={userAuditEntries} people={people} showFilters={false} />
+                  {userAuditEntries.length > 0 && (
+                    <Link href={auditHref("/admin/audit", { actor_id: id })} className={`${VIEW_ALL} mt-3`}>
+                      View all
+                    </Link>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

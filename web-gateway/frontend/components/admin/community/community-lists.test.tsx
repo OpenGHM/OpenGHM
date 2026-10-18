@@ -520,7 +520,7 @@ describe("pinning a workshop to the home page", () => {
 
 describe("the audit log", () => {
   it("has a Content tab that filters by the content category", () => {
-    render(<AuditLogTable entries={[]} activeCategory="content" basePath="/admin/audit" />);
+    render(<AuditLogTable entries={[]} filters={{ category: "content" }} basePath="/admin/audit" />);
     const tab = screen.getByRole("link", { name: "Content" });
     expect(tab.getAttribute("href")).toBe("/admin/audit?category=content");
     expect(tab.getAttribute("aria-current")).toBe("page");

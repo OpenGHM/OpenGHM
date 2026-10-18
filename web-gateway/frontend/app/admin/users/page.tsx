@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -6,7 +7,11 @@ import { UsersTable } from "@/components/admin/users-table";
 import { UserSearchFilters } from "@/components/admin/user-search-filters";
 import { ServerPagination } from "@/components/shared/server-pagination";
 import { fetchUsers } from "@/lib/admin/actions";
+import { loadOrSignIn } from "@/lib/admin/load";
+import { pathWithQuery } from "@/lib/auth-redirect";
 import type { UserListResponse } from "@/lib/admin/types";
+
+export const metadata: Metadata = { title: "Users | OpenGHM Admin" };
 
 const EMPTY_USERS: UserListResponse = { items: [], total_count: 0, page: 1, total_pages: 1 };
 
@@ -28,7 +33,9 @@ export default async function AdminUsersPage({
   const isActive =
     params.is_active === "true" ? true : params.is_active === "false" ? false : undefined;
 
-  const usersResult = await fetchUsers(page, role, { q, is_active: isActive }).catch(() => null);
+  const usersResult = await loadOrSignIn(pathWithQuery("/admin/users", params), () =>
+    fetchUsers(page, role, { q, is_active: isActive })
+  );
   const users = usersResult ?? EMPTY_USERS;
 
   return (

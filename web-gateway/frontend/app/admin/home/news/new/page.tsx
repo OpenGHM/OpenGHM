@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/admin-page";
 import { NewsEditor } from "@/components/admin/home/news-editor";
+
+export const metadata: Metadata = { title: "New news post | OpenGHM Admin" };
 
 export default function NewNewsPage() {
   return (

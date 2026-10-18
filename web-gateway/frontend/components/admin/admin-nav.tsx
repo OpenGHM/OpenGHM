@@ -44,7 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
       { href: "/admin/users", label: "Users", icon: Users },
-      { href: "/admin/jobs", label: "Jobs", icon: Cpu },
+      { href: "/admin/jobs", label: "Simulations", icon: Cpu },
       { href: "/admin/audit", label: "Audit log", icon: ScrollText },
       { href: "/admin/system", label: "System", icon: ServerCog, adminOnly: true },
     ],

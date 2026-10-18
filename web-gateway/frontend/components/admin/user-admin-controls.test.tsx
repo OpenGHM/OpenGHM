@@ -30,6 +30,15 @@ function renderRole() {
   return select;
 }
 
+describe("the role dropdown", () => {
+  it("names the roles in words and still sends the role itself", () => {
+    const select = renderRole();
+    const options = Array.from(select.options);
+    expect(options.map((o) => o.textContent)).toEqual(["Admin", "Staff", "User", "Guest"]);
+    expect(options.map((o) => o.value)).toEqual(["admin", "staff", "user", "guest"]);
+  });
+});
+
 describe("changing a role", () => {
   it("applies nothing until it is confirmed, and names the old and the new role", async () => {
     const select = renderRole();

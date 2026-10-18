@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InlineError } from "@/components/admin/admin-states";
 import { AdminPage } from "@/components/admin/admin-page";
 import { WorkshopEditor } from "@/components/admin/community/workshop-editor";
 import { fetchAdminWorkshop } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
+
+export const metadata: Metadata = { title: "Edit workshop | OpenGHM Admin" };
 
 export default async function EditWorkshopPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

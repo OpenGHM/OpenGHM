@@ -11,6 +11,20 @@ from pydantic import BaseModel, ConfigDict
 DependencyStatus = Literal["ok", "degraded", "unconfigured", "error"]
 
 
+class UserLabel(BaseModel):
+    """Who an id belongs to, for the admin tables that cite users by id."""
+
+    id: str
+    name: str
+    email: str
+
+
+class UserLabelsResponse(BaseModel):
+    """The users found among the ids asked for; an id that is no user is left out."""
+
+    items: list[UserLabel]
+
+
 class DependencyHealth(BaseModel):
     """One external dependency's reachability. `detail` is always a short,
     hand-written phrase — never str(exception); see app.services.system_info

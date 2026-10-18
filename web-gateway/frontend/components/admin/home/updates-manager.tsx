@@ -25,11 +25,11 @@ import type { FeedItem, HomeSources, HomeUpdatesAdmin, HomeUpdatesSettingsInput 
 const SOURCES: { key: keyof HomeSources; label: string; hint: string }[] = [
   { key: "news", label: "News posts", hint: "The newest visible news posts." },
   { key: "workshops", label: "Workshops", hint: "Workshops, by when they were announced." },
-  { key: "datasets", label: "Datasets", hint: "Public datasets, by when they were added to the repository." },
+  { key: "datasets", label: "Snapshots", hint: "Public snapshots, by when they were added to the repository." },
 ];
 
 /**
- * The home page's "Latest Datasets & News" section: its words and size, which
+ * The home page's "Latest Snapshots & News" section: its words and size, which
  * sources feed it, what it shows now, and the pinned items. By default it
  * shows the newest items; a pinned item shows first, in the order given here,
  * whether or not its source is on. The preview is the saved state; the rest is
@@ -144,7 +144,7 @@ export function UpdatesManager({
         {errors.pins && <p className="text-xs text-destructive">{errors.pins}</p>}
       </EditorSection>
 
-      <EditorSection icon={Pin} title="Add a pin" description="Search the newest news posts, workshops and datasets.">
+      <EditorSection icon={Pin} title="Add a pin" description="Search the newest news posts, workshops and snapshots.">
         <PinPicker
           pinned={pinnedKeys}
           full={form.pins.length >= PINS_MAX}

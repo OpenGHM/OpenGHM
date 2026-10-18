@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/admin-page";
 import { WorkshopEditor } from "@/components/admin/community/workshop-editor";
+
+export const metadata: Metadata = { title: "New workshop | OpenGHM Admin" };
 
 export default function NewWorkshopPage() {
   return (

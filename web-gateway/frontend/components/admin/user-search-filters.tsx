@@ -50,12 +50,16 @@ export function UserSearchFilters({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      pushParams({ q: query || undefined });
+      // The effect also runs on mount, and the box then holds what the address
+      // already says. Replacing the URL with itself would still drop `page`:
+      // reloading page 3, or coming Back from a user, landed on page 1.
+      if (query.trim() === (initialQuery ?? "")) return;
+      pushParams({ q: query.trim() || undefined });
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on query change; pushParams reads fresh searchParams each call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on query change; pushParams reads fresh searchParams each call, and the address only changes the query through this box.
   }, [query]);
 
   const hasFilters = Boolean(initialQuery || role || status);

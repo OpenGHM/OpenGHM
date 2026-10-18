@@ -1283,7 +1283,13 @@ assume. None of them is here:
 ## 7. Audit log
 
 `web-gateway/backend/app/core/audit.py` appends to `audit_events`; admins and
-staff read it at `GET /admin/audit-log`. Every event carries a category,
+staff read it at `GET /admin/audit-log`, newest first, optionally narrowed by
+`category`, `actor_id` (a user id, or `system`) and a UTC day range
+(`date_from`, `date_to`, both inclusive); the console's audit page and a user's
+Recent activity card use them. `GET /admin/user-labels?ids=…` (`user:view:any`,
+at most 100 ids) answers name and email for the users among a batch of ids, so
+the admin simulation list and audit log show people rather than ids with one
+query. Every event carries a category,
 because the streams
 have nothing in common: `auth` is low-volume and security-relevant (sign-in
 success and failure, registration, password reset, role and status changes, SSO

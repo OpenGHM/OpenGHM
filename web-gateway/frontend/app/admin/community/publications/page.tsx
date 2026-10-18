@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { PublicationManager } from "@/components/admin/community/publication-man
 import { fetchAdminPublications } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
 import { countLabel } from "@/lib/community/format";
+
+export const metadata: Metadata = { title: "Publications | OpenGHM Admin" };
 
 export default async function AdminPublicationsPage({
   searchParams,

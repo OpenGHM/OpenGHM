@@ -6,7 +6,7 @@ app.core.audit's events collection and aggregate counts over jobs/users.
 """
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,8 @@ from app.models.admin import (
     SystemInfoResponse,
     TimeSeriesPoint,
     TimeSeriesResponse,
+    UserLabel,
+    UserLabelsResponse,
 )
 from app.models.user import AuditLogEntry, AuditLogListResponse, TokenPayload
 from app.services import anvil_scratch
@@ -47,9 +49,32 @@ async def list_audit_log(
     category: AuditCategory | None = Query(
         None, description="Filter by event category; omit for all"
     ),
+    actor_id: str | None = Query(
+        None, min_length=1, max_length=128,
+        description="Only events this user (or `system`) did",
+    ),
+    date_from: date | None = Query(
+        None, description="Only events on or after this day (UTC)"
+    ),
+    date_to: date | None = Query(
+        None, description="Only events on or before this day (UTC)"
+    ),
 ):
     db = get_db()
     query: dict = {}
+    if actor_id is not None:
+        # Served by the (actor_id, created_at) index created at startup.
+        query["actor_id"] = actor_id
+    if date_from is not None or date_to is not None:
+        window: dict = {}
+        if date_from is not None:
+            window["$gte"] = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        if date_to is not None:
+            # Up to the end of the day: strictly before the next midnight.
+            window["$lt"] = datetime.combine(
+                date_to + timedelta(days=1), time.min, tzinfo=timezone.utc
+            )
+        query["created_at"] = window
     if category is not None:
         if category is AuditCategory.AUTH:
             # Events written before the category field existed are all auth
@@ -85,6 +110,29 @@ async def list_audit_log(
 
     return AuditLogListResponse(
         items=items, total_count=total_count, page=page, total_pages=total_pages
+    )
+
+
+@router.get("/user-labels", response_model=UserLabelsResponse)
+async def user_labels(
+    _user: TokenPayload = Depends(require_permission(Permission.USER_VIEW_ANY)),
+    ids: list[str] = Query(default=[], max_length=100, description="User ids to name"),
+):
+    """Name and email for a batch of ids, so a table that cites users by id
+    (the job list's owners, the audit log's actors and targets) shows people
+    with one query instead of one per row. An id that is not a user (a job id
+    as an audit target, `system`) is left out of the answer. Same gate as the
+    user list: staff already see every name and email there."""
+    wanted = sorted(set(ids))
+    if not wanted:
+        return UserLabelsResponse(items=[])
+    db = get_db()
+    cursor = db.users.find({"_id": {"$in": wanted}}, {"name": 1, "email": 1})
+    return UserLabelsResponse(
+        items=[
+            UserLabel(id=str(doc["_id"]), name=doc.get("name") or "", email=doc.get("email") or "")
+            async for doc in cursor
+        ]
     )
 
 

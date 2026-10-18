@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { TutorialList } from "@/components/admin/community/tutorial-list";
 import { fetchAdminTutorials } from "@/lib/community/admin-actions";
 import { settle } from "@/lib/community/admin-load";
 import { countLabel } from "@/lib/community/format";
+
+export const metadata: Metadata = { title: "Tutorials | OpenGHM Admin" };
 
 export default async function AdminTutorialsPage() {
   const loaded = settle(await fetchAdminTutorials(), "/admin/community/tutorials");

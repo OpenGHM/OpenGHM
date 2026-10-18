@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -6,6 +8,8 @@ import { AnvilScratchCard } from "@/components/admin/anvil-scratch-card";
 import { StatCard } from "@/components/admin/site-stats-cards";
 import { fetchSystemInfo } from "@/lib/admin/actions";
 import type { DependencyStatus } from "@/lib/admin/types";
+
+export const metadata: Metadata = { title: "System | OpenGHM Admin" };
 
 const STATUS_STYLE: Record<DependencyStatus, string> = {
   ok: "bg-success/10 text-success border-success/25",
@@ -31,6 +35,20 @@ function formatUptime(seconds: number): string {
 }
 
 export default async function AdminSystemPage() {
+  // The backend answers only an admin (Permission.SYSTEM_VIEW); a staff member
+  // who types the address would otherwise read "Couldn't load", as if it broke.
+  // Defence in depth, like the Community and Home layouts: not the real gate.
+  const session = await auth();
+  if (session?.user.role !== "admin") {
+    return (
+      <AdminPage title="System" description={SYSTEM_DESCRIPTION}>
+        <InlineError title="This page is for administrators.">
+          Ask an admin for the information, or to give your account the admin role.
+        </InlineError>
+      </AdminPage>
+    );
+  }
+
   const info = await fetchSystemInfo();
 
   if (!info) {

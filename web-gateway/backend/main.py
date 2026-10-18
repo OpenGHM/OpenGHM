@@ -151,7 +151,7 @@ async def lifespan(app: FastAPI):
     await db.audit_events.create_index([("category", 1), ("created_at", -1)])
     # GET /users/{user_id} resolves last_login_at by newest login_succeeded
     # event for one actor — without this it's a full collection scan per
-    # detail-page view.
+    # detail-page view. GET /admin/audit-log?actor_id= reads it the same way.
     await db.audit_events.create_index([("actor_id", 1), ("created_at", -1)])
 
     # Site-wide admin views (GET /admin/jobs, jobs-per-day time series) sort

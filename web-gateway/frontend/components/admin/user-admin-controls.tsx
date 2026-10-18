@@ -8,6 +8,14 @@ import type { UserRole } from "@/lib/auth.types";
 
 export const ROLE_OPTIONS: UserRole[] = ["admin", "staff", "user", "guest"];
 
+/** How a role is named in the dropdown; the value sent stays the role itself. */
+export const ROLE_LABEL: Record<UserRole, string> = {
+  admin: "Admin",
+  staff: "Staff",
+  user: "User",
+  guest: "Guest",
+};
+
 /** What each role can do, as the end of a sentence. Matches the backend's
  *  role permissions (web-gateway/backend/app/core/roles.py). */
 const ROLE_CAN: Record<UserRole, string> = {
@@ -55,7 +63,7 @@ export function RoleControl({
       >
         {ROLE_OPTIONS.map((r) => (
           <option key={r} value={r}>
-            {r}
+            {ROLE_LABEL[r]}
           </option>
         ))}
       </select>

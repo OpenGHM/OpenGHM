@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { InlineError } from "@/components/admin/admin-states";
 import { AdminPage } from "@/components/admin/admin-page";
 import { CommunityOverview, type SectionFigures } from "@/components/admin/community/community-overview";
@@ -17,6 +18,8 @@ function figures(result: Loaded<{ state: string }[]>): SectionFigures {
     ? { total: result.data.length, drafts: result.data.filter((item) => item.state === "draft").length }
     : { total: null, drafts: null };
 }
+
+export const metadata: Metadata = { title: "Community | OpenGHM Admin" };
 
 export default async function CommunityAdminOverviewPage() {
   const [workshops, tutorials, publications, files] = await Promise.all([

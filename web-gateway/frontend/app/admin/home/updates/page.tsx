@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { InlineError } from "@/components/admin/admin-states";
 import { AdminPage } from "@/components/admin/admin-page";
 import { UpdatesManager } from "@/components/admin/home/updates-manager";
@@ -5,6 +6,8 @@ import { settle } from "@/lib/community/admin-load";
 import { fetchHomeSettings } from "@/lib/home/admin-actions";
 import { fetchHomeUpdates } from "@/lib/home/data";
 import type { FeedItem } from "@/lib/home/types";
+
+export const metadata: Metadata = { title: "Latest updates | OpenGHM Admin" };
 
 export default async function AdminLatestUpdatesPage() {
   const loaded = settle(await fetchHomeSettings(), "/admin/home/updates");
@@ -19,7 +22,7 @@ export default async function AdminLatestUpdatesPage() {
   return (
     <AdminPage
       title="Latest updates"
-      description="The “Latest Datasets & News” cards on the home page: how many, from where, and which ones stay on top."
+      description="The “Latest Snapshots & News” cards on the home page: how many, from where, and which ones stay on top."
     >
       {loaded.ok ? (
         // Keyed by the save, so what a save changed (a pin that went away) is read fresh from the backend.

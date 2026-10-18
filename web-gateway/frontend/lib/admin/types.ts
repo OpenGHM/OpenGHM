@@ -35,6 +35,24 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+/** Who an id belongs to (GET /admin/user-labels). */
+export interface UserLabel {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/** The users found for a batch of ids, by id. An id that is no user is absent. */
+export type UserLabels = Record<string, UserLabel>;
+
+/** What the audit log is narrowed to; every field optional. Days are YYYY-MM-DD, UTC. */
+export interface AuditFilters {
+  category?: AuditCategory;
+  actor_id?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
 export interface AuditLogListResponse {
   items: AuditLogEntry[];
   total_count: number;

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -12,8 +13,12 @@ import {
   fetchUsers,
   fetchTimeSeries,
   fetchJobStatusBreakdown,
+  fetchUserLabels,
 } from "@/lib/admin/actions";
+import { signInIfUnauthorized } from "@/lib/admin/load";
 import type { AuditLogListResponse, TimeSeriesResponse, StatusBreakdownResponse } from "@/lib/admin/types";
+
+export const metadata: Metadata = { title: "Overview | OpenGHM Admin" };
 
 const SHORTCUT_LINK =
   "block min-h-10 rounded-card focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -29,11 +34,16 @@ export default async function AdminOverviewPage() {
     await Promise.allSettled([
       fetchSiteJobStats(),
       fetchUsers(1),
-      fetchAuditLog(1),
+      fetchAuditLog(1, {}, 8),
       fetchTimeSeries("jobs", 30),
       fetchTimeSeries("registrations", 30),
       fetchJobStatusBreakdown(),
     ]);
+
+  // The backend no longer accepts the session: sign in again, not a page of dashes.
+  signInIfUnauthorized("/admin", [
+    statsResult, usersResult, auditResult, jobsSeriesResult, signupsSeriesResult, breakdownResult,
+  ]);
 
   // A figure that could not be loaded shows a dash, not a zero.
   const stats = statsResult.status === "fulfilled" ? statsResult.value : null;
@@ -42,6 +52,9 @@ export default async function AdminOverviewPage() {
   const jobsSeries = jobsSeriesResult.status === "fulfilled" ? jobsSeriesResult.value : EMPTY_SERIES;
   const signupsSeries = signupsSeriesResult.status === "fulfilled" ? signupsSeriesResult.value : EMPTY_SERIES;
   const breakdown = breakdownResult.status === "fulfilled" ? breakdownResult.value : EMPTY_BREAKDOWN;
+  const people = await fetchUserLabels(
+    auditLog.items.flatMap((e) => [e.actor_id, ...(e.target_id ? [e.target_id] : [])])
+  );
 
   return (
     <AdminPage title="Overview" description="Site-wide activity at a glance.">
@@ -128,7 +141,7 @@ export default async function AdminOverviewPage() {
           {auditResult.status === "rejected" ? (
             <InlineError title="Couldn't load recent activity." />
           ) : (
-            <AuditLogTable entries={auditLog.items.slice(0, 8)} showFilters={false} />
+            <AuditLogTable entries={auditLog.items} people={people} showFilters={false} />
           )}
         </CardContent>
       </Card>
