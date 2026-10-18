@@ -133,7 +133,7 @@ that file is the schema, in the sense that nothing else declares one.
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
 | `community_workshops`, `community_tutorials`, `community_publications` | the Community page's items; `slug` is unique on the first two ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
-| `community_news` | news posts for the home page's "Latest Datasets & News" and `/news`; `slug` is unique |
+| `community_news` | news posts for the home page's "Latest Snapshots & News" and `/news`; `slug` is unique |
 | `site_settings` | one document, `_id: "home_updates"`: that section's title, label, card count, sources and pins |
 | `community_settings` | one document, `_id: "community"`: the page's hero and groups text |
 | GridFS bucket `community_files` | files an admin uploads for the Community page: collections `community_files.files` and `community_files.chunks` |
@@ -510,7 +510,7 @@ Every write is an audit event in the `content` category, `community.<kind>.creat
 target. A bulk action writes one event per item, named as the single-item
 route names it (a state change is `.update`).
 
-### The home page's "Latest Datasets & News"
+### The home page's "Latest Snapshots & News"
 
 The cards on `/` are a feed over three sources, set up by admins in
 `/admin/home/updates` and `/admin/home/news` (ADR 0034). The routes are in
@@ -606,8 +606,10 @@ into one dialog with a tab for each (below, "Reading output"). Then
 fetch`, which gets those three and never the output. `metadata.json` and
 `SHA256SUMS` are not offered by themselves; the fetch reads them and the files
 page lists them. The section streams in under a `Suspense`, since the output
-listing can take seconds the first time. A model input's section is the fetch
-command, the files page and the S3 address.
+listing can take seconds the first time. When the links cannot be had the page
+still renders and the section says "Downloads are unavailable right now" with a
+Try again button (a 404 leaves the section out). A model input's section is the
+fetch command, the files page and the S3 address.
 
 The section's **Browse** links open `/repository/<id>/files` (or
 `/repository/model-inputs/<id>/files`), which walks the tree a folder at a
@@ -959,7 +961,7 @@ after a failure or a cancel. That button and "Duplicate" are the one copy action
 summary does not. A completed job's results (scratch path, file counts, when
 Anvil may delete them) sit in the summary, a failed job's cause and log excerpt.
 The facts of the simulation are one "Run details" card
-(`run-details-card.tsx`), styled as the Data Repository's "Dataset Info": the snapshot it is based on
+(`run-details-card.tsx`), styled as the Data Repository's "Snapshot info": the snapshot it is based on
 (a link), the run period, the output variables and output, the cores and
 walltime the job asked for (its own choice, else the base snapshot's
 `recommendedCompute` worked out as the submit does it, `effectiveCompute`,
@@ -1220,7 +1222,10 @@ through, `/api/repository/datasets/{id}/output` and `…/output/subset` (only `v
 `resolution`, `start`, `end` and `bbox` are passed on).
 
 - **Download a subset.** The inventory, read when the tab first shows, lists the variables
-  (searchable; the metadata's `fullName` stands in for a missing long name), the time
+  (searchable; described by the metadata's `fullName` as the page's table shows it, the
+  file's own long name where the metadata has none, and counted as "in the output files":
+  more than the table's "configured" count, since a variable written per mask, such as
+  `dischMsk`, is one per mask in the files, `dischMsk_1`, `dischMsk_4`), the time
   steps each has and their years. The period is picked as a run of years and, for monthly
   and daily data, of months, sent as `YYYY-MM` (the toolkit reads an end month to its last
   day). The size shown is the most the file can hold, steps x rows x cols x 4 bytes, since

@@ -12,7 +12,7 @@ export const TAG_CLASS: Record<NewsTag, string> = {
 /** The tags of a news post, in the order the editor lists them. */
 export const NEWS_TAGS: { value: NewsTag; label: string }[] = [
   { value: "announcement", label: "Announcement" },
-  { value: "dataset", label: "New Dataset" },
+  { value: "dataset", label: "New snapshot" },
   { value: "event", label: "Community Event" },
   { value: "other", label: "News" },
 ];

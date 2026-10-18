@@ -323,6 +323,9 @@ export function SnapshotDownload({
             All three at once with the CLI
             <ComingSoonChip title={TOOLKIT_NOT_RELEASED} />
           </span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            {TOOLKIT_NOT_RELEASED} The command is here for when it is; until then, use the downloads above.
+          </span>
           <Command command={fetchCommand} tone="light" />
           <span className="text-xs leading-relaxed text-muted-foreground">
             Every file is checked as it lands. Then <code className="font-mono text-[11.5px] text-foreground/90">openghm sim run</code>{" "}
@@ -362,6 +365,9 @@ export function ModelInputDownload({
           <span className="flex items-center gap-2 text-[12.5px] font-semibold text-hero-text">
             Download with the CLI
             <ComingSoonChip title={TOOLKIT_NOT_RELEASED} tone="dark" />
+          </span>
+          <span className="text-xs text-hero-faint">
+            {TOOLKIT_NOT_RELEASED} The command is here for when it is; until then, browse the files.
           </span>
           <Command command={fetchCommand} tone="dark" />
           <span className="text-xs text-hero-faint">Every file is checked against SHA256SUMS as it lands.</span>

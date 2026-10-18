@@ -7,7 +7,7 @@ import { SectionEyebrow, SectionTitle } from "./section-parts";
 import { UpdateCard } from "./update-card";
 
 /**
- * "Latest Datasets & News": the cards an admin configured in the console
+ * "Latest Snapshots & News": the cards an admin configured in the console
  * (`/admin/home/updates`): pinned items first, then the newest posts,
  * workshops and datasets. Nothing here is hard-coded, so when there is
  * nothing to show, or the backend does not answer, the section is left out

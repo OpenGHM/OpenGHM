@@ -17,8 +17,8 @@ export function CtaSection() {
           Ready to Accelerate Your Research?
         </SectionTitle>
         <p className="text-[17px] leading-[1.6] text-pretty text-hero-foreground-muted">
-          Join hundreds of hydrologists using OpenGHM to process data faster and
-          simulate smarter. Get started for free today.
+          Find published snapshots and model inputs, and run hydrologic models on
+          NSF Anvil from your browser. Get started today.
         </p>
       </div>
       <div className="relative flex flex-wrap gap-2.5">

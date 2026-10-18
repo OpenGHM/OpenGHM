@@ -17,12 +17,12 @@ const FEATURES: Feature[] = [
   {
     title: "Data Repository",
     description:
-      "Access vast repository of GHM-ready input data (ZARR format) hosted in high-availability cloud storage.",
+      "Browse and download GHM-ready model inputs (NetCDF format) and published snapshots, stored on NSF Anvil object storage.",
   },
   {
     title: "Community Model",
     description:
-      "Run containerized, reproducible state-of-the-art hydrologic models instantly.",
+      "Run containerized, reproducible hydrologic models as batch jobs on NSF Anvil.",
   },
   {
     title: "The Toolkit",

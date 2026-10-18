@@ -23,4 +23,11 @@ describe("ExecutionCard", () => {
 
     expect(screen.getByText("WBM Code").parentElement!.textContent).not.toContain(dataset.uses.container.version);
   });
+
+  it("says the cores and walltime are how the published run was executed", () => {
+    render(<ExecutionCard uses={dataset.uses} runtime={dataset.runtime} />);
+
+    expect(screen.getByRole("heading", { name: "How this run was executed" })).toBeTruthy();
+    expect(screen.getByText("Cores")).toBeTruthy();
+  });
 });

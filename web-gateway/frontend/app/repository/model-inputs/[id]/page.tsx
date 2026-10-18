@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { fetchModelInputById, fetchModelInputLinks } from "@/lib/repository/actions";
+import { fetchModelInputLinks } from "@/lib/repository/actions";
+import { getModelInput } from "@/lib/repository/detail-data";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
@@ -17,8 +19,15 @@ import {
   SpatialCoverageSection,
 } from "@/components/repository/detail-parts";
 import { ModelInputDownload } from "@/components/repository/download-card";
+import { DownloadUnavailable } from "@/components/repository/download-unavailable";
 import { ModelInputDatasetsTable } from "@/components/repository/model-input-datasets-table";
 import { formatLongDate } from "@/lib/workspace/time";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const modelInput = await getModelInput(id);
+  return { title: modelInput ? `${modelInput.about.name} | OpenGHM` : "Model input not found | OpenGHM" };
+}
 
 export default async function ModelInputDetailPage({
   params,
@@ -26,7 +35,12 @@ export default async function ModelInputDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [modelInput, links] = await Promise.all([fetchModelInputById(id), fetchModelInputLinks(id)]);
+  // The links are fetched beside the item and may fail without it: `undefined`
+  // is "could not be had" (the section says so), `null` is a 404 ("no links").
+  const [modelInput, links] = await Promise.all([
+    getModelInput(id),
+    fetchModelInputLinks(id).catch(() => undefined),
+  ]);
   if (!modelInput) notFound();
 
   const { about, coverage, datasets, networks } = modelInput;
@@ -53,7 +67,7 @@ export default async function ModelInputDetailPage({
           <Button variant="on-dark" size="xl" asChild>
             <Link href="/repository">
               <ArrowLeft aria-hidden="true" />
-              Back to Repository
+              Back to Data Repository
             </Link>
           </Button>
         }
@@ -100,13 +114,17 @@ export default async function ModelInputDetailPage({
 
             {/* Citation — the catalogue card's Cite link lands here */}
             <div id="cite" className="scroll-mt-24">
-              <CitationCard dataset={modelInput} />
+              <CitationCard dataset={modelInput} path={`/repository/model-inputs/${id}`} />
             </div>
 
             {/* Download — links from the backend, bytes from Anvil S3 */}
-            {links && (
+            {links !== null && (
               <div id="download" className="scroll-mt-24">
-                <ModelInputDownload id={id} treeUrl={links.treeUrl} fetchCommand={links.fetchCommand} />
+                {links ? (
+                  <ModelInputDownload id={id} treeUrl={links.treeUrl} fetchCommand={links.fetchCommand} />
+                ) : (
+                  <DownloadUnavailable />
+                )}
               </div>
             )}
           </div>

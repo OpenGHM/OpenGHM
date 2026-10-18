@@ -82,6 +82,7 @@ describe("SnapshotDownload", () => {
     // The toolkit is not released: its command is marked, not recommended.
     expect(screen.getByText("All three at once with the CLI").textContent).toContain("Coming soon");
     expect(screen.queryByText("Recommended")).toBeNull();
+    expect(screen.getByText(/The openghm toolkit is not released yet\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Copy command" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("openghm snapshot fetch abc");
     expect(await screen.findByText("Copied")).toBeTruthy();
@@ -99,6 +100,7 @@ describe("ModelInputDownload", () => {
     );
     expect(screen.getByText("openghm model-input fetch mi")).toBeTruthy();
     expect(screen.getByText("Download with the CLI").textContent).toContain("Coming soon");
+    expect(screen.getByText(/The openghm toolkit is not released yet\./)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Browse files/ }).getAttribute("href")).toBe("/repository/model-inputs/mi/files");
     fireEvent.click(screen.getByRole("button", { name: "Copy S3 address" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://s3.example/openghm/model-inputs/mi/");

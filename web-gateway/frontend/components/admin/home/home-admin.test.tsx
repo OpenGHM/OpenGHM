@@ -53,7 +53,7 @@ const pin = (id: string, title: string, over: Partial<PinStatus> = {}): PinStatu
   kind: "news", id, title, available: true, reason: null, item: feedItem({ id, title, pinned: true }), ...over,
 });
 const settings = (over: Partial<HomeUpdatesAdmin> = {}): HomeUpdatesAdmin => ({
-  title: "Latest Datasets & News", eyebrow: "What's New", count: 3,
+  title: "Latest Snapshots & News", eyebrow: "What's New", count: 3,
   sources: { news: true, workshops: true, datasets: true },
   pins: [pin("a", "Alpha"), pin("b", "Beta"), pin("c", "Gamma")],
   updated_at: null, updated_by: null, ...over,
@@ -61,7 +61,7 @@ const settings = (over: Partial<HomeUpdatesAdmin> = {}): HomeUpdatesAdmin => ({
 const candidates = [
   feedItem({ id: "x", title: "Candidate X" }),
   feedItem({ id: "a", title: "Alpha", pinned: true }),
-  feedItem({ kind: "dataset", id: "ds", title: "Dataset D", tag: "dataset", tag_label: "New Dataset" }),
+  feedItem({ kind: "dataset", id: "ds", title: "Dataset D", tag: "dataset", tag_label: "New snapshot" }),
 ];
 
 describe("the Latest updates page", () => {

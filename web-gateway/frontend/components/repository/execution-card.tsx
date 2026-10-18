@@ -41,14 +41,17 @@ export function ExecutionCard({ uses, runtime }: Pick<Dataset, "uses" | "runtime
           </div>
         ))}
       </dl>
-      <dl className="grid grid-cols-2 gap-2">
-        {run.map((item) => (
-          <div key={item.label} className="flex min-w-0 flex-col gap-[3px] rounded-xl bg-white/[0.06] p-3">
-            <dt className="text-[11.5px] text-hero-eyebrow">{item.label}</dt>
-            <dd className="font-mono text-[15px] break-words">{item.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xs text-hero-eyebrow">How this run was executed</h3>
+        <dl className="grid grid-cols-2 gap-2">
+          {run.map((item) => (
+            <div key={item.label} className="flex min-w-0 flex-col gap-[3px] rounded-xl bg-white/[0.06] p-3">
+              <dt className="text-[11.5px] text-hero-eyebrow">{item.label}</dt>
+              <dd className="font-mono text-[15px] break-words">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </DetailSection>
   );
 }

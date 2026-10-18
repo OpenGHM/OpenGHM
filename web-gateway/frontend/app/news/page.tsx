@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "New datasets, announcements and community events from the OpenGHM project.",
 };
 
-/** Everything the home page's "Latest Datasets & News" draws on, newest first. Open to anyone. */
+/** Everything the home page's "Latest Snapshots & News" draws on, newest first. Open to anyone. */
 export default async function NewsPage() {
   let items: FeedItem[] = [];
   let failed = false;

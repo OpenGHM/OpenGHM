@@ -1,4 +1,5 @@
 import { DetailSection } from "@/components/repository/detail-section";
+import { DownloadUnavailable } from "@/components/repository/download-unavailable";
 import { SnapshotDownload } from "@/components/repository/download-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchDatasetLinks } from "@/lib/repository/actions";
@@ -8,7 +9,7 @@ import type { Dataset } from "@/lib/repository/types";
  * A snapshot's Download section, fetched apart from the rest of the page:
  * its links route lists the output from the bucket, which can take seconds
  * the first time, so the page streams it in under a `Suspense`. A route
- * that fails leaves the section out rather than the page.
+ * that fails leaves the page standing and the section says it is unavailable.
  */
 export async function SnapshotDownloadSection({
   dataset,
@@ -17,8 +18,10 @@ export async function SnapshotDownloadSection({
   dataset: Dataset;
   modelInputName: string;
 }) {
-  const links = await fetchDatasetLinks(dataset.id).catch(() => null);
-  if (!links) return null;
+  // A 404 is "no links" (the section is left out); a failure is "unavailable", said where the section would be.
+  const links = await fetchDatasetLinks(dataset.id).catch(() => undefined);
+  if (links === undefined) return <DownloadUnavailable />;
+  if (links === null) return null;
   const { container } = dataset.uses;
   return (
     <SnapshotDownload

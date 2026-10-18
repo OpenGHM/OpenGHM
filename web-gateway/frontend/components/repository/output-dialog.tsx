@@ -271,10 +271,19 @@ function SubsetForm({
     () =>
       inventory.variables.map((v, i) => ({
         ...v,
-        description: v.longName || fullNames.get(v.name) || "",
+        // The metadata's name for it, as the page's table shows it, else the file's own.
+        description: fullNames.get(v.name) || v.longName || "",
         swatch: SWATCHES[(order.get(v.name) ?? i) % SWATCHES.length],
       })),
     [inventory.variables, order, fullNames]
+  );
+
+  // A variable the metadata declares once can be written as one per mask
+  // ("dischMsk" as dischMsk_1, dischMsk_4, ...): the files hold more variables
+  // than the metadata lists.
+  const perMask = useMemo(
+    () => options.some((v) => !fullNames.has(v.name) && fullNames.has(v.name.replace(/_\d+$/, ""))),
+    [options, fullNames]
   );
 
   const [variableName, setVariableName] = useState(options[0].name);
@@ -413,7 +422,7 @@ function SubsetForm({
             <span id={`${id}-variable`} className="text-sm font-semibold">
               Variable
             </span>
-            <span className="font-mono text-xs text-muted-foreground">{options.length} in this run</span>
+            <span className="font-mono text-xs text-muted-foreground">{options.length} in the output files</span>
           </div>
           <input
             type="search"
@@ -461,6 +470,12 @@ function SubsetForm({
             })}
             {shown.length === 0 && <div className="p-3.5 text-[13px] text-muted-foreground">No variable matches.</div>}
           </div>
+          {perMask && (
+            <span className="text-xs leading-normal text-muted-foreground">
+              Variables written separately per mask end in the mask&apos;s number, such as dischMsk_1; the page lists
+              the names the run was set up to write.
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5">
@@ -647,6 +662,9 @@ function SubsetForm({
             </span>
             <CopyButton text={command} label="subset command" tone="quiet" />
           </div>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            {TOOLKIT_NOT_RELEASED} The command is here for when it is; use the download button above until then.
+          </span>
           <code className="block rounded-[10px] border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed break-all text-foreground/90">
             <span aria-hidden="true" className="text-primary">
               ${" "}

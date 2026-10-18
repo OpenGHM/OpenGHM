@@ -1,4 +1,4 @@
-"""The home page's "Latest Datasets & News" section (ADR 0034): the news posts
+"""The home page's "Latest Snapshots & News" section (ADR 0034): the news posts
 an admin writes, the feed the home page shows (what is in it, in what order,
 what a pin does), who may change it, and what is audited.
 
@@ -99,7 +99,7 @@ def dataset(mongo, ident: str, registered: str, **over) -> str:
 
 def configure(http, **over) -> dict:
     body = {
-        "title": "Latest Datasets & News", "eyebrow": "What's New", "count": 3,
+        "title": "Latest Snapshots & News", "eyebrow": "What's New", "count": 3,
         "sources": {"news": True, "workshops": True, "datasets": True}, "pins": [],
     }
     r = http.put(f"{ADMIN_HOME}/settings", json={**body, **over}, headers=ADMIN)
@@ -131,7 +131,7 @@ def test_the_feed_is_public_and_empty_gives_the_defaults(http):
     assert r.status_code == 200
     assert r.json() == {
         "settings": {
-            "title": "Latest Datasets & News", "eyebrow": "What's New", "count": 3,
+            "title": "Latest Snapshots & News", "eyebrow": "What's New", "count": 3,
             "sources": {"news": True, "workshops": True, "datasets": True},
         },
         "items": [],
@@ -159,7 +159,7 @@ def test_each_source_has_its_own_date_tag_link_and_picture(http, mongo):
     )
     assert w["date"] == "2026-10-07" and w["image"]["url"] == "https://example.org/w.png"
     assert (d["kind"], d["tag"], d["tag_label"], d["href"]) == (
-        "dataset", "dataset", "New Dataset", "/repository/ds-1",
+        "dataset", "dataset", "New snapshot", "/repository/ds-1",
     )
     assert (d["title"], d["summary"], d["date"], d["image"]) == (
         "Dataset ds-1", "Describes it.", "2026-10-06", None,
@@ -377,7 +377,7 @@ def test_the_settings_are_saved_and_read_back(http, mongo):
 def test_the_settings_default_before_anyone_saves_them(http):
     r = http.get(f"{ADMIN_HOME}/settings", headers=ADMIN).json()
     assert (r["title"], r["eyebrow"], r["count"], r["pins"], r["updated_at"]) == (
-        "Latest Datasets & News", "What's New", 3, [], None,
+        "Latest Snapshots & News", "What's New", 3, [], None,
     )
 
 

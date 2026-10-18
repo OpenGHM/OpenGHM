@@ -1,4 +1,4 @@
-"""The home page's "Latest Datasets & News" feed (ADR 0034), as the API takes
+"""The home page's "Latest Snapshots & News" feed (ADR 0034), as the API takes
 and sends it.
 
 `HomeUpdatesSettingsInput` is what an admin writes (it carries the checks);
@@ -18,7 +18,7 @@ FeedKind = Literal["news", "workshop", "dataset"]
 FeedTag = Literal["announcement", "dataset", "event", "other"]
 PinReason = Literal["missing", "unpublished", "private"]
 
-DEFAULT_TITLE = "Latest Datasets & News"
+DEFAULT_TITLE = "Latest Snapshots & News"
 DEFAULT_EYEBROW = "What's New"
 DEFAULT_COUNT = 3
 COUNT_MIN = 1

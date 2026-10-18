@@ -1,4 +1,4 @@
-"""The home page's "Latest Datasets & News" feed (ADR 0034).
+"""The home page's "Latest Snapshots & News" feed (ADR 0034).
 
 Three sources: published news posts, published workshops and the datasets the
 catalogue shows. Each becomes a `FeedItem`; the home page takes the pinned
@@ -47,7 +47,7 @@ CANDIDATE_POOL = 200
 
 NEWS_TAG_LABELS = {
     "announcement": "Announcement",
-    "dataset": "New Dataset",
+    "dataset": "New snapshot",
     "event": "Community Event",
     "other": "News",
 }

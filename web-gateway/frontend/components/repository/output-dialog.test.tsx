@@ -47,14 +47,14 @@ afterEach(() => {
   fetchMock.mockReset();
 });
 
-function open(tab: OutputTab = "subset") {
+function open(tab: OutputTab = "subset", variables = [{ name: "cellArea", fullName: "Cell area" }]) {
   const onTabChange = vi.fn();
   render(
     <OutputDialog
       snapshotId={id()}
       treeUrl="https://s3.example/openghm/snapshots/abc/"
       output={OUTPUT}
-      variables={[{ name: "cellArea", fullName: "Cell area" }]}
+      variables={variables}
       open
       onOpenChange={() => {}}
       tab={tab}
@@ -69,13 +69,39 @@ describe("the subset tab", () => {
     open();
     const list = await screen.findByRole("radiogroup", { name: "Variable" });
     expect(fetchMock).toHaveBeenCalledWith(`/api/repository/datasets/${id()}/output`);
-    expect(screen.getByText("2 in this run")).toBeTruthy();
+    expect(screen.getByText("2 in the output files")).toBeTruthy();
     expect(within(list).getByRole("radio", { name: "runoff, Runoff, mm/day", checked: true })).toBeTruthy();
     expect(within(list).getByRole("radio", { name: "cellArea, Cell area" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Search variables"), { target: { value: "cell" } });
     expect(within(list).getAllByRole("radio")).toHaveLength(1);
     fireEvent.change(screen.getByLabelText("Search variables"), { target: { value: "zzz" } });
     expect(within(list).getByText("No variable matches.")).toBeTruthy();
+  });
+
+  it("describes a variable by the metadata's full name, as the page's table does, before the file's own long name", async () => {
+    open("subset", [
+      { name: "runoff", fullName: "Runoff (p)" },
+      { name: "cellArea", fullName: "Cell area" },
+    ]);
+    const list = await screen.findByRole("radiogroup", { name: "Variable" });
+    expect(within(list).getByRole("radio", { name: "runoff, Runoff (p), mm/day" })).toBeTruthy();
+    // No per-mask variables here, so no note about them.
+    expect(screen.queryByText(/written separately per mask/)).toBeNull();
+  });
+
+  it("notes that variables written per mask are one in the files and one name in the metadata", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({
+        ...INVENTORY,
+        variables: [
+          ...INVENTORY.variables,
+          { name: "dischMsk_1", longName: "Discharge in mask 1", units: "m3/s", resolutions: { daily: { years: [2000] } } },
+        ],
+      })
+    );
+    open("subset", [{ name: "dischMsk", fullName: "Discharge in mask" }]);
+    expect(await screen.findByText(/written separately per mask/)).toBeTruthy();
+    expect(screen.getByText("3 in the output files")).toBeTruthy();
   });
 
   it("offers the time steps a variable has, and months for daily data", async () => {

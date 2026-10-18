@@ -20,11 +20,11 @@ const admin: HomeUpdatesAdmin = {
 describe("the feed's defaults", () => {
   it("fills what the backend left out and keeps what it sent", () => {
     expect(withDefaults(null)).toEqual({
-      settings: { title: "Latest Datasets & News", eyebrow: "What's New", count: 3, sources: { news: true, workshops: true, datasets: true } },
+      settings: { title: "Latest Snapshots & News", eyebrow: "What's New", count: 3, sources: { news: true, workshops: true, datasets: true } },
       items: [],
     });
     const got = withDefaults({ settings: { title: "", eyebrow: "Hi", count: 6 } as never, items: [feedItem()] });
-    expect(got.settings.title).toBe("Latest Datasets & News");
+    expect(got.settings.title).toBe("Latest Snapshots & News");
     expect([got.settings.eyebrow, got.settings.count, got.items.length]).toEqual(["Hi", 6, 1]);
   });
 });

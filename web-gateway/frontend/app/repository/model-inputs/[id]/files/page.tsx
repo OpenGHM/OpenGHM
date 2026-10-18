@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { fetchModelInputById } from "@/lib/repository/actions";
+import { getModelInput } from "@/lib/repository/detail-data";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
@@ -10,13 +11,19 @@ import { DetailHero } from "@/components/repository/detail-hero";
 import { TreeBrowser } from "@/components/repository/tree-browser";
 import { ClampedName } from "@/components/common/clamped-name";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const modelInput = await getModelInput(id);
+  return { title: modelInput ? `Files of ${modelInput.about.name} | OpenGHM` : "Model input not found | OpenGHM" };
+}
+
 export default async function ModelInputFilesPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const modelInput = await fetchModelInputById(id);
+  const modelInput = await getModelInput(id);
   if (!modelInput) notFound();
   const { name } = modelInput.about;
 

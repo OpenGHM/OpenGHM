@@ -237,8 +237,8 @@ describe("card text", () => {
     expect(periodLabel(s)).toBe("2000–2009");
     expect(resolutionLabels(s)).toEqual(["5 arc-min"]);
     expect(resolutionSummary(s)).toBe("5 arc-min");
-    expect(contentsLabel(s)).toBe("WBM 22.1.1");
-    expect(contentsLine(s)).toBe("WBM 22.1.1 · GPL-3.0-only");
+    expect(contentsLabel(s)).toBe("WBM code 22.1.1");
+    expect(contentsLine(s)).toBe("WBM code 22.1.1 · GPL-3.0-only");
     expect(coverageLine(s)).toBe("2000–2009 · 5 arc-min");
     expect(creatorLabel(s)).toEqual({ first: "Ada Hydro", more: 1 });
     expect(cardKeywords(s)).toEqual({

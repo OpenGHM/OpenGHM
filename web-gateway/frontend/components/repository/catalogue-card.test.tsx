@@ -62,7 +62,7 @@ describe("CatalogueCard for a model snapshot", () => {
     const badge = screen.getByText("Model Snapshot");
     expect(badge.className).toContain("rounded-full");
     expect(badge.className).toContain("bg-secondary");
-    const line = screen.getByText("WBM 22.1.1 · GPL-3.0-only");
+    const line = screen.getByText("WBM code 22.1.1 · GPL-3.0-only");
     expect(line.className).toContain("font-mono");
     expect(screen.getByText("Publication")).toBeTruthy();
     expect(screen.getByText("Climate forcing")).toBeTruthy();
@@ -345,7 +345,7 @@ describe("CatalogueCard layout", () => {
     renderCard(snapshotItem());
     const published = screen.getByText(/^Published/);
     expect(published.className).toContain("text-muted-foreground");
-    expect(published.parentElement).toBe(screen.getByText("WBM 22.1.1 · GPL-3.0-only").parentElement);
+    expect(published.parentElement).toBe(screen.getByText("WBM code 22.1.1 · GPL-3.0-only").parentElement);
   });
 
   it("lets long text wrap instead of overflowing", () => {
@@ -414,7 +414,7 @@ describe("CatalogueCard in the grid view", () => {
   it("has exactly one link, the title, and no action buttons, keywords or Cite, only a decorative View", () => {
     renderCard(snapshotItem(), [], "grid");
     onlyLink("Global Storage Run", "/repository/snap-1");
-    expect(screen.getByText("View →").getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getByText("View details →").getAttribute("aria-hidden")).toBe("true");
     expect(screen.queryByText(/Download|Cite/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByText("Publication")).toBeNull();

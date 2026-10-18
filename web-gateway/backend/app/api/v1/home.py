@@ -1,4 +1,4 @@
-"""The home page's "Latest Datasets & News" section (ADR 0034).
+"""The home page's "Latest Snapshots & News" section (ADR 0034).
 
 Two routers. `router` (`/home`) is anonymous: the feed the home page shows and
 the longer list behind "View all updates". `admin_router` (`/admin/home`) needs

@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { fetchDatasetById, fetchModelInputById } from "@/lib/repository/actions";
+import { getDataset, getModelInput } from "@/lib/repository/detail-data";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
@@ -26,13 +27,19 @@ import { ExecutionCard } from "@/components/repository/execution-card";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
 import { newStepHref } from "@/lib/workspace/draft-wizard";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const dataset = await getDataset(id);
+  return { title: dataset ? `${dataset.about.name} | OpenGHM` : "Snapshot not found | OpenGHM" };
+}
+
 export default async function DatasetDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const dataset = await fetchDatasetById(id);
+  const dataset = await getDataset(id);
   if (!dataset) notFound();
 
   const { about, simulation, uses, runtime } = dataset;
@@ -40,7 +47,7 @@ export default async function DatasetDetailPage({
   // link to its page when the catalogue holds it; a lookup failure only
   // costs the name, never the page.
   const modelInputId = uses.modelInput.id;
-  const modelInput = await fetchModelInputById(modelInputId).catch(() => null);
+  const modelInput = await getModelInput(modelInputId).catch(() => null);
   const temporalLabel = `${simulation.temporalCoverage.start} – ${simulation.temporalCoverage.end}`;
   const resolutionLabel = `${simulation.resolution.value} ${simulation.resolution.unit}`;
 
@@ -64,7 +71,7 @@ export default async function DatasetDetailPage({
             <Button variant="on-dark" size="xl" asChild>
               <Link href="/repository">
                 <ArrowLeft aria-hidden="true" />
-                Back to Repository
+                Back to Data Repository
               </Link>
             </Button>
             <WhenWorkspace
@@ -76,7 +83,7 @@ export default async function DatasetDetailPage({
                   className="h-auto flex-col items-start justify-center gap-px py-2 disabled:opacity-100"
                 >
                   <span className="flex items-center gap-2 text-[11.5px] font-normal text-white/60">
-                    New snapshot from this model snapshot
+                    Start a new snapshot draft from it
                     <ComingSoonChip tone="dark" />
                   </span>
                   <span className="opacity-60">Run this snapshot</span>
@@ -90,7 +97,7 @@ export default async function DatasetDetailPage({
               >
                 <Link href={newStepHref(dataset.id, "run")}>
                   <span className="text-[11.5px] font-normal text-white/80">
-                    New snapshot from this model snapshot
+                    Start a new snapshot draft from it
                   </span>
                   Run this snapshot →
                 </Link>
@@ -119,11 +126,14 @@ export default async function DatasetDetailPage({
                 title="Output Variables"
                 aside={
                   <span className="font-mono text-xs text-muted-foreground">
-                    {simulation.outputVariables.length} variable
-                    {simulation.outputVariables.length !== 1 ? "s" : ""}
+                    {simulation.outputVariables.length} configured
                   </span>
                 }
               >
+                <p className="text-[13.5px] leading-relaxed text-pretty text-muted-foreground">
+                  The variables this run was configured to write. The output files can hold more: a variable written
+                  per mask, such as dischMsk, appears there once for each mask (dischMsk_1, dischMsk_4, …).
+                </p>
                 <OutputVariablesTable variables={simulation.outputVariables} />
               </DetailSection>
             )}
@@ -138,7 +148,7 @@ export default async function DatasetDetailPage({
 
             {/* Citation — the catalogue card's Cite link lands here */}
             <div id="cite" className="scroll-mt-24">
-              <CitationCard dataset={dataset} />
+              <CitationCard dataset={dataset} path={`/repository/${id}`} />
             </div>
 
             {/* Download — links from the backend, bytes from Anvil S3; streamed in */}
@@ -155,17 +165,9 @@ export default async function DatasetDetailPage({
           {/* Right column */}
           <aside className="flex min-w-0 flex-col gap-4">
             <InfoSection
-              title="Dataset Info"
+              title="Snapshot info"
               rows={[
-                {
-                  label: "WBM Code",
-                  value: uses.modelCode.version,
-                  title: `Tree hash ${uses.modelCode.treeHash}`,
-                  mono: true,
-                },
                 { label: "License", value: about.license, href: dataset.licenseUrl },
-                { label: "Spatial Resolution", value: resolutionLabel, mono: true },
-                { label: "Temporal Coverage", value: temporalLabel, mono: true },
                 {
                   label: "Generated At",
                   value: new Date(dataset.generatedAt).toLocaleDateString("en-US", {
@@ -181,7 +183,7 @@ export default async function DatasetDetailPage({
                   clamp: 3,
                 },
                 {
-                  label: "Recommended Compute",
+                  label: "Suggested for a new run",
                   value: `${simulation.recommendedCompute.cores} cores · ${simulation.recommendedCompute.walltime}`,
                   mono: true,
                 },

@@ -9,7 +9,7 @@ import { FALLBACK_IMAGE, TAG_CLASS } from "@/lib/home/format";
 import type { FeedItem } from "@/lib/home/types";
 
 /**
- * One card of the home page's "Latest Datasets & News", and of `/news`: a
+ * One card of the home page's "Latest Snapshots & News", and of `/news`: a
  * picture, the coloured tag, the title, the summary and, when it leads
  * anywhere, a link. A dataset's card draws its coverage on the world map; any other card with no picture of its own shows the kind's. The
  * link text is stretched over the whole card; an address that leaves the site

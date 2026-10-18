@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Dataset } from "@/lib/repository/types";
 
 const { fetchDatasetLinks } = vi.hoisted(() => ({ fetchDatasetLinks: vi.fn() }));
 vi.mock("@/lib/repository/actions", () => ({ fetchDatasetLinks }));
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 import { SnapshotDownloadSection } from "./download-section";
 
@@ -38,9 +40,15 @@ describe("SnapshotDownloadSection", () => {
     expect(screen.getByRole("link", { name: /Open model input/ }).getAttribute("href")).toBe("/repository/model-inputs/mi");
   });
 
-  it("is left out, without failing the page, when the links cannot be had", async () => {
+  it("says downloads are unavailable, without failing the page, when the links cannot be had", async () => {
     fetchDatasetLinks.mockRejectedValue(new Error("connect ECONNREFUSED"));
-    expect(await SnapshotDownloadSection({ dataset, modelInputName: "Inputs" })).toBeNull();
+    render(await SnapshotDownloadSection({ dataset, modelInputName: "Inputs" }));
+    expect(screen.getByText("Downloads are unavailable right now")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("is left out when the snapshot has no links (a 404)", async () => {
     fetchDatasetLinks.mockResolvedValue(null);
     expect(await SnapshotDownloadSection({ dataset, modelInputName: "Inputs" })).toBeNull();
   });

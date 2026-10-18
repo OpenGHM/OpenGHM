@@ -223,7 +223,7 @@ export function CatalogueCard({
           <TitleLink href={href} name={about.name} className="text-[15.5px] tracking-[-0.015em]" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
           <div className="mt-auto flex items-center gap-1.5 pt-2">
-            <ViewButton className="px-3.5 py-2">View →</ViewButton>
+            <ViewButton className="px-3.5 py-2">View details →</ViewButton>
             <span className="ml-auto text-xs text-muted-foreground">
               <TimeStamp value={about.datePublished} format="date" />
             </span>

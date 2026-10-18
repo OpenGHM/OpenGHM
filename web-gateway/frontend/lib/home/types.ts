@@ -1,5 +1,5 @@
 /**
- * The home page's "Latest Datasets & News" section, as the backend's `/home`
+ * The home page's "Latest Snapshots & News" section, as the backend's `/home`
  * and `/admin/home` routes send it (web-gateway/backend/app/api/v1/home.py).
  */
 import type { NewsTag } from "@/lib/community/types";
