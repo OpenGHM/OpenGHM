@@ -24,7 +24,7 @@ from slurmly.exceptions import InvalidJobSpec, SbatchError, SSHTransportError
 from slurmly.models import JobInfo
 
 from app.core.config import settings
-from app.models.job import JobDB
+from app.models.job import MAX_JOBS_PER_SIMULATION, JobDB
 from app.services import slurm
 
 from conftest import REMOTE_BASE
@@ -363,26 +363,25 @@ def test_a_toolkit_that_cannot_say_is_not_continued_and_not_asked_again(db, anvi
 
 
 def test_the_job_limit_stops_a_run_that_cannot_finish_without_asking_the_toolkit(db, anvil, submits):
-    running(db, previous_jobs=[prior(n, f"slurmly-0a0a0a0{n}", f"1000{n}") for n in range(1, settings.JOB_MAX_JOBS_PER_SIMULATION)])
+    running(db, previous_jobs=[prior(n, f"slurmly-0a0a0a0{n}", f"1000{n}") for n in range(1, MAX_JOBS_PER_SIMULATION)])
     anvil.found["12345"] = info()
     sweep()
     stored = db.jobs.docs["job-1"]
     assert stored["status"] == "FAILED"
     assert stored["failure"]["cause"] == "timeout" and stored["failure"]["detail"] == "job_limit"
-    assert f"ran as {settings.JOB_MAX_JOBS_PER_SIMULATION} jobs" in stored["status_reason"]
-    assert "most one simulation may use" in stored["status_reason"]
+    assert stored["status_reason"].startswith("The simulation reached the 2-week limit")
     assert state_calls(anvil) == [] and submits.calls == 0
-    assert len(stored["previous_jobs"]) == settings.JOB_MAX_JOBS_PER_SIMULATION - 1
+    assert len(stored["previous_jobs"]) == MAX_JOBS_PER_SIMULATION - 1
 
 
 def test_the_job_before_the_limit_is_still_continued(db, anvil, submits):
-    running(db, previous_jobs=[prior(n, f"slurmly-0a0a0a0{n}", f"1000{n}") for n in range(1, settings.JOB_MAX_JOBS_PER_SIMULATION - 1)])
+    running(db, previous_jobs=[prior(n, f"slurmly-0a0a0a0{n}", f"1000{n}") for n in range(1, MAX_JOBS_PER_SIMULATION - 1)])
     says_state(anvil)
     anvil.found["12345"] = info()
     sweep()
     stored = db.jobs.docs["job-1"]
     assert stored["slurm_job_id"] == "99999"
-    assert len(stored["previous_jobs"]) == settings.JOB_MAX_JOBS_PER_SIMULATION - 1
+    assert len(stored["previous_jobs"]) == MAX_JOBS_PER_SIMULATION - 1
 
 
 def test_a_cancel_that_was_asked_is_never_continued(db, anvil, submits):
@@ -956,7 +955,7 @@ def test_a_view_of_an_earlier_job_exists_only_for_a_job_that_ran(db, two_jobs):
 
 def test_the_job_shows_its_earlier_jobs_without_their_paths(client, db, two_jobs):
     body = client.get("/api/v1/jobs/job-1", headers=HEADERS).json()
-    assert body["job_number"] == 2 and body["max_jobs"] == settings.JOB_MAX_JOBS_PER_SIMULATION
+    assert body["job_number"] == 2 and body["max_jobs"] == MAX_JOBS_PER_SIMULATION
     assert body["continuation"] is None
     (earlier,) = body["previous_jobs"]
     assert set(earlier) == {"number", "slurm_job_id", "slurm_state", "slurm_start", "slurm_end", "state_saved_at"}
@@ -969,7 +968,7 @@ def test_the_status_poll_carries_the_same_fields(client, db, anvil):
     in_the_gap(db, tries=2)
     body = client.get("/api/v1/jobs/job-1/status", headers=HEADERS).json()
     assert body["status"] == "SUBMITTED" and body["slurm_job_id"] is None
-    assert body["job_number"] == 2 and body["max_jobs"] == settings.JOB_MAX_JOBS_PER_SIMULATION
+    assert body["job_number"] == 2 and body["max_jobs"] == MAX_JOBS_PER_SIMULATION
     assert body["continuation"]["number"] == 2 and body["continuation"]["tries"] == 2
     assert [p["slurm_job_id"] for p in body["previous_jobs"]] == ["12345"]
 
@@ -980,10 +979,10 @@ def test_a_job_run_by_one_job_says_so(client, db):
     assert body["previous_jobs"] == [] and body["job_number"] == 1 and body["continuation"] is None
 
 
-def test_a_job_with_no_stored_script_may_use_one_job_and_a_draft_the_setting(client, db):
+def test_a_job_with_no_stored_script_may_use_one_job_and_a_draft_the_limit(client, db):
     doc = running(db)
     del doc["submit_script"]
     assert client.get("/api/v1/jobs/job-1", headers=HEADERS).json()["max_jobs"] == 1
     db.jobs.docs["job-2"] = make_job("job-2", OWNER, "DRAFT")
     draft = client.get("/api/v1/jobs/job-2", headers=HEADERS).json()
-    assert draft["max_jobs"] == settings.JOB_MAX_JOBS_PER_SIMULATION and draft["job_number"] is None
+    assert draft["max_jobs"] == MAX_JOBS_PER_SIMULATION and draft["job_number"] is None

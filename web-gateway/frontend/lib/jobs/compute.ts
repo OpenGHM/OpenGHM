@@ -1,21 +1,21 @@
 /**
- * What a draft asks SLURM for: cores and walltime (`SlurmConfig`), the
- * snapshot's own recommendation behind them, and how to show both.
+ * What a draft asks SLURM for: the cores (`SlurmConfig`), the snapshot's own
+ * recommendation behind them, and how long a run is estimated to take. The
+ * walltime is never the user's: it is the snapshot's recommendation with
+ * headroom, and the run as a whole is held to `MAX_RUN_SECONDS`.
  *
  * A snapshot's `recommendedCompute.walltime` is SLURM `--time` syntax, not
  * `HH:MM:SS`: `15:00` is fifteen minutes, `111:30:00` is over four days. The
  * backend passes it to SLURM as written, so this file reads it the way SLURM
- * does. A draft's own walltime is always `HH:MM:SS` (app/models/job.py).
+ * does.
  */
 import {
   MAX_CORES,
-  MAX_WALLTIME,
+  MAX_RUN_SECONDS,
   MAX_WALLTIME_SECONDS,
   type PostProcessingChoice,
   type SlurmConfig,
 } from "@/lib/jobs/types";
-
-const HMS = /^(\d{1,3}):([0-5]\d):([0-5]\d)$/;
 
 /** Seconds in a SLURM `--time` value, or null if it is not one. Accepts
  *  `M`, `M:S`, `H:M:S`, `D-H`, `D-H:M` and `D-H:M:S`. */
@@ -35,14 +35,6 @@ export function parseSlurmTime(value: string): number | null {
   return a * 3600 + b * 60 + c; // H:M:S
 }
 
-/** `HH:MM:SS`, the form a draft stores. Hours are not capped at 24. */
-export function secondsToHms(total: number): string {
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
-}
-
 /** `M:SS` under an hour, `H:MM:SS` from an hour up — SLURM's format, as the
  *  backend's `format_slurm_time` writes it. */
 export function formatSlurmTime(total: number): string {
@@ -55,11 +47,10 @@ export function formatSlurmTime(total: number): string {
 }
 
 /** A snapshot's recommended walltime plus 50%, in SLURM's format, rounded up
- *  to a whole second and never over what one job may use (`MAX_WALLTIME`):
- *  `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`, `80:00:00` becomes
- *  `96:00:00`. A run that needs more is continued in further jobs of that size
- *  (`automaticJobCount`). This is what the backend asks SLURM for when a draft has no
- *  walltime of its own (`with_headroom` in app/services/job_script.py): the
+ *  to a whole second and never over what one job may use
+ *  (`MAX_WALLTIME_SECONDS`): `15:00` becomes `22:30`, `4:30:00` becomes
+ *  `6:45:00`, `80:00:00` becomes `96:00:00`. This is what the backend asks
+ *  SLURM for (`with_headroom` in app/services/job_script.py): the
  *  recommendation is what a simulation took, not what it is safe to ask for. Null if
  *  `value` is not a SLURM time. */
 export function withHeadroom(value: string): string | null {
@@ -71,8 +62,8 @@ export function withHeadroom(value: string): string | null {
 /** Whether a run will post-process: the draft asks for `climatology`, or asks
  *  nothing (`choice` null) and the snapshot's own init does (`own`, the
  *  dataset's `postProcessing`; null, absent or `none` count as not). The one
- *  rule the walltime a draft is shown and the job count share, as
- *  `runs_climatology` in app/services/job_script.py is for the backend's. */
+ *  rule every walltime a draft is shown with shares, as `runs_climatology` in
+ *  app/services/job_script.py is for the backend's. */
 export function runsClimatology(
   choice: PostProcessingChoice | null | undefined,
   own: string | null | undefined
@@ -141,62 +132,46 @@ export function postProcessingShare(recommended: Recommended | null, postProcess
   return postProcessing ? (postProcessingSeconds(recommended) ?? 0) : 0;
 }
 
-/** What a run is asked for when its automatic walltime is more than one job may
- *  use (ADR 0037): the draft has no walltime of its own and the snapshot's
- *  recommendation with headroom (`withHeadroom`, before the cap) is over the
- *  limit. Each job then asks for the limit and SLURM stops it there; the
- *  gateway submits the same job again and WBM carries on from its last saved
- *  state, so `jobs` is how many jobs of that size the run may take:
- *  `ceil(walltime with headroom / limit)`. `seconds` is the recommendation
- *  itself (with the post-processing time when the run `postProcessing`s,
- *  `recommendedSeconds`), to say what it is based on. Null when one job is
- *  enough, when the draft sets a walltime (its jobs are as long as it says;
- *  nothing here predicts whether it needs more), when the snapshot is unknown
- *  and when its value is not a time. */
-export function automaticJobCount(
-  config: SlurmConfig,
-  recommended: Recommended | null,
-  postProcessing = false
-): { jobs: number; seconds: number } | null {
-  if (config.walltime !== null) return null;
+/** How long a run is estimated to take, in seconds: the snapshot's recommended
+ *  time (with the post-processing time when the run `postProcessing`s,
+ *  `recommendedSeconds`) plus 50%, rounded up to a whole second and not capped at
+ *  what one job may use. This is what `MAX_RUN_SECONDS` is held against, as
+ *  `estimated_run_seconds` in app/services/job_script.py. Null when the
+ *  snapshot is unknown or its value is not a time (the backend decides). */
+export function estimatedRunSeconds(recommended: Recommended | null, postProcessing = false): number | null {
   const seconds = recommendedSeconds(recommended, postProcessing);
-  if (seconds === null) return null;
-  const jobs = Math.ceil(Math.ceil(seconds * 1.5) / MAX_WALLTIME_SECONDS);
-  return jobs > 1 ? { jobs, seconds } : null;
+  return seconds === null ? null : Math.ceil(seconds * 1.5);
 }
 
-/** `describeJobCount` without the reason, for a summary that already shows the
- *  walltime. */
-export function describeJobCountShort(jobs: number): string {
-  return `May run as up to ${jobs} jobs of ${MAX_WALLTIME_SECONDS / 3600} h each; each continues where the last one stopped.`;
+/** The estimated run time (`estimatedRunSeconds`) when it is over the limit for
+ *  one simulation (`MAX_RUN_SECONDS`), else null: a submit refuses it
+ *  (`run_over_limit` in app/api/v1/jobs.py). */
+export function runOverLimit(recommended: Recommended | null, postProcessing = false): number | null {
+  const seconds = estimatedRunSeconds(recommended, postProcessing);
+  return seconds !== null && seconds > MAX_RUN_SECONDS ? seconds : null;
 }
 
-/** What to tell a person when `automaticJobCount` applies, in one sentence
- *  under the field: how many jobs, and that each carries on from the last.
- *  `postProcessing` says the reference time has the post-processing in it. */
-export function describeJobCount(count: { jobs: number; seconds: number }, postProcessing = false): string {
-  const limit = MAX_WALLTIME_SECONDS / 3600;
-  const took = postProcessing ? "reference simulation and its post-processing took" : "reference simulation took";
-  return `This simulation may run as up to ${count.jobs} jobs of ${limit} h each (the ${took} about ${describeHours(count.seconds)}, plus 50%). Each job continues where the last one stopped.`;
-}
-
-/** A softer hint for a walltime the draft chose that is shorter than the
- *  reference simulation took (with its post-processing, when the run
- *  `postProcessing`s), or null. It does not block anything: a shorter run
- *  period needs less time. */
-export function describeWalltimeBelowReference(
-  config: SlurmConfig,
+/** What to tell a person when `runOverLimit` applies: how long it is estimated
+ *  to take and why. The estimate is the snapshot's reference run, so the run
+ *  period does not change it; the one thing to drop is the post-processing,
+ *  said only when the run alone would fit. The same sentence as the backend's
+ *  `run_over_limit` refusal. */
+export function describeRunOverLimit(
+  seconds: number,
   recommended: Recommended | null,
   postProcessing = false
-): string | null {
-  if (config.walltime === null || !recommended) return null;
-  const chosen = HMS.exec(config.walltime);
-  const reference = recommendedSeconds(recommended, postProcessing);
-  if (!chosen || reference === null) return null;
-  const seconds = Number(chosen[1]) * 3600 + Number(chosen[2]) * 60 + Number(chosen[3]);
-  if (seconds <= 0 || seconds >= reference) return null;
-  const took = postProcessingShare(recommended, postProcessing) > 0 ? "reference simulation and its post-processing took" : "reference simulation took";
-  return `The model snapshot's ${took} about ${describeHours(reference)}. If this simulation needs longer than your walltime, it may be stopped when time runs out.`;
+): string {
+  const includesPostProcessing = postProcessingShare(recommended, postProcessing) > 0;
+  const weeks = MAX_RUN_SECONDS / (7 * 24 * 3600);
+  const advice =
+    includesPostProcessing && runOverLimit(recommended, false) === null
+      ? " Turn post-processing off to run it."
+      : "";
+  return (
+    `This simulation is estimated to take about ${describeHours(seconds)} ` +
+    `(the reference run${includesPostProcessing ? " and its post-processing" : ""}, plus 50%), ` +
+    `over the ${weeks}-week limit for one simulation.${advice}`
+  );
 }
 
 /** Memory SLURM gives one core on Anvil's `shared` partition, in MB. Verified
@@ -257,31 +232,25 @@ export function describeCoresBelowRecommendedShort(
   return `${cores} ${cores === 1 ? "core is" : "cores are"} below the recommended ${recommended.cores}: the simulation may run out of memory.`;
 }
 
-/** What the automatic walltime is, in a few words after the value: the
+/** What an automatic time is, in a few words after the value: the
  *  recommendation (plus the post-processing time when the run has it,
- *  `includesPostProcessing`) plus 50%, or the limit for one job when that is
- *  more. `placeholder` is the short form for an input's placeholder. */
+ *  `includesPostProcessing`) plus 50%. `placeholder` is the short form. */
 export function automaticWalltimeLabel(
-  capped: boolean,
   form: "placeholder" | "summary" = "summary",
   includesPostProcessing = false
 ): string {
-  if (capped) return "the limit for one job";
   const base = form === "placeholder" ? "recommended" : "model snapshot's recommendation";
   return includesPostProcessing ? `${base} + post-processing + 50%` : `${base} + 50%`;
 }
 
-/** The cores and walltime a submit will ask for, the same as the backend's
- *  `resolve_compute`: the draft's own, else the snapshot's recommendation.
- *  Cores are the recommendation as it is; the walltime is the recommendation
- *  (plus the measured post-processing time when the run `postProcessing`s,
- *  `recommendedSeconds`) plus 50% (`withHeadroom`, at most the limit for one
- *  job), and a walltime the draft chose is used as given. `recommended` is null
- *  when the snapshot could not be loaded. `*Source` says which one answered
- *  ("snapshot" means the recommendation, with headroom for the walltime);
- *  `walltimeCapped` says the automatic walltime was cut to the limit;
- *  `includesPostProcessing` says the automatic walltime has the post-processing
- *  time in it. */
+/** The cores and the per-job walltime a submit will ask for, the same as the
+ *  backend's `resolve_compute`: the draft's cores, else the snapshot's
+ *  recommendation; the walltime is always the recommendation (plus the measured
+ *  post-processing time when the run `postProcessing`s, `recommendedSeconds`)
+ *  plus 50% (`withHeadroom`, at most the limit for one job). `recommended` is
+ *  null when the snapshot could not be loaded. `coresSource` says which one
+ *  answered; `walltimeCapped` says the walltime was cut to the limit for one
+ *  job; `includesPostProcessing` says it has the post-processing time in it. */
 export function effectiveCompute(
   config: SlurmConfig,
   recommended: Recommended | null,
@@ -290,62 +259,22 @@ export function effectiveCompute(
   cores: number | null;
   coresSource: "draft" | "snapshot";
   walltime: string | null;
-  walltimeSource: "draft" | "snapshot";
   walltimeCapped: boolean;
   includesPostProcessing: boolean;
 } {
   const reference = recommendedSeconds(recommended, postProcessing);
-  const automatic = reference !== null ? withHeadroom(formatSlurmTime(reference)) : null;
+  const walltime = reference !== null ? withHeadroom(formatSlurmTime(reference)) : null;
   return {
     cores: config.cores ?? recommended?.cores ?? null,
     coresSource: config.cores !== null ? "draft" : "snapshot",
-    walltime: config.walltime ?? automatic,
-    walltimeSource: config.walltime !== null ? "draft" : "snapshot",
-    walltimeCapped:
-      config.walltime === null && reference !== null && Math.ceil(reference * 1.5) > MAX_WALLTIME_SECONDS,
-    includesPostProcessing:
-      config.walltime === null && postProcessing && postProcessingSeconds(recommended) !== null,
+    walltime,
+    walltimeCapped: reference !== null && Math.ceil(reference * 1.5) > MAX_WALLTIME_SECONDS,
+    includesPostProcessing: postProcessing && postProcessingSeconds(recommended) !== null,
   };
-}
-
-/**
- * What a draft asks SLURM for, in one line for a person: `Recommended: 26 cores
- * · 4 d (limit for one job)` when it leaves both to the snapshot, `Custom: 8
- * cores · 12 h` when it sets either. In a custom line a part it did not set is
- * marked (`4 d (recommended + 50%)`), so the line reads as what will be asked.
- * `custom` says which. The numbers are `effectiveCompute`'s, the backend's own.
- */
-export function describeComputeSummary(
-  config: SlurmConfig,
-  recommended: Recommended | null,
-  postProcessing = false
-): { custom: boolean; text: string } {
-  const effective = effectiveCompute(config, recommended, postProcessing);
-  const custom = config.cores !== null || config.walltime !== null;
-  const cores =
-    effective.cores === null ? null : `${effective.cores} ${effective.cores === 1 ? "core" : "cores"}`;
-  const walltime = effective.walltime === null ? null : describeSlurmTime(effective.walltime);
-  const automaticWalltime = effective.walltimeCapped
-    ? "limit for one job"
-    : automaticWalltimeLabel(false, "placeholder", effective.includesPostProcessing);
-
-  if (!custom) {
-    if (cores === null || walltime === null) return { custom, text: "Recommended: set by the model snapshot" };
-    return {
-      custom,
-      text: `Recommended: ${cores} · ${walltime}${effective.walltimeCapped ? " (limit for one job)" : ""}`,
-    };
-  }
-  const parts = [
-    cores === null ? null : effective.coresSource === "draft" ? cores : `${cores} (recommended)`,
-    walltime === null ? null : effective.walltimeSource === "draft" ? walltime : `${walltime} (${automaticWalltime})`,
-  ].filter((part): part is string => part !== null);
-  return { custom, text: `Custom: ${parts.join(" · ")}` };
 }
 
 export interface ComputeErrors {
   cores?: string;
-  walltime?: string;
 }
 
 /** The same bounds the backend enforces on a PATCH (`SlurmConfigUpdate`), so
@@ -355,15 +284,6 @@ export function validateSlurmConfig(config: SlurmConfig): ComputeErrors {
   if (config.cores !== null) {
     if (!Number.isInteger(config.cores) || config.cores < 1 || config.cores > MAX_CORES) {
       errors.cores = `Use a whole number from 1 to ${MAX_CORES}.`;
-    }
-  }
-  if (config.walltime !== null) {
-    const m = HMS.exec(config.walltime);
-    const seconds = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
-    if (!m) {
-      errors.walltime = "Use hours:minutes:seconds, for example 02:00:00.";
-    } else if (seconds <= 0 || seconds > MAX_WALLTIME_SECONDS) {
-      errors.walltime = `Use more than zero and at most ${MAX_WALLTIME}.`;
     }
   }
   return errors;

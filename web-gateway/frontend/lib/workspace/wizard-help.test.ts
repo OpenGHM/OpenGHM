@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { MAX_WALLTIME } from "@/lib/jobs/types";
 import { ANVIL_SHARED_MB_PER_CORE } from "@/lib/jobs/compute";
 import { RETENTION_DAYS } from "@/lib/workspace/format";
 import { HELP_SECTIONS, helpIndex, helpTopic, type HelpBlock, type HelpTopic } from "@/lib/workspace/wizard-help";
@@ -44,7 +43,7 @@ describe("helpTopic", () => {
     expect(words(helpTopic("run", "output", { climatologyAvailable: false }))).toContain("not available yet");
     const offered = words(helpTopic("run", "output", { climatologyAvailable: true }));
     expect(offered).not.toContain("not available");
-    expect(offered).toContain("walltime then includes it");
+    expect(offered).toContain("estimated run time then includes it");
   });
 
   it("explains the checkbox: output is always written, what post-processing makes depends on the init, and it is never published", () => {
@@ -56,7 +55,7 @@ describe("helpTopic", () => {
 
   it("reads its numbers from where the code keeps them", () => {
     expect(words(helpTopic("run", "compute"))).toContain(`${ANVIL_SHARED_MB_PER_CORE} MB`);
-    expect(words(helpTopic("run", "compute"))).toContain(MAX_WALLTIME);
+    expect(words(helpTopic("run", "compute"))).toContain("at most 2 weeks");
     expect(words(helpTopic("run", "compute"))).toContain("96 hours");
     expect(words(helpTopic("review"))).toContain(`${RETENTION_DAYS} days`);
   });

@@ -11,7 +11,7 @@
 One SLURM job on Anvil may run for at most 96 hours (the `shared` partition's
 QOS limit; `MAX_WALLTIME_SECONDS` in `web-gateway/backend/app/models/job.py`). The
 published Global snapshot's reference run took 111 h 30 min
-(`recommendedCompute.walltime`), so the gateway refuses to submit it
+(`recommendedCompute.walltime`), so the gateway used to refuse to submit it
 (`walltime_over_limit`). Longer periods and larger domains will need more.
 
 WBM can carry on from where it stopped. Measured on Anvil from 2026-10-14 to
@@ -61,8 +61,11 @@ snapshot draft stays one simulation, run by one or more SLURM jobs.
 - **Continue only on progress.** A job continues when SLURM ended it with
   `TIMEOUT`, no one asked to cancel, and the work directory holds a complete
   resumable state written after that job started. Otherwise the job ends as
-  today (`timeout`). A limit on the number of jobs per simulation stops a run
-  that can never finish.
+  today (`timeout`). A simulation may take at most two weeks (decided
+  2026-10-19, `MAX_RUN_SECONDS`), enforced as at most 4 jobs
+  (`ceil(2 weeks / 96 h)`, `MAX_JOBS_PER_SIMULATION`); that stops a run that can
+  never finish. The 384 h that 4 jobs may take, beyond the two weeks, is slack
+  for the work each cut redoes, up to one simulated year.
 - **The same script, the same toolkit.** The continuation runs the job script
   the first job ran, so it runs the same pinned toolkit
   ([ADR 0025](0025-a-gateway-job-runs-the-pinned-toolkit.md)) with the same
@@ -75,7 +78,12 @@ snapshot draft stays one simulation, run by one or more SLURM jobs.
   printed. It reports the state of a work directory for the gateway to read
   (`openghm sim state`).
 - **Submitting longer runs.** A draft whose recommended walltime is over 96 h is
-  no longer refused; the gateway says it will run as several jobs.
+  no longer refused for that. One whose estimated run time, the recommended
+  walltime (with the post-processing time when the run post-processes) plus 50%,
+  not capped at 96 h, is over two weeks is refused at submit (`run_over_limit`).
+  Users no longer set a walltime: every job asks for the recommendation with
+  that headroom, at most 96 h, and the wizard shows the estimate and the
+  limit as a time, never as a number of jobs.
 
 ## Consequences
 

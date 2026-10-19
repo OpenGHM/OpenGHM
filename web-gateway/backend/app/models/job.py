@@ -8,13 +8,12 @@ change once a draft has moved past it (spec.md's "Two entities, not
 three").
 """
 
-import re
+import math
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
-from app.core.config import settings
 from app.models.generated.snapshot import OpenGHMCitationBlock
 from app.models.partial import _partial_model
 
@@ -166,16 +165,18 @@ def read_stored_parameters(raw: Any) -> Any:
 
 
 class SlurmConfig(BaseModel):
-    """What a draft asks SLURM for. Both unset means the snapshot's own
-    `simulation.recommendedCompute` (`app.services.slurm.resolve_compute`).
-    The account and partition are the gateway's (settings), not the user's."""
+    """What a draft asks SLURM for: the cores, or unset for the snapshot's own
+    `simulation.recommendedCompute`. The walltime is never the user's: it is
+    always the snapshot's recommendation with headroom
+    (`app.services.slurm.resolve_compute`). The account and partition are the
+    gateway's (settings). A stored draft that still holds a `walltime` loads, and
+    the value is ignored (the model drops fields it does not declare)."""
 
     cores: int | None = None
-    walltime: str | None = None
 
 
 #: Bounds for `SlurmConfigUpdate`, and the cap on the walltime a submit asks
-#: for by itself (`job_script.with_headroom`): 128 cores and 96 hours per job
+#: for (`job_script.with_headroom`): 128 cores and 96 hours per job
 #: on the `shared` partition. Checked on Anvil on 2026-10-02 with `scontrol show
 #: partition shared` (QoS=part-shared), `sacctmgr show qos` (part-shared
 #: MaxWall=4-00:00:00) and `sinfo` (128 CPUs per node); the gateway's account
@@ -187,33 +188,24 @@ class SlurmConfig(BaseModel):
 #: (`sbatch_refusal.explain`).
 MAX_CORES = 128
 MAX_WALLTIME_SECONDS = 96 * 3600
-#: The same limit as SLURM writes it, for messages.
-MAX_WALLTIME = f"{MAX_WALLTIME_SECONDS // 3600}:00:00"
 
-_WALLTIME_RE = re.compile(r"^(\d{1,3}):([0-5]\d):([0-5]\d)$")
+#: The gateway's own limit on one simulation's run time, decided 2026-10-19: two
+#: weeks. A draft whose estimated run time (`job_script.estimated_run_seconds`)
+#: is over it is refused at submit (`run_over_limit`). Mirrored by
+#: `MAX_RUN_SECONDS` in the frontend's lib/jobs/types.ts.
+MAX_RUN_SECONDS = 14 * 24 * 3600
+#: How many jobs of at most `MAX_WALLTIME_SECONDS` a simulation may use: enough
+#: to cover `MAX_RUN_SECONDS`, rounded up (4 x 96 h = 384 h). The hours beyond
+#: two weeks are slack for the work each cut redoes: a job SLURM stops resumes
+#: from the last 31 December WBM saved, up to one simulated year back.
+MAX_JOBS_PER_SIMULATION = math.ceil(MAX_RUN_SECONDS / MAX_WALLTIME_SECONDS)
 
 
 class SlurmConfigUpdate(BaseModel):
-    """PATCH body's `slurm_config`: the two values a user may change. A field
+    """PATCH body's `slurm_config`: the one value a user may change. A field
     left out keeps its stored value."""
 
     cores: int | None = Field(default=None, ge=1, le=MAX_CORES)
-    walltime: str | None = Field(
-        default=None, description=f"HH:MM:SS, at most {MAX_WALLTIME}", examples=["02:00:00"]
-    )
-
-    @field_validator("walltime")
-    @classmethod
-    def _v_walltime(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        m = _WALLTIME_RE.match(v)
-        if m is None:
-            raise ValueError("walltime must be HH:MM:SS, for example 02:00:00")
-        seconds = int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3])
-        if not 0 < seconds <= MAX_WALLTIME_SECONDS:
-            raise ValueError(f"walltime must be more than zero and at most {MAX_WALLTIME}")
-        return v
 
 
 class ToolkitRef(BaseModel):
@@ -499,8 +491,8 @@ class SimulationUpdateRequest(BaseModel):
     about: PartialAbout | None = None
     #: Replaces the stored parameters whole; it cannot be `null`.
     parameters: JobParameters | None = None
-    #: Cores and walltime to ask SLURM for. Only the fields sent change;
-    #: `null` goes back to the snapshot's recommended compute.
+    #: Cores to ask SLURM for. Only the fields sent change; `null` goes back to
+    #: the snapshot's recommended cores.
     slurm_config: SlurmConfigUpdate | None = None
     #: Set to override the base snapshot's model input, or explicitly to
     #: `null` to clear an override and go back to inheriting — `exclude_unset`
@@ -616,8 +608,9 @@ class JobRunFields(BaseModel):
     previous_jobs: list[PreviousJobSummary] = Field(default_factory=list)
     #: 1-based: the job running now, or the one that ran last. Null on a draft.
     job_number: int | None = None
-    #: The most jobs this simulation may use: the setting for a draft and for a
-    #: job that stored its script, 1 for one that did not (it is never continued).
+    #: The most jobs this simulation may use (`MAX_JOBS_PER_SIMULATION`) for a
+    #: draft and for a job that stored its script, 1 for one that did not (it is
+    #: never continued).
     max_jobs: int = 1
     continuation: Continuation | None = None
 
@@ -632,7 +625,7 @@ def run_fields(doc: dict) -> dict:
     return {
         "previous_jobs": earlier,
         "job_number": None if draft else len(earlier) + 1,
-        "max_jobs": settings.JOB_MAX_JOBS_PER_SIMULATION if continuable else 1,
+        "max_jobs": MAX_JOBS_PER_SIMULATION if continuable else 1,
         "continuation": doc.get("continuation"),
     }
 

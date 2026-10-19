@@ -11,7 +11,12 @@
  * snapshot's own order). Opening a draft therefore never saves, and a value the
  * server normalises never makes the two differ for ever.
  */
-import { validateSlurmConfig } from "@/lib/jobs/compute";
+import {
+  describeRunOverLimit,
+  runOverLimit,
+  runsClimatology,
+  validateSlurmConfig,
+} from "@/lib/jobs/compute";
 import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { checkRunStartFor, isRealDate } from "@/lib/jobs/run-start";
 import type {
@@ -68,7 +73,7 @@ type DraftGroup = "modelInput" | "parameters" | "slurm" | "about";
 const GROUP_FIELDS: Record<DraftGroup, readonly DraftField[]> = {
   modelInput: ["modelInput"],
   parameters: ["start", "end", "variables", "spatial", "custom", "postProcessing"],
-  slurm: ["cores", "walltime"],
+  slurm: ["cores"],
   about: ["name", "description"],
 };
 
@@ -99,10 +104,7 @@ export function fromJob(job: Job): DraftLocal {
     name: job.about?.name ?? "",
     description: job.about?.description ?? "",
     parameters: clone(job.parameters),
-    slurm: {
-      cores: job.slurm_config?.cores ?? null,
-      walltime: job.slurm_config?.walltime ?? null,
-    },
+    slurm: { cores: job.slurm_config?.cores ?? null },
     modelInputId: job.model_input_id ?? null,
   };
 }
@@ -156,7 +158,7 @@ export function canonical(local: DraftLocal, order: readonly string[] = []): Can
       // `null` and absent are the same draft.
       ...(p.post_processing ? { post_processing: p.post_processing } : {}),
     },
-    slurm: { cores: local.slurm.cores, walltime: local.slurm.walltime },
+    slurm: { cores: local.slurm.cores },
     modelInputId: local.modelInputId,
   };
 }
@@ -189,7 +191,6 @@ export function unsavedFields(local: DraftLocal, saved: Job, ctx: DraftContext):
     custom: fingerprint(want.parameters.custom_params) !== fingerprint(have.parameters.custom_params),
     postProcessing: (want.parameters.post_processing ?? null) !== (have.parameters.post_processing ?? null),
     cores: want.slurm.cores !== have.slurm.cores,
-    walltime: want.slurm.walltime !== have.slurm.walltime,
     name: want.name !== have.name,
     description: want.description !== have.description,
   };
@@ -205,8 +206,6 @@ export function isDirty(local: DraftLocal, baseline: Job, ctx: DraftContext): bo
 
 // ─── The patch ───────────────────────────────────────────────────────────────
 
-const SLURM_KEYS = ["cores", "walltime"] as const;
-
 function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown) {
   const refusal = refusals.groups?.[group];
   return refusal && refusal.fingerprint === fingerprint(sent) ? refusal : null;
@@ -218,7 +217,7 @@ function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown
  *
  * - Model input: `model_input_id`.
  * - Run settings: `parameters` (the full object, with `post_processing` only
- *   when one was chosen), and `slurm_config`.
+ *   when one was chosen), and `slurm_config` (the cores).
  * - Name and description (Run settings): `about` as `{ name, description }` and nothing else, so the
  *   citation fields the wizard never shows are not touched. Empty becomes
  *   `null`, which the backend reads as "remove the key".
@@ -227,7 +226,7 @@ function refusedGroup(refusals: ServerRefusals, group: DraftGroup, sent: unknown
  * - a start that does not suit the snapshot, or that the server refused. The
  *   backend checks a start only when it changes, so the saved start goes in its
  *   place and the rest of the parameters still save;
- * - cores or walltime that fail `validateSlurmConfig`, which the backend would
+ * - cores that fail `validateSlurmConfig`, which the backend would
  *   answer with a 422 (a key left out is not touched, a `null` is sent as
  *   `null`: "use the snapshot's recommendation");
  * - a group the server refused with a 422, until that group's value changes.
@@ -282,18 +281,15 @@ export function buildDraftPatch(
     else patch.parameters = parameters;
   }
 
-  // Run settings: cores and walltime.
-  const invalid = validateSlurmConfig(want.slurm);
-  for (const key of SLURM_KEYS) {
-    if (invalid[key] && want.slurm[key] !== have.slurm[key]) withheld.add(key);
-  }
-  if (SLURM_KEYS.some((key) => !invalid[key] && want.slurm[key] !== have.slurm[key])) {
-    const slurm: Partial<SlurmConfig> = {};
-    if (!invalid.cores) slurm.cores = want.slurm.cores;
-    if (!invalid.walltime) slurm.walltime = want.slurm.walltime;
-    const refusal = refusedGroup(refusals, "slurm", slurm);
-    if (refusal) withhold(refusal.fields, refusal.message);
-    else patch.slurm_config = slurm;
+  // Run settings: cores.
+  if (want.slurm.cores !== have.slurm.cores) {
+    if (validateSlurmConfig(want.slurm).cores) withheld.add("cores");
+    else {
+      const slurm: SlurmConfig = { cores: want.slurm.cores };
+      const refusal = refusedGroup(refusals, "slurm", slurm);
+      if (refusal) withhold(refusal.fields, refusal.message);
+      else patch.slurm_config = slurm;
+    }
   }
 
   // Review.
@@ -345,7 +341,7 @@ const PARAMETER_FIELDS: Record<string, DraftField> = {
   post_processing: "postProcessing",
 };
 
-/** The fields a validation error's dotted paths (`slurm_config.walltime`, see
+/** The fields a validation error's dotted paths (`slurm_config.cores`, see
  *  `describeFailure`) are about. A path that names a whole group names all of
  *  its fields; one that names nothing we edit names none. */
 export function fieldsForPaths(paths: readonly string[]): DraftField[] {
@@ -361,7 +357,7 @@ export function fieldsForPaths(paths: readonly string[]): DraftField[] {
       if (field) found.add(field);
       else GROUP_FIELDS.parameters.forEach((f) => found.add(f));
     } else if (head === "slurm_config") {
-      if (sub === "cores" || sub === "walltime") found.add(sub);
+      if (sub === "cores") found.add(sub);
       else GROUP_FIELDS.slurm.forEach((f) => found.add(f));
     }
   }
@@ -423,8 +419,8 @@ export function clientProblem(field: DraftField, local: DraftLocal, ctx: DraftCo
   if (field === "start") {
     return checkRunStartFor(ctx.dataset, local.parameters.temporal_range_start)?.message ?? null;
   }
-  if (field === "cores" || field === "walltime") {
-    return validateSlurmConfig(local.slurm)[field] ?? null;
+  if (field === "cores") {
+    return validateSlurmConfig(local.slurm).cores ?? null;
   }
   return null;
 }
@@ -469,6 +465,14 @@ export function submitProblems(
         "The model snapshot this draft is based on is no longer in the repository, so it can't be submitted.",
     });
   }
+
+  // The snapshot's reference run, with 50% headroom, is longer than one
+  // simulation may be (`run_over_limit`). The estimate is the snapshot's, not the
+  // draft's period, so no one field is at fault and the problem is the draft's.
+  const recommended = ctx.dataset?.simulation.recommendedCompute ?? null;
+  const postProcessing = runsClimatology(local.parameters.post_processing, ctx.dataset?.postProcessing);
+  const over = runOverLimit(recommended, postProcessing);
+  if (over !== null) whole.push({ step: "run", message: describeRunOverLimit(over, recommended, postProcessing) });
 
   // Cases the toolkit has no option for (ADR 0025): a submit refuses them.
   if (local.modelInputId !== null) {

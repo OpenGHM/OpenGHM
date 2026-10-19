@@ -17,9 +17,10 @@ import { DraftSection, STEP_CARD } from "@/components/workspace/draft-section";
 import { SessionExpiredBanner } from "@/components/workspace/session-expired-banner";
 import { describeSubmitFailure, SubmitSummary } from "@/components/workspace/submit-summary";
 import {
-  automaticJobCount,
   describeCoresBelowRecommended,
   effectiveCompute,
+  estimatedRunSeconds,
+  postProcessingShare,
   runsClimatology,
   type Recommended,
 } from "@/lib/jobs/compute";
@@ -217,20 +218,8 @@ export function DraftSubmitCard({
     onSubmitFailed?.();
   };
 
-  const compute = saved
-    ? effectiveCompute(
-        saved.slurm_config,
-        recommended,
-        runsClimatology(saved.parameters.post_processing, snapshotOutput)
-      )
-    : null;
-  const jobCount = saved
-    ? automaticJobCount(
-        saved.slurm_config,
-        recommended,
-        runsClimatology(saved.parameters.post_processing, snapshotOutput)
-      )
-    : null;
+  const postProcessing = saved ? runsClimatology(saved.parameters.post_processing, snapshotOutput) : false;
+  const compute = saved ? effectiveCompute(saved.slurm_config, recommended, postProcessing) : null;
 
   const done = stage === "done";
 
@@ -383,11 +372,8 @@ export function DraftSubmitCard({
               output={saved.parameters.post_processing ?? snapshotOutput}
               cores={compute.cores}
               coresFromSnapshot={compute.coresSource === "snapshot"}
-              walltime={compute.walltime}
-              walltimeFromSnapshot={compute.walltimeSource === "snapshot"}
-              walltimeCapped={compute.walltimeCapped}
-              walltimeIncludesPostProcessing={compute.includesPostProcessing}
-              jobs={jobCount?.jobs ?? null}
+              estimatedSeconds={estimatedRunSeconds(recommended, postProcessing)}
+              estimateIncludesPostProcessing={postProcessingShare(recommended, postProcessing) > 0}
               coresWarning={describeCoresBelowRecommended(saved.slurm_config, recommended)}
             />
           )}

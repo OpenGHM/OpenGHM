@@ -60,7 +60,7 @@ SETTINGS = {
         "spatial_domain": {"north": 50.0, "south": 30.0, "east": -70.0, "west": -120.0},
         "custom_params": {"k": "v"},
     },
-    "slurm_config": {"cores": 4, "walltime": "01:30:00"},
+    "slurm_config": {"cores": 4},
 }
 
 
@@ -222,4 +222,4 @@ def test_a_copy_of_a_job_with_no_slurm_config_or_about_still_works(client, db):
     db.jobs.docs["job-1"] = doc
     response = client.post(DUPLICATE, headers=HEADERS)
     assert response.status_code == 201
-    assert response.json()["slurm_config"] == {"cores": None, "walltime": None}
+    assert response.json()["slurm_config"] == {"cores": None}

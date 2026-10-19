@@ -93,7 +93,7 @@ them by itself.**
   name, and one made up from its fields would read as if it were.
 - **The steps after Start from edit the draft.** Run settings (what it is
   based on, then one card: name and description, the run period, the output
-  variables, cores and walltime), then Review & submit (one summary and the
+  variables, cores), then Review & submit (one summary and the
   submit area; nothing is edited there). There
   was a "Model & input" step between them; nothing on it could be changed, because
   the toolkit has no option for a different model input, so it was dropped, and

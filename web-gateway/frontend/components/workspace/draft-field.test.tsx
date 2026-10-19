@@ -13,13 +13,13 @@ function Part() {
       <h2 id="draft-step-run-heading" tabIndex={-1}>
         Run settings
       </h2>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} {...revealsDraftField("cores", "walltime")}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} {...revealsDraftField("cores", "end")}>
         Change
       </button>
       {open && (
         <>
           <input aria-label="Cores" {...draftField("cores")} />
-          <input aria-label="Walltime" {...draftField("walltime")} />
+          <input aria-label="End" {...draftField("end")} />
         </>
       )}
     </div>
@@ -42,12 +42,12 @@ describe("focusDraftField", () => {
 
   it("presses the button that reveals a control which is not on screen, then focuses it", async () => {
     render(<Part />);
-    expect(screen.queryByLabelText("Walltime")).toBeNull();
+    expect(screen.queryByLabelText("End")).toBeNull();
     await act(async () => {
-      focusDraftField("walltime", "run");
+      focusDraftField("end", "run");
       await Promise.resolve();
     });
-    expect(document.activeElement).toBe(screen.getByLabelText("Walltime"));
+    expect(document.activeElement).toBe(screen.getByLabelText("End"));
     expect(screen.getByRole("button", { name: "Change" }).getAttribute("aria-expanded")).toBe("true");
   });
 
@@ -58,11 +58,11 @@ describe("focusDraftField", () => {
       await Promise.resolve();
     });
     await act(async () => {
-      focusDraftField("walltime", "run");
+      focusDraftField("end", "run");
       await Promise.resolve();
     });
     expect(screen.getByRole("button", { name: "Change" }).getAttribute("aria-expanded")).toBe("true");
-    expect(document.activeElement).toBe(screen.getByLabelText("Walltime"));
+    expect(document.activeElement).toBe(screen.getByLabelText("End"));
   });
 
   it("falls back to the step's heading when nothing renders the field", () => {

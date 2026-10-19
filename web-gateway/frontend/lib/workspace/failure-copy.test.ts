@@ -67,14 +67,10 @@ describe("FAILURE_COPY", () => {
     }
   });
 
-  it("tells a timeout to pick a longer walltime", () => {
-    expect(FAILURE_COPY.timeout.nextStep).toBe("resubmit_longer_walltime");
-    expect(NEXT_STEP_COPY.resubmit_longer_walltime).toMatch(/longer walltime/);
-  });
-
-  it("words a timeout as a longer walltime or a shorter run period", () => {
+  it("tells a timeout to try a shorter run period, never a longer walltime (nobody sets one)", () => {
+    expect(FAILURE_COPY.timeout.nextStep).toBe("new_draft");
     expect(FAILURE_COPY.timeout.body).toMatch(/shorter run period/);
-    expect(NEXT_STEP_COPY.resubmit_longer_walltime).toMatch(/shorter run period/);
+    expect(FAILURE_COPY.timeout.body).not.toMatch(/longer walltime/);
   });
 
   it("does not suggest a smaller spatial domain for running out of memory: more cores or a shorter run period", () => {
@@ -145,10 +141,11 @@ describe("failureCopyFor", () => {
     expect(failureCopyFor(null)).toBe(UNRECORDED_FAILURE_COPY);
   });
 
-  it("tells a timeout that used all its jobs to shorten the run, not to ask for a longer walltime", () => {
+  it("tells a timeout that used all its time to shorten the run, in time and not in jobs", () => {
     const used = failureCopyFor({ cause: "timeout", detail: "job_limit" });
     expect(used.title).toBe(FAILURE_COPY.timeout.title);
-    expect(used.body).toMatch(/used all the jobs/);
+    expect(used.body).toMatch(/used all the time one simulation may have/);
+    expect(used.body).not.toMatch(/\bjobs?\b/);
     expect(used.body).toMatch(/shorter run period/);
     expect(used.nextStep).toBe("new_draft");
     // A job that saved no new state, and a verdict without a detail, read as a timeout always did.

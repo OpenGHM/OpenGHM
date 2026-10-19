@@ -283,21 +283,21 @@ export interface PublishedAnswer {
   files: PublishedFile[];
 }
 
-/** What a draft asks SLURM for. Both null means the snapshot's own
- *  `simulation.recommendedCompute`. The account and partition are the
- *  gateway's, not the user's (app/models/job.py). */
+/** What a draft asks SLURM for: the cores, or null for the snapshot's own
+ *  `simulation.recommendedCompute`. The walltime is never the user's, and the
+ *  account and partition are the gateway's, not the user's (app/models/job.py). */
 export interface SlurmConfig {
   cores: number | null;
-  /** `HH:MM:SS` when the user chose it; a snapshot's own recommendation is
-   *  never copied in here. */
-  walltime: string | null;
 }
 
-/** The limits the backend enforces on a draft's `slurm_config`
- *  (`MAX_CORES`, `MAX_WALLTIME_SECONDS` in app/models/job.py). */
+/** The limits the backend enforces (`MAX_CORES`, `MAX_WALLTIME_SECONDS`,
+ *  `MAX_RUN_SECONDS` in app/models/job.py). `MAX_WALLTIME_SECONDS` is what one
+ *  job may run; `MAX_RUN_SECONDS`, the gateway's own limit decided 2026-10-19, is
+ *  what one simulation may take altogether: a draft estimated to take longer is
+ *  refused. */
 export const MAX_CORES = 128;
 export const MAX_WALLTIME_SECONDS = 96 * 3600;
-export const MAX_WALLTIME = "96:00:00";
+export const MAX_RUN_SECONDS = 14 * 24 * 3600;
 
 /** The toolkit install a submitted job runs (ADR 0025). */
 export interface ToolkitRef {
@@ -395,8 +395,8 @@ export interface DraftUpdateRequest {
    *  clears it. */
   about?: AboutUpdate | null;
   parameters?: JobParameters | null;
-  /** Cores and walltime. Only the fields sent change; `null` goes back to
-   *  the snapshot's recommended compute. */
+  /** Cores. Only the fields sent change; `null` goes back to the snapshot's
+   *  recommended compute. */
   slurm_config?: Partial<SlurmConfig> | null;
   /** `null` clears an override and goes back to the snapshot's own model
    *  input. The API refuses to set one (`model_input_choice_unavailable`,
@@ -494,7 +494,7 @@ export type ActionFailure =
       code?: string;
       /** The fields a refusal names: those of an `unsupported_fields` answer
        *  (`parameters.spatial_domain`), or the dotted paths of a validation
-       *  error (`slurm_config.walltime`). */
+       *  error (`slurm_config.cores`). */
       fields?: string[];
       /** A `run_start_not_aligned` refusal's nearest allowed start. */
       suggestedStart?: string | null;

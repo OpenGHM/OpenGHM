@@ -705,7 +705,7 @@ no job-output link to return.
 
 A snapshot draft is created as a DRAFT (`POST /jobs/derive/{dataset_id}` or
 `POST /jobs/{id}/duplicate`) and edited with PATCH, including its `slurm_config`
-(cores, walltime).
+(the cores; a walltime a stored draft or a client still holds is ignored).
 `POST /jobs/{id}/submit` then **awaits the SLURM submission in the request**.
 There is no worker and no broker.
 `web-gateway/backend/app/services/slurm.py` holds one lazily created
@@ -764,20 +764,18 @@ markers (`WBM_MARKERS`) in the stderr tail, and a run that did this ends
 SLURM is asked for `--cpus-per-task` and `--time`:
 - cores come from the draft's `slurm_config`, or else the snapshot's
   `simulation.recommendedCompute.cores`;
-- walltime comes from the draft's `slurm_config` (a PATCH holds it to at most
-  96:00:00, `MAX_WALLTIME_SECONDS`), or else the snapshot's recommended
-  walltime × 1.5, **never more than 96:00:00** (`with_headroom`; SLURM rounds a
-  value with seconds up to the minute). When the run will post-process (the
-  draft asks for `climatology`, or asks nothing and the snapshot's own init
+- walltime is never the user's: it is the snapshot's recommended walltime × 1.5,
+  **never more than 96:00:00** (`MAX_WALLTIME_SECONDS`, `with_headroom`; SLURM
+  rounds a value with seconds up to the minute). When the run will post-process
+  (the draft asks for `climatology`, or asks nothing and the snapshot's own init
   does: `job_script.runs_climatology`) the walltime that gets the headroom is
   `recommendedCompute.walltime` plus `postProcessingWalltime`
   (`job_script.recommended_walltime`). `slurm.resolve_compute` resolves it
-  once, and the same string is `sbatch --time` and `sim run --walltime`. A
-  walltime the draft chose is used as written, post-processing or not, and it
-  is not scaled by the run period or the cores either;
-- a recommendation over 96 h is not refused: the job asks for 96 h, and a run
-  that needs longer continues in further jobs (below, "A run longer than one
-  job");
+  once, and the same string is `sbatch --time` and `sim run --walltime`. It is
+  not scaled by the run period or the cores;
+- a recommendation over 96 h is not refused for that: the job asks for 96 h, and a run
+  that needs longer continues in further jobs, up to the simulation's 2-week
+  limit (below, "A run longer than one job");
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
@@ -962,10 +960,11 @@ Anvil may delete them) sit in the summary, a failed job's cause and log excerpt.
 The facts of the simulation are one "Run details" card
 (`run-details-card.tsx`), styled as the Data Repository's "Snapshot info": the snapshot it is based on
 (a link), the run period, the output variables and output, the cores and
-walltime the job asked for (its own choice, else the base snapshot's
-`recommendedCompute` worked out as the submit does it, `effectiveCompute`,
-marked as recommended, with the post-processing time in the walltime when the
-job asked for climatology; while SLURM has the job, the limit it enforces), the
+walltime the job asked for (the cores its own, else the base snapshot's, and the
+walltime the base snapshot's `recommendedCompute` gives, all worked out as the
+submit does it, `effectiveCompute`, marked as recommended, with the
+post-processing time in the walltime when the job asked for climatology; while
+SLURM has the job, the limit it enforces), the
 Slurm job, the run id, and the times (submitted, started with how long it
 waited, ended with how long it ran, in the viewer's zone, the full date on
 hover). The job document stores no resolved cores or walltime, so the page
@@ -980,7 +979,7 @@ scrolls with the page; below `xl` it follows the status summary in the page.
 The first submit stores what it sent, `submit_script {body, cores, walltime}`. When
 SLURM ends a job with `TIMEOUT`, `_conclude` first asks whether to continue it
 (`_consider_continuing`): not when a cancel was asked, not once
-`JOB_MAX_JOBS_PER_SIMULATION` (5) jobs have run it (`job_limit`), and otherwise only
+`MAX_JOBS_PER_SIMULATION` (4) jobs have run it (`job_limit`), and otherwise only
 when `<toolkit home>/bin/openghm sim state <work dir> --json`, run over SSH with the
 simulation's own pinned toolkit, answers `resumable` with a `saved_at` later than
 that job's SLURM start. Any other answer, an exit other than SSH's 255 included
@@ -1002,13 +1001,26 @@ wrote (`run_state_incomplete`) and 65 when WBM exited 0 short of `Run_End`
 leaves the name to the orphan pass; delete removes every earlier job's slurmly
 directory too; the stdout and stderr log routes take `?job=<number>`, while WBM's
 log is one file that every job appends to. Responses carry `previous_jobs` (without
-paths), `job_number`, `max_jobs` and `continuation`. The wizard shows a
-recommendation over 96 h as up to N jobs of 96 h (`automaticJobCount`), the
-simulation page shows "Job N of at most M" and the earlier jobs, and the log viewer
+paths), `job_number`, `max_jobs` and `continuation`. The
+simulation page shows "Job N" and the earlier jobs (never how many it may use), and the log viewer
 has a job picker. Verified on Anvil on 2026-10-18 with the v2 tutorial: a job cut
 at its 8-minute limit (SLURM 21479856) was continued (21479888) and the run's
 daily output was identical to the published files; a 2-minute job that saved no
 state ended `timeout` (`no_new_state`).
+
+A simulation may take at most two weeks (`MAX_RUN_SECONDS`, the gateway's own
+limit, decided 2026-10-19), which `MAX_JOBS_PER_SIMULATION` enforces as
+`ceil(MAX_RUN_SECONDS / MAX_WALLTIME_SECONDS)` jobs. The limit is held against an
+estimate made before the run: the snapshot's recommended walltime, with the post-processing
+time when the run post-processes, plus 50%, not capped at one job's 96 h
+(`job_script.estimated_run_seconds`). A submit whose estimate is over the limit
+is refused with `422 run_over_limit` (kept as `last_submit_error`, nothing
+queued), and the wizard lists the same as a problem of the whole draft
+(`submitProblems`) and shows the estimate, with no walltime and no job count, as
+"Estimated run time" on Review and in the confirmation. The estimate is the
+snapshot's reference run, not the draft's period, so a shorter period does not
+change it; only turning post-processing off can, and the message says so when
+that would be enough.
 
 **How a job ends** ([ADR 0026](../decisions/0026-how-a-job-verdict-is-reached.md)).
 The first time the sweep sees a terminal SLURM state it reads `outcome.json`
@@ -1039,8 +1051,7 @@ and how much memory the simulation had, its cores times that, from the cores it 
 for (worked out as `resolve_compute` does; the message says less when the
 snapshot is gone): start a new snapshot draft with more cores, or a shorter run period. `timeout` says it by phase (while fetching, or before WBM
 finished); a job that was not continued (below) says why, with `detail`
-`no_new_state` (no state saved during the job: a longer walltime, up to 96 h, or a
-shorter period) or `job_limit` (every job a simulation may use has run: a shorter
+`no_new_state` (no state saved during the job: a shorter period) or `job_limit` (said as the 2-week limit reached, not as jobs: a shorter
 period). A fetch step that exits 64 to 78
 (sysexits, what `flock` answers with for a lock directory or a toolkit that is
 not there) is its own cause, `gateway_setup` (phase `fetch`), not `fetch_failed`:

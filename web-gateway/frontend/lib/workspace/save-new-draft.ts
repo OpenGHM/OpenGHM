@@ -59,8 +59,7 @@ export type SaveNewDraftResult =
 /** The words for a snapshot that left the repository, as the Start screen says it. */
 export const SNAPSHOT_GONE = "That model snapshot is no longer in the repository.";
 
-/** One group may be refused once each: model input, parameters, cores and
- *  walltime, about. */
+/** One group may be refused once each: model input, parameters, cores, about. */
 const MAX_PATCHES = 4;
 
 /** A 4xx that is the server declining this change, as opposed to a session

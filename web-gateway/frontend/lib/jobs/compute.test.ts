@@ -1,23 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   ANVIL_SHARED_MB_PER_CORE,
-  automaticJobCount,
   automaticWalltimeLabel,
-  describeComputeSummary,
   describeCoresBelowRecommended,
   describeHours,
+  describeRunOverLimit,
   describeSlurmTime,
-  describeJobCount,
-  describeJobCountShort,
-  describeWalltimeBelowReference,
   effectiveCompute,
+  estimatedRunSeconds,
   formatSlurmTime,
   withHeadroom,
   parseSlurmTime,
   postProcessingShare,
   recommendedSeconds,
+  runOverLimit,
   runsClimatology,
-  secondsToHms,
   sharedMemoryGb,
   submitBlockedReason,
   validateSlurmConfig,
@@ -38,11 +35,6 @@ describe("parseSlurmTime", () => {
   it("refuses what is not a time", () => {
     expect(parseSlurmTime("soon")).toBeNull();
     expect(parseSlurmTime("")).toBeNull();
-  });
-
-  it("round-trips through HH:MM:SS", () => {
-    expect(secondsToHms(parseSlurmTime("15:00")!)).toBe("00:15:00");
-    expect(secondsToHms(parseSlurmTime("111:30:00")!)).toBe("111:30:00");
   });
 
   it("describes a duration for a person", () => {
@@ -82,43 +74,8 @@ describe("withHeadroom", () => {
 });
 
 describe("a recommendation over the limit for one job", () => {
-  const unset = { cores: null, walltime: null };
+  const unset = { cores: null };
   const snapshot = (walltime: string) => ({ cores: 16, walltime });
-
-  // The recommendation with headroom, divided by what one job may use, rounded
-  // up (ADR 0037). A run over the limit is not refused: it is continued.
-  it.each([
-    ["111:30:00", 2], // 167 h 15 min
-    ["96:00:00", 2], // 144 h
-    ["80:00:00", 2], // 120 h
-    ["64:00:00", null], // exactly 96 h: one job
-    ["63:59:59", null],
-    ["64:00:01", 2],
-    ["192:00:00", 3], // 288 h
-    ["4:30:00", null],
-    ["15:00", null],
-    ["not a time", null],
-  ])("%s asks for %s jobs", (walltime, jobs) => {
-    expect(automaticJobCount(unset, snapshot(walltime))?.jobs ?? null).toBe(jobs);
-  });
-
-  it("is nothing when the draft sets its own walltime, or without the snapshot", () => {
-    expect(automaticJobCount({ cores: null, walltime: "02:00:00" }, snapshot("111:30:00"))).toBeNull();
-    expect(automaticJobCount(unset, null)).toBeNull();
-  });
-
-  it("carries the recommendation it is based on", () => {
-    expect(automaticJobCount(unset, snapshot("111:30:00"))).toEqual({ jobs: 2, seconds: 111 * 3600 + 30 * 60 });
-  });
-
-  it("says how many jobs, what they are based on, and that each carries on", () => {
-    expect(describeJobCount({ jobs: 2, seconds: 111 * 3600 + 30 * 60 })).toBe(
-      "This simulation may run as up to 2 jobs of 96 h each (the reference simulation took about 111 h 30 min, plus 50%). Each job continues where the last one stopped."
-    );
-    expect(describeJobCountShort(3)).toBe(
-      "May run as up to 3 jobs of 96 h each; each continues where the last one stopped."
-    );
-  });
 
   it("writes hours however long, the way the backend does", () => {
     expect(describeHours(111 * 3600 + 30 * 60)).toBe("111 h 30 min");
@@ -126,10 +83,9 @@ describe("a recommendation over the limit for one job", () => {
     expect(describeHours(22 * 60 + 30)).toBe("22 min 30 s");
   });
 
-  it("shows the automatic walltime capped, and says so", () => {
+  it("asks for the recommendation with headroom, at most one job's limit, and says when it is cut", () => {
     expect(effectiveCompute(unset, snapshot("111:30:00"))).toMatchObject({
       walltime: "96:00:00",
-      walltimeSource: "snapshot",
       walltimeCapped: true,
     });
     expect(effectiveCompute(unset, snapshot("80:00:00"))).toMatchObject({
@@ -144,71 +100,90 @@ describe("a recommendation over the limit for one job", () => {
       walltime: "22:30",
       walltimeCapped: false,
     });
-    expect(effectiveCompute({ cores: null, walltime: "96:00:00" }, snapshot("111:30:00"))).toMatchObject({
-      walltime: "96:00:00",
-      walltimeSource: "draft",
-      walltimeCapped: false,
-    });
   });
 
-  it("labels the automatic walltime for what it is", () => {
-    expect(automaticWalltimeLabel(false)).toBe("model snapshot's recommendation + 50%");
-    expect(automaticWalltimeLabel(false, "placeholder")).toBe("recommended + 50%");
-    expect(automaticWalltimeLabel(true)).toBe("the limit for one job");
+  it("labels the automatic time for what it is", () => {
+    expect(automaticWalltimeLabel()).toBe("model snapshot's recommendation + 50%");
+    expect(automaticWalltimeLabel("placeholder")).toBe("recommended + 50%");
+  });
+});
+
+describe("the estimated run time and its limit", () => {
+  const snapshot = (walltime: string, postProcessingWalltime?: string) => ({
+    cores: 16,
+    walltime,
+    ...(postProcessingWalltime ? { postProcessingWalltime } : {}),
   });
 
-  it("hints, softly, at a walltime shorter than the reference simulation", () => {
-    const rec = snapshot("4:30:00");
-    expect(describeWalltimeBelowReference({ cores: null, walltime: "02:00:00" }, rec)).toMatch(
-      /reference simulation took about 4 h 30 min/
+  // The same cases as tests/test_job_script.py: the two sides must agree.
+  it.each([
+    ["15:00", undefined, false, 22 * 60 + 30],
+    ["80:00:00", undefined, false, 120 * 3600], // not capped at one job's 96 h
+    ["80:00:00", "20:00:00", true, 150 * 3600],
+    ["80:00:00", "20:00:00", false, 120 * 3600],
+    ["0:00:01", undefined, false, 2], // rounded up to a whole second
+  ])("%s + %s, post-processing %s is estimated at %s s", (walltime, step, postProcessing, seconds) => {
+    expect(estimatedRunSeconds(snapshot(walltime, step), postProcessing)).toBe(seconds);
+  });
+
+  it("is unknown without a snapshot or with a value that is not a time", () => {
+    expect(estimatedRunSeconds(null)).toBeNull();
+    expect(estimatedRunSeconds(snapshot("not a time"))).toBeNull();
+    expect(runOverLimit(null)).toBeNull();
+  });
+
+  it("is over the limit only above two weeks", () => {
+    expect(runOverLimit(snapshot("224:00:00"))).toBeNull(); // 336 h exactly
+    expect(runOverLimit(snapshot("224:01:00"))).toBe(336 * 3600 + 90);
+    expect(runOverLimit(snapshot("150:00:00", "80:00:00"), true)).toBe(345 * 3600);
+    expect(runOverLimit(snapshot("150:00:00", "80:00:00"))).toBeNull();
+  });
+
+  it("says how long it is estimated to take, and the limit, as the backend does", () => {
+    const rec = snapshot("300:00:00");
+    expect(describeRunOverLimit(runOverLimit(rec)!, rec)).toBe(
+      "This simulation is estimated to take about 450 h (the reference run, plus 50%), over the 2-week limit for one simulation."
     );
-    expect(describeWalltimeBelowReference({ cores: null, walltime: "04:30:00" }, rec)).toBeNull();
-    expect(describeWalltimeBelowReference({ cores: null, walltime: "08:00:00" }, rec)).toBeNull();
-    expect(describeWalltimeBelowReference(unset, rec)).toBeNull();
-    expect(describeWalltimeBelowReference({ cores: null, walltime: "02:00:00" }, null)).toBeNull();
-    expect(describeWalltimeBelowReference({ cores: null, walltime: "x" }, rec)).toBeNull();
+  });
+
+  it("names the post-processing, and offers to turn it off only when the run alone would fit", () => {
+    const fits = snapshot("200:00:00", "30:00:00");
+    expect(describeRunOverLimit(runOverLimit(fits, true)!, fits, true)).toBe(
+      "This simulation is estimated to take about 345 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation. Turn post-processing off to run it."
+    );
+    const never = snapshot("230:00:00", "30:00:00");
+    expect(describeRunOverLimit(runOverLimit(never, true)!, never, true)).toBe(
+      "This simulation is estimated to take about 390 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation."
+    );
   });
 });
 
 describe("validateSlurmConfig", () => {
-  it("accepts unset values and the bounds", () => {
-    expect(validateSlurmConfig({ cores: null, walltime: null })).toEqual({});
-    expect(validateSlurmConfig({ cores: 128, walltime: "96:00:00" })).toEqual({});
+  it("accepts unset cores and the bounds", () => {
+    expect(validateSlurmConfig({ cores: null })).toEqual({});
+    expect(validateSlurmConfig({ cores: 128 })).toEqual({});
   });
 
   it("refuses what the backend refuses", () => {
-    expect(validateSlurmConfig({ cores: 0, walltime: null }).cores).toBeDefined();
-    expect(validateSlurmConfig({ cores: 129, walltime: null }).cores).toBeDefined();
-    expect(validateSlurmConfig({ cores: 1.5, walltime: null }).cores).toBeDefined();
-    for (const walltime of ["15:00", "00:00:00", "96:00:01", "02:61:00", "x"]) {
-      expect(validateSlurmConfig({ cores: null, walltime }).walltime).toBeDefined();
-    }
+    expect(validateSlurmConfig({ cores: 0 }).cores).toBeDefined();
+    expect(validateSlurmConfig({ cores: 129 }).cores).toBeDefined();
+    expect(validateSlurmConfig({ cores: 1.5 }).cores).toBeDefined();
   });
 });
 
-describe("effectiveCompute and the PATCH payload", () => {
+describe("effectiveCompute", () => {
   const recommended = { cores: 16, walltime: "15:00" };
 
-  it("falls back to the snapshot's recommendation, in the backend's order", () => {
-    expect(effectiveCompute({ cores: null, walltime: null }, recommended)).toMatchObject({
+  it("falls back to the snapshot's cores, and always asks for its walltime with headroom", () => {
+    expect(effectiveCompute({ cores: null }, recommended)).toMatchObject({
       cores: 16,
       coresSource: "snapshot",
-      walltime: "22:30", // 15:00 recommended plus 50%; cores as recommended
-      walltimeSource: "snapshot",
+      walltime: "22:30", // 15:00 recommended plus 50%
     });
-    expect(effectiveCompute({ cores: 4, walltime: "02:00:00" }, recommended)).toMatchObject({
+    expect(effectiveCompute({ cores: 4 }, recommended)).toMatchObject({
       cores: 4,
       coresSource: "draft",
-      walltime: "02:00:00",
-      walltimeSource: "draft",
-    });
-  });
-
-  it("sends a walltime the user chose as given, without headroom", () => {
-    expect(effectiveCompute({ cores: null, walltime: "00:15:00" }, recommended)).toMatchObject({
-      cores: 16,
-      walltime: "00:15:00",
-      walltimeSource: "draft",
+      walltime: "22:30",
     });
   });
 });
@@ -247,7 +222,7 @@ describe("shared-partition memory", () => {
 
 describe("describeCoresBelowRecommended", () => {
   const rec = { cores: 64, walltime: "15:00" };
-  const cores = (n: number | null) => ({ cores: n, walltime: null });
+  const cores = (n: number | null) => ({ cores: n });
 
   it("warns, with the numbers, when cores are below the recommended count", () => {
     expect(describeCoresBelowRecommended(cores(1), rec)).toBe(
@@ -286,66 +261,12 @@ describe("describeCoresBelowRecommended", () => {
   });
 });
 
-describe("describeComputeSummary", () => {
-  it("says what the snapshot recommends when the draft sets nothing", () => {
-    expect(describeComputeSummary({ cores: null, walltime: null }, { cores: 2, walltime: "15:00" })).toEqual({
-      custom: false,
-      text: "Recommended: 2 cores · 22 min 30 s",
-    });
-  });
-
-  it("says when the automatic walltime is the limit for one job", () => {
-    expect(describeComputeSummary({ cores: null, walltime: null }, { cores: 26, walltime: "111:30:00" })).toEqual({
-      custom: false,
-      text: "Recommended: 26 cores · 4 d (limit for one job)",
-    });
-  });
-
-  it("says Custom when either value is the draft's own, and marks the part it left to the snapshot", () => {
-    const recommended = { cores: 26, walltime: "111:30:00" };
-    expect(describeComputeSummary({ cores: 8, walltime: "12:00:00" }, recommended)).toEqual({
-      custom: true,
-      text: "Custom: 8 cores · 12 h",
-    });
-    expect(describeComputeSummary({ cores: 8, walltime: null }, recommended).text).toBe(
-      "Custom: 8 cores · 4 d (limit for one job)"
-    );
-    expect(describeComputeSummary({ cores: null, walltime: "02:00:00" }, { cores: 1, walltime: "15:00" }).text).toBe(
-      "Custom: 1 core (recommended) · 2 h"
-    );
-    expect(describeComputeSummary({ cores: 4, walltime: null }, { cores: 26, walltime: "15:00" }).text).toBe(
-      "Custom: 4 cores · 22 min 30 s (recommended + 50%)"
-    );
-  });
-
-  it("does not guess what it cannot know without a snapshot", () => {
-    expect(describeComputeSummary({ cores: null, walltime: null }, null).text).toBe(
-      "Recommended: set by the model snapshot"
-    );
-    expect(describeComputeSummary({ cores: 8, walltime: null }, null).text).toBe("Custom: 8 cores");
-  });
-});
-
 describe("a run that post-processes", () => {
-  const unset = { cores: null, walltime: null };
+  const unset = { cores: null };
   const snapshot = (walltime: string, postProcessingWalltime?: string) => ({
     cores: 16,
     walltime,
     ...(postProcessingWalltime ? { postProcessingWalltime } : {}),
-  });
-
-  it.each([
-    ["80:00:00", "20:00:00", true, 2], // 100 h, 150 h with headroom
-    ["80:00:00", "20:00:00", false, 2], // 80 h alone: 120 h with headroom
-    ["40:00:00", "20:00:00", true, null], // 60 h: 90 h with headroom
-    ["40:00:00", "20:00:00", false, null],
-    ["50:00:00", "20:00:00", true, 2], // 70 h: 105 h with headroom
-    ["50:00:00", undefined, true, null], // post-processing not measured
-    ["15:00", "1:00:00", true, null],
-  ])("%s + %s, post-processing %s asks for %s jobs", (walltime, step, postProcessing, jobs) => {
-    expect(automaticJobCount(unset, snapshot(walltime, step), postProcessing)?.jobs ?? null).toBe(jobs);
-    // A walltime the draft chose is a walltime of its own.
-    expect(automaticJobCount({ cores: null, walltime: "02:00:00" }, snapshot(walltime, step), postProcessing)).toBeNull();
   });
 
   it("adds the post-processing time only when the run has it and it was measured", () => {
@@ -364,7 +285,6 @@ describe("a run that post-processes", () => {
     // 15:00 + 1:00:00 = 1:15:00, and half as much again.
     expect(effectiveCompute(unset, snapshot("15:00", "1:00:00"), true)).toMatchObject({
       walltime: "1:52:30",
-      walltimeSource: "snapshot",
       walltimeCapped: false,
       includesPostProcessing: true,
     });
@@ -376,41 +296,17 @@ describe("a run that post-processes", () => {
       walltime: "22:30",
       includesPostProcessing: false,
     });
-    expect(effectiveCompute({ cores: null, walltime: "03:00:00" }, snapshot("15:00", "1:00:00"), true)).toMatchObject({
-      walltime: "03:00:00",
-      walltimeSource: "draft",
-      includesPostProcessing: false,
-    });
     expect(effectiveCompute(unset, snapshot("80:00:00", "10:00:00"), true)).toMatchObject({
       walltime: "96:00:00",
       walltimeCapped: true,
     });
   });
 
-  it("names the post-processing in the labels and the job count sentence", () => {
-    expect(automaticWalltimeLabel(false, "summary", true)).toBe(
+  it("names the post-processing in the labels", () => {
+    expect(automaticWalltimeLabel("summary", true)).toBe(
       "model snapshot's recommendation + post-processing + 50%"
     );
-    expect(automaticWalltimeLabel(false, "placeholder", true)).toBe("recommended + post-processing + 50%");
-    expect(automaticWalltimeLabel(true, "summary", true)).toBe("the limit for one job");
-    expect(describeJobCount({ jobs: 2, seconds: 100 * 3600 }, true)).toContain(
-      "reference simulation and its post-processing took about 100 h"
-    );
-    expect(describeJobCount({ jobs: 2, seconds: 111 * 3600 })).not.toContain("post-processing");
-  });
-
-  it("says Custom with the post-processing in the automatic walltime", () => {
-    expect(describeComputeSummary({ cores: 4, walltime: null }, snapshot("15:00", "1:00:00"), true).text).toBe(
-      "Custom: 4 cores · 1 h 52 min (recommended + post-processing + 50%)"
-    );
-  });
-
-  it("mentions the post-processing when a walltime of the draft's own is below the reference", () => {
-    const below = { cores: null, walltime: "00:30:00" };
-    expect(describeWalltimeBelowReference(below, snapshot("15:00", "1:00:00"), true)).toContain(
-      "reference simulation and its post-processing took about 1 h 15 min"
-    );
-    expect(describeWalltimeBelowReference(below, snapshot("15:00", "1:00:00"))).toBeNull();
+    expect(automaticWalltimeLabel("placeholder", true)).toBe("recommended + post-processing + 50%");
   });
 
   it("is a climatology run when the draft asks, or asks nothing and the snapshot does", () => {

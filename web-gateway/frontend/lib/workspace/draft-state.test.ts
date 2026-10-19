@@ -46,7 +46,7 @@ const draft = (overrides: Partial<Job> = {}): Job =>
       variables: [...NAMES],
       custom_params: null,
     },
-    slurm_config: { cores: null, walltime: null },
+    slurm_config: { cores: null },
     ...overrides,
   });
 
@@ -68,7 +68,8 @@ describe("fromJob", () => {
         variables: ["runoff", "mystery"],
         custom_params: { A: "1" },
       },
-      slurm_config: { cores: 8, walltime: "01:00:00" },
+      // A walltime stored before it went is dropped.
+      slurm_config: { cores: 8, walltime: "01:00:00" } as { cores: number | null },
       model_input_id: "other-input",
     });
     const local = fromJob(job);
@@ -76,7 +77,7 @@ describe("fromJob", () => {
       name: "Run A",
       description: "why",
       parameters: job.parameters,
-      slurm: { cores: 8, walltime: "01:00:00" },
+      slurm: { cores: 8 },
       modelInputId: "other-input",
     });
     expect(local.parameters).not.toBe(job.parameters);
@@ -86,7 +87,7 @@ describe("fromJob", () => {
     const local = fromJob(draft());
     expect(local.name).toBe("");
     expect(local.description).toBe("");
-    expect(local.slurm).toEqual({ cores: null, walltime: null });
+    expect(local.slurm).toEqual({ cores: null });
     expect(local.modelInputId).toBeNull();
   });
 });
@@ -166,9 +167,8 @@ describe("buildDraftPatch: nothing to save", () => {
       parameters: { ...draft().parameters, temporal_range_start: "2003-01-01", temporal_range_end: "2001-01-01" },
     }),
     "a cleared date": draft({ parameters: { ...draft().parameters, temporal_range_end: "" } }),
-    "cores and walltime": draft({ slurm_config: { cores: 8, walltime: "02:00:00" } }),
-    "only cores": draft({ slurm_config: { cores: 4, walltime: null } }),
-    "a walltime past what may be asked for": draft({ slurm_config: { cores: null, walltime: "99:00:00" } }),
+    "cores": draft({ slurm_config: { cores: 8 } }),
+    "no cores": draft({ slurm_config: { cores: null } }),
     "a model input override": draft({ model_input_id: "other-input" }),
     "a null about": draft({ about: null }),
   };
@@ -189,7 +189,7 @@ describe("buildDraftPatch: nothing to save", () => {
 });
 
 describe("buildDraftPatch: each group sends only its own keys", () => {
-  const job = draft({ about: { name: "Run A", creator: [{ name: "Kim" }] }, slurm_config: { cores: 8, walltime: "02:00:00" } });
+  const job = draft({ about: { name: "Run A", creator: [{ name: "Kim" }] }, slurm_config: { cores: 8 } });
 
   it("model input: only model_input_id, null to inherit again", () => {
     const stored = { ...job, model_input_id: "override" };
@@ -217,9 +217,9 @@ describe("buildDraftPatch: each group sends only its own keys", () => {
   });
 
   it("run settings, compute: only slurm_config", () => {
-    const { patch } = buildDraftPatch(edited(job, { slurm: { cores: 16, walltime: "02:00:00" } }), job, FOUND);
+    const { patch } = buildDraftPatch(edited(job, { slurm: { cores: 16 } }), job, FOUND);
     expect(Object.keys(patch!)).toEqual(["slurm_config"]);
-    expect(patch!.slurm_config).toEqual({ cores: 16, walltime: "02:00:00" });
+    expect(patch!.slurm_config).toEqual({ cores: 16 });
   });
 
   it("name and description: only those two keys, so the other citation fields are left alone", () => {
@@ -229,7 +229,7 @@ describe("buildDraftPatch: each group sends only its own keys", () => {
 
   it("two groups changed: both are sent, neither carries the other's keys", () => {
     const { patch } = buildDraftPatch(
-      edited(job, { name: "Run B", slurm: { cores: 4, walltime: "02:00:00" } }),
+      edited(job, { name: "Run B", slurm: { cores: 4 } }),
       job,
       FOUND
     );
@@ -356,55 +356,36 @@ describe("buildDraftPatch: a start the model would refuse", () => {
   });
 });
 
-describe("buildDraftPatch: cores and walltime", () => {
-  const job = draft({ slurm_config: { cores: 8, walltime: "02:00:00" } });
+describe("buildDraftPatch: cores", () => {
+  const job = draft({ slurm_config: { cores: 8 } });
 
   it("sends null as null, to go back to the snapshot's recommendation", () => {
-    const { patch } = buildDraftPatch(edited(job, { slurm: { cores: null, walltime: "02:00:00" } }), job, FOUND);
-    expect(patch!.slurm_config).toEqual({ cores: null, walltime: "02:00:00" });
+    const { patch } = buildDraftPatch(edited(job, { slurm: { cores: null } }), job, FOUND);
+    expect(patch!.slurm_config).toEqual({ cores: null });
     expect(patch!.slurm_config).toHaveProperty("cores", null);
   });
 
   it("leaves out cores that fail validation and lists them", () => {
     for (const cores of [0, 129, 2.5, -1]) {
-      const { patch, withheld } = buildDraftPatch(edited(job, { slurm: { cores, walltime: "02:00:00" } }), job, FOUND);
+      const { patch, withheld } = buildDraftPatch(edited(job, { slurm: { cores } }), job, FOUND);
       expect(patch).toBeNull();
       expect(withheld).toEqual(["cores"]);
     }
   });
 
-  it("leaves out a walltime that fails validation and lists it", () => {
-    for (const walltime of ["02:0", "2h", "00:00:00", "97:00:00", ""]) {
-      const { patch, withheld } = buildDraftPatch(edited(job, { slurm: { cores: 8, walltime } }), job, FOUND);
-      expect(patch).toBeNull();
-      expect(withheld).toEqual(["walltime"]);
-    }
-  });
-
-  it("still sends the other value", () => {
-    const { patch, withheld } = buildDraftPatch(edited(job, { slurm: { cores: 4, walltime: "02:0" } }), job, FOUND);
+  it("never sends a walltime, whatever a stored draft holds", () => {
+    const stored = draft({ slurm_config: { cores: null, walltime: "99:00:00" } as { cores: number | null } });
+    expect(fromJob(stored).slurm).toEqual({ cores: null });
+    const { patch, withheld } = buildDraftPatch(edited(stored, { slurm: { cores: 4 } }), stored, FOUND);
     expect(patch).toEqual({ slurm_config: { cores: 4 } });
     expect(patch!.slurm_config).not.toHaveProperty("walltime");
-    expect(withheld).toEqual(["walltime"]);
-  });
-
-  it("lists both when both fail", () => {
-    const { patch, withheld } = buildDraftPatch(edited(job, { slurm: { cores: 0, walltime: "x" } }), job, FOUND);
-    expect(patch).toBeNull();
-    expect(withheld).toEqual(["cores", "walltime"]);
-  });
-
-  it("does not hold back a stored value it would refuse, when it has not been touched", () => {
-    const stored = draft({ slurm_config: { cores: null, walltime: "99:00:00" } });
-    const { patch, withheld } = buildDraftPatch(edited(stored, { slurm: { cores: 4, walltime: "99:00:00" } }), stored, FOUND);
-    expect(patch).toEqual({ slurm_config: { cores: 4 } });
     expect(withheld).toEqual([]);
   });
 });
 
 describe("buildDraftPatch: a group the server refused", () => {
-  const job = draft({ slurm_config: { cores: 8, walltime: "02:00:00" } });
-  const local = edited(job, { slurm: { cores: 16, walltime: "02:00:00" }, name: "Run B" });
+  const job = draft({ slurm_config: { cores: 8 } });
+  const local = edited(job, { slurm: { cores: 16 }, name: "Run B" });
   const sent = buildDraftPatch(local, job, FOUND).patch!;
 
   it("is withheld, with the server's words, while its value is the refused one; the others still go", () => {
@@ -417,9 +398,9 @@ describe("buildDraftPatch: a group the server refused", () => {
 
   it("is sent again once its value changes", () => {
     const refusals = refuseGroups({}, sent, { message: "Too many.", paths: ["slurm_config.cores"] });
-    const changed = edited(job, { slurm: { cores: 12, walltime: "02:00:00" } });
+    const changed = edited(job, { slurm: { cores: 12 } });
     const out = buildDraftPatch(changed, job, FOUND, refusals);
-    expect(out.patch).toEqual({ slurm_config: { cores: 12, walltime: "02:00:00" } });
+    expect(out.patch).toEqual({ slurm_config: { cores: 12 } });
     expect(out.withheld).toEqual([]);
   });
 
@@ -427,20 +408,20 @@ describe("buildDraftPatch: a group the server refused", () => {
     const refusals = refuseGroups({}, sent, { message: "No." });
     const out = buildDraftPatch(local, job, FOUND, refusals);
     expect(out.patch).toBeNull();
-    expect(out.withheld).toEqual(["cores", "walltime", "name", "description"]);
+    expect(out.withheld).toEqual(["cores", "name", "description"]);
   });
 
   it("invalid_about refuses the about group only", () => {
     const refusals = refuseGroups({}, sent, { message: "Bad about.", code: "invalid_about" });
     const out = buildDraftPatch(local, job, FOUND, refusals);
-    expect(out.patch).toEqual({ slurm_config: { cores: 16, walltime: "02:00:00" } });
+    expect(out.patch).toEqual({ slurm_config: { cores: 16 } });
     expect(out.withheld).toEqual(["name", "description"]);
   });
 });
 
 describe("fieldsForPaths", () => {
   it("places a validation error's path on the field", () => {
-    expect(fieldsForPaths(["slurm_config.walltime"])).toEqual(["walltime"]);
+    expect(fieldsForPaths(["slurm_config.cores"])).toEqual(["cores"]);
     expect(fieldsForPaths(["parameters.temporal_range_end"])).toEqual(["end"]);
     expect(fieldsForPaths(["parameters.variables.0"])).toEqual(["variables"]);
     expect(fieldsForPaths(["about.name", "model_input_id"])).toEqual(["modelInput", "name"]);
@@ -448,7 +429,7 @@ describe("fieldsForPaths", () => {
   });
 
   it("places a path that names a whole group on all its fields, and one that names nothing of ours on none", () => {
-    expect(fieldsForPaths(["slurm_config"])).toEqual(["cores", "walltime"]);
+    expect(fieldsForPaths(["slurm_config"])).toEqual(["cores"]);
     expect(fieldsForPaths(["parameters"])).toEqual([
       "start",
       "end",
@@ -463,14 +444,13 @@ describe("fieldsForPaths", () => {
 });
 
 describe("clientProblem", () => {
-  it("says why a start, cores or walltime is not saved", () => {
+  it("says why a start or cores are not saved", () => {
     const local = edited(draft(), {
       params: { temporal_range_start: "2001-03-15" },
-      slurm: { cores: 0, walltime: "x" },
+      slurm: { cores: 0 },
     });
     expect(clientProblem("start", local, FOUND)).toMatch(/January 1/);
     expect(clientProblem("cores", local, FOUND)).toMatch(/1 to 128/);
-    expect(clientProblem("walltime", local, FOUND)).toMatch(/hours:minutes:seconds/);
     expect(clientProblem("name", local, FOUND)).toBeNull();
   });
 });
@@ -522,9 +502,7 @@ describe("submitProblems", () => {
     });
   });
 
-  describe("a reference simulation longer than one job may be", () => {
-    // Not a problem (ADR 0037): the run is continued in further jobs, and the
-    // wizard says how many (`automaticJobCount`).
+  describe("a run estimated to take longer than one simulation may", () => {
     const withWalltime = (walltime: string, postProcessingWalltime?: string): DraftContext => ({
       snapshotState: "found",
       dataset: {
@@ -536,16 +514,32 @@ describe("submitProblems", () => {
       },
     });
 
-    it("lists nothing, with or without a walltime of the draft's own", () => {
-      const ctx = withWalltime("111:30:00");
-      expect(problems(fromJob(ok), ctx)).toEqual([]);
-      expect(problems(edited(ok, { slurm: { cores: null, walltime: "96:00:00" } }), ctx)).toEqual([]);
-      expect(problems(edited(ok, { slurm: { cores: 4, walltime: null } }), ctx)).toEqual([]);
+    it("lists nothing for a reference run longer than one job, so long as the estimate fits in two weeks", () => {
+      expect(problems(fromJob(ok), withWalltime("111:30:00"))).toEqual([]);
+      expect(problems(fromJob(ok), withWalltime("224:00:00"))).toEqual([]); // 336 h exactly
     });
 
-    it("lists nothing for a climatology run whose post-processing makes it longer", () => {
-      const ctx = withWalltime("80:00:00", "20:00:00");
-      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), ctx)).toEqual([]);
+    it("is a problem of the whole draft above two weeks: the recommendation plus 50%, not capped at one job", () => {
+      const [problem, ...rest] = problems(fromJob(ok), withWalltime("224:01:00"));
+      expect(rest).toEqual([]);
+      expect(problem).toMatchObject({ step: "run" });
+      expect(problem.field).toBeUndefined();
+      expect(problem.message).toBe(
+        "This simulation is estimated to take about 336 h 1 min (the reference run, plus 50%), over the 2-week limit for one simulation."
+      );
+    });
+
+    it("counts the post-processing of a climatology run, and offers to turn it off when that is enough", () => {
+      const ctx = withWalltime("200:00:00", "30:00:00");
+      expect(problems(edited(ok, { params: { post_processing: "standard" } }), ctx)).toEqual([]);
+      const [problem] = problems(edited(ok, { params: { post_processing: "climatology" } }), ctx);
+      expect(problem.message).toBe(
+        "This simulation is estimated to take about 345 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation. Turn post-processing off to run it."
+      );
+    });
+
+    it("is not a problem when the post-processing is not measured", () => {
+      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), withWalltime("200:00:00"))).toEqual([]);
     });
   });
 
@@ -667,7 +661,7 @@ describe("isDirty", () => {
     expect(isDirty(edited(baseline, { description: "why" }), baseline, FOUND)).toBe(true);
     expect(isDirty(edited(baseline, { params: { temporal_range_end: "2002-12-31" } }), baseline, FOUND)).toBe(true);
     expect(isDirty(edited(baseline, { params: { variables: ["runoff"] } }), baseline, FOUND)).toBe(true);
-    expect(isDirty(edited(baseline, { slurm: { cores: 8, walltime: null } }), baseline, FOUND)).toBe(true);
+    expect(isDirty(edited(baseline, { slurm: { cores: 8 } }), baseline, FOUND)).toBe(true);
     expect(isDirty(edited(baseline, { params: { post_processing: "climatology" } }), baseline, FOUND)).toBe(true);
   });
 
@@ -707,7 +701,7 @@ describe("unsavedFields", () => {
     const local = edited(saved, {
       name: "Run A",
       description: "why",
-      slurm: { cores: 4, walltime: "01:00:00" },
+      slurm: { cores: 4 },
       params: {
         temporal_range_start: "2002-01-01",
         temporal_range_end: "2002-12-31",
@@ -727,7 +721,6 @@ describe("unsavedFields", () => {
       "custom",
       "postProcessing",
       "cores",
-      "walltime",
       "name",
       "description",
     ]);

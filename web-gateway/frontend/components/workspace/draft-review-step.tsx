@@ -13,12 +13,12 @@ import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { PublishedAnswerCard, PublishedAnswerNotice } from "@/components/workspace/published-answer-card";
 import {
-  automaticJobCount,
   automaticWalltimeLabel,
   describeCoresBelowRecommendedShort,
-  describeJobCountShort,
-  describeSlurmTime,
+  describeDuration,
   effectiveCompute,
+  estimatedRunSeconds,
+  postProcessingShare,
   runsClimatology,
   type Recommended,
 } from "@/lib/jobs/compute";
@@ -181,17 +181,10 @@ export function DraftReviewStep({
   disabled?: boolean;
 }) {
   const { parameters, slurm } = local;
-  const compute = effectiveCompute(
-    slurm,
-    recommended,
-    runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing)
-  );
+  const postProcessing = runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing);
+  const compute = effectiveCompute(slurm, recommended, postProcessing);
+  const estimate = estimatedRunSeconds(recommended, postProcessing);
   const coresWarning = describeCoresBelowRecommendedShort(slurm, recommended);
-  const jobCount = automaticJobCount(
-    slurm,
-    recommended,
-    runsClimatology(parameters.post_processing, ctx.dataset?.postProcessing)
-  );
   const spatial = parameters.spatial_domain;
   const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
@@ -283,19 +276,14 @@ export function DraftReviewStep({
               )}
               {coresWarning && <span className="block text-xs text-warning">{coresWarning}</span>}
             </Row>
-            <Row
-              mono
-              label="Walltime"
-              edit={<EditLink step="run" field="walltime" label="walltime" onEditStep={onEditStep} />}
-            >
-              {compute.walltime ? describeSlurmTime(compute.walltime) : "Not known"}
-              {compute.walltimeSource === "snapshot" && compute.walltime !== null && (
+            <Row mono label="Estimated run time">
+              {estimate !== null ? describeDuration(estimate) : "Not known"}
+              {estimate !== null && (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {automaticWalltimeLabel(compute.walltimeCapped, "summary", compute.includesPostProcessing)}
+                  · {automaticWalltimeLabel("summary", postProcessingShare(recommended, postProcessing) > 0)}
                 </span>
               )}
-              {jobCount && <span className="block text-xs text-muted-foreground">{describeJobCountShort(jobCount.jobs)}</span>}
             </Row>
             {spatial && (
               <Row

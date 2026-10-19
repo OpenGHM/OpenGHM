@@ -54,10 +54,9 @@ The job's body runs the toolkit.** Two steps, in order:
 - **The work of each run stays under `output_base/<sim_id>/`** on scratch
   (ADR 0023). slurmly's own job directory, holding the script and its logs,
   sits beside it.
-- SLURM gets `--cpus-per-task` and `--time` from the draft. Without a
-  draft value, cores fall back to the snapshot's
-  `simulation.recommendedCompute.cores`, and walltime to its recommended
-  walltime × 1.5. SLURM rounds a value with seconds up to the minute. The first gateway-shaped v2 run
+- SLURM gets `--cpus-per-task` and `--time`. Without a draft value, cores fall
+  back to the snapshot's `simulation.recommendedCompute.cores`; walltime is its
+  recommended walltime × 1.5 (users do not set one). SLURM rounds a value with seconds up to the minute. The first gateway-shaped v2 run
   used 13:49 of the snapshot's 15:00 (job 20974812), too little headroom to
   request as is. The account is also passed.
 

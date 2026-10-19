@@ -20,7 +20,7 @@ const SAVED = fakeDraft("DRAFT", {
     variables: ["discharge", "runoff"],
     custom_params: null,
   },
-  slurm_config: { cores: 8, walltime: "02:00:00" },
+  slurm_config: { cores: 8 },
 });
 const SUBMITTED = fakeDraft("PENDING", { id: "job-1" });
 const RECOMMENDED = { cores: 16, walltime: "15:00" };
@@ -140,7 +140,7 @@ describe("DraftSubmitCard: cores below the recommended count", () => {
   const warning = /This model snapshot recommends 64 cores/;
   const withCores = (cores: number | null) => ({
     ...SAVED,
-    slurm_config: { cores, walltime: "02:00:00" },
+    slurm_config: { cores },
   });
 
   it("is in the confirmation, which still lets the person submit", async () => {
@@ -264,7 +264,7 @@ describe("DraftSubmitCard: after it went through", () => {
 
 describe("DraftSubmitCard: long refusals", () => {
   const LONG =
-    "Anvil refused the requested run time: it is over the limit for one job (96 h). Shorten the run period or set a shorter walltime. SLURM said: QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: Job violates accounting/QOS policy (job submit limit, user's size and/or time limits). Your draft is unchanged.";
+    "Anvil refused the requested run time: it is over the limit for one job (96 h). Shorten the run period. SLURM said: QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: Job violates accounting/QOS policy (job submit limit, user's size and/or time limits). Your draft is unchanged.";
 
   it("wraps the stored reason of the last submit instead of overflowing", () => {
     card({ lastSubmitError: { code: "sbatch_rejected", message: LONG, at: "2026-10-02T00:00:00Z" } });
@@ -277,6 +277,18 @@ describe("DraftSubmitCard: long refusals", () => {
   it("shows the backend's sentence for a refusal it has no wording for as it is", async () => {
     const message = "Anvil is not configured for this gateway.";
     submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "anvil_not_configured" });
+    card();
+    await openDialog();
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(message));
+  });
+});
+
+describe("DraftSubmitCard: a run over the limit for one simulation", () => {
+  it("shows the backend's sentence for run_over_limit as it is", async () => {
+    const message =
+      "This simulation is estimated to take about 450 h (the reference run, plus 50%), over the 2-week limit for one simulation.";
+    submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "run_over_limit" });
     card();
     await openDialog();
     fireEvent.click(confirmButton());
@@ -298,7 +310,8 @@ describe("DraftSubmitCard: submitting", () => {
     expect(text).toContain("2001-03-01 to 2001-06-30");
     expect(text).toContain("discharge, runoff");
     expect(text).toContain("8");
-    expect(text).toContain("2 h");
+    expect(text).toContain("Estimated run time");
+    expect(text).toContain("22 min 30 s");
     expect(onSubmittingChange).not.toHaveBeenCalled();
 
     fireEvent.click(confirmButton());
@@ -313,7 +326,7 @@ describe("DraftSubmitCard: submitting", () => {
   it("says where a field comes from the snapshot's recommendation", async () => {
     flush.mockResolvedValue({
       ok: true,
-      job: { ...SAVED, slurm_config: { cores: null, walltime: null } },
+      job: { ...SAVED, slurm_config: { cores: null } },
       withheld: [],
     });
     card();
@@ -322,27 +335,33 @@ describe("DraftSubmitCard: submitting", () => {
     expect(dialog().textContent).toContain("22 min 30 s");
   });
 
-  it("says in the confirmation that a run over the limit for one job may take several", async () => {
+  it("shows the estimated run time of a run longer than one job whole, without a job count", async () => {
     flush.mockResolvedValue({
       ok: true,
-      job: { ...SAVED, slurm_config: { cores: null, walltime: null } },
+      job: { ...SAVED, slurm_config: { cores: null } },
       withheld: [],
     });
     card({ recommended: { cores: 16, walltime: "111:30:00" } });
     await openDialog();
-    expect(dialog().textContent).toContain("limit for one job");
-    expect(dialog().textContent).toContain("May run as up to 2 jobs of 96 h each; each continues where the last one stopped.");
+    // 111 h 30 min plus 50% is 167 h 15 min.
+    expect(dialog().textContent).toContain("Estimated run time6 d 23 h");
+    expect(dialog().textContent).not.toMatch(/limit for one job|\d+ jobs/);
   });
 
-  it("does not say it for a run that fits in one job", async () => {
+  it("includes the post-processing time in the estimate of a climatology run", async () => {
     flush.mockResolvedValue({
       ok: true,
-      job: { ...SAVED, slurm_config: { cores: null, walltime: null } },
+      job: {
+        ...SAVED,
+        parameters: { ...SAVED.parameters, post_processing: "climatology" as const },
+        slurm_config: { cores: null },
+      },
       withheld: [],
     });
-    card();
+    card({ recommended: { cores: 16, walltime: "15:00", postProcessingWalltime: "1:00:00" } });
     await openDialog();
-    expect(dialog().textContent).not.toContain("May run as up to");
+    expect(dialog().textContent).toContain("1 h 52 min");
+    expect(dialog().textContent).toContain("model snapshot's recommendation + post-processing + 50%");
   });
 
   it("does nothing more on Cancel: no submit, nothing stopped, Submit available again", async () => {
@@ -377,11 +396,11 @@ describe("DraftSubmitCard: submitting", () => {
   });
 
   it("stops when a value was left out of the save, and names it", async () => {
-    flush.mockResolvedValue({ ok: true, job: SAVED, withheld: ["start", "walltime"] });
+    flush.mockResolvedValue({ ok: true, job: SAVED, withheld: ["start", "postProcessing"] });
     card();
     fireEvent.click(submitButton());
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("alert").textContent).toContain("Start date, Walltime");
+    expect(screen.getByRole("alert").textContent).toContain("Start date, Post-processing");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(submit).not.toHaveBeenCalled();
   });

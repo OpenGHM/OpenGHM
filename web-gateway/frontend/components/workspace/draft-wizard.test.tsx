@@ -69,7 +69,7 @@ const JOB = fakeDraft("DRAFT", {
     variables: ["discharge"],
     custom_params: null,
   },
-  slurm_config: { cores: 8, walltime: "02:00:00" },
+  slurm_config: { cores: 8 },
 });
 
 /** A server that keeps what it is sent, as far as these tests need. */
@@ -432,9 +432,9 @@ describe("the step", () => {
 
   it("sends focus to the field an Edit line names, opening the closed part of Run settings that holds it", async () => {
     wizard({ step: "review" });
-    fireEvent.click(button("Edit walltime")!);
+    fireEvent.click(button("Edit cores")!);
     // The compute fields are always on the page; the variables are a line and a button until asked for.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Walltime/)));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Cores/)));
     expect(variableBoxes()).toHaveLength(0);
 
     fireEvent.click(button("Next")!);

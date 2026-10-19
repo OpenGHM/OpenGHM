@@ -43,16 +43,16 @@ function details(job: Job, recommended: { cores: number; walltime: string } | nu
 const VARIABLES = Array.from({ length: 51 }, (_, i) => `var${i + 1}`);
 
 describe("the run details card", () => {
-  it("shows the cores and walltime the draft chose, as they are", () => {
-    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 26, walltime: "10:00:00" } } });
+  it("shows the cores the draft chose as they are, and the walltime the snapshot's recommendation gave", () => {
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 26 } } });
     const { container } = details(job, { cores: 16, walltime: "15:00" });
     expect(container.textContent).toContain("Cores26");
-    expect(container.textContent).toContain("Walltime10 h");
-    expect(container.textContent).not.toContain("recommended");
+    expect(container.textContent).not.toContain("Cores26(recommended)");
+    expect(container.textContent).toContain("Walltime22 min 30 s(recommended + 50%)");
   });
 
   it("shows the snapshot's recommendation as numbers, marked as recommended", () => {
-    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null } } });
     const { container } = details(job, { cores: 16, walltime: "15:00" });
     expect(container.textContent).toContain("Cores16(recommended)");
     // 15 min plus 50%: what the submit asked SLURM for.
@@ -61,14 +61,14 @@ describe("the run details card", () => {
   });
 
   it("shows a dash, not a guess, when there is nothing to work it out from", () => {
-    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: null } } });
     const { container } = details(job, null);
     expect(container.textContent).toContain("Cores—");
     expect(container.textContent).toContain("Walltime—");
   });
 
   it("prefers the limit SLURM enforces while it has the job", () => {
-    const job = previewDraftJob("running", { overrides: { slurm_config: { cores: null, walltime: null } } });
+    const job = previewDraftJob("running", { overrides: { slurm_config: { cores: null } } });
     const live: JobLive = {
       checked_at: "2026-09-30T12:00:00Z",
       queue_reason: null,
@@ -125,15 +125,15 @@ describe("the run details card", () => {
   });
 
   it("shows the walltime a finished run used, against the limit, when both are known", () => {
-    // Ran 1 h of a 3 h walltime.
-    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 4, walltime: "03:00:00" } } });
-    const { container } = details(job, null);
+    // Ran 1 h of a 3 h walltime: 2 h recommended, plus 50%.
+    const job = previewDraftJob("completed", { overrides: { slurm_config: { cores: 4 } } });
+    const { container } = details(job, { cores: 4, walltime: "2:00:00" });
     const bar = screen.getByRole("progressbar", { name: "Walltime used" });
     expect(bar.getAttribute("aria-valuenow")).toBe("33");
     expect(container.textContent).toContain("1 h / 3 h");
     cleanup();
     // Nothing to compare against: no bar.
-    details(previewDraftJob("completed", { overrides: { slurm_config: { cores: null, walltime: null } } }), null);
+    details(previewDraftJob("completed", { overrides: { slurm_config: { cores: null } } }), null);
     expect(screen.queryByRole("progressbar", { name: "Walltime used" })).toBeNull();
   });
 

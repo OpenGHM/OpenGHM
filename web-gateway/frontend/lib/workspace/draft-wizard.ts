@@ -66,8 +66,9 @@ export function newWizardPath(datasetId: string): string {
   return `/workspace/new/${encodeURIComponent(datasetId)}`;
 }
 
-/** The snapshot's own `recommendedCompute`, shown as what an empty cores or
- *  walltime field means. Null when the snapshot could not be loaded. */
+/** The snapshot's own `recommendedCompute`, shown as what an empty cores field
+ *  means and behind the estimated run time. Null when the snapshot could not be
+ *  loaded. */
 export function recommendedComputeFor(snapshot: Dataset | null): Recommended | null {
   return snapshot ? snapshot.simulation.recommendedCompute : null;
 }
@@ -82,7 +83,6 @@ export const DRAFT_FIELDS = [
   "custom",
   "postProcessing",
   "cores",
-  "walltime",
   "name",
   "description",
 ] as const;
@@ -98,7 +98,6 @@ export const FIELD_STEP: Record<DraftField, DraftStep> = {
   custom: "run",
   postProcessing: "run",
   cores: "run",
-  walltime: "run",
   name: "run",
   description: "run",
 };
@@ -112,7 +111,6 @@ export const FIELD_LABELS: Record<DraftField, string> = {
   custom: "Custom parameters",
   postProcessing: "Post-processing",
   cores: "Cores",
-  walltime: "Walltime",
   name: "Name",
   description: "Description",
 };

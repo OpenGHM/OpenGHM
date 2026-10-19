@@ -179,12 +179,6 @@ class Settings(BaseSettings):
     JOB_END_BACKFILL_WINDOW_SECONDS: int = 86400
     JOB_END_BACKFILL_RETRY_SECONDS: int = 300
     JOB_END_BACKFILL_MAX_TRIES: int = 5
-    # A run longer than one job continues in the next (ADR 0037). The most jobs
-    # one simulation may use: a job SLURM stops at its time limit after WBM saved a
-    # newer state is submitted again until this many have run it (5 jobs, 480 h
-    # at the 96 h maximum). Without a limit a run that can never finish would
-    # queue forever.
-    JOB_MAX_JOBS_PER_SIMULATION: int = 5
     # A continuation whose submit's answer was lost is tried again by the sweep
     # (`slurm.reconcile_interrupted_submits`); after this many lost answers the
     # simulation fails `continuation_failed`.

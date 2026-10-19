@@ -64,8 +64,8 @@ describe("SaveStatus: the words", () => {
   });
 
   it("refused: says how many more there are", () => {
-    const { container } = show({ kind: "refused", fields: ["walltime", "cores", "end"], message: "x" });
-    expect(screen.getByRole("button", { name: "fix Walltime" })).toBeTruthy();
+    const { container } = show({ kind: "refused", fields: ["postProcessing", "cores", "end"], message: "x" });
+    expect(screen.getByRole("button", { name: "fix Post-processing" })).toBeTruthy();
     expect(container.textContent).toContain("and 2 more");
   });
 

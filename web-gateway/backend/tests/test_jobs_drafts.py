@@ -352,7 +352,7 @@ def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
         "custom_params": None,
         "post_processing": None,
     }
-    assert body["slurm_config"] == {"cores": None, "walltime": None}
+    assert body["slurm_config"] == {"cores": None}
     assert body["about"] is None and body["model_input_id"] is None
     assert body["updated_at"] == body["created_at"]
 
@@ -528,7 +528,8 @@ def test_duplicate_document_has_exactly_the_keys_of_a_fresh_draft():
     assert copy_["about"] == {"name": "Basin (copy)", "keywords": ["k"]}
     assert copy_["model_input_id"] is None  # an override is not copied (user decision 2026-10-06)
     assert copy_["parameters"]["variables"] == ["runoff"]
-    assert copy_["slurm_config"] == {"cores": 4, "walltime": "01:00:00"}
+    # A walltime stored before it went is not carried into the copy.
+    assert copy_["slurm_config"] == {"cores": 4}
 
 
 def test_duplicate_document_does_not_share_or_change_the_sources_about():

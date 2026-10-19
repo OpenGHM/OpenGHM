@@ -65,7 +65,7 @@ const STORED = fakeDraft("DRAFT", {
   dataset_title: "Fake Snapshot",
   updated_at: "2026-10-01T12:00:00.000Z",
   parameters: PARAMETERS,
-  slurm_config: { cores: 8, walltime: "02:00:00" },
+  slurm_config: { cores: 8 },
 });
 /** What the server would create for a new snapshot draft: no id. */
 const PREVIEW: Job = { ...STORED, id: "" };

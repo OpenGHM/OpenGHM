@@ -23,7 +23,7 @@ import {
   OutputVariablesSection,
   type VariableOption,
 } from "@/components/workspace/output-variables-field";
-import { runsClimatology, type Recommended } from "@/lib/jobs/compute";
+import type { Recommended } from "@/lib/jobs/compute";
 import { checkAggregationWindowFor } from "@/lib/jobs/aggregation-window";
 import { describeRunPeriodLimits } from "@/lib/jobs/run-period";
 import { checkRunStartFor, isRealDate, type RunStartProblem } from "@/lib/jobs/run-start";
@@ -52,8 +52,8 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
  * card whose first part is the snapshot draft's name and description (the first
  * thing a new draft asks for, so the Name takes focus when it has none and
  * `autoFocusName` is set), followed by the run period, the output variables,
- * whether post-processing runs after the simulation, and cores and
- * walltime. Most people keep the defaults, so the variables and compute are a line saying
+ * whether post-processing runs after the simulation, and cores. Most people
+ * keep the defaults, so the variables and compute are a line saying
  * what they hold and a button that opens them (`DraftCollapsible`); what is
  * wrong with them stays in view either way.
  *
@@ -395,13 +395,12 @@ export function DraftRunStep({
           </DraftSection>
         )}
 
-        {/* What SLURM is asked for. Account and partition are the gateway's, so
-            only cores and walltime are here. */}
+        {/* What SLURM is asked for. Account, partition and walltime are the
+            gateway's, so only cores are here. */}
         <ComputeSection
           config={slurm}
           recommended={recommended}
-          postProcessing={runsClimatology(parameters.post_processing, dataset?.postProcessing)}
-          serverErrors={{ cores: serverErrors.cores, walltime: serverErrors.walltime }}
+          serverErrors={{ cores: serverErrors.cores }}
           onChange={onSlurmChange}
         />
       </DraftPanel>

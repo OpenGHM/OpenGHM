@@ -71,7 +71,7 @@ const PREVIEW = fakeDraft("DRAFT", {
     variables: ["discharge"],
     custom_params: null,
   },
-  slurm_config: { cores: 8, walltime: "02:00:00" },
+  slurm_config: { cores: 8 },
 });
 /** What deriving it stores. */
 const CREATED: Job = { ...PREVIEW, id: "new-1", updated_at: "2026-10-01T12:00:01.000Z" };

@@ -45,8 +45,8 @@ describe("which job, and how many", () => {
     expect(jobCount(runs)).toBe(2);
   });
 
-  it("says Job N of at most M from the second job on", () => {
-    expect(describeJobNumber({ previous_jobs: [previous(1)], job_number: 2, max_jobs: 5 })).toBe("Job 2 of at most 5");
+  it("says Job N from the second job on", () => {
+    expect(describeJobNumber({ previous_jobs: [previous(1)], job_number: 2, max_jobs: 5 })).toBe("Job 2");
     expect(describeContinuation({ previous_jobs: [previous(1)], job_number: 2 })).toBe(
       "Continued after the previous job reached its time limit, from the state WBM had saved."
     );
@@ -60,7 +60,7 @@ describe("which job, and how many", () => {
         max_jobs: 5,
         continuation: { number: 2, requested_at: "2026-10-05T00:00:05Z", tries: 1 },
       })
-    ).toBe("Job 2 of at most 5");
+    ).toBe("Job 2");
   });
 
   it("leaves out the most when the backend did not say", () => {

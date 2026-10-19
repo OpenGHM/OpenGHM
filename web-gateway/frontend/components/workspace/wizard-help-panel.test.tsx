@@ -170,7 +170,7 @@ describe("WizardHelpPanel", () => {
     expect(screen.getByText(/Post-processing is not available yet/)).toBeTruthy();
     view.rerender(<Output available />);
     expect(screen.queryByText(/not available yet/)).toBeNull();
-    expect(screen.getByText(/walltime then includes it/)).toBeTruthy();
+    expect(screen.getByText(/estimated run time then includes it/)).toBeTruthy();
   });
 
   it("draws nothing, and breaks nothing, outside a provider", () => {
@@ -330,7 +330,7 @@ describe("the sections of Run settings", () => {
           datasetTitle="Kept title"
           ctx={ctx}
           parameters={parameters}
-          slurm={{ cores: null, walltime: null }}
+          slurm={{ cores: null }}
           recommended={dataset.simulation.recommendedCompute}
           modelInputId={null}
           resolvedModelInput={undefined}

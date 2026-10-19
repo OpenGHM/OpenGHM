@@ -185,8 +185,9 @@ function TimeRows({ job }: { job: Job }) {
  * place is said here only: the status summary has the path of a completed run's
  * results, so this card leaves it out then.
  *
- * Cores and walltime are what the job asked SLURM for: the draft's own choice,
- * else the model snapshot's recommendation worked out the way the submit does
+ * Cores and walltime are what the job asked SLURM for: the draft's own cores,
+ * else the model snapshot's recommendation, and the snapshot's recommended
+ * walltime with headroom, worked out the way the submit does
  * (`effectiveCompute`, the backend's `resolve_compute`), marked as such. While
  * SLURM has the job, the limit it enforces is shown instead. A value that
  * cannot be known (no recommendation to read) is a dash, not a guess.
@@ -219,10 +220,10 @@ export function RunDetailsCard({
         ? describeHours(walltimeSeconds)
         : null;
   const walltimeNote =
-    limit === null && walltime !== null && compute.walltimeSource === "snapshot"
+    limit === null && walltime !== null
       ? compute.walltimeCapped
         ? "(the limit for one job)"
-        : `(${automaticWalltimeLabel(false, "placeholder", compute.includesPostProcessing)})`
+        : `(${automaticWalltimeLabel("placeholder", compute.includesPostProcessing)})`
       : null;
   const coresNote = compute.cores !== null && compute.coresSource === "snapshot" ? "(recommended)" : null;
   const domain = parameters.spatial_domain;

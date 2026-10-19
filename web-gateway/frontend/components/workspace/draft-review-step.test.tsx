@@ -20,7 +20,7 @@ const LOCAL: DraftLocal = fromJob(
       variables: ["discharge", "runoff"],
       custom_params: null,
     },
-    slurm_config: { cores: 8, walltime: "02:00:00" },
+    slurm_config: { cores: 8 },
   })
 );
 
@@ -100,7 +100,7 @@ describe("DraftReviewStep: name and description", () => {
 });
 
 describe("DraftReviewStep: the summary", () => {
-  it("is one list: name, description, based on, run period, output variables, output, cores, walltime", () => {
+  it("is one list: name, description, based on, run period, output variables, output, cores, estimated run time", () => {
     review();
     expect(screen.getAllByRole("term").map((t) => t.textContent)).toEqual([
       "Name",
@@ -110,7 +110,7 @@ describe("DraftReviewStep: the summary", () => {
       "Output variables",
       "Post-processing",
       "Cores",
-      "Walltime",
+      "Estimated run time",
     ]);
     // Nothing is repeated as a card of its own.
     expect(screen.queryByRole("heading", { name: "Model snapshot" })).toBeNull();
@@ -141,7 +141,6 @@ describe("DraftReviewStep: the summary", () => {
       ["Edit run period", "start"],
       ["Edit output variables", "variables"],
       ["Edit cores", "cores"],
-      ["Edit walltime", "walltime"],
     ] as const;
     for (const [name, field] of edits) {
       fireEvent.click(screen.getByRole("button", { name }));
@@ -195,69 +194,56 @@ describe("DraftReviewStep: the summary", () => {
   it("shows the compute it will ask for, and where an unset value comes from", () => {
     review();
     expect(within(row("Cores")).getByText("8")).toBeTruthy();
-    expect(within(row("Walltime")).getByText("2 h")).toBeTruthy();
+    // The time is the snapshot's recommendation plus 50%, whatever the cores are.
+    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
     expect(row("Cores").textContent).not.toContain("· recommended");
-    expect(row("Walltime").textContent).not.toContain("recommendation");
+    expect(screen.queryByRole("button", { name: /Edit estimated run time|Edit walltime/ })).toBeNull();
 
     cleanup();
-    review({ local: { ...LOCAL, slurm: { cores: null, walltime: null } } });
+    review({ local: { ...LOCAL, slurm: { cores: null } } });
     expect(row("Cores").textContent).toContain("16 · recommended");
-    expect(row("Walltime").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
   });
 
   it("says the low-cores warning once, under Cores, in one line, and only then", () => {
     const BIG = { cores: 64, walltime: "15:00" };
-    review({ recommended: BIG, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
+    review({ recommended: BIG, local: { ...LOCAL, slurm: { cores: 1 } } });
     const note = within(row("Cores")).getByText("1 core is below the recommended 64: the simulation may run out of memory.");
     expect(note.className).toContain("text-warning");
     expect(screen.queryByText(/On Anvil's shared partition/)).toBeNull();
 
     for (const cores of [64, null]) {
       cleanup();
-      review({ recommended: BIG, local: { ...LOCAL, slurm: { cores, walltime: null } } });
+      review({ recommended: BIG, local: { ...LOCAL, slurm: { cores } } });
       expect(screen.queryByText(/below the recommended/)).toBeNull();
     }
     cleanup();
-    review({ recommended: null, local: { ...LOCAL, slurm: { cores: 1, walltime: null } } });
+    review({ recommended: null, local: { ...LOCAL, slurm: { cores: 1 } } });
     expect(screen.queryByText(/below the recommended/)).toBeNull();
   });
 
-  it("shows an automatic walltime cut to the limit as the limit", () => {
+  it("shows the estimate of a run longer than one job whole, not cut to a job's limit, and never as jobs", () => {
     review({
-      local: { ...LOCAL, slurm: { cores: null, walltime: null } },
+      local: { ...LOCAL, slurm: { cores: null } },
       recommended: { cores: 16, walltime: "111:30:00" },
     });
-    expect(row("Walltime").textContent).toContain("4 d · the limit for one job");
+    // 111 h 30 min plus 50% is 167 h 15 min.
+    expect(row("Estimated run time").textContent).toContain("6 d 23 h · model snapshot's recommendation + 50%");
+    expect(row("Estimated run time").textContent).not.toMatch(/limit for one job|\d+ jobs/);
   });
 
-  it("says a run that does not fit in one job may take several, under Walltime, and only then", () => {
-    const local = { ...LOCAL, slurm: { cores: null, walltime: null } };
-    review({ local, recommended: { cores: 16, walltime: "111:30:00" } });
-    expect(
-      within(row("Walltime")).getByText("May run as up to 2 jobs of 96 h each; each continues where the last one stopped.")
-    ).toBeTruthy();
-
-    cleanup();
-    review({ local, recommended: { cores: 16, walltime: "15:00" } });
-    expect(screen.queryByText(/May run as up to/)).toBeNull();
-    // A walltime of the draft's own is its own.
-    cleanup();
-    review({ local: { ...LOCAL, slurm: { cores: null, walltime: "96:00:00" } }, recommended: { cores: 16, walltime: "111:30:00" } });
-    expect(screen.queryByText(/May run as up to/)).toBeNull();
-  });
-
-  it("adds the post-processing time to the automatic walltime of a climatology choice, and says so", () => {
+  it("adds the post-processing time to the estimate of a climatology choice, and says so", () => {
     const recommended = { cores: 16, walltime: "15:00", postProcessingWalltime: "1:00:00" };
     const local = (post_processing: "standard" | "climatology") => ({
       ...LOCAL,
       parameters: { ...LOCAL.parameters, post_processing },
-      slurm: { cores: null, walltime: null },
+      slurm: { cores: null },
     });
     review({ local: local("climatology"), recommended });
-    expect(row("Walltime").textContent).toContain("1 h 52 min · model snapshot's recommendation + post-processing + 50%");
+    expect(row("Estimated run time").textContent).toContain("1 h 52 min · model snapshot's recommendation + post-processing + 50%");
     cleanup();
     review({ local: local("standard"), recommended });
-    expect(row("Walltime").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
   });
 
   it("still summarises a draft whose snapshot is gone, with no link to it", () => {
@@ -278,7 +264,7 @@ describe("DraftReviewStep: the rest", () => {
     review();
     const area = screen.getByTestId("submit-area");
     expect(area.textContent).toBe("submit here");
-    expect(area.previousElementSibling?.textContent).toContain("Walltime");
+    expect(area.previousElementSibling?.textContent).toContain("Estimated run time");
   });
 
   it("switches its Edit buttons off while a submit is under way", () => {

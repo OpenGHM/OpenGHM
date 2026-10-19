@@ -642,12 +642,12 @@ def test_the_walltime_slurm_is_asked_for_is_the_one_the_toolkit_is_told(
     assert slurm.build_job_spec(job, snapshot, body, post_processing).time_limit == asked == _walltime_in(body)
 
 
-def test_a_walltime_of_the_drafts_own_is_used_as_written_with_climatology(client, db, draft, monkeypatch, sent):
+def test_a_walltime_stored_in_the_draft_is_ignored_with_climatology(client, db, draft, monkeypatch, sent):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
     db.jobs.docs["job-1"]["slurm_config"] = {"cores": 4, "walltime": "03:00:00"}
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert _walltime_in(sent[0]) == "03:00:00"
+    assert _walltime_in(sent[0]) != "03:00:00"
 
 
 def test_a_snapshot_whose_own_climatology_has_no_measurement_asks_for_its_walltime_alone(
@@ -669,6 +669,34 @@ def test_a_climatology_draft_over_the_limit_with_its_post_processing_is_capped_n
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
     assert _walltime_in(sent[0]) == "96:00:00"
     assert db.jobs.docs["job-1"]["status"] == "SUBMITTED"
+
+
+def test_the_estimate_of_a_climatology_run_includes_its_post_processing_for_the_two_week_limit(
+    client, db, draft, monkeypatch, sent
+):
+    """200 h is 300 h with headroom: fine alone. With 30 h of post-processing it is 345 h."""
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    _recommend(db, "200:00:00", "30:00:00")
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
+    response = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "run_over_limit"
+    assert "about 345 h (the reference run and its post-processing, plus 50%)" in detail["message"]
+    assert detail["message"].endswith("over the 2-week limit for one simulation. Turn post-processing off to run it.")
+    assert sent == []
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "standard"
+    assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
+
+
+def test_no_advice_to_turn_post_processing_off_when_the_run_alone_is_over_the_limit(
+    client, db, draft, monkeypatch, sent
+):
+    _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
+    _recommend(db, "230:00:00", "30:00:00")
+    db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
+    message = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).json()["detail"]["message"]
+    assert message.endswith("over the 2-week limit for one simulation.")
 
 
 @pytest.mark.parametrize("value", [None, "standard"])

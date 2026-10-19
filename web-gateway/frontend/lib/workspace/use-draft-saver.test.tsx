@@ -37,7 +37,7 @@ const JOB = fakeDraft("DRAFT", {
     variables: ["discharge", "runoff"],
     custom_params: null,
   },
-  slurm_config: { cores: null, walltime: null },
+  slurm_config: { cores: null },
 });
 
 /** What the backend does with a PATCH, as far as these tests need. */
@@ -253,7 +253,7 @@ describe("flush", () => {
     const { result, set, base } = setup();
     set(withCores(base, 4));
     await save(result);
-    expect(patches()).toEqual([{ slurm_config: { cores: 4, walltime: null } }]);
+    expect(patches()).toEqual([{ slurm_config: { cores: 4 } }]);
   });
 
   it("the answer is the baseline, never written over the local copy", async () => {
@@ -312,7 +312,7 @@ describe("flush", () => {
     expect(result.current.state).toEqual({ kind: "saving" });
 
     // Typed while the first request is out.
-    set({ ...base, name: "Run 2", slurm: { cores: 8, walltime: null } });
+    set({ ...base, name: "Run 2", slurm: { cores: 8 } });
     await wait(5_000);
     expect(update).toHaveBeenCalledTimes(1);
     expect(flushed).toBeUndefined();
@@ -323,7 +323,7 @@ describe("flush", () => {
     expect(update).toHaveBeenCalledTimes(2);
     expect(patches()[1]).toEqual({
       about: { name: "Run 2", description: null },
-      slurm_config: { cores: 8, walltime: null },
+      slurm_config: { cores: 8 },
     });
     expect(flushed).toMatchObject({ ok: true, job: { about: { name: "Run 2" } } });
     expect(result.current.state.kind).toBe("saved");
@@ -481,7 +481,7 @@ describe("what the server answers", () => {
       await save(result);
 
       expect(patches()).toEqual([
-        { slurm_config: { cores: 99, walltime: null }, about: { name: "Run", description: null } },
+        { slurm_config: { cores: 99 }, about: { name: "Run", description: null } },
         { about: { name: "Run", description: null } },
       ]);
       expect(result.current.withheld).toEqual(["cores"]);
@@ -502,7 +502,7 @@ describe("what the server answers", () => {
 
       set(withCores(base, 64));
       await save(result);
-      expect(patches()[1]).toEqual({ slurm_config: { cores: 64, walltime: null } });
+      expect(patches()[1]).toEqual({ slurm_config: { cores: 64 } });
       expect(result.current.state.kind).toBe("saved");
       expect(result.current.serverErrors).toEqual({});
     });
@@ -514,7 +514,7 @@ describe("what the server answers", () => {
       await save(result);
       await wait(10_000);
       expect(update).toHaveBeenCalledTimes(1);
-      expect(result.current.withheld).toEqual(["cores", "walltime", "name", "description"]);
+      expect(result.current.withheld).toEqual(["cores", "name", "description"]);
     });
 
     it("a 403 is refused too and not retried", async () => {

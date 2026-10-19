@@ -28,7 +28,7 @@ _REASONS: tuple[tuple[tuple[str, ...], str, str], ...] = (
         ("QOSMaxWallDurationPerJobLimit",),
         "Anvil refused the requested run time: it is over the limit for one job "
         f"({MAX_WALLTIME_SECONDS // 3600} h).",
-        "Shorten the run period or set a shorter walltime.",
+        "Shorten the run period.",
     ),
     (
         ("QOSMaxCpuPerJobLimit", "QOSMaxCPUsPerUserLimit", "QOSMaxCpuPerUserLimit"),

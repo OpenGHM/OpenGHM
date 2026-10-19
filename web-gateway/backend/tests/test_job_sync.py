@@ -1245,22 +1245,23 @@ def snapshot_recommending(db, walltime):
 
 
 def test_a_timeout_at_the_96_hour_maximum_says_to_shorten_the_period(db, anvil, job):
-    job["slurm_config"] = {"cores": 8, "walltime": "96:00:00"}
+    snapshot_recommending(db, "100:00:00")
     anvil.found["12345"] = info("TIMEOUT", "timeout")
     sweep()
     message = db.jobs.docs["job-1"]["failure"]["message"]
     assert "already the 96 h maximum" in message and "longer walltime" not in message
 
 
-def test_a_timeout_of_a_shorter_walltime_offers_a_longer_one(db, anvil, job):
-    job["slurm_config"] = {"cores": 8, "walltime": "06:00:00"}
+def test_a_timeout_of_a_shorter_walltime_still_says_to_shorten_the_period(db, anvil, job):
+    """4 h recommended is 6 h with headroom: not the maximum, and nobody can ask for more."""
+    snapshot_recommending(db, "4:00:00")
     anvil.found["12345"] = info("TIMEOUT", "timeout")
     sweep()
     message = db.jobs.docs["job-1"]["failure"]["message"]
-    assert "longer walltime (up to 96 h)" in message and "maximum" not in message
+    assert "Shorten the run period" in message and "longer walltime" not in message and "maximum" not in message
 
 
-def test_the_walltime_of_a_draft_with_none_of_its_own_is_the_snapshots_with_headroom(db, anvil, job):
+def test_the_walltime_of_a_draft_is_the_snapshots_with_headroom(db, anvil, job):
     """80 h recommended: with headroom it is 120 h, which the submit capped at 96 h."""
     snapshot_recommending(db, "80:00:00")
     anvil.found["12345"] = info("TIMEOUT", "timeout")
@@ -1285,7 +1286,7 @@ def test_the_walltime_of_a_climatology_draft_includes_its_post_processing_time(d
 
 
 def test_an_out_of_memory_job_is_told_how_much_memory_its_cores_gave(db, anvil, job):
-    job["slurm_config"] = {"cores": 4, "walltime": "06:00:00"}
+    job["slurm_config"] = {"cores": 4}
     anvil.found["12345"] = info("OUT_OF_MEMORY", "failed")
     sweep()
     message = db.jobs.docs["job-1"]["failure"]["message"]
@@ -1293,7 +1294,7 @@ def test_an_out_of_memory_job_is_told_how_much_memory_its_cores_gave(db, anvil, 
 
 
 def test_an_out_of_memory_job_with_the_snapshot_gone_is_still_told_to_add_cores(db, anvil, job):
-    job["slurm_config"] = {"cores": None, "walltime": None}
+    job["slurm_config"] = {"cores": None}
     del db.datasets.docs["ds-1"]
     anvil.found["12345"] = info("OUT_OF_MEMORY", "failed")
     sweep()

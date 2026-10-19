@@ -12,16 +12,8 @@ import {
   FIELD_LABEL,
 } from "@/components/workspace/draft-section";
 import {
-  describeComputeSummary,
   describeCoresBelowRecommended,
   describeCoresBelowRecommendedShort,
-  describeDuration,
-  describeJobCount,
-  describeWalltimeBelowReference,
-  automaticJobCount,
-  effectiveCompute,
-  parseSlurmTime,
-  secondsToHms,
   validateSlurmConfig,
   type Recommended,
 } from "@/lib/jobs/compute";
@@ -52,89 +44,47 @@ function Warning({ id, short, why }: { id?: string; short: string; why: string }
 }
 
 /**
- * Cores and walltime for a draft: the two things a user may change about how
- * SLURM runs it, as two fields under "Compute", each with what is recommended
- * under it ("Recommended 64", "Recommended 6:45:00"). The lines under the
- * fields say what the draft asks for (`describeComputeSummary`: "Recommended:
- * 26 cores · 4 d (limit for one job)", or "Custom: 8 cores · 12 h") and what an
- * empty field means. Left empty, a field means the snapshot's recommendation,
- * which is its placeholder. The limits are the inputs' own (`max`) and are
- * spoken of only when a value is over them. The account and partition are the
- * gateway's (one shared allocation, ADR 0024), so they are not fields.
+ * Cores for a draft: the one thing a user may change about how SLURM runs it,
+ * a field under "Compute" with what is recommended under it ("Recommended
+ * 64"). Left empty, it means the snapshot's recommendation, which is its
+ * placeholder. The limit is the input's own (`max`) and is spoken of only when
+ * a value is over it. The walltime is not the user's (it is the snapshot's
+ * recommendation with headroom, and the run is held to a time limit), and the
+ * account and partition are the gateway's (one shared allocation, ADR 0024),
+ * so none of them is a field.
  *
- * A warning stands above the fields, one line with the long reason behind
- * "Why": cores below what the snapshot recommends (memory comes with cores).
- * Two quiet notes stand with it: a snapshot whose reference simulation is
- * longer than one job may be, with no walltime set, runs as several jobs, each
- * continuing where the last one stopped (`automaticJobCount`); and a walltime
- * shorter than the reference simulation. A value that is refused (here or by
- * the server) has its message under the field.
- *
- * `postProcessing` says the run will post-process (a climatology choice,
- * `runsClimatology`): the automatic walltime then includes the snapshot's
- * measured post-processing time, and the line under the fields says so.
+ * A warning stands above the field, one line with the long reason behind
+ * "Why": cores below what the snapshot recommends (memory comes with cores). A
+ * value that is refused (here or by the server) has its message under the
+ * field.
  */
 export function ComputeSection({
   config,
   recommended,
-  postProcessing = false,
   serverErrors = {},
   onChange,
 }: {
   config: SlurmConfig;
   /** The snapshot's own `recommendedCompute`; null when it could not be loaded. */
   recommended: Recommended | null;
-  /** The run will post-process: a climatology choice. */
-  postProcessing?: boolean;
   /** What the server said about a value it did not take. */
-  serverErrors?: { cores?: string; walltime?: string };
+  serverErrors?: { cores?: string };
   onChange: (config: SlurmConfig) => void;
 }) {
   const id = useId();
   const errors = validateSlurmConfig(config);
   const coresError = errors.cores ?? serverErrors.cores;
-  const walltimeError = errors.walltime ?? serverErrors.walltime;
-  // What an empty field means: the recommended cores, and its walltime (plus
-  // the post-processing time of a climatology run) plus 50%, at most the limit
-  // for one job.
-  const automatic = effectiveCompute({ cores: null, walltime: null }, recommended, postProcessing);
-  const automaticSeconds = automatic.walltime ? parseSlurmTime(automatic.walltime) : null;
-  const jobCount = automaticJobCount(config, recommended, postProcessing);
-  const belowReference = describeWalltimeBelowReference(config, recommended, postProcessing);
   const coresWarning = describeCoresBelowRecommendedShort(config, recommended);
   const coresWarningId = coresWarning ? `${id}-cores-warning` : undefined;
-  const walltimeNoteId = jobCount !== null || belowReference ? `${id}-walltime-note` : undefined;
-  const summary = describeComputeSummary(config, recommended, postProcessing);
-
-  const emptyMeans =
-    recommended && automaticSeconds !== null
-      ? `Empty = recommended: ${recommended.cores} ${recommended.cores === 1 ? "core" : "cores"}, ${describeDuration(automaticSeconds)}${
-          automatic.walltimeCapped ? " (the limit for one job)" : ""
-        }${automatic.includesPostProcessing ? ", with the post-processing" : ""}.`
-      : "Empty = the model snapshot's recommendation.";
 
   return (
     <DraftSection title="Compute" help="compute">
-      {(coresWarning || jobCount !== null || belowReference) && (
-        <div className="space-y-3">
-          {coresWarning && (
-            <Warning
-              id={coresWarningId}
-              short={coresWarning}
-              why={describeCoresBelowRecommended(config, recommended) as string}
-            />
-          )}
-          {jobCount !== null && (
-            <p id={walltimeNoteId} className="text-xs text-muted-foreground">
-              {describeJobCount(jobCount, automatic.includesPostProcessing)}
-            </p>
-          )}
-          {belowReference && (
-            <p id={walltimeNoteId} className="text-xs text-muted-foreground">
-              {belowReference}
-            </p>
-          )}
-        </div>
+      {coresWarning && (
+        <Warning
+          id={coresWarningId}
+          short={coresWarning}
+          why={describeCoresBelowRecommended(config, recommended) as string}
+        />
       )}
       <div className="grid gap-3.5 sm:grid-cols-2">
         <div className="space-y-[7px]">
@@ -154,9 +104,9 @@ export function ComputeSection({
             value={config.cores ?? ""}
             aria-invalid={coresError !== undefined}
             aria-describedby={
-              [`${id}-compute-hint`, recommended ? `${id}-cores-hint` : null, coresError ? `${id}-cores-error` : null, coresWarningId]
+              [recommended ? `${id}-cores-hint` : null, coresError ? `${id}-cores-error` : null, coresWarningId]
                 .filter(Boolean)
-                .join(" ")
+                .join(" ") || undefined
             }
             onChange={(e) =>
               onChange({ ...config, cores: e.target.value === "" ? null : Number(e.target.value) })
@@ -173,46 +123,6 @@ export function ComputeSection({
             </p>
           )}
         </div>
-        <div className="space-y-[7px]">
-          <Label htmlFor={`${id}-walltime`} className={FIELD_LABEL}>
-            Walltime <span className="font-normal text-muted-foreground">(hh:mm:ss)</span>
-          </Label>
-          <Input
-            id={`${id}-walltime`}
-            {...draftField("walltime")}
-            inputMode="numeric"
-            className={`${FIELD_INPUT} font-mono md:text-sm`}
-            placeholder={automaticSeconds !== null ? secondsToHms(automaticSeconds) : "HH:MM:SS"}
-            value={config.walltime ?? ""}
-            aria-invalid={walltimeError !== undefined}
-            aria-describedby={
-              [`${id}-compute-hint`, automaticSeconds !== null ? `${id}-walltime-hint` : null, walltimeError ? `${id}-walltime-error` : null, walltimeNoteId]
-                .filter(Boolean)
-                .join(" ")
-            }
-            onChange={(e) =>
-              onChange({ ...config, walltime: e.target.value === "" ? null : e.target.value })
-            }
-          />
-          {walltimeError && (
-            <p id={`${id}-walltime-error`} className="text-xs text-destructive">
-              {walltimeError}
-            </p>
-          )}
-          {automaticSeconds !== null && (
-            <p id={`${id}-walltime-hint`} className={FIELD_HINT}>
-              Recommended {secondsToHms(automaticSeconds)}
-            </p>
-          )}
-        </div>
-      </div>
-      <div className="space-y-1">
-        <p aria-live="polite" className="text-[13px] text-foreground">
-          {summary.text}
-        </p>
-        <p id={`${id}-compute-hint`} className={FIELD_HINT}>
-          {emptyMeans}
-        </p>
       </div>
     </DraftSection>
   );

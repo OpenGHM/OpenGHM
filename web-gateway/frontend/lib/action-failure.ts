@@ -115,7 +115,7 @@ function noAnswer(code: string | undefined, message: string): ActionFailure {
 }
 
 /** A pydantic error's `loc` as a dotted path without the leading "body":
- *  `["body", "slurm_config", "walltime"]` is `slurm_config.walltime`. Null when
+ *  `["body", "slurm_config", "cores"]` is `slurm_config.cores`. Null when
  *  it names nothing. */
 function validationPath(loc: unknown): string | null {
   if (!Array.isArray(loc)) return null;

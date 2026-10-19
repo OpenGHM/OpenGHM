@@ -3,8 +3,8 @@
  * reviewed together. No React here.
  *
  * Every statement is about what this gateway does, and the numbers that have a
- * source in code are read from it (the memory per core, the longest walltime,
- * the days Anvil keeps unused files), so the text cannot drift from them. Write
+ * source in code are read from it (the memory per core, the longest job, the
+ * longest simulation, the days Anvil keeps unused files), so the text cannot drift from them. Write
  * for a hydrologist: plain words, no names of files, settings or decisions.
  *
  * A topic is the help for one step (its overview) or, on Run settings, for one
@@ -12,7 +12,7 @@
  * the panel only draws them.
  */
 import { ANVIL_SHARED_MB_PER_CORE } from "@/lib/jobs/compute";
-import { MAX_WALLTIME, MAX_WALLTIME_SECONDS } from "@/lib/jobs/types";
+import { MAX_RUN_SECONDS, MAX_WALLTIME_SECONDS } from "@/lib/jobs/types";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
 import { RETENTION_DAYS } from "@/lib/workspace/format";
 
@@ -44,6 +44,7 @@ const text = (value: string): HelpBlock => ({ kind: "text", text: value });
 const list = (...items: string[]): HelpBlock => ({ kind: "list", items });
 
 const MAX_WALLTIME_HOURS = MAX_WALLTIME_SECONDS / 3600;
+const MAX_RUN_WEEKS = MAX_RUN_SECONDS / (7 * 24 * 3600);
 
 const START: HelpTopic = {
   id: "start",
@@ -143,13 +144,12 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
     title: "Compute",
     blocks: [
       text(
-        "The cores and the walltime of the SLURM job on Anvil. Leave a field empty to use the snapshot's recommendation, which is shown in it."
+        "The cores of the SLURM job on Anvil. Leave the field empty to use the snapshot's recommendation, which is shown in it."
       ),
       list(
         `Cores are for memory. On Anvil's shared partition a core brings ${ANVIL_SHARED_MB_PER_CORE} MB, and memory comes only with cores, so the snapshot recommends the number that gives its simulation enough. With fewer, the simulation may be stopped for running out of memory. You get a warning, and can still submit.`,
-        `Left empty, the walltime is the snapshot's recommended time plus 50%, and never more than ${MAX_WALLTIME_HOURS} hours, the longest one job may run. A walltime you set is used as written, up to ${MAX_WALLTIME}.`,
-        "If a simulation needs longer than its walltime, it may be stopped when time runs out.",
-        `A simulation that SLURM stops at its walltime after WBM saved its state is continued: the gateway submits it again and WBM carries on from the last saved state. A snapshot whose reference simulation took more than ${MAX_WALLTIME_HOURS} hours therefore runs as several jobs, and this page says how many it may take.`
+        `You do not choose a walltime. A simulation may take at most ${MAX_RUN_WEEKS} weeks. The review step shows how long yours is estimated to take, the snapshot's recommended time plus 50%, and a snapshot draft estimated to take longer cannot be submitted.`,
+        `Anvil stops a SLURM job after ${MAX_WALLTIME_HOURS} hours. A simulation stopped there continues automatically where it stopped, so a long simulation needs nothing from you.`
       ),
     ],
   },
@@ -176,7 +176,7 @@ function outputTopic({ climatologyAvailable = false }: HelpFacts): HelpTopic {
   const base = SECTIONS.output;
   const [intro, ...rest] = base.blocks;
   const availability = climatologyAvailable
-    ? text("Running it takes extra time after the simulation, and the walltime then includes it.")
+    ? text("Running it takes extra time after the simulation, and the estimated run time then includes it.")
     : text(
         "Post-processing is not available yet: WBM's post-processing time grows with a snapshot's size and period, and the gateway does not plan for it yet."
       );

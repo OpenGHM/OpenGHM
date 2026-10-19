@@ -178,18 +178,27 @@ def test_a_stored_about_that_no_longer_validates_is_a_422_not_a_500(client, db, 
 # ---- slurm_config clears one field at a time ---------------------------------------
 
 
-def test_null_cores_clears_cores_and_keeps_the_walltime(client, db, draft):
-    assert _patch(client, slurm_config={"cores": 8, "walltime": "04:00:00"}).status_code == 200
+def test_null_cores_clears_the_cores(client, db, draft):
+    assert _patch(client, slurm_config={"cores": 8}).status_code == 200
     response = _patch(client, slurm_config={"cores": None})
     assert response.status_code == 200
-    assert response.json()["slurm_config"] == {"cores": None, "walltime": "04:00:00"}
-    assert db.jobs.docs["job-1"]["slurm_config"] == {"cores": None, "walltime": "04:00:00"}
+    assert response.json()["slurm_config"] == {"cores": None}
+    assert db.jobs.docs["job-1"]["slurm_config"] == {"cores": None}
 
 
-def test_null_walltime_clears_the_walltime_and_keeps_the_cores(client, db, draft):
-    assert _patch(client, slurm_config={"cores": 8, "walltime": "04:00:00"}).status_code == 200
-    got = _patch(client, slurm_config={"walltime": None}).json()
-    assert got["slurm_config"] == {"cores": 8, "walltime": None}
+def test_a_walltime_in_a_patch_is_ignored_and_never_stored(client, db, draft):
+    got = _patch(client, slurm_config={"cores": 8, "walltime": "04:00:00"})
+    assert got.status_code == 200
+    assert got.json()["slurm_config"] == {"cores": 8}
+    assert db.jobs.docs["job-1"]["slurm_config"] == {"cores": 8}
+
+
+def test_a_walltime_stored_before_the_walltime_went_is_dropped_by_the_next_patch(client, db, draft):
+    draft["slurm_config"] = {"cores": 8, "walltime": "04:00:00"}
+    got = _patch(client, slurm_config={"cores": 4})
+    assert got.status_code == 200
+    assert got.json()["slurm_config"] == {"cores": 4}
+    assert db.jobs.docs["job-1"]["slurm_config"] == {"cores": 4}
 
 
 # ---- an edit is not an audited event ----------------------------------------------

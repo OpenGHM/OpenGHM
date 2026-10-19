@@ -72,7 +72,7 @@ function step(props: Partial<React.ComponentProps<typeof DraftRunStep>> = {}) {
       datasetTitle="Kept title"
       ctx={FOUND}
       parameters={PARAMETERS}
-      slurm={{ cores: null, walltime: null }}
+      slurm={{ cores: null }}
       recommended={dataset.simulation.recommendedCompute}
       modelInputId={null}
       resolvedModelInput={undefined}
@@ -167,7 +167,6 @@ describe("the draft run step: fields the wizard can focus", () => {
     expect(marked("start")).toBe(start());
     expect(marked("end")).toBe(end());
     expect(marked("cores")).toBe(screen.getByLabelText("Cores"));
-    expect(marked("walltime")).toBe(screen.getByLabelText(/^Walltime/));
     const removes = screen.getAllByRole("button", { name: "Remove" });
     expect(marked("spatial")).toBe(removes[0]);
     expect(marked("custom")).toBe(removes[1]);
@@ -197,7 +196,8 @@ describe("the draft run step: the quiet path", () => {
     expect(end()).toBeTruthy();
     expect(variableBoxes()).toHaveLength(0);
     expect(screen.getByLabelText("Cores")).toBeTruthy();
-    expect(screen.getByLabelText(/^Walltime/)).toBeTruthy();
+    // The walltime is not the user's: no field for it.
+    expect(screen.queryByLabelText(/Walltime/i)).toBeNull();
     expect(screen.getByRole("button", { name: "Choose output variables" }).textContent).toBe("Choose…");
     expect(screen.queryByRole("button", { name: /compute/i })).toBeNull();
   });
@@ -275,13 +275,12 @@ describe("the draft run step: the quiet path", () => {
     expect(variableBoxes()).toHaveLength(0);
   });
 
-  it("says what the compute is in one line: the recommendation, or the draft's own values", () => {
+  it("shows the draft's own cores in the field, and the recommendation as its placeholder", () => {
     const { unmount } = step();
-    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
+    expect((screen.getByLabelText("Cores") as HTMLInputElement).value).toBe("");
+    expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16");
     unmount();
-    step({ slurm: { cores: 8, walltime: "12:00:00" } });
-    expect(screen.getByText("Custom: 8 cores · 12 h")).toBeTruthy();
-    // Still reachable.
+    step({ slurm: { cores: 8 } });
     expect((screen.getByLabelText("Cores") as HTMLInputElement).value).toBe("8");
   });
 
@@ -303,7 +302,7 @@ describe("the draft run step: the quiet path", () => {
   });
 
   it("keeps the compute fields open, with their message, for a value that is refused", () => {
-    step({ slurm: { cores: 0, walltime: null } });
+    step({ slurm: { cores: 0 } });
     expect(screen.getByText("Use a whole number from 1 to 128.")).toBeTruthy();
     expect(screen.getByLabelText("Cores").getAttribute("aria-invalid")).toBe("true");
     expect(screen.queryByRole("button", { name: /compute/ })).toBeNull();
@@ -499,7 +498,6 @@ describe("the draft run step: without a snapshot", () => {
     // Nothing to compare with, so no "All" and no "of": the stored variables, as they are.
     expect(screen.getByText("1 variable")).toBeTruthy();
     expect(screen.getByText(/own list isn't\s+available/)).toBeTruthy();
-    expect(screen.getByText("Recommended: set by the model snapshot")).toBeTruthy();
     openVariables();
     expect(variableBoxes().map((c) => (c as HTMLInputElement).checked)).toEqual([true]);
     expect(screen.getByRole("checkbox", { name: "discharge" })).toBeTruthy();
@@ -614,7 +612,8 @@ describe("the draft run step: compute", () => {
     expect(screen.getByText("Recommended 16").id).toBe(
       screen.getByLabelText("Cores").getAttribute("aria-describedby")!.split(" ").find((i) => i.endsWith("-cores-hint"))
     );
-    expect(screen.getByText(/^Recommended \d+:\d\d:\d\d$/)).toBeTruthy();
+    // Only cores are recommended here: the time is the review step's estimate.
+    expect(screen.getAllByText(/^Recommended /)).toHaveLength(1);
   });
 
   it("says nothing is recommended when the snapshot gave nothing to recommend", () => {
@@ -622,62 +621,27 @@ describe("the draft run step: compute", () => {
     expect(screen.queryByText(/^Recommended \d/)).toBeNull();
   });
 
-  it("passes cores and walltime on", () => {
-    const { onSlurmChange } = step({ slurm: { cores: null, walltime: "02:00:00" } });
+  it("passes cores on", () => {
+    const { onSlurmChange } = step({ slurm: { cores: null } });
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "4" } });
-    expect(onSlurmChange).toHaveBeenCalledWith({ cores: 4, walltime: "02:00:00" });
+    expect(onSlurmChange).toHaveBeenCalledWith({ cores: 4 });
     expect(screen.getByLabelText("Cores").getAttribute("placeholder")).toBe("16");
   });
 
-  it("shows what the server said about cores and walltime", () => {
-    step({ serverErrors: { cores: "Too many cores.", walltime: "Too long." } });
-    // Refused values keep the fields open, the message under its own field.
+  it("shows what the server said about cores", () => {
+    step({ serverErrors: { cores: "Too many cores." } });
+    // A refused value keeps the field open, the message under it.
     expect(screen.getByText("Too many cores.").previousElementSibling).toBe(screen.getByLabelText("Cores"));
-    expect(screen.getByText("Too long.").previousElementSibling).toBe(screen.getByLabelText(/^Walltime/));
   });
 });
 
 describe("the draft run step: a reference simulation that does not fit in one job", () => {
-  const long = { cores: 16, walltime: "111:30:00" };
-
-  it("says it runs as several jobs next to the Walltime field, and shows the automatic one as the limit", () => {
-    step({ recommended: long });
-    // Visible with the fields closed; a note, not a warning.
-    const notice = screen.getByText(/may run as up to 2 jobs of 96 h each/);
-    expect(notice.textContent).toBe(
-      "This simulation may run as up to 2 jobs of 96 h each (the reference simulation took about 111 h 30 min, plus 50%). Each job continues where the last one stopped."
-    );
-    expect(notice.className).toContain("text-muted-foreground");
+  it("says nothing about the time or about jobs, however long the reference simulation took", () => {
+    step({ recommended: { cores: 16, walltime: "111:30:00" } });
+    expect(screen.queryByText(/\d+ jobs/)).toBeNull();
+    expect(screen.queryByText(/limit for one job|reference simulation took/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Why?" })).toBeNull();
-    expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
-    const walltime = screen.getByLabelText(/^Walltime/);
-    expect(walltime.getAttribute("aria-describedby")).toContain(notice.id);
-    expect(walltime.getAttribute("placeholder")).toBe("96:00:00");
-    expect(screen.getByText("Empty = recommended: 16 cores, 4 d (the limit for one job).")).toBeTruthy();
-  });
-
-  it("counts the jobs from the recommendation with headroom", () => {
-    step({ recommended: { cores: 16, walltime: "192:00:00" } });
-    expect(screen.getByText(/may run as up to 3 jobs of 96 h each/)).toBeTruthy();
-  });
-
-  it("is gone once the draft sets a walltime of its own", () => {
-    step({ recommended: long, slurm: { cores: null, walltime: "96:00:00" } });
-    expect(screen.queryByText(/may run as up to/)).toBeNull();
-    expect(screen.getByText("Custom: 16 cores (recommended) · 4 d")).toBeTruthy();
-  });
-
-  it("says nothing for a recommendation that fits", () => {
-    step();
-    expect(screen.queryByText(/reference simulation took/)).toBeNull();
-    expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("00:22:30");
-    expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
-  });
-
-  it("only hints, without an error, at a walltime shorter than the reference simulation", () => {
-    step({ recommended: { cores: 16, walltime: "4:30:00" }, slurm: { cores: null, walltime: "02:00:00" } });
-    expect(screen.getByText(/reference simulation took about 4 h 30 min/)).toBeTruthy();
-    expect(screen.getByLabelText(/^Walltime/).getAttribute("aria-invalid")).not.toBe("true");
+    expect(screen.queryByLabelText(/Walltime/i)).toBeNull();
   });
 });
 
@@ -686,7 +650,7 @@ describe("the draft run step: cores below the recommended count", () => {
   const warning = () => screen.queryByText(/1 core is below the recommended 64/);
 
   it("warns next to the Cores field, with the numbers, and does not make it an error", () => {
-    step({ recommended: BIG, slurm: { cores: 1, walltime: null } });
+    step({ recommended: BIG, slurm: { cores: 1 } });
     // In view with the fields closed.
     const note = warning()!;
     expect(note.textContent).toContain("1 core is below the recommended 64: the simulation may run out of memory.");
@@ -708,7 +672,7 @@ describe("the draft run step: cores below the recommended count", () => {
     const { onSlurmChange, rerender } = step({ recommended: BIG });
     expect(warning()).toBeNull();
     fireEvent.change(screen.getByLabelText("Cores"), { target: { value: "1" } });
-    expect(onSlurmChange).toHaveBeenLastCalledWith({ cores: 1, walltime: null });
+    expect(onSlurmChange).toHaveBeenLastCalledWith({ cores: 1 });
 
     const props = (cores: number | null) => (
       <DraftRunStep
@@ -716,7 +680,7 @@ describe("the draft run step: cores below the recommended count", () => {
         datasetTitle="Kept title"
         ctx={FOUND}
         parameters={PARAMETERS}
-        slurm={{ cores, walltime: null }}
+        slurm={{ cores }}
         recommended={BIG}
         modelInputId={null}
         resolvedModelInput={undefined}
@@ -740,7 +704,7 @@ describe("the draft run step: cores below the recommended count", () => {
   });
 
   it("says nothing without a recommendation", () => {
-    step({ recommended: null, slurm: { cores: 1, walltime: null } });
+    step({ recommended: null, slurm: { cores: 1 } });
     expect(screen.queryByText(/snapshot recommends/)).toBeNull();
   });
 });
@@ -756,7 +720,6 @@ describe("the draft run step: disabled", () => {
     expect(off(end())).toBe(true);
     expect(off(screen.getByRole("button", { name: "Choose output variables" }))).toBe(true);
     expect(off(screen.getByLabelText("Cores"))).toBe(true);
-    expect(off(screen.getByLabelText(/^Walltime/))).toBe(true);
     for (const remove of screen.getAllByRole("button", { name: "Remove" })) expect(off(remove)).toBe(true);
   });
 });
@@ -1191,53 +1154,5 @@ describe("the draft run step: the Post-processing choice", () => {
     unmount();
     step({ disabled: true });
     expect(box().matches(":disabled")).toBe(true);
-  });
-});
-
-describe("the draft run step: the walltime of a climatology choice", () => {
-  const climatology = { ...PARAMETERS, post_processing: "climatology" as const };
-
-  it("adds the post-processing time to the automatic walltime, and says so", () => {
-    // 15 min + 45 min, and half as much again.
-    step({ parameters: climatology });
-    expect(screen.getByText("Recommended: 16 cores · 1 h 30 min")).toBeTruthy();
-    expect(screen.getByText("Empty = recommended: 16 cores, 1 h 30 min, with the post-processing.")).toBeTruthy();
-    expect(screen.getByLabelText(/^Walltime/).getAttribute("placeholder")).toBe("01:30:00");
-  });
-
-  it("leaves the automatic walltime alone for the standard output", () => {
-    step({ parameters: { ...PARAMETERS, post_processing: "standard" } });
-    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
-    expect(screen.getByText("Empty = recommended: 16 cores, 22 min 30 s.")).toBeTruthy();
-  });
-
-  it("follows the snapshot's own choice when the draft has none", () => {
-    step({ ctx: { dataset: fakeDataset({ ...dataset, postProcessing: "climatology" }), snapshotState: "found" } });
-    expect(screen.getByText("Recommended: 16 cores · 1 h 30 min")).toBeTruthy();
-  });
-
-  it("names the post-processing in a custom line", () => {
-    step({ parameters: climatology, slurm: { cores: 4, walltime: null } });
-    expect(screen.getByText("Custom: 4 cores · 1 h 30 min (recommended + post-processing + 50%)")).toBeTruthy();
-  });
-
-  it("leaves a snapshot without a measurement at its walltime alone", () => {
-    const unmeasured = { cores: 16, walltime: "15:00" };
-    step({ parameters: climatology, recommended: unmeasured });
-    expect(screen.getByText("Recommended: 16 cores · 22 min 30 s")).toBeTruthy();
-  });
-
-  it("names the post-processing in the several jobs a climatology run may take", () => {
-    const big = { cores: 16, walltime: "80:00:00", postProcessingWalltime: "20:00:00" };
-    const { unmount } = step({ parameters: climatology, recommended: big });
-    expect(
-      screen.getByText(/the reference simulation and its post-processing took about 100 h, plus 50%/)
-    ).toBeTruthy();
-    expect(screen.getByText(/may run as up to 2 jobs of 96 h each/)).toBeTruthy();
-    expect(screen.getByText("Recommended: 16 cores · 4 d (limit for one job)")).toBeTruthy();
-    unmount();
-    // The run alone is 80 h, 120 h with headroom: also two jobs, without the post-processing in it.
-    step({ parameters: { ...PARAMETERS, post_processing: "standard" }, recommended: big });
-    expect(screen.getByText(/the reference simulation took about 80 h, plus 50%/)).toBeTruthy();
   });
 });

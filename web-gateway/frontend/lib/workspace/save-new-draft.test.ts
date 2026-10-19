@@ -19,7 +19,7 @@ const created = fakeDraft("DRAFT", {
     variables: ["discharge"],
     custom_params: null,
   },
-  slurm_config: { cores: null, walltime: null },
+  slurm_config: { cores: null },
   updated_at: "2026-10-01T12:00:00.000Z",
 });
 /** What the preview showed: the same draft before it has an id. */
@@ -113,7 +113,7 @@ describe("a create that works and a fill that does not", () => {
   it("still reports the draft, with the fields it does not hold and why", async () => {
     const update = vi.fn(async (): Promise<ActionResult<Job>> => ({ ok: false, reason: "error", message: "Server error", status: 500 }));
     const { saver } = deps({ update });
-    const local = { ...base(), name: "Run A", description: "why", slurm: { cores: 8, walltime: null } };
+    const local = { ...base(), name: "Run A", description: "why", slurm: { cores: 8 } };
     const result = await saver.save("snap-1", local, CTX);
     expect(result).toEqual({
       ok: true,

@@ -21,13 +21,12 @@ export function jobCount(runs: JobRuns): number {
   return Math.max(currentJobNumber(runs), (runs.previous_jobs?.length ?? 0) + 1, runs.continuation?.number ?? 1);
 }
 
-/** "Job 2 of at most 5": which job this is and how many the simulation may
- *  use; null for a simulation that has had only one. The job being submitted
- *  counts as the one meant. */
+/** "Job 2": which job this is; null for a simulation that has had only one.
+ *  The job being submitted counts as the one meant. How many jobs a simulation
+ *  may use is not said: a person is told its limit as time (2 weeks). */
 export function describeJobNumber(runs: JobRuns): string | null {
   if (jobCount(runs) < 2) return null;
-  const number = runs.continuation?.number ?? currentJobNumber(runs);
-  return runs.max_jobs ? `Job ${number} of at most ${runs.max_jobs}` : `Job ${number}`;
+  return `Job ${runs.continuation?.number ?? currentJobNumber(runs)}`;
 }
 
 /** The sentence that goes with `describeJobNumber`: why there is more than one

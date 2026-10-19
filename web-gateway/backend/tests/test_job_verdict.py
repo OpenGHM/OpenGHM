@@ -418,11 +418,12 @@ def test_a_failing_record_wins_over_a_completed_state():
 # ---- rule 2: SLURM killed the job -------------------------------------------
 
 
-def test_timeout_is_timeout_and_suggests_a_longer_walltime():
+def test_timeout_is_timeout_and_suggests_a_shorter_run_period():
     v = verdict("TIMEOUT", outcome=None, err=stderr("slurmstepd: error: *** JOB 1 ON a000 CANCELLED AT 2026-09-30T14:15:00 DUE TO TIME LIMIT ***"))
     assert v.status == "FAILED"
     assert v.failure.cause == "timeout"
-    assert "walltime" in v.failure.message and "longer" in v.failure.message
+    assert "walltime" in v.failure.message and "Shorten the run period" in v.failure.message
+    assert "longer walltime" not in v.failure.message
     assert "DUE TO TIME LIMIT" in v.failure.excerpt
 
 
@@ -745,7 +746,7 @@ def test_a_timeout_in_the_run_says_it_ended_before_wbm_finished():
     rec = record(phase="run", signal="TERM", steps={"fetch": {"exit_code": 0}, "run": {"exit_code": None}})
     msg = verdict("TIMEOUT", outcome=rec, walltime_seconds=6 * 3600).failure.message
     assert "before WBM finished" in msg
-    assert "longer walltime (up to 96 h)" in msg and "shorter run period" in msg
+    assert "Shorten the run period" in msg and "longer walltime" not in msg
 
 
 def test_a_timeout_at_the_96_hour_limit_says_to_shorten_the_period_not_to_ask_for_more():
@@ -754,9 +755,9 @@ def test_a_timeout_at_the_96_hour_limit_says_to_shorten_the_period_not_to_ask_fo
     assert "longer walltime" not in msg
 
 
-def test_a_timeout_whose_walltime_is_unknown_offers_both_levers():
+def test_a_timeout_whose_walltime_is_unknown_says_to_shorten_the_period():
     msg = verdict("TIMEOUT", outcome=None).failure.message
-    assert "longer walltime" in msg and "shorter run period" in msg
+    assert "Shorten the run period" in msg and "longer walltime" not in msg
 
 
 @pytest.mark.parametrize("code", [64, 66, 69, 78])
@@ -868,7 +869,7 @@ def test_a_timeout_not_continued_for_want_of_a_state_says_so_and_carries_the_det
     v = verdict("TIMEOUT", outcome=None, walltime_seconds=4 * 3600, timeout_reason="no_new_state")
     assert v.failure.cause == "timeout" and v.failure.detail == "no_new_state"
     assert "before it saved a state to continue from" in v.failure.message
-    assert "longer walltime (up to 96 h)" in v.failure.message
+    assert "Shorten the run period" in v.failure.message and "longer walltime" not in v.failure.message
 
 
 def test_a_timeout_with_no_state_at_the_maximum_walltime_says_to_shorten_the_period():
@@ -878,16 +879,17 @@ def test_a_timeout_with_no_state_at_the_maximum_walltime_says_to_shorten_the_per
 
 
 def test_a_timeout_at_the_job_limit_says_the_limit_was_reached():
-    v = verdict("TIMEOUT", outcome=None, jobs_ran=5, timeout_reason="job_limit")
+    v = verdict("TIMEOUT", outcome=None, jobs_ran=4, timeout_reason="job_limit")
     assert v.failure.detail == "job_limit"
-    assert v.failure.message.startswith("This simulation ran as 5 jobs. That is the most one simulation may use")
-    assert "ask an administrator" in v.failure.message
+    assert v.failure.message.startswith("The simulation reached the 2-week limit for one simulation")
+    assert v.failure.message.endswith("Shorten the run period and submit again.")
+    assert "jobs" not in v.failure.message
 
 
 def test_a_continued_simulation_is_not_told_to_shorten_the_period_as_its_only_remedy():
     v = verdict("TIMEOUT", outcome=None, jobs_ran=2, timeout_reason="no_new_state", walltime_seconds=30 * 3600)
     assert v.failure.message.startswith("This simulation ran as 2 jobs.")
-    assert "longer walltime (up to 96 h)" in v.failure.message
+    assert "Shorten the run period" in v.failure.message and "longer walltime" not in v.failure.message
     # The same words without a reason (a verdict read from before): still about the jobs.
     assert verdict("TIMEOUT", outcome=None, jobs_ran=3).failure.message.startswith("This simulation ran as 3 jobs.")
 

@@ -352,10 +352,11 @@ describe("a failed job", () => {
     expect(longHtml).toContain("Copy log excerpt");
   });
 
-  it("offers to try again right there, and says to pick a longer walltime after a timeout", () => {
+  it("offers to try again right there after a timeout, and never to pick a longer walltime", () => {
     render(summary(previewDraftJob("failed:timeout")));
     expect(screen.getByRole("button", { name: "Try again with these settings" })).toBeTruthy();
-    expect(screen.getByText(/longer walltime/)).toBeTruthy();
+    expect(screen.queryByText(/longer walltime/)).toBeNull();
+    expect(screen.getByText(/Try again from a new draft/)).toBeTruthy();
     expect(screen.queryByText("Start a new draft")).toBeNull();
   });
 
@@ -480,7 +481,7 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
       summary(live("RUNNING", { previous_jobs: [ended(1)], job_number: 2, max_jobs: 5 }), { live: runLive() })
     );
     const text = container.textContent ?? "";
-    expect(text).toContain("Job 2 of at most 5.");
+    expect(text).toContain("Job 2.");
     expect(text).toContain("Continued after the previous job reached its time limit");
     expect(screen.getByRole("heading", { name: "Earlier jobs" })).toBeTruthy();
     const [row] = screen.getAllByRole("listitem");
@@ -496,7 +497,7 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
   it("lists every earlier job, oldest first", () => {
     render(summary(live("RUNNING", { previous_jobs: [ended(1), ended(2)], job_number: 3, max_jobs: 5 }), { live: runLive() }));
     expect(screen.getAllByRole("listitem").map((li) => li.textContent?.slice(0, 5))).toEqual(["Job 1", "Job 2"]);
-    expect(screen.getByText("Job 3 of at most 5.")).toBeTruthy();
+    expect(screen.getByText("Job 3.")).toBeTruthy();
   });
 
   it("shows the next job being submitted, not an ordinary queue, while the continuation is set", () => {
@@ -514,7 +515,7 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
     expect(screen.getByRole("heading", { name: "Continuing in a new job" })).toBeTruthy();
     const text = container.textContent ?? "";
     expect(text).toContain("The next job is being submitted to SLURM.");
-    expect(text).toContain("Job 2 of at most 5.");
+    expect(text).toContain("Job 2.");
     expect(text).not.toContain("In the queue");
     expect(text).not.toContain("earlier attempt");
     expect(screen.getByRole("button", { name: "Cancel simulation" })).toBeTruthy();
@@ -537,7 +538,7 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
   it("is an ordinary queue once the next job has a SLURM id and the continuation is over", () => {
     render(summary(live("PENDING", { previous_jobs: [ended(1)], job_number: 2, max_jobs: 5 }), { live: QUEUED }));
     expect(screen.getByRole("heading", { name: "In the queue" })).toBeTruthy();
-    expect(screen.getByText("Job 2 of at most 5.")).toBeTruthy();
+    expect(screen.getByText("Job 2.")).toBeTruthy();
   });
 
   it("counts all the jobs in how long a completed simulation ran, and counts the last one's wait from the end of the one before", () => {
@@ -547,7 +548,7 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
       summary({ ...job, previous_jobs: [{ ...ended(1), slurm_end: "2026-09-30T10:00:00Z" }] })
     );
     expect(screen.getByRole("heading", { name: "Completed in 71 h" })).toBeTruthy();
-    expect(container.textContent).toContain("Job 2 of at most 5.");
+    expect(container.textContent).toContain("Job 2.");
     expect(container.textContent).toMatch(/Resubmitted · queued/);
     expect(container.textContent).toContain("Started · ran 1 h");
   });
@@ -556,6 +557,6 @@ describe("a simulation continued in more than one job (ADR 0037)", () => {
     const { container } = render(summary(previewDraftJob("failed:run_state_incomplete")));
     expect(container.textContent).toContain(FAILURE_COPY.run_state_incomplete.title);
     expect(screen.getByRole("heading", { name: "Earlier jobs" })).toBeTruthy();
-    expect(container.textContent).toContain("Job 2 of at most 5.");
+    expect(container.textContent).toContain("Job 2.");
   });
 });

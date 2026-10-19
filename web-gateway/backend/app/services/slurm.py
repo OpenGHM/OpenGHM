@@ -40,6 +40,7 @@ from app.core.audit import SYSTEM_ACTOR, AuditCategory, log_event
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.job import (
+    MAX_JOBS_PER_SIMULATION,
     SLURM_NO_VAL,
     TERMINAL_STATUSES,
     JobDB,
@@ -212,24 +213,22 @@ def client_state() -> str:
 def resolve_compute(
     slurm_config: SlurmConfig, snapshot: dict, post_processing: bool = False
 ) -> tuple[int, str]:
-    """`(cores, walltime)` a job asks SLURM for: the draft's own choice, else
-    the snapshot's `simulation.recommendedCompute` (the spec requires both
-    there, so a real snapshot always answers).
+    """`(cores, walltime)` a job asks SLURM for: the draft's cores, else the
+    snapshot's `simulation.recommendedCompute` (the spec requires both there, so a
+    real snapshot always answers).
 
-    Cores are the recommendation as it is. A walltime the draft chose is sent
-    as written; the snapshot's is sent with 50% headroom (`with_headroom`),
-    because the recommendation is what a simulation took, not what it is safe to ask
-    for. When the run will post-process (`job_script.runs_climatology`) that
+    The walltime is never the draft's: it is the snapshot's recommendation with
+    50% headroom (`with_headroom`) and at most one job's limit, because the
+    recommendation is what a simulation took, not what it is safe to ask for.
+    When the run will post-process (`job_script.runs_climatology`) that
     recommendation is the walltime plus the snapshot's measured
     `postProcessingWalltime` (`job_script.recommended_walltime`). Both are SLURM
     `--time` syntax: `15:00` is fifteen minutes.
     """
     recommended = snapshot.get("simulation", {}).get("recommendedCompute") or {}
     cores = slurm_config.cores or recommended.get("cores")
-    walltime = slurm_config.walltime
-    if not walltime:
-        base = recommended_walltime(snapshot, post_processing)
-        walltime = with_headroom(base) if base else None
+    base = recommended_walltime(snapshot, post_processing)
+    walltime = with_headroom(base) if base else None
     if not cores or not walltime:
         raise SubmitInputError(
             "The snapshot does not say how many cores and how much time it needs, "
@@ -598,9 +597,9 @@ async def _move(
 
 async def _requested_compute(doc: dict) -> tuple[int | None, int | None]:
     """`(cores, walltime in seconds)` the job asked SLURM for, worked out the way
-    the submit worked it out: the draft's own, else the snapshot's recommendation
-    (the walltime plus its post-processing time when the run post-processed, with
-    headroom). The job stores neither. `(None, None)` when it cannot be told (the
+    the submit worked it out: the draft's cores, else the snapshot's, and the
+    snapshot's recommended walltime (plus its post-processing time when the run
+    post-processed, with headroom). The job stores neither. `(None, None)` when it cannot be told (the
     snapshot is gone, say): a message then says less, not something false. A job
     that kept its script (ADR 0037) knows what it asked for, and says so."""
     script = doc.get("submit_script")
@@ -814,7 +813,7 @@ async def _consider_continuing(doc: dict, info: JobInfo | None) -> str | None:
     if doc.get("cancel_requested_at"):
         return None
     jobs_ran = len(doc.get("previous_jobs") or []) + 1
-    if jobs_ran >= settings.JOB_MAX_JOBS_PER_SIMULATION:
+    if jobs_ran >= MAX_JOBS_PER_SIMULATION:
         return "job_limit"
 
     state = await read_run_state(doc)

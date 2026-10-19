@@ -45,7 +45,6 @@ const BASE_PARAMETERS: Job["parameters"] = {
 
 const BASE_SLURM: Job["slurm_config"] = {
   cores: 16,
-  walltime: "00:15:00",
 };
 
 /**

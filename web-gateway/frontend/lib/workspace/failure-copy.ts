@@ -12,7 +12,6 @@ import { sharedMemoryGb } from "@/lib/jobs/compute";
  *  (`NEXT_STEP_COPY`) and the buttons it offers. */
 export type NextStep =
   | "resubmit"
-  | "resubmit_longer_walltime"
   | "new_draft"
   | "contact_admin"
   | "admin_fixes_setup"
@@ -77,8 +76,8 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
   },
   timeout: {
     title: "Ran out of time",
-    body: "The simulation hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil. Try a longer walltime, or a shorter run period if the walltime is already at its limit.",
-    nextStep: "resubmit_longer_walltime",
+    body: "The simulation hit its walltime before WBM finished. Anything it wrote before that may still be on Anvil. Try a shorter run period.",
+    nextStep: "new_draft",
     tone: "warning",
   },
   out_of_memory: {
@@ -138,12 +137,10 @@ export const FAILURE_COPY: Record<FailureCause, FailureCopy> = {
 };
 
 /** A `timeout` that was not continued because the simulation had used all the
- *  jobs it may have (`detail` `job_limit`): a longer walltime would not help
- *  when each job already ran to the limit, so the way on is a shorter run. */
+ *  time it may have (`detail` `job_limit`). */
 const TIMEOUT_JOB_LIMIT_COPY: FailureCopy = {
   ...FAILURE_COPY.timeout,
-  body: "The simulation used all the jobs it may have and WBM still had not finished. Anything it wrote may still be on Anvil. Try a shorter run period.",
-  nextStep: "new_draft",
+  body: "The simulation used all the time one simulation may have and WBM still had not finished. Anything it wrote may still be on Anvil. Try a shorter run period.",
 };
 
 /** A verdict whose cause this frontend has no wording for (the backend gained
@@ -168,8 +165,6 @@ export function failureCopyFor(failure: Pick<JobFailure, "cause" | "detail"> | n
 /** The sentence under the body that says what to do. */
 export const NEXT_STEP_COPY: Record<NextStep, string> = {
   resubmit: "Try again from a new draft with the same settings.",
-  resubmit_longer_walltime:
-    "Try again from a new draft with the same settings, and pick a longer walltime before you submit it, or a shorter run period if the walltime is already at its limit.",
   new_draft:
     "Try again from a new draft, change what caused this, and submit it.",
   contact_admin:

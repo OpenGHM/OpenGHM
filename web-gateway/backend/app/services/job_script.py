@@ -74,7 +74,7 @@ import shlex
 from dataclasses import dataclass
 from datetime import date
 
-from app.models.job import MAX_WALLTIME_SECONDS, JobParameters
+from app.models.job import MAX_RUN_SECONDS, MAX_WALLTIME_SECONDS, JobParameters
 
 
 class SubmitInputError(ValueError):
@@ -513,17 +513,21 @@ def format_slurm_time(seconds: int) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def _headroom_seconds(seconds: int) -> int:
+    """`seconds` plus 50%, rounded up to a whole second."""
+    return (seconds * 3 + 1) // 2
+
+
 def with_headroom(walltime: str) -> str:
     """A snapshot's recommended walltime plus 50%, in SLURM's format, rounded
     up to a whole second and never over `MAX_WALLTIME_SECONDS` (what one job
     may use on Anvil): `15:00` becomes `22:30`, `4:30:00` becomes `6:45:00`,
     `80:00:00` becomes `96:00:00`. A simulation of the v2 snapshot took 13:49 of its
-    recommended 15:00, so the bare recommendation leaves no room. Applied only
-    to a snapshot's value; a walltime the user chose is sent as given.
-    A recommendation that is itself over the limit cannot be run in one job; the
-    job asks for the cap and the run continues in the next job when SLURM stops it
-    (ADR 0037). Mirrored by `withHeadroom` in the frontend's lib/jobs/compute.ts."""
-    seconds = (parse_slurm_time(walltime) * 3 + 1) // 2
+    recommended 15:00, so the bare recommendation leaves no room. A recommendation
+    that is itself over the limit cannot be run in one job; the job asks for the
+    cap and the run continues in the next job when SLURM stops it (ADR 0037).
+    Mirrored by `withHeadroom` in the frontend's lib/jobs/compute.ts."""
+    seconds = _headroom_seconds(parse_slurm_time(walltime))
     return format_slurm_time(min(seconds, MAX_WALLTIME_SECONDS))
 
 
@@ -547,8 +551,8 @@ def runs_climatology(parameters: JobParameters, own_post_processing: str | None)
     """Whether the run will post-process: the draft asks for `climatology`, or
     asks nothing and the snapshot's own init does (`own_post_processing`,
     `run_start.InitRules.post_processing`; None when the init could not be read,
-    which counts as not). The one rule the resolved walltime and the over-limit
-    check share, mirrored by `runsClimatology` in the frontend's
+    which counts as not). The one rule the resolved walltime and the run-time
+    limit check share, mirrored by `runsClimatology` in the frontend's
     lib/jobs/compute.ts."""
     return (parameters.post_processing or own_post_processing) == "climatology"
 
@@ -567,6 +571,44 @@ def recommended_walltime(snapshot: dict, post_processing: bool = False) -> str |
     if extra is None:
         return str(walltime)
     return format_slurm_time(seconds + parse_slurm_time(extra))
+
+
+def estimated_run_seconds(snapshot: dict, post_processing: bool = False) -> int | None:
+    """How long a run of this snapshot is estimated to take: the recommended
+    walltime (with the post-processing time when the run `post_processing`s,
+    `recommended_walltime`) plus 50%, not capped at one job's limit. What the
+    simulation's 2-week limit (`MAX_RUN_SECONDS`) is held against. None when
+    the snapshot has no walltime or one that is not a SLURM time
+    (`resolve_compute` reports that). Mirrored by `estimatedRunSeconds` in the
+    frontend's lib/jobs/compute.ts."""
+    try:
+        recommended = recommended_walltime(snapshot, post_processing)
+        if recommended is None:
+            return None
+        return _headroom_seconds(parse_slurm_time(recommended))
+    except SubmitInputError:
+        return None
+
+
+def run_over_limit(snapshot: dict, post_processing: bool = False) -> int | None:
+    """The estimated run time in seconds (`estimated_run_seconds`) when it is
+    over `MAX_RUN_SECONDS`, else None: the draft is refused (`run_over_limit`).
+    Mirrored by `submitProblems` in the frontend's lib/workspace/draft-state.ts."""
+    seconds = estimated_run_seconds(snapshot, post_processing)
+    return seconds if seconds is not None and seconds > MAX_RUN_SECONDS else None
+
+
+def describe_hours(seconds: int) -> str:
+    """"111 h 30 min", "4 h", "22 min 30 s": a duration for a person, in hours
+    however long it is, the way the limit is written. Mirrored by
+    `describeHours` in the frontend's lib/jobs/compute.ts."""
+    h, rest = divmod(seconds, 3600)
+    m, s = divmod(rest, 60)
+    if h:
+        return f"{h} h {m} min" if m else f"{h} h"
+    if m:
+        return f"{m} min {s} s" if s else f"{m} min"
+    return f"{s} s"
 
 
 # ---------------------------------------------------------------------------

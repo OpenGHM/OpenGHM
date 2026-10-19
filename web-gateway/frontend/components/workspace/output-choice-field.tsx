@@ -285,7 +285,7 @@ export function OutputChoiceSection({
                     Measured on this snapshot&apos;s reference period at {compute.cores}{" "}
                     {compute.cores === 1 ? "core" : "cores"}: about{" "}
                     {describeSlurmTime(compute.postProcessingWalltime)} on top of the run time, which the
-                    walltime then includes.
+                    estimated run time then includes.
                   </p>
                 )}
               </div>

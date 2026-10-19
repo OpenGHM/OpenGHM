@@ -40,7 +40,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from app.models.job import MAX_WALLTIME_SECONDS, FailureCause, JobFailure
+from app.models.job import MAX_RUN_SECONDS, MAX_WALLTIME_SECONDS, FailureCause, JobFailure
 from app.services.job_script import WBM_MARKERS
 
 logger = logging.getLogger(__name__)
@@ -556,26 +556,25 @@ def _message(
 
 def _timeout_message(*, walltime: int | None, reason: str | None, jobs_ran: int) -> str:
     """A `TIMEOUT` after the fetch. `reason` is why it was not continued
-    (ADR 0037): `job_limit` (the simulation used all the jobs it may) or
+    (ADR 0037): `job_limit` (the simulation used all the jobs it may, which is
+    its 2-week limit) or
     `no_new_state` (WBM saved no complete state during the job, which WBM does at
     the end of each simulated year, so there is nothing to carry on from); None
     when no continuation was considered (a job from before them). A simulation
     that already ran as several jobs is not told to shorten the run period as
     though one job was all it had."""
     hours = MAX_WALLTIME_SECONDS // 3600
-    lever = (
-        "Shorten the run period and submit again."
-        if walltime is not None and walltime >= MAX_WALLTIME_SECONDS
-        else f"Submit again with a longer walltime (up to {hours} h), or with a shorter run period."
+    lever = "Shorten the run period and submit again."
+    # Told as time, never as a job count: the job limit is how the 2-week limit
+    # is held (`MAX_JOBS_PER_SIMULATION`).
+    limit = (
+        f"The simulation reached the {MAX_RUN_SECONDS // (7 * 24 * 3600)}-week limit for one "
+        "simulation before WBM finished."
     )
     if jobs_ran > 1:
         ran = f"This simulation ran as {jobs_ran} jobs."
         if reason == "job_limit":
-            return (
-                f"{ran} That is the most one simulation may use, and the last job hit its walltime "
-                "before WBM finished. Shorten the run period (fewer years need fewer jobs), or ask "
-                "an administrator whether the limit can be raised."
-            )
+            return f"{limit} {lever}"
         if reason == "no_new_state":
             return (
                 f"{ran} The last one hit its walltime before WBM saved a new state to continue "
@@ -583,10 +582,7 @@ def _timeout_message(*, walltime: int | None, reason: str | None, jobs_ran: int)
             )
         return f"{ran} The last one hit its walltime before WBM finished. {lever}"
     if reason == "job_limit":
-        return (
-            "The simulation hit its walltime before WBM finished, and one simulation may use only "
-            f"{jobs_ran} job. Shorten the run period and submit again."
-        )
+        return f"{limit} {lever}"
     if reason == "no_new_state":
         return (
             "The simulation hit its walltime before WBM finished, and before it saved a state to "

@@ -36,6 +36,7 @@ from app.core.roles import Permission
 from app.models.job import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
+    MAX_RUN_SECONDS,
     TERMINAL_STATUSES,
     JobListResponse,
     JobLogResponse,
@@ -712,6 +713,38 @@ async def _refuse_unavailable_post_processing(
         )
 
 
+def _refuse_run_over_limit(snapshot: dict, post_processing: bool) -> None:
+    """422 `run_over_limit` when the run is estimated to take longer than one
+    simulation may (`MAX_RUN_SECONDS`, 2 weeks): the snapshot's recommended
+    walltime, with the post-processing time when the run post-processes, plus 50%
+    (`job_script.estimated_run_seconds`), not capped at one job's limit. Only a
+    submit refuses it, like the run-date checks: the wizard says it before the
+    click (`submitProblems`). A snapshot with no usable walltime blocks nothing
+    here (`resolve_compute` reports that)."""
+    over = job_script.run_over_limit(snapshot, post_processing)
+    if over is None:
+        return
+    # The post-processing is in the estimate only when the snapshot measured it.
+    includes_post_processing = post_processing and job_script.post_processing_walltime(snapshot) is not None
+    # The estimate is the snapshot's reference run, not the draft's period, so a
+    # shorter period does not change it. The one thing a draft can drop is the
+    # post-processing, and the sentence says so only when that would be enough.
+    advice = (
+        " Turn post-processing off to run it."
+        if includes_post_processing and job_script.run_over_limit(snapshot, False) is None
+        else ""
+    )
+    raise _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "run_over_limit",
+        f"This simulation is estimated to take about {job_script.describe_hours(over)} "
+        f"(the reference run{' and its post-processing' if includes_post_processing else ''}, plus 50%), "
+        f"over the {MAX_RUN_SECONDS // (7 * 24 * 3600)}-week limit for one simulation.{advice}",
+        estimated_seconds=over,
+        limit_seconds=MAX_RUN_SECONDS,
+    )
+
+
 async def _refuse_dates_outside_aggregation(
     dataset_id: str, snapshot: dict, start: str, end: str
 ) -> None:
@@ -893,6 +926,7 @@ async def submit_simulation(
         post_processing = job_script.runs_climatology(
             job.parameters, rules.post_processing if rules else None
         )
+        _refuse_run_over_limit(snapshot, post_processing)
         await _refuse_unaligned_start(
             job.dataset_id, snapshot, job.parameters.temporal_range_start
         )
@@ -914,7 +948,8 @@ async def submit_simulation(
             # What sbatch is asked for (`--time`), told to the toolkit too so the
             # spool lease lasts as long as the job can. A recommendation over one
             # job's 96 h is capped there (`with_headroom`): the run continues in
-            # a next job when SLURM stops it (ADR 0037).
+            # a next job when SLURM stops it (ADR 0037), up to the 2-week limit
+            # the refusal above holds a draft to.
             cores, walltime = slurm.resolve_compute(job.slurm_config, snapshot, post_processing)
             body = job_script.render_job_body(
                 snapshot_id=job.dataset_id,

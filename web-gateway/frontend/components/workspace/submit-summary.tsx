@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import {
   automaticWalltimeLabel,
-  describeJobCountShort,
-  describeSlurmTime,
+  describeDuration,
   describeUnsupportedField,
 } from "@/lib/jobs/compute";
 import { ClampedName } from "@/components/common/clamped-name";
@@ -24,6 +23,10 @@ export function describeSubmitFailure(
       return `These settings cannot run yet: ${(failure.fields ?? [])
         .map(describeUnsupportedField)
         .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
+    case "run_over_limit":
+      // The backend's sentence says how long the run is estimated to take and
+      // what the limit is.
+      return failure.message;
     case "answered_by_published":
       return "The model snapshot already publishes these results, so nothing was run. Use Run anyway if you want to run it again.";
     case "not_a_draft":
@@ -54,14 +57,13 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
 
 /**
  * What a submit will run and spend, for the confirmation dialog: the snapshot,
- * the run period, the output variables, the output, cores and walltime, and whose
- * allocation it is. `cores` and `walltime` are what SLURM will be asked for
- * (`effectiveCompute`); `*FromSnapshot` says the draft left them unset, which
- * means the snapshot's recommendation for cores and the recommendation plus 50%
- * (at most the limit for one job: `walltimeCapped`) for walltime, with the
- * snapshot's post-processing time added to it when the run asks for climatology
- * (`walltimeIncludesPostProcessing`). `jobs` says the run may take several jobs
- * of that walltime, each continuing where the last one stopped.
+ * the run period, the output variables, the output, cores and the estimated
+ * run time, and whose allocation it is. `cores` is what SLURM will be asked for
+ * (`effectiveCompute`); `coresFromSnapshot` says the draft left it unset, which
+ * means the snapshot's recommendation. The estimated run time is the
+ * snapshot's recommended time plus 50% (`estimatedRunSeconds`), with its
+ * post-processing time added when the run asks for climatology
+ * (`estimateIncludesPostProcessing`).
  */
 export function SubmitSummary({
   snapshotTitle,
@@ -71,11 +73,8 @@ export function SubmitSummary({
   output = "standard",
   cores,
   coresFromSnapshot,
-  walltime,
-  walltimeFromSnapshot,
-  walltimeCapped = false,
-  walltimeIncludesPostProcessing = false,
-  jobs = null,
+  estimatedSeconds,
+  estimateIncludesPostProcessing = false,
   coresWarning = null,
 }: {
   snapshotTitle: string;
@@ -86,15 +85,11 @@ export function SubmitSummary({
   output?: PostProcessingChoice;
   cores: number | null;
   coresFromSnapshot: boolean;
-  walltime: string | null;
-  walltimeFromSnapshot: boolean;
-  /** The automatic walltime was cut to the limit for one job. */
-  walltimeCapped?: boolean;
-  /** The automatic walltime has the snapshot's post-processing time in it. */
-  walltimeIncludesPostProcessing?: boolean;
-  /** How many jobs of the walltime the run may take (`automaticJobCount`);
-   *  null when one is enough. */
-  jobs?: number | null;
+  /** How long the run is estimated to take (`estimatedRunSeconds`); null when
+   *  the snapshot is unknown. */
+  estimatedSeconds: number | null;
+  /** The estimate has the snapshot's post-processing time in it. */
+  estimateIncludesPostProcessing?: boolean;
   /** `describeCoresBelowRecommended`: shown under Cores, because the dialog is
    *  the last place to notice it. A hint; Submit stays on. */
   coresWarning?: string | null;
@@ -121,16 +116,11 @@ export function SubmitSummary({
             <span className="mt-1 block text-xs font-normal text-warning">{coresWarning}</span>
           )}
         </SummaryRow>
-        <SummaryRow label="Walltime">
-          {walltime ? describeSlurmTime(walltime) : "Not known"}
-          <Recommendation show={walltime !== null && walltimeFromSnapshot}>
-            {automaticWalltimeLabel(walltimeCapped, "summary", walltimeIncludesPostProcessing)}
+        <SummaryRow label="Estimated run time">
+          {estimatedSeconds !== null ? describeDuration(estimatedSeconds) : "Not known"}
+          <Recommendation show={estimatedSeconds !== null}>
+            {automaticWalltimeLabel("summary", estimateIncludesPostProcessing)}
           </Recommendation>
-          {jobs !== null && (
-            <span className="mt-1 block text-xs font-normal text-muted-foreground">
-              {describeJobCountShort(jobs)}
-            </span>
-          )}
         </SummaryRow>
       </dl>
       <p className="text-sm text-muted-foreground">Runs on the shared ees260008 allocation.</p>

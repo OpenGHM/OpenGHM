@@ -311,6 +311,40 @@ def test_the_recommended_walltime_adds_the_post_processing_time_only_when_the_ru
 
 
 @pytest.mark.parametrize(
+    "walltime, step, post_processing, seconds",
+    [
+        ("15:00", None, False, 22 * 60 + 30),
+        ("80:00:00", None, False, 120 * 3600),  # not capped at one job's 96 h
+        ("80:00:00", "20:00:00", True, 150 * 3600),
+        ("80:00:00", "20:00:00", False, 120 * 3600),
+        ("0:00:01", None, False, 2),  # rounded up to a whole second
+        ("not a time", None, False, None),
+    ],
+)
+def test_the_estimated_run_time_is_the_recommendation_plus_half_and_not_capped(
+    walltime, step, post_processing, seconds
+):
+    assert job_script.estimated_run_seconds(_recommending(walltime, step), post_processing) == seconds
+    assert job_script.estimated_run_seconds({"simulation": {}}, post_processing) is None
+
+
+def test_a_run_is_over_the_limit_only_above_two_weeks():
+    assert job_script.run_over_limit(_recommending("224:00:00")) is None  # 336 h exactly
+    assert job_script.run_over_limit(_recommending("224:01:00")) == 336 * 3600 + 90
+    assert job_script.run_over_limit(_recommending("150:00:00", "80:00:00"), True) == 345 * 3600
+    assert job_script.run_over_limit(_recommending("150:00:00", "80:00:00")) is None
+    assert job_script.run_over_limit({"simulation": {}}) is None
+
+
+@pytest.mark.parametrize(
+    "seconds, text",
+    [(111 * 3600 + 30 * 60, "111 h 30 min"), (4 * 3600, "4 h"), (22 * 60 + 30, "22 min 30 s"), (45, "45 s")],
+)
+def test_hours_are_written_however_long(seconds, text):
+    assert job_script.describe_hours(seconds) == text
+
+
+@pytest.mark.parametrize(
     "draft, own, expected",
     [
         ("climatology", "standard", True),
@@ -387,11 +421,11 @@ def test_a_walltime_that_is_not_a_slurm_time_is_refused(walltime):
 
 
 def test_the_flag_carries_the_value_the_submit_gives_sbatch(v2):
-    """One resolution feeds both (`slurm.resolve_compute`): the draft's own
-    walltime as written, else the snapshot's with headroom."""
+    """One resolution feeds both (`slurm.resolve_compute`): the snapshot's
+    walltime with headroom, whatever a stored draft may still hold."""
     from app.services import slurm
 
     _, from_snapshot = slurm.resolve_compute(SlurmConfig(), v2)
-    _, own = slurm.resolve_compute(SlurmConfig(walltime="02:00:00"), v2)
+    _, stored = slurm.resolve_compute(SlurmConfig(walltime="02:00:00"), v2)
+    assert stored == from_snapshot
     assert f"--walltime {from_snapshot} " in _body(walltime=from_snapshot)
-    assert own == "02:00:00" and f"--walltime {own} " in _body(walltime=own)

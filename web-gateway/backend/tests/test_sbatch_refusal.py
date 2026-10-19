@@ -18,7 +18,7 @@ def test_the_real_run_time_refusal_is_explained_and_kept():
     message = explain(REAL)
     assert message == (
         "Anvil refused the requested run time: it is over the limit for one job (96 h). "
-        "Shorten the run period or set a shorter walltime. SLURM said: "
+        "Shorten the run period. SLURM said: "
         "QOSMaxWallDurationPerJobLimit sbatch: error: Batch job submission failed: "
         "Job violates accounting/QOS policy (job submit limit, user's size and/or time limits)."
     )
@@ -94,7 +94,7 @@ def test_a_long_text_is_cut():
 
 
 def test_nothing_to_quote_is_just_the_explanation():
-    assert explain("", also="QOSMaxWallDurationPerJobLimit").endswith("shorter walltime.")
+    assert explain("", also="QOSMaxWallDurationPerJobLimit").endswith("Shorten the run period.")
 
 
 # ---- without advice (a page that gives its own instruction) --------------------

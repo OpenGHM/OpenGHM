@@ -81,8 +81,9 @@ export default async function JobDetailPage({
   const viewerEmail = job.status === "CANCELLED" ? ((await fetchMe())?.email ?? null) : null;
 
   // The base snapshot, read once for two things: what the job asked for when it
-  // chose no cores or walltime of its own (its recommendation; snapshots never
-  // change, so reading it now gives what the submit read), and the `about` the
+  // chose no cores of its own, and for the walltime it asked for (the
+  // recommendation; snapshots never change, so reading it now gives what the
+  // submit read), and the `about` the
   // publish form fills from when the draft stores none. Null when it cannot be
   // read just now: the page then shows a dash, and the form starts as the draft
   // has it, rather than a guess.

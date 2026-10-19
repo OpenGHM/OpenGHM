@@ -21,7 +21,13 @@ from slurmly.scripts.renderer import render_script
 
 from app.api.v1 import jobs as jobs_router
 from app.core.config import settings
-from app.models.job import JobDB
+from app.models.job import (
+    MAX_JOBS_PER_SIMULATION,
+    MAX_RUN_SECONDS,
+    MAX_WALLTIME_SECONDS,
+    JobDB,
+    SlurmConfig,
+)
 from app.services import job_script, slurm
 
 from conftest import REMOTE_BASE
@@ -130,11 +136,12 @@ def test_a_changed_period_reaches_the_script_as_flags(client, db, draft, sent):
     assert "--output-vars runoff" in script
 
 
-def test_the_drafts_cores_and_walltime_are_what_slurm_is_asked_for(client, db, draft, sent):
+def test_the_drafts_cores_and_the_snapshots_walltime_are_what_slurm_is_asked_for(client, db, draft, sent):
+    # A walltime sent by a client that still has the field is not stored, so it cannot be asked for.
     assert _patch(client, slurm_config={"cores": 4, "walltime": "01:30:00"}).status_code == 200
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     (job, snapshot, _), = sent
-    assert slurm.resolve_compute(job.slurm_config, snapshot) == (4, "01:30:00")
+    assert slurm.resolve_compute(job.slurm_config, snapshot) == (4, "22:30")
 
 
 # ---- refused before anything changes ---------------------------------------
@@ -299,14 +306,12 @@ def test_a_recommendation_over_the_limit_is_submitted_at_the_cap_and_the_script_
     assert stored["submit_script"] == {"body": call[2], "cores": 16, "walltime": "96:00:00"}
 
 
-def test_a_walltime_the_draft_chose_is_not_refused_whatever_the_recommendation(
-    client, db, draft, sent
-):
-    _recommend(db, "111:30:00")
-    assert _patch(client, slurm_config={"walltime": "96:00:00"}).status_code == 200
+def test_a_walltime_stored_in_a_draft_before_it_went_is_ignored_at_submit(client, db, draft, sent):
+    db.jobs.docs["job-1"]["slurm_config"] = {"cores": 4, "walltime": "00:05:00"}
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     (call,) = sent
-    assert slurm.build_job_spec(call[0], call[1], "x").time_limit == "96:00:00"
+    assert slurm.build_job_spec(call[0], call[1], "x").time_limit == "22:30"
+    assert db.jobs.docs["job-1"]["submit_script"]["walltime"] == "22:30"
 
 
 def test_an_automatic_walltime_is_capped_at_the_limit_when_the_recommendation_fits(
@@ -316,6 +321,42 @@ def test_an_automatic_walltime_is_capped_at_the_limit_when_the_recommendation_fi
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     (call,) = sent
     assert slurm.build_job_spec(call[0], call[1], "x").time_limit == "96:00:00"
+
+
+def test_one_simulation_may_run_two_weeks_in_at_most_four_jobs():
+    assert MAX_RUN_SECONDS == 14 * 24 * 3600
+    assert MAX_JOBS_PER_SIMULATION == 4  # 4 x 96 h = 384 h: the slack is for the work each cut redoes
+    assert MAX_JOBS_PER_SIMULATION * MAX_WALLTIME_SECONDS >= MAX_RUN_SECONDS
+
+
+def test_a_run_estimated_over_two_weeks_is_refused_and_stays_a_draft(client, db, draft, sent):
+    """224 h recommended is 336 h with headroom: exactly two weeks, allowed. A minute more is not."""
+    _recommend(db, "224:00:00")
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    db.jobs.docs["job-1"].update(status="DRAFT", submit_script=None)
+    sent.clear()
+    _recommend(db, "224:01:00")
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "run_over_limit"
+    assert detail["message"] == (
+        "This simulation is estimated to take about 336 h 1 min "
+        "(the reference run, plus 50%), over the 2-week limit for one simulation."
+    )
+    assert detail["estimated_seconds"] == 336 * 3600 + 90 and detail["limit_seconds"] == MAX_RUN_SECONDS
+    assert sent == []
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT" and stored["last_submit_error"]["code"] == "run_over_limit"
+
+
+def test_the_estimate_is_not_capped_at_one_jobs_limit(client, db, draft, sent):
+    """A 300 h recommendation is asked of SLURM at the 96 h cap, but is estimated at 450 h."""
+    _recommend(db, "300:00:00")
+    response = client.post(SUBMIT, headers=HEADERS)
+    assert response.status_code == 422
+    assert "about 450 h" in response.json()["detail"]["message"]
+    assert sent == []
 
 
 # ---- Anvil does not take it: the draft stays a draft ------------------------
@@ -593,17 +634,17 @@ def test_a_cleanup_that_cannot_reach_anvil_is_silent(db, anvil):
 # ---- PATCH slurm_config ------------------------------------------------------
 
 
-def test_patch_stores_cores_and_walltime_and_merges(client, db, draft):
-    got = _patch(client, slurm_config={"cores": 8, "walltime": "04:00:00"}).json()
-    assert got["slurm_config"] == {"cores": 8, "walltime": "04:00:00"}
+def test_patch_stores_cores(client, db, draft):
+    got = _patch(client, slurm_config={"cores": 8}).json()
+    assert got["slurm_config"] == {"cores": 8}
     got = _patch(client, slurm_config={"cores": 16}).json()
-    assert got["slurm_config"] == {"cores": 16, "walltime": "04:00:00"}
+    assert got["slurm_config"] == {"cores": 16}
 
 
 def test_patch_null_goes_back_to_the_snapshots_recommendation(client, db, draft):
-    _patch(client, slurm_config={"cores": 8, "walltime": "04:00:00"})
+    _patch(client, slurm_config={"cores": 8})
     got = _patch(client, slurm_config=None).json()
-    assert got["slurm_config"] == {"cores": None, "walltime": None}
+    assert got["slurm_config"] == {"cores": None}
 
 
 @pytest.mark.parametrize(
@@ -612,26 +653,21 @@ def test_patch_null_goes_back_to_the_snapshots_recommendation(client, db, draft)
         {"cores": 0},
         {"cores": 129},
         {"cores": 1.5},
-        {"walltime": "96:00:01"},
-        {"walltime": "00:00:00"},
-        {"walltime": "15:00"},
-        {"walltime": "1-00:00:00"},
-        {"walltime": "02:61:00"},
-        {"walltime": "x"},
-        {"nodes": 2},  # not a field a user sets any more: ignored, so nothing changes
+        {"nodes": 2},  # not a field a user sets: ignored, so nothing changes
+        {"walltime": "x"},  # nor is the walltime, which is never the user's
     ],
 )
 def test_patch_refuses_out_of_bounds_compute(client, db, draft, config):
     response = _patch(client, slurm_config=config)
-    if config == {"nodes": 2}:
+    if "cores" not in config:
         assert response.status_code == 200
-        assert response.json()["slurm_config"] == {"cores": None, "walltime": None}
+        assert response.json()["slurm_config"] == {"cores": None}
     else:
         assert response.status_code == 422
 
 
 def test_patch_accepts_the_bounds(client, db, draft):
-    got = _patch(client, slurm_config={"cores": 128, "walltime": "96:00:00"})
+    got = _patch(client, slurm_config={"cores": 128})
     assert got.status_code == 200
 
 
@@ -667,12 +703,11 @@ def test_spec_for_the_v2_snapshot_asks_for_its_recommended_compute(v2_spec_input
     assert spec.env == {}
 
 
-def test_spec_prefers_the_drafts_own_compute(v2_spec_inputs):
+def test_spec_prefers_the_drafts_own_cores_and_never_its_walltime(v2_spec_inputs):
     job, snapshot = v2_spec_inputs
     job.slurm_config.cores = 4
-    job.slurm_config.walltime = "02:00:00"
     spec = slurm.build_job_spec(job, snapshot, "echo body")
-    assert (spec.cpus_per_task, spec.time_limit) == (4, "02:00:00")
+    assert (spec.cpus_per_task, spec.time_limit) == (4, "22:30")
 
 
 def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inputs):
@@ -719,11 +754,12 @@ def test_every_module_preamble_is_quiet_and_has_no_module_list():
         assert "module -q list" not in profile.preamble, name
 
 
-def test_a_walltime_the_draft_chose_is_sent_as_given(v2_spec_inputs):
+def test_a_stored_walltime_is_not_a_field_of_the_draft_any_more(v2_spec_inputs):
     job, snapshot = v2_spec_inputs
-    job.slurm_config.walltime = "00:15:00"  # equal to the recommendation: no headroom
+    stored = SlurmConfig(**{"cores": None, "walltime": "00:15:00"})
+    assert not hasattr(stored, "walltime") and stored.model_dump() == {"cores": None}
     spec = slurm.build_job_spec(job, snapshot, "echo body")
-    assert spec.time_limit == "00:15:00"
+    assert spec.time_limit == "22:30"  # the recommendation's, with headroom
     assert spec.cpus_per_task == 1  # cores still the snapshot's
 
 
@@ -742,8 +778,6 @@ def test_a_run_that_post_processes_gets_headroom_on_its_walltime_and_post_proces
     assert slurm.resolve_compute(job.slurm_config, snapshot) == (8, "6:00:00")
     assert slurm.resolve_compute(job.slurm_config, snapshot, True) == (8, "6:45:00")
     assert slurm.build_job_spec(job, snapshot, "x", True).time_limit == "6:45:00"
-    job.slurm_config.walltime = "01:00:00"  # the draft's own is as written
-    assert slurm.resolve_compute(job.slurm_config, snapshot, True) == (8, "01:00:00")
 
 
 def test_the_job_body_locks_the_fetch_on_home(client, db, draft, sent):
