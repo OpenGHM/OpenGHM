@@ -12,7 +12,7 @@ export function Providers({ features, children }: { features: SiteFeatures; chil
       <SiteFeaturesProvider features={features}>
         <NavigationProgress />
         {children}
-        <Toaster position="top-center" richColors />
+        <Toaster position="top-center" />
       </SiteFeaturesProvider>
     </SessionProvider>
   );

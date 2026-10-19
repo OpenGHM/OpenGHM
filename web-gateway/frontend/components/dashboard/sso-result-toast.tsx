@@ -4,11 +4,15 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+// A refusal stays until closed: it says why the button did nothing, and the
+// person may still be reading it when a timer would take it away.
+const STAY = { duration: Infinity } as const;
+
 const MESSAGES = {
   connected: () => toast.success("CILogon connected. You can now sign in with it."),
   conflict: () =>
-    toast.error("That CILogon identity is already connected to another OpenGHM account."),
-  failed: () => toast.error("Couldn't connect CILogon. Please try again."),
+    toast.error("That CILogon identity is already connected to another OpenGHM account.", STAY),
+  failed: () => toast.error("Couldn't connect CILogon. Please try again.", STAY),
 } as const;
 
 /**

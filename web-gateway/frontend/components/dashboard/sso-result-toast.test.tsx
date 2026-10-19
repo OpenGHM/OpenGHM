@@ -28,13 +28,16 @@ describe("the CILogon result toast", () => {
   it("says the identity belongs to another account on a conflict", () => {
     render(<SsoResultToast result="conflict" />);
     expect(toast.error).toHaveBeenCalledWith(
-      "That CILogon identity is already connected to another OpenGHM account."
+      "That CILogon identity is already connected to another OpenGHM account.",
+      { duration: Infinity }
     );
   });
 
   it("says it failed", () => {
     render(<SsoResultToast result="failed" />);
-    expect(toast.error).toHaveBeenCalledWith("Couldn't connect CILogon. Please try again.");
+    expect(toast.error).toHaveBeenCalledWith("Couldn't connect CILogon. Please try again.", {
+      duration: Infinity,
+    });
   });
 
   it("says nothing without a result, or for one it does not know", () => {
