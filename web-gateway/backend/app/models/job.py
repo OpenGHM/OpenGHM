@@ -190,9 +190,10 @@ MAX_CORES = 128
 MAX_WALLTIME_SECONDS = 96 * 3600
 
 #: The gateway's own limit on one simulation's run time, decided 2026-10-19: two
-#: weeks. A draft whose estimated run time (`job_script.estimated_run_seconds`)
-#: is over it is refused at submit (`run_over_limit`). Mirrored by
-#: `MAX_RUN_SECONDS` in the frontend's lib/jobs/types.ts.
+#: weeks. A draft whose estimated run time (`job_script.estimated_run_seconds`,
+#: the snapshot's recommendation without headroom) is over it is refused at
+#: submit (`run_over_limit`). Mirrored by `MAX_RUN_SECONDS` in the frontend's
+#: lib/jobs/types.ts.
 MAX_RUN_SECONDS = 14 * 24 * 3600
 #: How many jobs of at most `MAX_WALLTIME_SECONDS` a simulation may use: enough
 #: to cover `MAX_RUN_SECONDS`, rounded up (4 x 96 h = 384 h). The hours beyond

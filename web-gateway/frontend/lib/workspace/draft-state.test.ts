@@ -516,30 +516,30 @@ describe("submitProblems", () => {
 
     it("lists nothing for a reference run longer than one job, so long as the estimate fits in two weeks", () => {
       expect(problems(fromJob(ok), withWalltime("111:30:00"))).toEqual([]);
-      expect(problems(fromJob(ok), withWalltime("224:00:00"))).toEqual([]); // 336 h exactly
+      expect(problems(fromJob(ok), withWalltime("336:00:00"))).toEqual([]); // 336 h exactly
     });
 
-    it("is a problem of the whole draft above two weeks: the recommendation plus 50%, not capped at one job", () => {
-      const [problem, ...rest] = problems(fromJob(ok), withWalltime("224:01:00"));
+    it("is a problem of the whole draft above two weeks: the recommendation as it is, not capped at one job", () => {
+      const [problem, ...rest] = problems(fromJob(ok), withWalltime("336:00:01"));
       expect(rest).toEqual([]);
       expect(problem).toMatchObject({ step: "run" });
       expect(problem.field).toBeUndefined();
       expect(problem.message).toBe(
-        "This simulation is estimated to take about 336 h 1 min (the reference run, plus 50%), over the 2-week limit for one simulation."
+        "This simulation is estimated to take about 336 h (the reference run), over the 2-week limit for one simulation."
       );
     });
 
     it("counts the post-processing of a climatology run, and offers to turn it off when that is enough", () => {
-      const ctx = withWalltime("200:00:00", "30:00:00");
+      const ctx = withWalltime("320:00:00", "30:00:00");
       expect(problems(edited(ok, { params: { post_processing: "standard" } }), ctx)).toEqual([]);
       const [problem] = problems(edited(ok, { params: { post_processing: "climatology" } }), ctx);
       expect(problem.message).toBe(
-        "This simulation is estimated to take about 345 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation. Turn post-processing off to run it."
+        "This simulation is estimated to take about 350 h (the reference run and its post-processing), over the 2-week limit for one simulation. Turn post-processing off to run it."
       );
     });
 
     it("is not a problem when the post-processing is not measured", () => {
-      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), withWalltime("200:00:00"))).toEqual([]);
+      expect(problems(edited(ok, { params: { post_processing: "climatology" } }), withWalltime("320:00:00"))).toEqual([]);
     });
   });
 

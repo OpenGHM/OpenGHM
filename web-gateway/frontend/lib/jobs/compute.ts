@@ -134,13 +134,14 @@ export function postProcessingShare(recommended: Recommended | null, postProcess
 
 /** How long a run is estimated to take, in seconds: the snapshot's recommended
  *  time (with the post-processing time when the run `postProcessing`s,
- *  `recommendedSeconds`) plus 50%, rounded up to a whole second and not capped at
- *  what one job may use. This is what `MAX_RUN_SECONDS` is held against, as
- *  `estimated_run_seconds` in app/services/job_script.py. Null when the
+ *  `recommendedSeconds`) as it is: no headroom, and not capped at what one job
+ *  may use. This is what `MAX_RUN_SECONDS` is held against, as
+ *  `estimated_run_seconds` in app/services/job_script.py. The slack for a run's
+ *  uncertainty is already in the jobs the limit allows (4 x 96 h); the 50%
+ *  (`withHeadroom`) belongs only to what one job asks SLURM for. Null when the
  *  snapshot is unknown or its value is not a time (the backend decides). */
 export function estimatedRunSeconds(recommended: Recommended | null, postProcessing = false): number | null {
-  const seconds = recommendedSeconds(recommended, postProcessing);
-  return seconds === null ? null : Math.ceil(seconds * 1.5);
+  return recommendedSeconds(recommended, postProcessing);
 }
 
 /** The estimated run time (`estimatedRunSeconds`) when it is over the limit for
@@ -169,7 +170,7 @@ export function describeRunOverLimit(
       : "";
   return (
     `This simulation is estimated to take about ${describeHours(seconds)} ` +
-    `(the reference run${includesPostProcessing ? " and its post-processing" : ""}, plus 50%), ` +
+    `(the reference run${includesPostProcessing ? " and its post-processing" : ""}), ` +
     `over the ${weeks}-week limit for one simulation.${advice}`
   );
 }
@@ -241,6 +242,15 @@ export function automaticWalltimeLabel(
 ): string {
   const base = form === "placeholder" ? "recommended" : "model snapshot's recommendation";
   return includesPostProcessing ? `${base} + post-processing + 50%` : `${base} + 50%`;
+}
+
+/** What the estimated run time is, in a few words after the value: the
+ *  snapshot's recommendation, plus the post-processing time when the run has it
+ *  (`includesPostProcessing`). No headroom (`estimatedRunSeconds`). */
+export function estimatedRunLabel(includesPostProcessing = false): string {
+  return includesPostProcessing
+    ? "model snapshot's recommendation + post-processing"
+    : "model snapshot's recommendation";
 }
 
 /** The cores and the per-job walltime a submit will ask for, the same as the

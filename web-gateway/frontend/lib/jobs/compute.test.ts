@@ -7,6 +7,7 @@ import {
   describeRunOverLimit,
   describeSlurmTime,
   effectiveCompute,
+  estimatedRunLabel,
   estimatedRunSeconds,
   formatSlurmTime,
   withHeadroom,
@@ -102,6 +103,11 @@ describe("a recommendation over the limit for one job", () => {
     });
   });
 
+  it("labels the estimated run time as the recommendation, with no headroom", () => {
+    expect(estimatedRunLabel()).toBe("model snapshot's recommendation");
+    expect(estimatedRunLabel(true)).toBe("model snapshot's recommendation + post-processing");
+  });
+
   it("labels the automatic time for what it is", () => {
     expect(automaticWalltimeLabel()).toBe("model snapshot's recommendation + 50%");
     expect(automaticWalltimeLabel("placeholder")).toBe("recommended + 50%");
@@ -117,11 +123,12 @@ describe("the estimated run time and its limit", () => {
 
   // The same cases as tests/test_job_script.py: the two sides must agree.
   it.each([
-    ["15:00", undefined, false, 22 * 60 + 30],
-    ["80:00:00", undefined, false, 120 * 3600], // not capped at one job's 96 h
-    ["80:00:00", "20:00:00", true, 150 * 3600],
-    ["80:00:00", "20:00:00", false, 120 * 3600],
-    ["0:00:01", undefined, false, 2], // rounded up to a whole second
+    ["15:00", undefined, false, 15 * 60],
+    ["111:30:00", undefined, false, 111 * 3600 + 30 * 60],
+    ["120:00:00", undefined, false, 120 * 3600], // not capped at one job's 96 h
+    ["80:00:00", "20:00:00", true, 100 * 3600],
+    ["80:00:00", "20:00:00", false, 80 * 3600],
+    ["0:00:01", undefined, false, 1],
   ])("%s + %s, post-processing %s is estimated at %s s", (walltime, step, postProcessing, seconds) => {
     expect(estimatedRunSeconds(snapshot(walltime, step), postProcessing)).toBe(seconds);
   });
@@ -133,27 +140,27 @@ describe("the estimated run time and its limit", () => {
   });
 
   it("is over the limit only above two weeks", () => {
-    expect(runOverLimit(snapshot("224:00:00"))).toBeNull(); // 336 h exactly
-    expect(runOverLimit(snapshot("224:01:00"))).toBe(336 * 3600 + 90);
-    expect(runOverLimit(snapshot("150:00:00", "80:00:00"), true)).toBe(345 * 3600);
-    expect(runOverLimit(snapshot("150:00:00", "80:00:00"))).toBeNull();
+    expect(runOverLimit(snapshot("336:00:00"))).toBeNull(); // 336 h exactly
+    expect(runOverLimit(snapshot("336:00:01"))).toBe(336 * 3600 + 1);
+    expect(runOverLimit(snapshot("300:00:00", "40:00:00"), true)).toBe(340 * 3600);
+    expect(runOverLimit(snapshot("300:00:00", "40:00:00"))).toBeNull();
   });
 
   it("says how long it is estimated to take, and the limit, as the backend does", () => {
-    const rec = snapshot("300:00:00");
+    const rec = snapshot("450:00:00");
     expect(describeRunOverLimit(runOverLimit(rec)!, rec)).toBe(
-      "This simulation is estimated to take about 450 h (the reference run, plus 50%), over the 2-week limit for one simulation."
+      "This simulation is estimated to take about 450 h (the reference run), over the 2-week limit for one simulation."
     );
   });
 
   it("names the post-processing, and offers to turn it off only when the run alone would fit", () => {
-    const fits = snapshot("200:00:00", "30:00:00");
+    const fits = snapshot("320:00:00", "30:00:00");
     expect(describeRunOverLimit(runOverLimit(fits, true)!, fits, true)).toBe(
-      "This simulation is estimated to take about 345 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation. Turn post-processing off to run it."
+      "This simulation is estimated to take about 350 h (the reference run and its post-processing), over the 2-week limit for one simulation. Turn post-processing off to run it."
     );
-    const never = snapshot("230:00:00", "30:00:00");
+    const never = snapshot("360:00:00", "30:00:00");
     expect(describeRunOverLimit(runOverLimit(never, true)!, never, true)).toBe(
-      "This simulation is estimated to take about 390 h (the reference run and its post-processing, plus 50%), over the 2-week limit for one simulation."
+      "This simulation is estimated to take about 390 h (the reference run and its post-processing), over the 2-week limit for one simulation."
     );
   });
 });

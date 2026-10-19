@@ -330,29 +330,29 @@ def test_one_simulation_may_run_two_weeks_in_at_most_four_jobs():
 
 
 def test_a_run_estimated_over_two_weeks_is_refused_and_stays_a_draft(client, db, draft, sent):
-    """224 h recommended is 336 h with headroom: exactly two weeks, allowed. A minute more is not."""
-    _recommend(db, "224:00:00")
+    """336 h recommended is exactly two weeks, allowed. A second more is not."""
+    _recommend(db, "336:00:00")
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     db.jobs.docs["job-1"].update(status="DRAFT", submit_script=None)
     sent.clear()
-    _recommend(db, "224:01:00")
+    _recommend(db, "336:00:01")
     response = client.post(SUBMIT, headers=HEADERS)
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail["code"] == "run_over_limit"
     assert detail["message"] == (
-        "This simulation is estimated to take about 336 h 1 min "
-        "(the reference run, plus 50%), over the 2-week limit for one simulation."
+        "This simulation is estimated to take about 336 h "
+        "(the reference run), over the 2-week limit for one simulation."
     )
-    assert detail["estimated_seconds"] == 336 * 3600 + 90 and detail["limit_seconds"] == MAX_RUN_SECONDS
+    assert detail["estimated_seconds"] == 336 * 3600 + 1 and detail["limit_seconds"] == MAX_RUN_SECONDS
     assert sent == []
     stored = db.jobs.docs["job-1"]
     assert stored["status"] == "DRAFT" and stored["last_submit_error"]["code"] == "run_over_limit"
 
 
 def test_the_estimate_is_not_capped_at_one_jobs_limit(client, db, draft, sent):
-    """A 300 h recommendation is asked of SLURM at the 96 h cap, but is estimated at 450 h."""
-    _recommend(db, "300:00:00")
+    """A 450 h recommendation is asked of SLURM at the 96 h cap, but is estimated at 450 h."""
+    _recommend(db, "450:00:00")
     response = client.post(SUBMIT, headers=HEADERS)
     assert response.status_code == 422
     assert "about 450 h" in response.json()["detail"]["message"]

@@ -716,7 +716,7 @@ async def _refuse_unavailable_post_processing(
 def _refuse_run_over_limit(snapshot: dict, post_processing: bool) -> None:
     """422 `run_over_limit` when the run is estimated to take longer than one
     simulation may (`MAX_RUN_SECONDS`, 2 weeks): the snapshot's recommended
-    walltime, with the post-processing time when the run post-processes, plus 50%
+    walltime, with the post-processing time when the run post-processes, as it is
     (`job_script.estimated_run_seconds`), not capped at one job's limit. Only a
     submit refuses it, like the run-date checks: the wizard says it before the
     click (`submitProblems`). A snapshot with no usable walltime blocks nothing
@@ -738,7 +738,7 @@ def _refuse_run_over_limit(snapshot: dict, post_processing: bool) -> None:
         status.HTTP_422_UNPROCESSABLE_ENTITY,
         "run_over_limit",
         f"This simulation is estimated to take about {job_script.describe_hours(over)} "
-        f"(the reference run{' and its post-processing' if includes_post_processing else ''}, plus 50%), "
+        f"(the reference run{' and its post-processing' if includes_post_processing else ''}), "
         f"over the {MAX_RUN_SECONDS // (7 * 24 * 3600)}-week limit for one simulation.{advice}",
         estimated_seconds=over,
         limit_seconds=MAX_RUN_SECONDS,

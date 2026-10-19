@@ -576,16 +576,18 @@ def recommended_walltime(snapshot: dict, post_processing: bool = False) -> str |
 def estimated_run_seconds(snapshot: dict, post_processing: bool = False) -> int | None:
     """How long a run of this snapshot is estimated to take: the recommended
     walltime (with the post-processing time when the run `post_processing`s,
-    `recommended_walltime`) plus 50%, not capped at one job's limit. What the
-    simulation's 2-week limit (`MAX_RUN_SECONDS`) is held against. None when
-    the snapshot has no walltime or one that is not a SLURM time
-    (`resolve_compute` reports that). Mirrored by `estimatedRunSeconds` in the
-    frontend's lib/jobs/compute.ts."""
+    `recommended_walltime`) as it is: no headroom, and not capped at one job's
+    limit. What the simulation's 2-week limit (`MAX_RUN_SECONDS`) is held
+    against. The slack for a run's uncertainty is already in the jobs the limit
+    allows (`MAX_JOBS_PER_SIMULATION` x 96 h); the 50% (`with_headroom`) belongs
+    only to what one job asks SLURM for. None when the snapshot has no walltime
+    or one that is not a SLURM time (`resolve_compute` reports that). Mirrored
+    by `estimatedRunSeconds` in the frontend's lib/jobs/compute.ts."""
     try:
         recommended = recommended_walltime(snapshot, post_processing)
         if recommended is None:
             return None
-        return _headroom_seconds(parse_slurm_time(recommended))
+        return parse_slurm_time(recommended)
     except SubmitInputError:
         return None
 

@@ -148,7 +148,7 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
       ),
       list(
         `Cores are for memory. On Anvil's shared partition a core brings ${ANVIL_SHARED_MB_PER_CORE} MB, and memory comes only with cores, so the snapshot recommends the number that gives its simulation enough. With fewer, the simulation may be stopped for running out of memory. You get a warning, and can still submit.`,
-        `You do not choose a walltime. A simulation may take at most ${MAX_RUN_WEEKS} weeks. The review step shows how long yours is estimated to take, the snapshot's recommended time plus 50%, and a snapshot draft estimated to take longer cannot be submitted.`,
+        `You do not choose a walltime. A simulation may take at most ${MAX_RUN_WEEKS} weeks. The review step shows how long yours is estimated to take, the snapshot's recommended time, and a snapshot draft estimated to take longer cannot be submitted.`,
         `Anvil stops a SLURM job after ${MAX_WALLTIME_HOURS} hours. A simulation stopped there continues automatically where it stopped, so a long simulation needs nothing from you.`
       ),
     ],

@@ -466,8 +466,8 @@ export function submitProblems(
     });
   }
 
-  // The snapshot's reference run, with 50% headroom, is longer than one
-  // simulation may be (`run_over_limit`). The estimate is the snapshot's, not the
+  // The snapshot's reference run, as recommended and without headroom, is
+  // longer than one simulation may be (`run_over_limit`). The estimate is the snapshot's, not the
   // draft's period, so no one field is at fault and the problem is the draft's.
   const recommended = ctx.dataset?.simulation.recommendedCompute ?? null;
   const postProcessing = runsClimatology(local.parameters.post_processing, ctx.dataset?.postProcessing);

@@ -1012,8 +1012,10 @@ A simulation may take at most two weeks (`MAX_RUN_SECONDS`, the gateway's own
 limit, decided 2026-10-19), which `MAX_JOBS_PER_SIMULATION` enforces as
 `ceil(MAX_RUN_SECONDS / MAX_WALLTIME_SECONDS)` jobs. The limit is held against an
 estimate made before the run: the snapshot's recommended walltime, with the post-processing
-time when the run post-processes, plus 50%, not capped at one job's 96 h
-(`job_script.estimated_run_seconds`). A submit whose estimate is over the limit
+time when the run post-processes, as it is (no headroom) and not capped at one
+job's 96 h (`job_script.estimated_run_seconds`). The slack for a run's
+uncertainty is already in the jobs the limit allows (4 x 96 h = 384 h); the 50%
+belongs only to what one job asks SLURM for. A submit whose estimate is over the limit
 is refused with `422 run_over_limit` (kept as `last_submit_error`, nothing
 queued), and the wizard lists the same as a problem of the whole draft
 (`submitProblems`) and shows the estimate, with no walltime and no job count, as

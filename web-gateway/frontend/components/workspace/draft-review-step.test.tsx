@@ -194,15 +194,15 @@ describe("DraftReviewStep: the summary", () => {
   it("shows the compute it will ask for, and where an unset value comes from", () => {
     review();
     expect(within(row("Cores")).getByText("8")).toBeTruthy();
-    // The time is the snapshot's recommendation plus 50%, whatever the cores are.
-    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+    // The time is the snapshot's recommendation as it is, whatever the cores are.
+    expect(row("Estimated run time").textContent).toContain("15 min · model snapshot's recommendation");
     expect(row("Cores").textContent).not.toContain("· recommended");
     expect(screen.queryByRole("button", { name: /Edit estimated run time|Edit walltime/ })).toBeNull();
 
     cleanup();
     review({ local: { ...LOCAL, slurm: { cores: null } } });
     expect(row("Cores").textContent).toContain("16 · recommended");
-    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+    expect(row("Estimated run time").textContent).toContain("15 min · model snapshot's recommendation");
   });
 
   it("says the low-cores warning once, under Cores, in one line, and only then", () => {
@@ -227,8 +227,8 @@ describe("DraftReviewStep: the summary", () => {
       local: { ...LOCAL, slurm: { cores: null } },
       recommended: { cores: 16, walltime: "111:30:00" },
     });
-    // 111 h 30 min plus 50% is 167 h 15 min.
-    expect(row("Estimated run time").textContent).toContain("6 d 23 h · model snapshot's recommendation + 50%");
+    // 111 h 30 min, as recommended: no headroom.
+    expect(row("Estimated run time").textContent).toContain("4 d 15 h · model snapshot's recommendation");
     expect(row("Estimated run time").textContent).not.toMatch(/limit for one job|\d+ jobs/);
   });
 
@@ -240,10 +240,11 @@ describe("DraftReviewStep: the summary", () => {
       slurm: { cores: null },
     });
     review({ local: local("climatology"), recommended });
-    expect(row("Estimated run time").textContent).toContain("1 h 52 min · model snapshot's recommendation + post-processing + 50%");
+    expect(row("Estimated run time").textContent).toContain("1 h 15 min · model snapshot's recommendation + post-processing");
     cleanup();
     review({ local: local("standard"), recommended });
-    expect(row("Estimated run time").textContent).toContain("22 min 30 s · model snapshot's recommendation + 50%");
+    expect(row("Estimated run time").textContent).toContain("15 min · model snapshot's recommendation");
+    expect(row("Estimated run time").textContent).not.toContain("50%");
   });
 
   it("still summarises a draft whose snapshot is gone, with no link to it", () => {

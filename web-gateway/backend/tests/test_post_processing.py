@@ -674,15 +674,15 @@ def test_a_climatology_draft_over_the_limit_with_its_post_processing_is_capped_n
 def test_the_estimate_of_a_climatology_run_includes_its_post_processing_for_the_two_week_limit(
     client, db, draft, monkeypatch, sent
 ):
-    """200 h is 300 h with headroom: fine alone. With 30 h of post-processing it is 345 h."""
+    """320 h is fine alone. With 30 h of post-processing it is 350 h."""
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
-    _recommend(db, "200:00:00", "30:00:00")
+    _recommend(db, "320:00:00", "30:00:00")
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
     response = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail["code"] == "run_over_limit"
-    assert "about 345 h (the reference run and its post-processing, plus 50%)" in detail["message"]
+    assert "about 350 h (the reference run and its post-processing)" in detail["message"]
     assert detail["message"].endswith("over the 2-week limit for one simulation. Turn post-processing off to run it.")
     assert sent == []
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "standard"
@@ -693,7 +693,7 @@ def test_no_advice_to_turn_post_processing_off_when_the_run_alone_is_over_the_li
     client, db, draft, monkeypatch, sent
 ):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
-    _recommend(db, "230:00:00", "30:00:00")
+    _recommend(db, "340:00:00", "30:00:00")
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
     message = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).json()["detail"]["message"]
     assert message.endswith("over the 2-week limit for one simulation.")

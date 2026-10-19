@@ -13,10 +13,10 @@ import { DraftPanel, DraftSection } from "@/components/workspace/draft-section";
 import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { PublishedAnswerCard, PublishedAnswerNotice } from "@/components/workspace/published-answer-card";
 import {
-  automaticWalltimeLabel,
   describeCoresBelowRecommendedShort,
   describeDuration,
   effectiveCompute,
+  estimatedRunLabel,
   estimatedRunSeconds,
   postProcessingShare,
   runsClimatology,
@@ -281,7 +281,7 @@ export function DraftReviewStep({
               {estimate !== null && (
                 <span className="text-muted-foreground">
                   {" "}
-                  · {automaticWalltimeLabel("summary", postProcessingShare(recommended, postProcessing) > 0)}
+                  · {estimatedRunLabel(postProcessingShare(recommended, postProcessing) > 0)}
                 </span>
               )}
             </Row>

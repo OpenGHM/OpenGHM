@@ -313,15 +313,16 @@ def test_the_recommended_walltime_adds_the_post_processing_time_only_when_the_ru
 @pytest.mark.parametrize(
     "walltime, step, post_processing, seconds",
     [
-        ("15:00", None, False, 22 * 60 + 30),
-        ("80:00:00", None, False, 120 * 3600),  # not capped at one job's 96 h
-        ("80:00:00", "20:00:00", True, 150 * 3600),
-        ("80:00:00", "20:00:00", False, 120 * 3600),
-        ("0:00:01", None, False, 2),  # rounded up to a whole second
+        ("15:00", None, False, 15 * 60),
+        ("111:30:00", None, False, 111 * 3600 + 30 * 60),
+        ("120:00:00", None, False, 120 * 3600),  # not capped at one job's 96 h
+        ("80:00:00", "20:00:00", True, 100 * 3600),
+        ("80:00:00", "20:00:00", False, 80 * 3600),
+        ("0:00:01", None, False, 1),
         ("not a time", None, False, None),
     ],
 )
-def test_the_estimated_run_time_is_the_recommendation_plus_half_and_not_capped(
+def test_the_estimated_run_time_is_the_recommendation_as_it_is_and_not_capped(
     walltime, step, post_processing, seconds
 ):
     assert job_script.estimated_run_seconds(_recommending(walltime, step), post_processing) == seconds
@@ -329,10 +330,10 @@ def test_the_estimated_run_time_is_the_recommendation_plus_half_and_not_capped(
 
 
 def test_a_run_is_over_the_limit_only_above_two_weeks():
-    assert job_script.run_over_limit(_recommending("224:00:00")) is None  # 336 h exactly
-    assert job_script.run_over_limit(_recommending("224:01:00")) == 336 * 3600 + 90
-    assert job_script.run_over_limit(_recommending("150:00:00", "80:00:00"), True) == 345 * 3600
-    assert job_script.run_over_limit(_recommending("150:00:00", "80:00:00")) is None
+    assert job_script.run_over_limit(_recommending("336:00:00")) is None  # 336 h exactly
+    assert job_script.run_over_limit(_recommending("336:00:01")) == 336 * 3600 + 1
+    assert job_script.run_over_limit(_recommending("300:00:00", "40:00:00"), True) == 340 * 3600
+    assert job_script.run_over_limit(_recommending("300:00:00", "40:00:00")) is None
     assert job_script.run_over_limit({"simulation": {}}) is None
 
 

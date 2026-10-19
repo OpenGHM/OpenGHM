@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import {
-  automaticWalltimeLabel,
   describeDuration,
+  estimatedRunLabel,
   describeUnsupportedField,
 } from "@/lib/jobs/compute";
 import { ClampedName } from "@/components/common/clamped-name";
@@ -61,7 +61,7 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
  * run time, and whose allocation it is. `cores` is what SLURM will be asked for
  * (`effectiveCompute`); `coresFromSnapshot` says the draft left it unset, which
  * means the snapshot's recommendation. The estimated run time is the
- * snapshot's recommended time plus 50% (`estimatedRunSeconds`), with its
+ * snapshot's recommended time as it is (`estimatedRunSeconds`), with its
  * post-processing time added when the run asks for climatology
  * (`estimateIncludesPostProcessing`).
  */
@@ -119,7 +119,7 @@ export function SubmitSummary({
         <SummaryRow label="Estimated run time">
           {estimatedSeconds !== null ? describeDuration(estimatedSeconds) : "Not known"}
           <Recommendation show={estimatedSeconds !== null}>
-            {automaticWalltimeLabel("summary", estimateIncludesPostProcessing)}
+            {estimatedRunLabel(estimateIncludesPostProcessing)}
           </Recommendation>
         </SummaryRow>
       </dl>

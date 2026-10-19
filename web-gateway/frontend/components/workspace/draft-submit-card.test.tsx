@@ -287,7 +287,7 @@ describe("DraftSubmitCard: long refusals", () => {
 describe("DraftSubmitCard: a run over the limit for one simulation", () => {
   it("shows the backend's sentence for run_over_limit as it is", async () => {
     const message =
-      "This simulation is estimated to take about 450 h (the reference run, plus 50%), over the 2-week limit for one simulation.";
+      "This simulation is estimated to take about 450 h (the reference run), over the 2-week limit for one simulation.";
     submit.mockResolvedValueOnce({ ok: false, reason: "error", message, code: "run_over_limit" });
     card();
     await openDialog();
@@ -311,7 +311,7 @@ describe("DraftSubmitCard: submitting", () => {
     expect(text).toContain("discharge, runoff");
     expect(text).toContain("8");
     expect(text).toContain("Estimated run time");
-    expect(text).toContain("22 min 30 s");
+    expect(text).toContain("15 min");
     expect(onSubmittingChange).not.toHaveBeenCalled();
 
     fireEvent.click(confirmButton());
@@ -332,7 +332,7 @@ describe("DraftSubmitCard: submitting", () => {
     card();
     await openDialog();
     expect(dialog().textContent).toContain("model snapshot's recommendation");
-    expect(dialog().textContent).toContain("22 min 30 s");
+    expect(dialog().textContent).toContain("15 min");
   });
 
   it("shows the estimated run time of a run longer than one job whole, without a job count", async () => {
@@ -343,8 +343,8 @@ describe("DraftSubmitCard: submitting", () => {
     });
     card({ recommended: { cores: 16, walltime: "111:30:00" } });
     await openDialog();
-    // 111 h 30 min plus 50% is 167 h 15 min.
-    expect(dialog().textContent).toContain("Estimated run time6 d 23 h");
+    // 111 h 30 min, as recommended: no headroom.
+    expect(dialog().textContent).toContain("Estimated run time4 d 15 h");
     expect(dialog().textContent).not.toMatch(/limit for one job|\d+ jobs/);
   });
 
@@ -360,8 +360,9 @@ describe("DraftSubmitCard: submitting", () => {
     });
     card({ recommended: { cores: 16, walltime: "15:00", postProcessingWalltime: "1:00:00" } });
     await openDialog();
-    expect(dialog().textContent).toContain("1 h 52 min");
-    expect(dialog().textContent).toContain("model snapshot's recommendation + post-processing + 50%");
+    expect(dialog().textContent).toContain("1 h 15 min");
+    expect(dialog().textContent).toContain("model snapshot's recommendation + post-processing");
+    expect(dialog().textContent).not.toContain("50%");
   });
 
   it("does nothing more on Cancel: no submit, nothing stopped, Submit available again", async () => {

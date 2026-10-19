@@ -79,11 +79,13 @@ snapshot draft stays one simulation, run by one or more SLURM jobs.
   (`openghm sim state`).
 - **Submitting longer runs.** A draft whose recommended walltime is over 96 h is
   no longer refused for that. One whose estimated run time, the recommended
-  walltime (with the post-processing time when the run post-processes) plus 50%,
-  not capped at 96 h, is over two weeks is refused at submit (`run_over_limit`).
-  Users no longer set a walltime: every job asks for the recommendation with
-  that headroom, at most 96 h, and the wizard shows the estimate and the
-  limit as a time, never as a number of jobs.
+  walltime (with the post-processing time when the run post-processes) as it
+  is, not capped at 96 h, is over two weeks is refused at submit
+  (`run_over_limit`). The estimate has no headroom: the slack for a run's
+  uncertainty is already in the 4 jobs (384 h) the limit allows. Users no longer
+  set a walltime: every job asks for the recommendation plus 50%, at most 96 h
+  (the 50% is only on what one job asks SLURM for), and the wizard shows the
+  estimate and the limit as a time, never as a number of jobs.
 
 ## Consequences
 
