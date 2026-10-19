@@ -23,7 +23,7 @@ export default async function AdminLayout({
   if (session.user.role !== "admin" && session.user.role !== "staff") {
     return (
       <div className="flex min-h-screen flex-col">
-        <PageHero size="page" eyebrow="Admin console" title="Admin console" />
+        <PageHero eyebrow="Admin console" title="Admin console" />
         <PageBody className="flex-1">
           <section className="rounded-card bg-card px-6 py-14 text-center shadow-raised">
             <h2 className="text-xl font-[650] tracking-[-0.01em] text-foreground">

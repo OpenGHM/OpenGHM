@@ -7,7 +7,6 @@ export default function NewsPostNotFound() {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[{ label: "Home", href: "/" }, { label: "News", href: "/news" }]}
         title="Post not found"
       />

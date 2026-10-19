@@ -104,11 +104,9 @@ export default function AboutPage() {
         eyebrow="Our Mission"
         title="Making global hydrologic science FAIR, reproducible, and accessible to all."
         subtitle="We are building the next generation of open-source tools to help researchers, policymakers, and communities understand water systems at a planetary scale."
-        contentClassName="pt-16 lg:pt-24"
-        className="pb-[140px]"
       />
 
-      <PageBody className="-mt-20 flex flex-col gap-24">
+      <PageBody className="flex flex-col gap-24">
         <section className="flex flex-wrap gap-3 rounded-panel bg-card p-3 shadow-raised">
           <div className="flex-[1_1_380px] self-center overflow-hidden rounded-[20px] bg-accent">
             <Image

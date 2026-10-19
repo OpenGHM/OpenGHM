@@ -7,7 +7,6 @@ export default function WorkshopNotFound() {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[{ label: "Community", href: "/community" }, { label: "Workshops" }]}
         title="Workshop not found"
       />

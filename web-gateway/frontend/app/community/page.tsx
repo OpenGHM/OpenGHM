@@ -41,7 +41,6 @@ export default async function CommunityPage({
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         eyebrow="Community"
         title={settings.hero_title || DEFAULT_COMMUNITY_SETTINGS.hero_title}
         subtitle={settings.hero_intro || undefined}

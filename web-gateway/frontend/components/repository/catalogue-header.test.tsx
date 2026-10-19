@@ -20,12 +20,12 @@ describe("CatalogueHeader", () => {
     );
   }
 
-  it("has the eyebrow, the one h1 and the subtitle", () => {
+  it("has the eyebrow and the one h1", () => {
     renderHeader();
-    expect(screen.getByRole("heading", { level: 1, name: "Data Repository" })).toBeTruthy();
-    expect(screen.getByText("Repository").className).toContain("uppercase");
-    expect(screen.getByText("Repository").className).toContain("font-mono");
-    expect(screen.getByText("Model snapshots and inputs shared by the OpenGHM community")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Find model snapshots and inputs for hydrologic research." })).toBeTruthy();
+    const eyebrow = screen.getAllByText("Data Repository").find((el) => el.tagName === "P");
+    expect(eyebrow?.className).toContain("uppercase");
+    expect(eyebrow?.className).toContain("font-mono");
   });
 
   it("carries the search box in the band", () => {

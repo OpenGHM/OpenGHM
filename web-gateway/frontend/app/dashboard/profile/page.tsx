@@ -34,7 +34,6 @@ export default async function ProfilePage({
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         eyebrow="Account"
         title="My Profile"
         subtitle="Manage your account details, password, and signed-in devices."

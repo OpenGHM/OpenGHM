@@ -18,7 +18,7 @@ export function Hero() {
       }
       subtitle="Make water sustainability research FAIR. Access high-performance computing and massive datasets directly via your browser."
       backgroundImage={{ src: "/images/hero-bg.jpg", alt: "Global Hydrology Visualization" }}
-      contentClassName="pt-16 lg:pt-[104px]"
+      contentClassName="gap-7 pt-16 lg:pt-[104px]"
       className="pb-[136px]"
       actions={
         <>

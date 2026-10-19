@@ -23,7 +23,6 @@ export default async function NewsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[{ label: "Home", href: "/" }, { label: "News" }]}
         eyebrow="What's New"
         title="All updates"

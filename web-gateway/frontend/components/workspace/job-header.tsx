@@ -78,7 +78,6 @@ export function JobHeader({ job, preview = false }: { job: Job; preview?: boolea
 
   return (
     <PageHero
-      size="page"
       breadcrumb={draftBreadcrumb(name)}
       // The pill is drawn on white so its status colour (made for a light
       // surface) stays readable on the navy.

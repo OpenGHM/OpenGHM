@@ -34,7 +34,6 @@ export default async function TutorialPage({ params }: Params) {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[
           { label: "Community", href: "/community" },
           { label: "Tutorials", href: "/community?tab=tutorials" },

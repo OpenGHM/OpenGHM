@@ -13,12 +13,6 @@ export interface HeroBreadcrumbItem {
 export interface PageHeroProps {
   /** The h1. Plain text or inline markup. */
   title: ReactNode;
-  /**
-   * `display` (default) is the big title of Home, About and the Repository,
-   * clamp(40px, 6vw, 72px). `page` is the smaller one of a detail or workspace
-   * page, clamp(28px, 3.4vw, 44px), with the title block closer to the header.
-   */
-  size?: "display" | "page";
   /** The mono label above the title; the small dot is drawn for you. */
   eyebrow?: ReactNode;
   /** The muted line under the title. */
@@ -69,12 +63,12 @@ export interface PageHeroProps {
  * <Footer />
  * ```
  *
- * A detail page uses `size="page"` with a `breadcrumb`. A page with no band at
+ * A detail page passes a `breadcrumb`. Every band has the same title size
+ * (clamp(28px, 3.4vw, 40px)) and spacing; Home overrides both. A page with no band at
  * all uses `<Header />` (its default `variant="standalone"` is a navy bar).
  */
 export function PageHero({
   title,
-  size = "display",
   eyebrow,
   subtitle,
   breadcrumb,
@@ -87,7 +81,6 @@ export function PageHero({
   contentClassName,
   className,
 }: PageHeroProps) {
-  const isDisplay = size === "display";
   return (
     <div
       className={cn(
@@ -125,7 +118,7 @@ export function PageHero({
       <div
         className={cn(
           "relative mx-auto flex w-full max-w-[1360px] flex-col px-4 sm:px-7",
-          isDisplay ? "gap-7 pt-12 lg:pt-16" : "gap-[22px] pt-6 lg:pt-10",
+          "gap-[22px] pt-6 lg:pt-10",
           contentClassName,
         )}
       >
@@ -143,9 +136,7 @@ export function PageHero({
         <h1
           className={cn(
             "font-bold text-white",
-            isDisplay
-              ? "max-w-[880px] text-[clamp(40px,6vw,72px)] leading-[0.98] tracking-[-0.045em] text-balance"
-              : "max-w-[1040px] text-[clamp(28px,3.4vw,44px)] leading-[1.12] tracking-[-0.035em] text-pretty",
+            "max-w-[1040px] text-[clamp(28px,3.4vw,40px)] leading-[1.12] tracking-[-0.035em] text-pretty",
           )}
         >
           {title}
@@ -153,8 +144,7 @@ export function PageHero({
         {subtitle && (
           <p
             className={cn(
-              "max-w-[640px] leading-[1.55] text-hero-foreground-muted text-pretty",
-              isDisplay ? "text-base sm:text-[19px]" : "text-base sm:text-[17px]",
+              "max-w-[640px] text-base leading-[1.55] text-hero-foreground-muted text-pretty sm:text-[17px]",
             )}
           >
             {subtitle}

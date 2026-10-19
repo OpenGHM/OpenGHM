@@ -32,7 +32,6 @@ export default async function WorkshopPage({ params }: Params) {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[
           { label: "Community", href: "/community" },
           { label: "Workshops", href: "/community?tab=workshops" },

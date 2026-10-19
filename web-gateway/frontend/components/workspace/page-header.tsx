@@ -15,7 +15,7 @@ export function draftBreadcrumb(current: string): HeroBreadcrumbItem[] {
  * eyebrow, the title with, under it, a status chip and a muted line (`meta`),
  * whatever the page does (`actions`: buttons, the save status) and anything that
  * belongs to the band's bottom edge (`children`: the section switch, the
- * wizard's steps). It is `PageHero` at `size="page"`, so it carries the Header
+ * wizard's steps). It is a `PageHero`, so it carries the Header
  * itself; the content under it goes in `PageBody`, which overlaps the band.
  *
  * The chip is drawn on a white pill so a status colour (made for a light
@@ -47,7 +47,6 @@ export function PageHeader({
     ) : undefined;
   return (
     <PageHero
-      size="page"
       eyebrow={eyebrow}
       breadcrumb={breadcrumb}
       title={<span className="[overflow-wrap:anywhere]">{title}</span>}

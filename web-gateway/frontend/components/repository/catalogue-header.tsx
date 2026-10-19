@@ -9,9 +9,8 @@ import { CatalogueSearch } from "./catalogue-search";
 export function CatalogueHeader() {
   return (
     <PageHero
-      eyebrow="Repository"
-      title="Data Repository"
-      subtitle="Model snapshots and inputs shared by the OpenGHM community"
+      eyebrow="Data Repository"
+      title="Find model snapshots and inputs for hydrologic research."
     >
       <CatalogueSearch />
     </PageHero>

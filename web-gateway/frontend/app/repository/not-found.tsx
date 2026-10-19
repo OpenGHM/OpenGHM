@@ -8,7 +8,6 @@ export default function RepositoryNotFound() {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[{ label: "Home", href: "/" }, { label: "Data Repository", href: "/repository" }]}
         title="Not found in the Data Repository"
       />

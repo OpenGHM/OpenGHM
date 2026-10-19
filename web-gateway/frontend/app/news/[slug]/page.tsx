@@ -35,7 +35,6 @@ export default async function NewsPostPage({ params }: Params) {
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero
-        size="page"
         breadcrumb={[{ label: "Home", href: "/" }, { label: "News", href: "/news" }, { label: post.title }]}
         meta={
           <div className="flex flex-wrap items-center gap-2">

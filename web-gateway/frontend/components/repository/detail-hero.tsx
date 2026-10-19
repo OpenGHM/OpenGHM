@@ -48,7 +48,6 @@ export function DetailHero({
 }) {
   return (
     <PageHero
-      size="page"
       breadcrumb={[{ label: "Data Repository", href: "/repository" }, ...breadcrumb]}
       meta={
         <div className="flex flex-wrap items-center gap-2">
