@@ -6,53 +6,63 @@ import {
   Loader2Icon,
   OctagonXIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
 /**
- * A toast is a raised card with a coloured edge and icon by kind, larger than
- * Sonner's default. Every toast has a close button; one that must not vanish
- * on its own (an error the person has to read) passes `duration: Infinity`.
+ * Toasts drawn by us rather than Sonner (`unstyled`: Sonner keeps only the
+ * stacking, swiping and timing). A card with the kind's icon in a tinted disc,
+ * the message, and a close button. It sits below the site header rather than
+ * on it. A toast that must not vanish on its own (an error the person has to
+ * read) passes `duration: Infinity`; every toast can be closed.
  */
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      // The site has no dark mode (no ThemeProvider), so Sonner must not
+      // follow the OS into its dark one.
+      theme="light"
       className="toaster group"
       closeButton
+      offset={{ top: 88 }}
+      mobileOffset={{ top: 76, left: 16, right: 16 }}
       icons={{
-        success: <CircleCheckIcon className="size-5 text-success" />,
-        info: <InfoIcon className="size-5 text-primary" />,
-        warning: <TriangleAlertIcon className="size-5 text-warning" />,
-        error: <OctagonXIcon className="size-5 text-destructive" />,
-        loading: <Loader2Icon className="size-5 animate-spin" />,
+        success: <CircleCheckIcon />,
+        info: <InfoIcon />,
+        warning: <TriangleAlertIcon />,
+        error: <OctagonXIcon />,
+        loading: <Loader2Icon className="animate-spin" />,
+        close: <XIcon />,
       }}
       toastOptions={{
+        unstyled: true,
         classNames: {
-          toast:
-            "!w-[420px] !max-w-[calc(100vw-32px)] !items-start !gap-3 !rounded-card !border-0 !border-l-4 !p-4 !pr-10 !text-[15px] !leading-snug !font-medium !shadow-raised",
-          icon: "!mt-0.5 !size-5",
-          title: "!text-[15px] !font-semibold",
-          description: "!text-sm !font-normal !text-muted-foreground",
-          closeButton:
-            "!left-auto !right-2 !top-2 !size-6 !translate-x-0 !translate-y-0 !rounded-full !border-0 !bg-transparent !text-muted-foreground hover:!bg-muted hover:!text-foreground",
-          success: "!border-l-success",
-          info: "!border-l-primary",
-          warning: "!border-l-warning",
-          error: "!border-l-destructive",
+          toast: [
+            "group/toast flex w-full items-start gap-3 rounded-[18px] border border-border/80 bg-popover p-3.5 pr-11 text-popover-foreground",
+            "shadow-[0_1px_2px_rgba(16,40,58,0.06),0_16px_36px_-12px_rgba(16,40,58,0.28)]",
+          ].join(" "),
+          icon: [
+            "flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground [&_svg]:size-[18px]",
+            "group-data-[type=success]/toast:bg-success/12 group-data-[type=success]/toast:text-success",
+            "group-data-[type=info]/toast:bg-primary/12 group-data-[type=info]/toast:text-primary",
+            "group-data-[type=warning]/toast:bg-warning/12 group-data-[type=warning]/toast:text-warning",
+            "group-data-[type=error]/toast:bg-destructive/12 group-data-[type=error]/toast:text-destructive",
+          ].join(" "),
+          content: "flex min-w-0 flex-1 flex-col gap-0.5 self-center py-0.5",
+          title: "text-[14.5px] leading-snug font-semibold text-pretty",
+          description: "text-[13.5px] leading-snug text-muted-foreground text-pretty",
+          closeButton: [
+            "absolute top-3 right-3 flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors",
+            "hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&_svg]:size-4",
+          ].join(" "),
+          actionButton:
+            "ml-1 shrink-0 self-center rounded-full bg-primary px-3 py-1.5 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90",
+          cancelButton:
+            "shrink-0 self-center rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted",
         },
       }}
-      style={
-        {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius-card)",
-        } as React.CSSProperties
-      }
+      style={{ "--width": "440px" } as React.CSSProperties}
       {...props}
     />
   )
