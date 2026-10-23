@@ -8,19 +8,23 @@ import {
   describeChanges,
   displayValue,
   effectiveValue,
+  hasCandidates,
   indexByPath,
   isChanged,
   isEditableField,
   isInitUnavailable,
+  isSwitchedOn,
   moduleIsOn,
+  resetModule,
   resetPath,
   sameValue,
   setFieldValue,
   switchOffModule,
+  switchOnModule,
   type ParamField,
   type ParamModule,
 } from "@/lib/workspace/model-parameters";
-import { fakeModelParameters } from "@/lib/workspace/fixtures";
+import { fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
 
 const tree = fakeModelParameters();
 const field = (path: string) => allFields(tree.groups).find((f) => f.path === path) as ParamField;
@@ -153,15 +157,17 @@ describe("describeChanges", () => {
       tree
     );
     expect(changes).toEqual([
-      { path: "Glaciers", label: "Runoff from Glaciated Areas", value: "", shown: "switched off" },
-      { path: "Other.key", label: null, value: "x", shown: "x" },
-      { path: "wbmParam.Infiltration", label: "Infiltration method", value: "HBV", shown: "HBV" },
-      { path: "wbmParam.maxRffStorage", label: "Runoff storage limit", value: "500", shown: "500 mm" },
+      { kind: "change", path: "Glaciers", label: "Runoff from Glaciated Areas", value: "", shown: "switched off" },
+      { kind: "change", path: "Other.key", label: null, value: "x", shown: "x" },
+      { kind: "change", path: "wbmParam.Infiltration", label: "Infiltration method", value: "HBV", shown: "HBV" },
+      { kind: "change", path: "wbmParam.maxRffStorage", label: "Runoff storage limit", value: "500", shown: "500 mm" },
     ]);
   });
 
   it("lists keys as they are without the tree, and nothing for no changes", () => {
-    expect(describeChanges({ a: "1" }, null)).toEqual([{ path: "a", label: null, value: "1", shown: "1" }]);
+    expect(describeChanges({ a: "1" }, null)).toEqual([
+      { kind: "change", path: "a", label: null, value: "1", shown: "1" },
+    ]);
     expect(describeChanges(null, tree)).toEqual([]);
   });
 });
@@ -179,5 +185,81 @@ describe("the 422 and the 503", () => {
     expect(isInitUnavailable({ status: 503, code: "init_unavailable" })).toBe(true);
     expect(isInitUnavailable({ status: 503 })).toBe(true);
     expect(isInitUnavailable({ status: 500 })).toBe(false);
+  });
+});
+
+describe("switching a module on", () => {
+  const on = fakeSwitchOnTree();
+  const fieldOf = (path: string) => allFields(on.groups).find((f) => f.path === path) as ParamField;
+  const moduleOf = (path: string) => allModules(on.groups).find((m) => m.path === path) as ParamModule;
+  const glacier = moduleOf("Glaciers");
+  const MELT = "/wbm/data_init/glaciers/discharge_m.init";
+  const AREA = "/wbm/data_init/glaciers/area_1km.init";
+
+  it("is off until the draft sets something of it or opens it", () => {
+    expect(moduleIsOn(glacier, null)).toBe(false);
+    expect(isSwitchedOn(glacier, null)).toBe(false);
+    expect(moduleIsOn(glacier, null, new Set(["Glaciers"]))).toBe(true);
+    expect(isSwitchedOn(glacier, null, new Set(["Glaciers"]))).toBe(true);
+    expect(moduleIsOn(glacier, { "Glaciers.glMelt": MELT })).toBe(true);
+    // a module of another path is not opened by it
+    expect(moduleIsOn(glacier, null, new Set(["Irrigation"]))).toBe(false);
+    // a module that is on in the snapshot is not "switched on"
+    expect(isSwitchedOn(allModules(fakeModelParameters().groups)[0], null)).toBe(false);
+  });
+
+  it("is on by its own key when it is a dataset", () => {
+    const lai = moduleOf("Impervious");
+    expect(moduleIsOn(lai, { Impervious: AREA })).toBe(true);
+    expect(isSwitchedOn(lai, { Impervious: AREA })).toBe(true);
+  });
+
+  it("starts a required scalar at WBM's default and leaves the datasets to be chosen", () => {
+    expect(switchOnModule(null, glacier)).toBeNull();
+    const nitrogen = moduleOf("DIN");
+    // its dataset fields have no unit, so they take constants and start unset
+    expect(switchOnModule(null, nitrogen)).toEqual({ "DIN.scale": "2" });
+    expect(switchOnModule({ "DIN.scale": "3" }, nitrogen)).toEqual({ "DIN.scale": "3" });
+    expect(switchOnModule({ "wbmParam.alpha": "7" }, glacier)).toEqual({ "wbmParam.alpha": "7" });
+  });
+
+  it("takes a chosen dataset into custom_params and an emptied choice out", () => {
+    const melt = fieldOf("Glaciers.glMelt");
+    const chosen = setFieldValue(null, melt, MELT);
+    expect(chosen).toEqual({ "Glaciers.glMelt": MELT });
+    expect(setFieldValue(chosen, melt, "")).toBeNull();
+    expect(hasCandidates(melt)).toBe(true);
+    expect(isEditableField({ ...melt, editable: false })).toBe(false);
+    expect(isEditableField({ ...melt, candidates: null })).toBe(false);
+    expect(isEditableField(melt)).toBe(true);
+  });
+
+  it("is taken back off by Reset: everything set of the module goes, and nothing else", () => {
+    const custom = { "Glaciers.glMelt": MELT, "Glaciers.glArea": AREA, "wbmParam.alpha": "7" };
+    expect(resetModule(custom, glacier)).toEqual({ "wbmParam.alpha": "7" });
+    expect(resetModule({ Impervious: AREA }, moduleOf("Impervious"))).toBeNull();
+    expect(resetModule(null, glacier)).toBeNull();
+  });
+
+  it("is shown by a line of its own and the datasets by name", () => {
+    expect(describeChanges({ "Glaciers.glMelt": MELT, "Glaciers.glArea": AREA }, on)).toEqual([
+      { kind: "switched_on", path: "Glaciers", label: "Runoff from Glaciated Areas", value: "", shown: "switched on" },
+      { kind: "change", path: "Glaciers.glArea", label: "Glacier area fraction", value: AREA, shown: "Glacier area fraction, 1 km" },
+      { kind: "change", path: "Glaciers.glMelt", label: "Glacier melt discharge", value: MELT, shown: "Glacier discharge, monthly" },
+    ]);
+    // a module that is a dataset has its own key: its line is that key, and no second line
+    expect(describeChanges({ Impervious: AREA }, on)).toEqual([
+      { kind: "change", path: "Impervious", label: "Impervious surface runoff", value: AREA, shown: "Glacier area fraction, 1 km" },
+    ]);
+    // without the tree it can only list the keys
+    expect(describeChanges({ "Glaciers.glMelt": MELT }, null)).toEqual([
+      { kind: "change", path: "Glaciers.glMelt", label: null, value: MELT, shown: MELT },
+    ]);
+  });
+
+  it("names a dataset in displayValue, and shows a path that is no candidate as it is", () => {
+    const melt = fieldOf("Glaciers.glMelt");
+    expect(displayValue(melt, MELT)).toBe("Glacier discharge, monthly");
+    expect(displayValue(melt, "/wbm/data_init/other.init")).toBe("/wbm/data_init/other.init");
   });
 });

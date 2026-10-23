@@ -15,7 +15,7 @@ import {
   BACKEND_UNREACHABLE_MESSAGE,
   SERVER_ERROR_MESSAGE,
 } from "@/lib/action-failure";
-import { cancelJob, deleteDraft, duplicateDraft, pollJobStatus, publishDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
+import { cancelJob, deleteDraft, draftChecks, duplicateDraft, pollJobStatus, publishDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
@@ -350,6 +350,41 @@ describe("publishedAnswer", () => {
     await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "not_found" });
     post.mockRejectedValueOnce(refused(401));
     await expect(publishedAnswer("s", parameters, null)).resolves.toEqual({ ok: false, reason: "session_expired" });
+  });
+});
+
+describe("draftChecks", () => {
+  const parameters = {
+    temporal_range_start: "2000-01-01",
+    temporal_range_end: "2002-06-30",
+    spatial_domain: null,
+    variables: ["discharge"],
+    custom_params: { "Spinup.Start": "1999-01-01" },
+  };
+
+  it("POSTs the parameters to the snapshot's checks route and gives what it answers", async () => {
+    const checks = {
+      errors: [{ rule: "dataset_file_coverage", level: "error", message: "m", paths: ["MT_Code_Name.Run_End"] }],
+      warnings: [],
+      files_checked: true,
+    };
+    post.mockResolvedValue({ data: checks });
+    await expect(draftChecks("snap/1", parameters)).resolves.toEqual({ ok: true, data: checks });
+    expect(post).toHaveBeenCalledWith("/api/v1/repository/datasets/snap%2F1/checks", { parameters });
+  });
+
+  it("answers an unreadable init with its code and status, an unknown snapshot and an ended session as such", async () => {
+    post.mockRejectedValueOnce(refused(503, { code: "init_unavailable", message: "The init could not be read." }));
+    await expect(draftChecks("s", parameters)).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 503,
+      code: "init_unavailable",
+    });
+    post.mockRejectedValueOnce(refused(404, "Dataset not found"));
+    await expect(draftChecks("s", parameters)).resolves.toEqual({ ok: false, reason: "not_found" });
+    post.mockRejectedValueOnce(refused(401));
+    await expect(draftChecks("s", parameters)).resolves.toEqual({ ok: false, reason: "session_expired" });
   });
 });
 

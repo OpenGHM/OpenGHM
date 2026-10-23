@@ -26,10 +26,15 @@ from route_helpers import make_job, make_user, token_for
 WBM_TEST_INIT = """{
 ID		=> 'wbm_test',
 Project		=> 'WBM_test',
+Output_vars	=> 'runoff',
+Network		=> '/wbm/data/network/n.asc',
+Routing		=> 'LRR',
+soilAWCapacity	=> '/wbm/data_init/soil/a.init',
 MT_Code_Name	=>  {
           File_Size	=> 'year',
           MT_ID		=> 'WMB_test_runoff',
           Output_dir	=> 'wbm/wbm_output/WBM_test',
+          Run_Start	=> '2000-01-01',
           Run_End	=> '2001-12-31'
         },
 }

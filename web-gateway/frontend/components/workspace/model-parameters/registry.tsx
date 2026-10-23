@@ -8,11 +8,13 @@ import {
   defaultDiffers,
   displayValue,
   effectiveValue,
+  hasCandidates,
   isChanged,
   isConstantForDataset,
   isEditableField,
   valueType,
   type CustomParams,
+  type DatasetCandidate,
   type FieldType,
   type ParamField,
 } from "@/lib/workspace/model-parameters";
@@ -84,6 +86,58 @@ function EnumControl({ field, id, value, describedBy, invalid, onChange }: Field
         </option>
       ))}
     </select>
+  );
+}
+
+/** What a dataset is called in a list: its name, time step and unit. */
+const candidateLabel = (c: DatasetCandidate) =>
+  `${c.name} · ${c.time_series || "no time series"} · ${c.unit || "no unit"}`;
+
+/** One of the datasets of the snapshot's model input, all in the field's unit, or, where the field
+ *  also takes a number (`edit_as`), a constant typed beside the select: both write the same key. A
+ *  dataset WBM cannot read is listed, greyed and not chosen (the reason is under the field). A
+ *  required field has no "not set". */
+function CandidateControl({ field, id, value, describedBy, invalid, onChange }: FieldControlProps) {
+  const candidates = field.candidates ?? [];
+  const takesNumber = field.edit_as === "number";
+  const listed = candidates.some((c) => c.value === value);
+  const constant = takesNumber && value !== "" && !listed && Number.isFinite(Number(value));
+  return (
+    <>
+      <select
+        id={id}
+        value={constant ? "" : value}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        className={SELECT}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="" disabled={field.required === true && !takesNumber}>
+          {field.required ? "Choose a dataset…" : "Not set"}
+        </option>
+        {value !== "" && !listed && !constant && <option value={value}>{value}</option>}
+        {candidates.map((c) => (
+          <option key={c.value} value={c.value} disabled={c.disabled !== null} title={c.disabled ?? undefined}>
+            {candidateLabel(c)}
+            {c.disabled !== null && " (cannot be used)"}
+          </option>
+        ))}
+      </select>
+      {takesNumber && (
+        <Input
+          type="number"
+          inputMode="decimal"
+          step="any"
+          placeholder="or a constant"
+          aria-label={`${field.label}, a constant`}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+          value={constant ? value : ""}
+          className={cn(CONTROL_INPUT, "w-32 shrink-0")}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
   );
 }
 
@@ -180,9 +234,15 @@ export const FIELD_CONTROLS: Record<FieldType, ComponentType<FieldControlProps>>
 };
 
 /** The control for a field: the editable one for a scalar the tree lets the
- *  wizard change, the read-only display for everything else. */
+ *  wizard change, a choice among the model input's datasets (in the field's unit) for a dataset of a
+ *  module being switched on, the read-only display for everything else. */
 export function FieldControl(props: FieldControlProps) {
-  const Control = isEditableField(props.field) ? FIELD_CONTROLS[valueType(props.field)] : ReadOnlyControl;
+  const { field } = props;
+  const Control = !isEditableField(field)
+    ? ReadOnlyControl
+    : hasCandidates(field)
+      ? CandidateControl
+      : FIELD_CONTROLS[valueType(field)];
   return <Control {...props} />;
 }
 
@@ -222,6 +282,8 @@ export function ParamFieldRow({
   const editable = isEditableField(field);
   const changed = isChanged(field.path, custom);
   const constant = isConstantForDataset(field);
+  const pickable = editable && hasCandidates(field);
+  const unusable = (field.candidates ?? []).filter((c) => c.disabled !== null);
   const own = effectiveValue(field, custom) ?? "";
   // A dataset's value is a path, which a number box cannot hold: the box is empty until
   // the draft sets a constant.
@@ -262,6 +324,11 @@ export function ParamFieldRow({
             {!editable && (
               <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                 Read-only
+              </span>
+            )}
+            {pickable && field.required && value === "" && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                Required
               </span>
             )}
           </div>
@@ -314,6 +381,20 @@ export function ParamFieldRow({
         <p id={ids.doc} className="text-[13px] leading-normal text-muted-foreground">
           {field.doc}
         </p>
+      )}
+      {pickable && unusable.length > 0 && (
+        <details className={MUTED}>
+          <summary className="cursor-pointer">
+            {unusable.length === 1 ? "1 dataset cannot be used here" : `${unusable.length} datasets cannot be used here`}
+          </summary>
+          <ul className="mt-1 space-y-1">
+            {unusable.map((c) => (
+              <li key={c.value} className="break-words">
+                <span className="font-medium text-foreground">{c.name}</span>: {c.disabled}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {field.show_if && (
         <p id={ids.when} className={MUTED}>

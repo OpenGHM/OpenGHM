@@ -23,7 +23,8 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
 from app.core import audit, authz, pending_sso, sessions
 from app.core.config import settings
-from app.services import job_live, published_answer, run_start, slurm
+from app.services import job_live, published_answer, run_start, slurm, tree_browse
+from app.wbm_init import model_input
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +66,26 @@ def _no_s3_listing(monkeypatch):
     published_answer.reset()
     yield
     published_answer.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_model_input_read(monkeypatch):
+    """No test reads a model input from Anvil S3 either: the checks before a submit
+    (`app.wbm_init.cross_rules`) then report dataset coverage as not checked, which refuses
+    nothing. A test that wants files replaces `tree_browse._get` and `_get_head`
+    (tests/test_wbm_model_input.py), or the readers of `model_input` itself. What it read stays
+    process-wide, so each test starts without another's."""
+
+    async def no_network(*args, **kwargs):
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(tree_browse, "_get", no_network)
+    monkeypatch.setattr(tree_browse, "_get_head", no_network)
+    model_input.reset()
+    tree_browse.reset()
+    yield
+    model_input.reset()
+    tree_browse.reset()
 
 
 @pytest.fixture

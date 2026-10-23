@@ -356,13 +356,13 @@ def test_the_changes_file_holds_the_drafts_own_fields_beside_the_custom_params(c
         db,
         temporal_range_start="2001-01-01",
         temporal_range_end="2005-12-31",
-        variables=["runoff"],
+        variables=["runoff", "dischMsk"],  # Wyoming's Runoff_mask block needs a Msk output
     ).status_code == 200
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     assert changes_in(sent[0][2])["set"] == {
         "MT_Code_Name.Run_Start": "2001-01-01",
         "MT_Code_Name.Run_End": "2005-12-31",
-        "Output_vars": "runoff",
+        "Output_vars": "runoff dischMsk",
         "wbmParam.alpha": 7.0,
     }
 

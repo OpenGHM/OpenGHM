@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/jobs/actions", () => ({ pollJobStatus: vi.fn() }));
+vi.mock("@/lib/repository/actions", () => ({ fetchModelParameters: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/workspace/x",
@@ -10,8 +11,17 @@ vi.mock("next/navigation", () => ({
 import { RunDetailsCard } from "@/components/workspace/run-details-card";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import type { Job, JobLive } from "@/lib/jobs/types";
-import { previewDraftJob } from "@/lib/workspace/fixtures";
+import { fetchModelParameters } from "@/lib/repository/actions";
+import { fakeModelParameters, fakeSwitchOnTree, previewDraftJob } from "@/lib/workspace/fixtures";
+import { allModules } from "@/lib/workspace/model-parameters";
+import { forgetModelParameters } from "@/lib/workspace/use-model-parameters";
 
+const fetchTree = vi.mocked(fetchModelParameters);
+
+beforeEach(() => {
+  forgetModelParameters();
+  fetchTree.mockReset();
+});
 afterEach(cleanup);
 
 function details(job: Job, recommended: { cores: number; walltime: string } | null, live: JobLive | null = null) {
@@ -250,5 +260,90 @@ describe("the run details card: what the page says once", () => {
     const purged = previewDraftJob("completed:purged");
     details(purged, null);
     expect(value("Work directory")).toContain(purged.work_dir!);
+  });
+});
+
+describe("the run details card: the model parameters the run changed", () => {
+  const withCustom = (custom: Record<string, string> | null) => {
+    const job = previewDraftJob("completed");
+    return { ...job, parameters: { ...job.parameters, custom_params: custom } };
+  };
+
+  it("lists a change by the tree's label, a readable value and the init key", async () => {
+    fetchTree.mockResolvedValue({ ok: true, data: fakeModelParameters() });
+    const job = withCustom({ "wbmParam.alpha": "4", "wbmParam.Infiltration": "HBV", "wbmParam.endorheicDir": "1" });
+    details(job, null);
+    expect(await screen.findByText("Soil moisture drying coefficient")).toBeTruthy();
+    const row = value("Model parameters");
+    expect(row).toContain("3 changed");
+    expect(row).toContain("wbmParam.alpha = 4");
+    expect(row).toContain("Infiltration method");
+    expect(row).toContain("wbmParam.Infiltration = HBV");
+    // The tree's readable value, where it differs from the stored one.
+    expect(row).toContain("· On");
+    expect(fetchTree).toHaveBeenCalledWith(job.dataset_id);
+  });
+
+  it("says a switched-off module as such", async () => {
+    const tree = fakeModelParameters();
+    fetchTree.mockResolvedValue({ ok: true, data: tree });
+    const mod = allModules(tree.groups)[0];
+    if (!mod) throw new Error("the fixture has a module");
+    details(withCustom({ [mod.path]: "" }), null);
+    expect(await screen.findByText(mod.name)).toBeTruthy();
+    expect(value("Model parameters")).toContain("switched off");
+  });
+
+  it("says a module the run switched on, and names the datasets chosen for it", async () => {
+    fetchTree.mockResolvedValue({ ok: true, data: fakeSwitchOnTree() });
+    details(
+      withCustom({
+        "Glaciers.glMelt": "/wbm/data_init/glaciers/discharge_m.init",
+        "Glaciers.glArea": "/wbm/data_init/glaciers/area_1km.init",
+      }),
+      null
+    );
+    expect(await screen.findByText("Runoff from Glaciated Areas")).toBeTruthy();
+    const row = value("Model parameters");
+    expect(row).toContain("3 changed");
+    expect(row).toContain("switched on");
+    expect(row).toContain("Glacier discharge, monthly");
+    expect(row).toContain("Glaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init");
+  });
+
+  it("lists the init key and the raw value at once, before the tree has come", () => {
+    fetchTree.mockReturnValue(new Promise(() => {}));
+    details(withCustom({ "wbmParam.alpha": "4" }), null);
+    const row = value("Model parameters");
+    expect(row).toContain("wbmParam.alpha = 4");
+    expect(row).not.toContain("Soil moisture drying coefficient");
+  });
+
+  it("lists the init key and the raw value when the tree request fails", async () => {
+    fetchTree.mockResolvedValue({ ok: false, reason: "server_error", message: "boom" } as never);
+    details(withCustom({ "wbmParam.alpha": "4" }), null);
+    await waitFor(() => expect(fetchTree).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    const row = value("Model parameters");
+    expect(row).toContain("1 changed");
+    expect(row).toContain("wbmParam.alpha = 4");
+    expect(row).not.toContain("Soil moisture drying coefficient");
+  });
+
+  it("lists the init key and the raw value when the snapshot's init cannot be read", async () => {
+    fetchTree.mockResolvedValue({ ok: false, reason: "http", status: 503, code: "init_unavailable", message: "x" } as never);
+    details(withCustom({ "wbmParam.alpha": "4" }), null);
+    await waitFor(() => expect(fetchTree).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(value("Model parameters")).toContain("wbmParam.alpha = 4");
+  });
+
+  it("has no entry, and asks for no tree, when the run changed nothing", () => {
+    details(withCustom(null), null);
+    expect(screen.queryByText("Model parameters", { selector: "dt" })).toBeNull();
+    cleanup();
+    details(withCustom({}), null);
+    expect(screen.queryByText("Model parameters", { selector: "dt" })).toBeNull();
+    expect(fetchTree).not.toHaveBeenCalled();
   });
 });

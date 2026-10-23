@@ -4,6 +4,7 @@ import { getApiClient } from "@/lib/api-client";
 import { describeFailure } from "@/lib/action-failure";
 import type {
   ActionResult,
+  DraftChecks,
   Job,
   JobListResponse,
   JobLogChunk,
@@ -29,6 +30,9 @@ const ANVIL_ACTION_TIMEOUT_MS = 60_000;
 /** The first answer for a snapshot lists its published files in the public
  *  bucket, which the 10 s default may not allow for. */
 const PUBLISHED_ANSWER_TIMEOUT_MS = 20_000;
+/** The first check of a snapshot reads its datasets' folders in the public bucket
+ *  (about 9 s for the global run on 2026-10-23, a repeated one under 1 s). */
+const DRAFT_CHECKS_TIMEOUT_MS = 40_000;
 
 /**
  * Runs one backend call and folds its failures into an ActionResult, so a
@@ -140,6 +144,31 @@ export async function publishedAnswer(
     },
     [404],
     PUBLISHED_ANSWER_TIMEOUT_MS
+  );
+}
+
+/**
+ * What a submit of a draft with these parameters would refuse or warn about: the parameter
+ * tree's cross rules, dataset file coverage first (docs/architecture/model-parameters.md
+ * section 6). It takes the parameters rather than a job id, like `publishedAnswer`, because
+ * what the wizard shows is not always what is saved and a new draft has no id. Any signed-in
+ * user may ask. Failures are "could not be checked", never a reason to stop a submit: the
+ * submit asks the same questions and says what it refuses.
+ */
+export async function draftChecks(
+  datasetId: string,
+  parameters: JobParameters
+): Promise<ActionResult<DraftChecks>> {
+  return run(
+    async (client) => {
+      const res = await client.post<DraftChecks>(
+        `/api/v1/repository/datasets/${encodeURIComponent(datasetId)}/checks`,
+        { parameters }
+      );
+      return res.data;
+    },
+    [404],
+    DRAFT_CHECKS_TIMEOUT_MS
   );
 }
 

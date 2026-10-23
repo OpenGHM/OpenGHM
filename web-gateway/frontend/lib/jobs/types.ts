@@ -283,6 +283,26 @@ export interface PublishedAnswer {
   files: PublishedFile[];
 }
 
+/** One rule of the parameter tree that a draft fails (`cross_rules`). `level` is `error` (a
+ *  submit refuses), `warn` or `info`; `paths` are the init key paths it concerns, so
+ *  `MT_Code_Name.Run_End` is the run end date. `message` is plain sentences. */
+export interface CheckFinding {
+  rule: string;
+  level: "error" | "warn" | "info";
+  message: string;
+  paths: string[];
+}
+
+/** `POST /repository/datasets/{id}/checks`: what a submit of a draft would refuse
+ *  (`errors`) or warn about (`warnings`, which also holds the notes). `files_checked` is
+ *  false when the dataset files could not be read, so coverage was not judged: a warning
+ *  says so. */
+export interface DraftChecks {
+  errors: CheckFinding[];
+  warnings: CheckFinding[];
+  files_checked: boolean;
+}
+
 /** What a draft asks SLURM for: the cores, or null for the snapshot's own
  *  `simulation.recommendedCompute`. The walltime is never the user's, and the
  *  account and partition are the gateway's, not the user's (app/models/job.py). */

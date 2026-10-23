@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { ModelParametersSection } from "@/components/workspace/model-parameters/model-parameters-section";
 import type { CustomParams, ModelParameters, ParamGroup } from "@/lib/workspace/model-parameters";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
-import { fakeModelParameters, fakeParamField } from "@/lib/workspace/fixtures";
+import { fakeModelParameters, fakeParamField, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
 
 afterEach(cleanup);
 
@@ -373,5 +373,168 @@ describe("the Model parameters section: before and without the tree", () => {
     open();
     expect(screen.getByText("Spinup.Save_Vars = 1")).toBeTruthy();
     expect(screen.getByText(/no field for/)).toBeTruthy();
+  });
+});
+
+describe("the Model parameters section: switching a module on", () => {
+  const SWITCH_ON: ModelParametersState = { status: "ready", tree: fakeSwitchOnTree() };
+  const MELT = "/wbm/data_init/glaciers/discharge_m.init";
+  const AREA = "/wbm/data_init/glaciers/area_1km.init";
+  const card = (path: string) => document.querySelector(`[data-param-path="${path}"]`) as HTMLElement;
+  const reach = () => {
+    open();
+    openGroup(/^Modules/);
+  };
+  const choose = (label: string | RegExp, value: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+  it("offers Switch on for a module the snapshot has off and the backend says can be", () => {
+    section({ state: SWITCH_ON });
+    reach();
+    expect(within(card("Glaciers")).getByText("Off in this snapshot")).toBeTruthy();
+    expect(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" })).toBeTruthy();
+    // none of its fields is shown until it is on
+    expect(within(card("Glaciers")).queryByText("Glacier melt discharge")).toBeNull();
+  });
+
+  it("says why a module cannot be switched on, and offers nothing for it", () => {
+    section({ state: SWITCH_ON });
+    reach();
+    const irrigation = card("Irrigation");
+    expect(within(irrigation).getByText(/Can't be switched on here\. It needs a file, which cannot be chosen here yet/)).toBeTruthy();
+    expect(within(irrigation).queryByRole("button")).toBeNull();
+    expect(within(irrigation).queryByText("Return coefficient")).toBeNull();
+  });
+
+  it("switches on: the module's required datasets are chosen from the model input's, each by name", () => {
+    const { onChange } = section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" }));
+    // nothing is chosen yet, so there is nothing to keep: the module is open, not changed
+    expect(last(onChange)).toBeNull();
+    expect(within(card("Glaciers")).getByText("Switched on")).toBeTruthy();
+    expect(within(card("Glaciers")).queryByRole("button", { name: /^Switch on/ })).toBeNull();
+    const melt = screen.getByLabelText("Glacier melt discharge") as HTMLSelectElement;
+    expect(melt.value).toBe("");
+    expect(screen.getAllByText("Required", { selector: "span" })).toHaveLength(2);
+    // the placeholder cannot be chosen again for a required field, and the field is offered the
+    // dataset of its own unit and no other
+    expect((within(melt).getByRole("option", { name: "Choose a dataset…" }) as HTMLOptionElement).disabled).toBe(true);
+    expect(within(melt).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Choose a dataset…",
+      "Glacier discharge, monthly · monthly · m3/sec",
+    ]);
+    expect(within(melt).queryByRole("group")).toBeNull();
+    choose("Glacier melt discharge", MELT);
+    expect(last(onChange)).toEqual({ "Glaciers.glMelt": MELT });
+    choose("Glacier area fraction", AREA);
+    expect(last(onChange)).toEqual({ "Glaciers.glMelt": MELT, "Glaciers.glArea": AREA });
+    expect(screen.getByText("WBM 23.9.0 · 2 parameters changed")).toBeTruthy();
+    // the pill says what is still to be chosen: glVolume is optional, the others have a value now
+    expect(screen.queryByText("Required", { selector: "span" })).toBeNull();
+  });
+
+  it("lists a dataset WBM cannot read, disabled, and says why under the field", () => {
+    section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" }));
+    const area = screen.getByLabelText("Glacier area fraction");
+    const renamed = within(area).getByRole("option", { name: /Irrigation efficiency .*\(cannot be used\)/ }) as HTMLOptionElement;
+    expect(renamed.disabled).toBe(true);
+    expect(renamed.title).toContain("fao_irrEfficiency");
+    const row = area.closest("[data-param-path]") as HTMLElement;
+    fireEvent.click(within(row).getByText("1 dataset cannot be used here"));
+    expect(within(row).getByText(/Its Code_Name \(fao_irrEfficiency\) differs/)).toBeTruthy();
+  });
+
+  it("lets an optional dataset stay unset", () => {
+    const { onChange } = section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" }));
+    const volume = screen.getByLabelText("Glacier water volume") as HTMLSelectElement;
+    expect((within(volume).getByRole("option", { name: "Not set" }) as HTMLOptionElement).disabled).toBe(false);
+    choose("Glacier water volume", "/wbm/data_init/glaciers/volume_y.init");
+    expect(last(onChange)).toEqual({ "Glaciers.glVolume": "/wbm/data_init/glaciers/volume_y.init" });
+    choose("Glacier water volume", "");
+    expect(last(onChange)).toBeNull();
+  });
+
+  it("resets: the module is off again, and what was chosen is gone", () => {
+    const { onChange } = section({ state: SWITCH_ON, initial: { "Glaciers.glMelt": MELT, "Glaciers.glArea": AREA } });
+    reach();
+    expect(within(card("Glaciers")).getByText("Switched on")).toBeTruthy();
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Reset Runoff from Glaciated Areas" }));
+    expect(last(onChange)).toBeNull();
+    expect(within(card("Glaciers")).getByText("Off in this snapshot")).toBeTruthy();
+    expect(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" })).toBeTruthy();
+    expect(within(card("Glaciers")).queryByText("Glacier melt discharge")).toBeNull();
+  });
+
+  it("resets a module that was opened and has nothing chosen", () => {
+    section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" }));
+    fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Reset Runoff from Glaciated Areas" }));
+    expect(within(card("Glaciers")).getByText("Off in this snapshot")).toBeTruthy();
+  });
+
+  it("starts a required scalar at WBM's default when it switches on", () => {
+    const { onChange } = section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("DIN")).getByRole("button", { name: "Switch on Nitrogen tracking" }));
+    expect(last(onChange)).toEqual({ "DIN.scale": "2" });
+    expect((screen.getByLabelText("Loading scale") as HTMLInputElement).value).toBe("2");
+    fireEvent.click(within(card("DIN")).getByRole("button", { name: "Reset Nitrogen tracking" }));
+    expect(last(onChange)).toBeNull();
+  });
+
+  it("switches on a module that is itself a dataset by choosing one for its own key, or a constant", () => {
+    const { onChange } = section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("Impervious")).getByRole("button", { name: "Switch on Impervious surface runoff" }));
+    expect(last(onChange)).toBeNull();
+    const dataset = within(card("Impervious")).getByLabelText("Dataset");
+    expect(within(dataset).getByRole("option", { name: /Irrigation efficiency .*\(cannot be used\)/ })).toBeTruthy();
+    fireEvent.change(dataset, { target: { value: AREA } });
+    expect(last(onChange)).toEqual({ Impervious: AREA });
+    // a constant goes to the same key, and the select shows no dataset
+    const constant = within(card("Impervious")).getByLabelText("Dataset, a constant") as HTMLInputElement;
+    fireEvent.change(constant, { target: { value: "0.2" } });
+    expect(last(onChange)).toEqual({ Impervious: "0.2" });
+    expect((within(card("Impervious")).getByLabelText("Dataset") as HTMLSelectElement).value).toBe("");
+    expect((within(card("Impervious")).getByLabelText("Dataset, a constant") as HTMLInputElement).value).toBe("0.2");
+    fireEvent.click(within(card("Impervious")).getByRole("button", { name: "Reset Impervious surface runoff" }));
+    expect(last(onChange)).toBeNull();
+  });
+
+  it("gives a field with no datasets in the model input a constant and nothing to choose from", () => {
+    const { onChange } = section({ state: SWITCH_ON });
+    reach();
+    fireEvent.click(within(card("DIN")).getByRole("button", { name: "Switch on Nitrogen tracking" }));
+    const field = screen.getByLabelText("Developed land fraction") as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.placeholder).toBe("Constant");
+    fireEvent.change(field, { target: { value: "0.3" } });
+    expect(last(onChange)).toEqual({ "DIN.scale": "2", "DIN.luSub": "0.3" });
+  });
+
+  it("shows a module the draft switched on as on when it comes back, from what it sets", () => {
+    section({ state: SWITCH_ON, initial: { "Glaciers.glMelt": MELT, "Glaciers.glArea": AREA } });
+    reach();
+    expect((screen.getByLabelText("Glacier melt discharge") as HTMLSelectElement).value).toBe(MELT);
+    expect((screen.getByLabelText("Glacier area fraction") as HTMLSelectElement).value).toBe(AREA);
+  });
+
+  it("shows the backend's message for the module at its card, and for a dataset at its field", () => {
+    section({
+      state: SWITCH_ON,
+      initial: { "Glaciers.glMelt": MELT },
+      errors: {
+        Glaciers: "Runoff from Glaciated Areas is being switched on but does not set Glacier area fraction (Glaciers.glArea).",
+        "Glaciers.glMelt": "This is not a dataset of the snapshot's model input.",
+      },
+    });
+    expect(within(card("Glaciers")).getByText(/does not set Glacier area fraction/)).toBeTruthy();
+    expect(within(card("Glaciers")).getByText("This is not a dataset of the snapshot's model input.")).toBeTruthy();
   });
 });

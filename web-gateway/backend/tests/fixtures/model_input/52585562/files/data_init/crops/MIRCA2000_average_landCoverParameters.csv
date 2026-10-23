@@ -1,0 +1,5 @@
+Land_ID	Group	Priority	RootDepth	CropDepletionFactor	LandFracTS	Kc_TS	AddedWaterTS
+Fallow	Fallow	74			/wbm/data_init/crops/LandFracTS/MC_fallow_fr.init		
+Rice_crop	Irrigated_av	1	/wbm/data_init/crops/awCap/MC_rice_irr_awCap_av.init	/wbm/data_init/crops/CDF/MC_rice_irr_CDF_av.init	/wbm/data_init/crops/LandFracTS/MC_rice_irr_fr_av.init	/wbm/data_init/crops/KcTS/MC_rice_irr_Kc_av.init	/wbm/data_init/crops/added_water/MC_rice_irr_AddedWater_av.init
+Non_rice_crop	Irrigated_av	2	/wbm/data_init/crops/awCap/MC_nonrice_irr_awCap_av.init	/wbm/data_init/crops/CDF/MC_nonrice_irr_CDF_av.init	/wbm/data_init/crops/LandFracTS/MC_nonrice_irr_fr_av.init	/wbm/data_init/crops/KcTS/MC_nonrice_irr_Kc_av.init	
+Rfd_crop	Rainfed_av	3	/wbm/data_init/crops/awCap/MC_rfd_awCap_av.init	0	/wbm/data_init/crops/LandFracTS/MC_rfd_fr_av.init	/wbm/data_init/crops/KcTS/MC_rfd_Kc_av.init	

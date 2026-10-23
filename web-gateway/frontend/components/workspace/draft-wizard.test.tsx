@@ -29,6 +29,10 @@ vi.mock("@/lib/jobs/actions", () => ({
 vi.mock("@/lib/workspace/use-published-answer", () => ({
   usePublishedAnswer: () => ({ state: { status: "none" }, refresh: () => {} }),
 }));
+// Nor are the rules of the parameter tree checked (draft-wizard-checks.test.tsx covers them).
+vi.mock("@/lib/workspace/use-draft-checks", () => ({
+  useDraftChecks: () => ({ status: "none" }),
+}));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
   fetchModelParameters: vi.fn(() => new Promise(() => {})),

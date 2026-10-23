@@ -1,0 +1,17 @@
+{
+Code_Name	=> 'root_depth',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name	=> 'FAO Digital soil map of the world Root Depth (from soil depth)',
+Var_Name	=> 'STNetwork',
+Units	=> 'mm',
+Var_Scale	=> 1,
+Var_Offset	=> 0,
+Orig_Units	=> 'mm',
+Bands		=> 1,
+Processing	=> '',
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/soil/Global_Terrain_RootDepthWBM_LTXXXX_30min.nc',
+Comment		=> 'Citation: The Digital soil map of the world (DSMW) CD-ROM (Version 3.6, January 2003) is based on the FAO/UNESCO Soil map of the world.'
+}

@@ -3,7 +3,8 @@
 The tree is the wizard's form schema (docs/architecture/model-parameters.md). These checks
 are the structural half of the audit it came from; what WBM does with each value is in
 docs/reference/wbm-init.md. They read the file as data and import nothing from the tree
-loader, so they hold whatever the loader does.
+loader, so they hold whatever the loader does. The one exception is the label test at the
+end, which asks the loader what the wizard is served.
 """
 
 from __future__ import annotations
@@ -320,3 +321,69 @@ def test_leftovers_of_the_old_design_are_gone(doc):
         assert n.get("wbm") != "landCover", "landCover is not an alias of LandCover"
         assert n.get("cli") != "-m", "wbm.pl has no -m option"
         assert "landCover" not in (n.get("aliases") or [])
+
+
+# ---------------------------------------------------------------------------
+# Every served node has a label written in the file
+# ---------------------------------------------------------------------------
+
+_NO_LABEL = "\0no written label: "
+
+
+def _served_without_label(monkeypatch, doc=None) -> list[str]:
+    """The `kind key` of every node the loader serves with the label it makes up from the tree
+    key (`tree._label`) instead of one written in the file, for both code versions.
+
+    `_label` is swapped for a marker, so a label that is written, even one that happens to read
+    like the derived one, is not mistaken for it. The loader's caches are cleared before and
+    after, so no other test sees the marker."""
+    from app.wbm_init import tree
+
+    def served(nodes):
+        for n in nodes:
+            yield n
+            yield from served(n.get("children") or [])
+
+    with monkeypatch.context() as m:
+        m.setattr(tree, "_label", lambda key: _NO_LABEL + key)
+        if doc is not None:
+            m.setattr(tree, "_doc", lambda: doc)
+        tree.resolve.cache_clear()
+        try:
+            missing = []
+            for version in CODE_VERSIONS:
+                resolved = tree.resolve(version)
+                for group in tree.render(resolved, {}):
+                    for n in served([group]):
+                        label = n["name"] if n["kind"] == "module" else n["label"]
+                        if label.startswith(_NO_LABEL):
+                            missing.append(f"{version} {n['kind']} {label[len(_NO_LABEL):]}")
+            return missing
+        finally:
+            tree.resolve.cache_clear()
+
+
+def test_every_served_node_has_a_written_label(monkeypatch):
+    missing = _served_without_label(monkeypatch)
+    assert not missing, f"served without a label written in param_tree.yaml: {missing}"
+
+
+def test_the_label_test_sees_a_label_taken_away(monkeypatch):
+    import copy
+
+    from app.wbm_init import tree
+
+    doc = copy.deepcopy(tree._doc())
+    victims = [
+        n for n in nodes(doc)
+        if n.get("key") == "hbv_beta" or n.get("module") == "reservoirs" or n.get("group") == "stream_geometry"
+    ]
+    assert len(victims) == 3
+    for n in victims:
+        n.pop("label", None)
+        n.pop("name", None)
+    missing = _served_without_label(monkeypatch, doc)
+    assert any(m.endswith("field hbv_beta") for m in missing), missing
+    assert any(m.endswith("module reservoirs") for m in missing), missing
+    assert any(m.endswith("group stream_geometry") for m in missing), missing
+    assert not _served_without_label(monkeypatch)

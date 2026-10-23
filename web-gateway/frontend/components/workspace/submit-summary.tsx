@@ -117,13 +117,23 @@ export function SubmitSummary({
             {changes.length} changed
             <ul className="mt-1 space-y-1 font-normal">
               {changes.map((change) => (
-                <li key={change.path} className="min-w-0 text-[13px]">
+                <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
                   {change.label && <span className="mr-1.5">{change.label}</span>}
-                  <code className="break-all font-mono text-xs text-muted-foreground">
-                    {change.path} = {change.value === "" ? "''" : change.value}
-                  </code>
-                  {change.shown !== change.value && (
-                    <span className="text-muted-foreground"> · {change.shown}</span>
+                  {/* A module switched on has no value of its own: its fields carry it. */}
+                  {change.kind === "switched_on" ? (
+                    <>
+                      <code className="break-all font-mono text-xs text-muted-foreground">{change.path}</code>
+                      <span className="text-muted-foreground"> · {change.shown}</span>
+                    </>
+                  ) : (
+                    <>
+                      <code className="break-all font-mono text-xs text-muted-foreground">
+                        {change.path} = {change.value === "" ? "''" : change.value}
+                      </code>
+                      {change.shown !== change.value && (
+                        <span className="text-muted-foreground"> · {change.shown}</span>
+                      )}
+                    </>
                   )}
                 </li>
               ))}

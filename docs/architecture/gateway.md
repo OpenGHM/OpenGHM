@@ -342,7 +342,9 @@ walltime then includes `postProcessingWalltime` where the snapshot has one.
 **A draft's model parameters** ([model-parameters.md](model-parameters.md),
 [ADR 0038](../decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md)).
 `parameters.custom_params` is `{init key path: string}` (`{"wbmParam.alpha": "3.5"}`), or
-`null` for none; `""` on a module's own path (`Glaciers`) switches that module off.
+`null` for none; `""` on a module's own path (`Glaciers`) switches that module off, and a module the
+snapshot has off is switched on by the keys it requires (`Glaciers.glMelt` and `Glaciers.glArea`, each
+a dataset of the draft's model input as its container path).
 `PATCH /jobs/{id}` checks it when the request carries a non-empty `custom_params` and the
 snapshot is still in the catalogue; a PATCH that leaves it out, or sends none, reads nothing.
 The check is `web-gateway/backend/app/wbm_init/validate.py` against the parameter tree resolved for the snapshot's WBM
@@ -353,7 +355,10 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
 - **Refused.** An unknown key, a key outside the version, a key a draft field owns, a locked
   or inert one; a value that is not ASCII, is not in the form of its type, or is outside its
   options or range; an empty value other than a module's switch-off; a field of a module that
-  is off; a field in a block the init sets from a file; and a module switched off while the
+  is off and cannot be switched on by this save (the message says why); a module switched on that
+  does not set what it requires (the message is at the module's path), or a dataset that is not
+  one of the model input's datasets in the field's unit that WBM can read; a field in a block the init sets from
+  a file; and a module switched off while the
   draft's output variables still need it. An output variable the module unlocks
   (`unlocks_outputs` in the tree) must be removed first, and Glaciers is also refused while any
   variable ends in `_pg`; the message is at the module's path and names the variables. The
@@ -363,7 +368,10 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
   save and shows each message at its field.
 - **Unreadable.** The check needs the init: when it cannot be read or parsed the answer is
   `503 init_unavailable`, and a snapshot that names no WBM version the tree covers (22.1.1 or
-  23.9.0) is `422 model_code_version_missing`. The submit gives the same answers (below).
+  23.9.0) is `422 model_code_version_missing`. The submit gives the same answers (below). A
+  `custom_params` that names a module the snapshot has off also reads the model input's
+  `metadata.json` and the data inits it lists (public reads, kept per process); when they cannot be
+  read, what the module would be given is refused with that reason and nothing else is.
 
 `GET /api/v1/repository/datasets/{id}/model-parameters` serves the tree the wizard renders.
 - **Request.** No query. It is open like `GET /repository/datasets/{id}`: it holds nothing the
@@ -371,7 +379,11 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
 - **Response.** `{code_version, groups}`: the tree for the snapshot's `uses.modelCode.version`,
   as nested nodes. A `group` has `children`. A `module` has `path` (its init key), `state`
   (`on` or `off`, from the snapshot's init), `switch_off` (the tree allows switching it off and
-  it is on) and `children`. A `field` has `path`, `type`, `editable`, `edit_as`, `current` (the
+  it is on), `switch_on` and `switch_on_reason` (the snapshot has it off and everything it requires
+  can be given from the model input; the reason when not), `candidates` (a module that is itself a
+  dataset: the model input's datasets it can be given) and `children`. A `field` has `path`, `type`,
+  `editable`, `edit_as`, `required`, `candidates` (the model input's datasets in the field's unit, with each one's
+  `disabled` reason, on a dataset field of a module that can be switched on; else `null`), `current` (the
   init's value as text, `null` when the key is absent), `default` (resolved for the version), `unit`,
   `options` (`{value, label}`), `min`, `max`, `calibration`, `show_if` and `doc`. Every node has
   `tier` (`basic` or `advanced`). `editable` is true only for a field that can be set now: a
@@ -919,6 +931,20 @@ submits with `{"rerun": true}` after a confirmation that says it uses compute
 time. A failed check (502 `published_listing_unavailable`) never blocks
 submitting.
 
+**The checks before a submit**
+([model-parameters.md](model-parameters.md) section 6, `web-gateway/backend/app/wbm_init/cross_rules.py`).
+`POST /repository/datasets/{id}/checks` takes `{parameters}`, a draft's parameters as the editor
+holds them (saved or not, a new draft has no id, as for `published-answer`), and answers
+`{errors, warnings, files_checked}`. Each entry is `{rule, level, message, paths}`: `rule` is the
+id in the tree's `cross_rules`, `level` is `error`, `warn` or `info`, `paths` are the init key
+paths the rule concerns (`MT_Code_Name.Run_End` is the end date input), and `warnings` holds the
+`warn` and `info` entries. `files_checked` is false when the model input could not be read, so
+dataset coverage was not judged (a warning says so). A signed-in user may ask: it reads nothing
+a person could not read anonymously. 404 for an id that is not a snapshot, and 503
+`init_unavailable` or `model_code_version_missing` as for `model-parameters`. The Review step
+asks it once when it opens and again when the parameters change; a failure of the check never
+blocks a submit.
+
 **What submit refuses.**
 - A draft the snapshot answers, unless the body says `{"rerun": true}`: 409
   `answered_by_published`, before the Anvil checks. A rerun is audited with
@@ -944,6 +970,11 @@ submitting.
   `run_dates_outside_aggregation`, with `fields` (`start`, `end` or both),
   `aggregation_start_year`, `latest_start` and `earliest_end`, and a message that
   names the allowed range. A window that cannot be read blocks nothing.
+- A draft that fails an error rule of the tree's `cross_rules` (above): 422
+  `cross_rules_failed`, with `errors`, one `{rule, level, message, paths}` per failed rule in the
+  tree's order, and a message that joins theirs. The checks run after the run-date refusals and
+  before anything is written. A warning refuses nothing, and neither does a model input that
+  could not be read (dataset coverage is then not judged) or an init that cannot be read.
 - An Anvil that cannot be reached: 503 `anvil_unreachable`. When sbatch may
   already have run (the connection dropped, or its answer did not parse), the
   route runs `scancel --name=<sim_id>` at once; if that fails too, the name
@@ -964,7 +995,7 @@ After a refusal the draft goes **back to DRAFT**, with `last_submit_error`
 `{code, message, at}`. Every refusal of a submit replaces it, the ones before
 the claim included (`answered_by_published`, `unsupported_fields`,
 `invalid_custom_params`, `init_unavailable`,
-`post_processing_unavailable`, `model_code_version_missing`, the run-date refusals, `anvil_not_configured`, an
+`post_processing_unavailable`, `model_code_version_missing`, the run-date refusals, `cross_rules_failed`, `anvil_not_configured`, an
 account that may not run, the active-job limit), so a reopened draft never shows
 the reason of an earlier try; the claim itself clears it. A refusal's message always
 ends in a full stop (`sbatch_refusal.sentence`), so "Your draft is unchanged."

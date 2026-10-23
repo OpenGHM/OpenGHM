@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeDraft, fakeModelParameters } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft, fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 
 afterEach(cleanup);
@@ -216,6 +216,30 @@ describe("DraftReviewStep: the summary", () => {
         "Runoff from Glaciated AreasGlaciers = '' · switched off",
         "Infiltration methodwbmParam.Infiltration = HBV",
         "Runoff storage limitwbmParam.maxRffStorage = 500 · 500 mm",
+      ]);
+    });
+
+    it("says a module is switched on and lists the datasets chosen for it by name", () => {
+      review({
+        modelParameters: { status: "ready", tree: fakeSwitchOnTree() },
+        local: {
+          ...LOCAL,
+          parameters: {
+            ...LOCAL.parameters,
+            custom_params: {
+              "Glaciers.glMelt": "/wbm/data_init/glaciers/discharge_m.init",
+              "Glaciers.glArea": "/wbm/data_init/glaciers/area_1km.init",
+            },
+          },
+        },
+      });
+      const list = row("Model parameters");
+      expect(within(list).getByText("3 changed")).toBeTruthy();
+      const items = within(list).getAllByRole("listitem").map((li) => li.textContent);
+      expect(items).toEqual([
+        "Runoff from Glaciated AreasGlaciers · switched on",
+        "Glacier area fractionGlaciers.glArea = /wbm/data_init/glaciers/area_1km.init · Glacier area fraction, 1 km",
+        "Glacier melt dischargeGlaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init · Glacier discharge, monthly",
       ]);
     });
 
@@ -457,5 +481,74 @@ describe("DraftReviewStep: output", () => {
     const { onEditStep } = review();
     fireEvent.click(screen.getByRole("button", { name: "Edit post-processing" }));
     expect(onEditStep).toHaveBeenLastCalledWith("run", "postProcessing");
+  });
+});
+
+describe("DraftReviewStep: the checks", () => {
+  const ERROR = {
+    rule: "dataset_file_coverage",
+    level: "error" as const,
+    message: "The dataset precip read by MT_Precip.Primary has no file for 2002-01-01.",
+    paths: ["MT_Precip.Primary", "MT_Code_Name.Run_End"],
+  };
+  const WARN = {
+    rule: "irr_outputs_without_irrigation",
+    level: "warn" as const,
+    message: "Irrigation is off, so WBM drops these irrigation re-use outputs without a word: runoff_irr.",
+    paths: ["Output_vars", "Irrigation"],
+  };
+  const NOTE = {
+    rule: "muskingum_note",
+    level: "info" as const,
+    message: "Muskingum routing suits coarse grids only.",
+    paths: ["Routing.method"],
+  };
+  const ready = (errors = [ERROR], warnings = [WARN, NOTE]) =>
+    ({ status: "ready", errors, warnings, filesChecked: true }) as const;
+
+  it("says an error about a date under the run period, and nothing under the other rows", () => {
+    review({ checks: ready() });
+    const period = row("Run period");
+    expect(within(period).getByText(ERROR.message).className).toContain("text-destructive");
+    expect(within(row("Output variables")).queryByText(ERROR.message)).toBeNull();
+    // said once under the period, though it concerns the end and not the start
+    expect(screen.getAllByText(ERROR.message)).toHaveLength(1);
+  });
+
+  it("does not say an error that is about no date under the run period", () => {
+    review({ checks: ready([{ ...ERROR, paths: ["Output_vars", "Runoff_mask"] }]) });
+    expect(screen.queryByText(ERROR.message)).toBeNull();
+  });
+
+  it("lists the warnings and the notes under 'Heads up', a note muted", () => {
+    review({ checks: ready() });
+    const card = screen.getByRole("heading", { name: "Heads up" }).closest("section") as HTMLElement;
+    expect(within(card).getByText(WARN.message).closest("li")?.className).toContain("text-warning");
+    expect(within(card).getByText(NOTE.message).closest("li")?.className).toContain("text-muted-foreground");
+    // the errors are the submit card's
+    expect(within(card).queryByText(ERROR.message)).toBeNull();
+  });
+
+  it("has no 'Heads up' card when there is nothing to warn about", () => {
+    review({ checks: ready([], []) });
+    expect(screen.queryByRole("heading", { name: "Heads up" })).toBeNull();
+  });
+
+  it("says that it is checking, and keeps the submit area", () => {
+    review({ checks: { status: "loading" } });
+    expect(screen.getByRole("status").textContent).toContain("Checking that the datasets cover the run");
+    expect(screen.getByTestId("submit-area")).toBeTruthy();
+  });
+
+  it("says that the check failed and that a submit checks it too", () => {
+    review({ checks: { status: "error" } });
+    expect(screen.getByRole("status").textContent).toContain("We couldn't check the run against its datasets");
+    expect(screen.getByTestId("submit-area")).toBeTruthy();
+  });
+
+  it("says nothing when nothing was asked", () => {
+    review();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Heads up" })).toBeNull();
   });
 });

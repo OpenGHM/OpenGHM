@@ -1,0 +1,18 @@
+{
+Code_Name	=> 'MC_rice_irr_awCap_av',
+Time_Series	=> 'daily_clim',
+Start_Date	=> '0000-01-01',
+End_Date	=> '0000-12-31',
+Name		=> 'Rice, irrigated available water capacity, MIRCA-Complete average land collapse',
+Var_Name	=> 'MC_rice_irr_awCap_ave',
+Units		=> 'mm',
+Var_Scale	=> ,
+Var_Offset	=> 0,
+Orig_Units	=> 'mm',
+Bands		=> 365,
+Processing	=> '',
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/crops/awCap/MC_rice_irr_awCap_av.nc',
+Comment 	=> 'Area-weighted average of all rice irrigated crops available water capacity, from the MIRCA crop dataset.  There are 3 rice rice crops in the MIRCA dataset.  awCap is calculated by: root depth x (field capacity - wilting point).  Crop root depths are from Siebert S and Doll P, 2010, Quanitifying blue and green virtual water contentents in global crop production as well as potential production losses without irrigation. Journal of Hydrology, 384, 198-217. Field capacity and wilting point are from the UNESCO/FAO soil map of the world (FAO/UNESCO, 2003. Digital Soil Map of the World and Derived Soil Properties Version 3.6. CD ROM.',
+MetadataLink    => 'https://www.uni-frankfurt.de/45218023/MIRCA'
+}

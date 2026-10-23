@@ -100,6 +100,7 @@ export function DraftRunStep({
   serverErrors,
   customErrors,
   startRefusal,
+  checks,
   modelParameters,
   onRetryModelParameters,
   onNameChange,
@@ -131,6 +132,9 @@ export function DraftRunStep({
   customErrors?: Record<string, string>;
   /** The server's refusal of the current start (`useDraftSaver().startRefusal`). */
   startRefusal: { message: string; suggestion: string | null } | null;
+  /** What the checks of the draft as it stands say about each date (`dateMessages` of
+   *  `useDraftChecks`): shown when nothing nearer says it. Absent until Review has asked. */
+  checks?: { start: string | null; end: string | null };
   /** The snapshot's parameter tree (`useModelParameters`); absent, no Model
    *  parameters section is drawn. */
   modelParameters?: ModelParametersState;
@@ -168,13 +172,13 @@ export function DraftRunStep({
   const aggregation = checkAggregationWindowFor(dataset, start, end);
   const startText = !isRealDate(start)
     ? "Choose a start date that exists."
-    : (startProblem?.short ?? aggregation.startShort ?? serverErrors.start ?? null);
+    : (startProblem?.short ?? aggregation.startShort ?? serverErrors.start ?? checks?.start ?? null);
   const suggestion = isRealDate(start) ? (startProblem?.suggestion ?? null) : null;
   const endText = !isRealDate(end)
     ? "Choose an end date that exists."
     : isRealDate(start) && start > end
       ? "The end date is before the start date."
-      : (aggregation.endShort ?? serverErrors.end ?? null);
+      : (aggregation.endShort ?? serverErrors.end ?? checks?.end ?? null);
   const limits = describeRunPeriodLimits(dataset);
 
   // Variables: the snapshot's, in its order, then the stored ones it does not list.

@@ -7,6 +7,7 @@ import { clampClass } from "@/components/common/clamped-name";
 import { CopyButton } from "@/components/workspace/copy-button";
 import { periodBarLayout } from "@/components/workspace/run-period-bar";
 import { describeOutput } from "@/components/workspace/output-choice-field";
+import { RunModelParameters } from "@/components/workspace/model-parameters/run-model-parameters";
 import { useLiveJobContext } from "@/components/workspace/live-job-provider";
 import {
   automaticWalltimeLabel,
@@ -227,6 +228,7 @@ export function RunDetailsCard({
       : null;
   const coresNote = compute.cores !== null && compute.coresSource === "snapshot" ? "(recommended)" : null;
   const domain = parameters.spatial_domain;
+  const customParams = parameters.custom_params;
   const workDir = view.work_dir ?? job.work_dir;
   const files = view.files ?? job.files;
   // A completed run's results (and their path) are the status summary's.
@@ -285,6 +287,12 @@ export function RunDetailsCard({
           {/* Only when the draft chose: the snapshot's own is not known here. */}
           {parameters.post_processing && (
             <InfoRow label="Post-processing">{describeOutput(parameters.post_processing)}</InfoRow>
+          )}
+          {/* Only what the draft changed: the snapshot's own init is not listed. */}
+          {customParams && Object.keys(customParams).length > 0 && (
+            <InfoRow label="Model parameters">
+              <RunModelParameters datasetId={job.dataset_id} customParams={customParams} />
+            </InfoRow>
           )}
           {job.sim_id && (
             <InfoRow inline label="Run ID">

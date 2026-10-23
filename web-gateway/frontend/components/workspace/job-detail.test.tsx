@@ -11,6 +11,8 @@ vi.mock("@/lib/jobs/actions", () => ({
   duplicateDraft: vi.fn(),
   submitDraft: vi.fn(),
 }));
+// The Run details card asks for the parameter tree of a run that changed some.
+vi.mock("@/lib/repository/actions", () => ({ fetchModelParameters: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),

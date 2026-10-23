@@ -1,0 +1,17 @@
+{
+Code_Name	=> 'harmonized_AWC_5min',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name	=> 'Harmonized Soil Map Available Water Capacity',
+Var_Name	=> 'Band1',
+Units	=> 'mm',
+Var_Scale	=> '',
+Var_Offset	=> '',
+Orig_Units	=> 'mm',
+Bands	=> 1,
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/soil/Harmonized-SoilMap_AWC-mm_5min.nc;',
+download_link	=> 'https://www.fao.org/soils-portal/data-hub/soil-maps-and-databases/harmonized-world-soil-database-v12/en/',
+citation	=> 'Fischer, G., F. Nachtergaele, S. Prieler, H.T. van Velthuizen, L. Verelst, D. Wiberg, 2008. Global Agro-ecological Zones Assessment for Agriculture (GAEZ 2008). IIASA, Laxenburg, Austria and FAO, Rome, Italy.'
+}

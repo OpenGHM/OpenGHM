@@ -3,13 +3,14 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { ActionResult, Job, PublishedAnswer } from "@/lib/jobs/types";
 import type { DraftContext } from "@/lib/workspace/draft-state";
 
-const { deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, push, replace, refresh, toast } =
+const { deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, draftChecks, push, replace, refresh, toast } =
   vi.hoisted(() => ({
     deriveDraft: vi.fn(),
     updateDraft: vi.fn(),
     fetchJob: vi.fn(),
     submitDraft: vi.fn(),
     publishedAnswer: vi.fn(),
+    draftChecks: vi.fn(),
     push: vi.fn(),
     replace: vi.fn(),
     refresh: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/lib/jobs/actions", () => ({
   fetchJob,
   submitDraft,
   publishedAnswer,
+  draftChecks,
   deleteDraft: vi.fn(),
   duplicateDraft: vi.fn(),
 }));
@@ -110,11 +112,12 @@ const fresh = (step: "run" | "review" = "review") => {
 
 beforeEach(() => {
   clearDraftCache();
-  for (const m of [deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, push, replace, refresh]) {
+  for (const m of [deriveDraft, updateDraft, fetchJob, submitDraft, publishedAnswer, draftChecks, push, replace, refresh]) {
     m.mockReset();
   }
   for (const m of Object.values(toast)) m.mockReset();
   publishedAnswer.mockResolvedValue({ ok: true, data: ANSWERED });
+  draftChecks.mockResolvedValue({ ok: true, data: { errors: [], warnings: [], files_checked: true } });
   deriveDraft.mockResolvedValue({ ok: true, data: CREATED });
   updateDraft.mockImplementation(async (): Promise<ActionResult<Job>> => ({ ok: true, data: CREATED }));
   fetchJob.mockResolvedValue({ ok: true, data: STORED });

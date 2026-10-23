@@ -17,6 +17,10 @@ version, once, and is cached:
   (`edit_as: "number"`): WBM reads a number for it as that value in every grid cell;
 * groups left with no children are dropped.
 
+`switch_on_decisions` says which modules the snapshot has off can be switched on by the wizard
+(everything they require can be chosen from the draft's model input, `choices`), and `render`
+serves the answer with the candidates of the dataset fields it opens.
+
 `Resolved.fields` is the index from init key path to the field or module, which is what
 validation reads. `render` gives the contract's JSON (docs/architecture/model-parameters.md):
 the nodes with `current` and module `state` read from a snapshot's init values (`reader.read`).
@@ -31,6 +35,7 @@ from typing import Any
 
 import yaml
 
+from app.wbm_init.choices import Candidate, Choices, field_reason
 from app.wbm_init.reader import lookup
 
 TREE_FILE = Path(__file__).with_name("param_tree.yaml")
@@ -87,6 +92,30 @@ class Node:
     #: A module: the output variables that need it (`unlocks_outputs`), so it cannot be
     #: switched off while the draft still lists one.
     unlocks_outputs: tuple[str, ...] = ()
+    #: The value kinds a dataset or file field (or a module whose own key is one) takes: `init`,
+    #: `number`, `raster`, `file`.
+    accepts: tuple[str, ...] = ()
+    #: The tree marks the field `required: true`: a module that is on has it set.
+    required: bool = False
+    #: A dataset field: the text the chosen dataset's Units must contain, for this version.
+    unit_contains: str | None = None
+    #: What says which datasets of the model input fit this dataset field or module: `unit` (those
+    #: in `unit`). None: the tree does not say, and no dataset is offered.
+    fit: str | None = None
+    #: A dataset field: WBM opens the dataset's first file at the start, to read its grid. True; or the
+    #: init path of the module the run needs on for it to (`MT_airT.Primary` with `lapseDownscale`).
+    reads_first_file: bool | str = False
+    #: A module: the init paths of its dataset fields that this version needs on one grid.
+    same_grid: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SwitchOn:
+    """Whether the wizard can switch a module the snapshot has off on."""
+
+    offered: bool
+    #: Why not, as a sentence for the module's card.
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +238,9 @@ def resolve(version: str) -> Resolved:
                         "module", key, label, raw.get("doc"), shown, tuple(children), path,
                         raw.get("type"), editable=raw.get("editable") == "switch_off",
                         modules=modules, unlocks_outputs=tuple(raw.get("unlocks_outputs") or ()),
+                        accepts=tuple(raw.get("accepts") or ()),
+                        unit=raw.get("unit"), fit=raw.get("fit"),
+                        same_grid=tuple(_pick(raw.get("same_grid"), version) or ()),
                     )
                     fields[path] = node
                 elif children:
@@ -248,6 +280,11 @@ def resolve(version: str) -> Resolved:
                 pattern=pattern if isinstance(pattern, str) else None,
                 aliases=tuple(raw.get("aliases") or ()),
                 modules=modules,
+                accepts=tuple(raw.get("accepts") or ()),
+                required=raw.get("required") is True,
+                unit_contains=_pick(raw.get("unit_contains"), version),
+                fit=raw.get("fit"),
+                reads_first_file=_pick(raw.get("reads_first_file"), version) or False,
             )
             fields[path] = node
             out.append(node)
@@ -255,6 +292,46 @@ def resolve(version: str) -> Resolved:
 
     groups = build(doc["tree"], None, False, False, False, ())
     return Resolved(version, tuple(groups), fields, refused)
+
+
+def cross_rules(version: str) -> list[dict]:
+    """The `cross_rules` of the tree that apply to a code version, in file order: each is
+    `{id, level, rule, versions?}` as the file states it (`level` is error, warn or info)."""
+    return [
+        r for r in _doc()["cross_rules"] if "versions" not in r or version in r["versions"]
+    ]
+
+
+def module_requirements(version: str) -> dict[str, tuple[str, ...]]:
+    """module init path -> the init paths of the children it always needs once it is on: a
+    `required: true` leaf directly under the module or under a group of it that has no
+    `show_if`. A group with a `show_if` holds one of several forms of the block (the polygon
+    or the sub-pixel form of `Runoff_mask`, the aquifer types), so its requirements belong to
+    the form and not to the module. A child outside the version is not counted."""
+    out: dict[str, tuple[str, ...]] = {}
+
+    def leaves(raws) -> list[str]:
+        found: list[str] = []
+        for raw in raws:
+            if "versions" in raw and version not in raw["versions"]:
+                continue
+            if "children" in raw:
+                if "show_if" not in raw:
+                    found.extend(leaves(raw["children"]))
+            elif raw.get("required") is True and raw.get("wbm"):
+                found.append(raw["wbm"])
+        return found
+
+    def walk(raws) -> None:
+        for raw in raws:
+            if "versions" in raw and version not in raw["versions"]:
+                continue
+            if raw.get("wbm") and ("module" in raw or raw.get("editable") == "switch_off"):
+                out[raw["wbm"]] = tuple(leaves(raw.get("children") or []))
+            walk(raw.get("children") or [])
+
+    walk(_doc()["tree"])
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +342,11 @@ def resolve(version: str) -> Resolved:
 def _filled(value: Any) -> bool:
     """Whether an init value is something: not missing, '', '0' or an empty block."""
     return value not in (None, "", "0", {})
+
+
+def filled(value: Any) -> bool:
+    """Whether an init value is something: not missing, '', '0' or an empty block."""
+    return _filled(value)
 
 
 def module_state(path: str, values: dict) -> str:
@@ -315,18 +397,168 @@ def block_is_file(path: str, values: dict) -> bool:
     return False
 
 
-def editable_now(resolved: Resolved, node: Node, values: dict, pending_off: frozenset = frozenset()) -> bool:
+def editable_now(
+    resolved: Resolved,
+    node: Node,
+    values: dict,
+    pending_off: frozenset = frozenset(),
+    switchable: frozenset = frozenset(),
+) -> bool:
     """Whether a custom parameter may set `node`: the tree allows it, every module it is inside is
-    on (and not being switched off in the same save, `pending_off`), and no block above it is
-    a file reference."""
+    on (and not being switched off in the same save, `pending_off`) or is one the same save can
+    switch on (`switchable`), and no block above it is a file reference."""
     if not node.editable:
         return False
     if node.kind == "module":
         return module_state(node.path, values) == "on"
     return (
-        all(module_state(m, values) == "on" and m not in pending_off for m in node.modules)
+        all(
+            (module_state(m, values) == "on" or m in switchable) and m not in pending_off
+            for m in node.modules
+        )
         and not block_is_file(node.path, values)
     )
+
+
+# ---------------------------------------------------------------------------
+# Switching a module on
+# ---------------------------------------------------------------------------
+
+_UNREADABLE = "The model input could not be read right now, so its datasets cannot be offered."
+
+#: What a required child can lack, from `_lacks`.
+_NEEDS_DEFAULT, _NEEDS_DATASET, _NEEDS_FIT, _NEEDS_RASTER, _NEEDS_FILE, _NEEDS_PART = (
+    "default", "dataset", "fit", "raster", "file", "part",
+)
+
+
+def offered_candidates(node: Node, choices: Choices | None) -> list[Candidate]:
+    """The datasets of the model input that `node` (a dataset field, or a module whose own key
+    is a dataset) is offered: where the tree states `fit: unit`, those in the node's `unit`; none
+    otherwise, since the tree then does not say which dataset fits. Some may be disabled
+    (`field_reason`)."""
+    if choices is None or "init" not in node.accepts or node.fit != "unit":
+        return []
+    return choices.for_unit(node.unit)
+
+
+def usable_candidates(node: Node, choices: Choices | None) -> list[Candidate]:
+    """The offered datasets that `node`'s WBM version reads and its own rule allows."""
+    return [c for c in offered_candidates(node, choices) if field_reason(c, node.unit_contains) is None]
+
+
+def _lacks(node: Node, choices: Choices | None) -> str | None:
+    """What `node` lacks to be given a value from the model input, or None when it can be. A
+    scalar starts at WBM's default; a dataset is a constant where the field takes a number, else
+    chosen from the model input's datasets in the field's unit (a field with no unit has none to
+    choose from). `unreadable` when the model input is needed and could not be read."""
+    if node.type in SCALAR_TYPES:
+        return None if node.default is not None else _NEEDS_DEFAULT
+    if node.type == "dataset":
+        if "number" in node.accepts:
+            return None
+        if "init" not in node.accepts:
+            return _NEEDS_RASTER
+        if node.fit != "unit":
+            return _NEEDS_FIT
+        if choices is None:
+            return "unreadable"
+        return None if usable_candidates(node, choices) else _NEEDS_DATASET
+    return _NEEDS_FILE if node.type == "file" else _NEEDS_PART
+
+
+def _join(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _decide(node: Node, required: tuple[str, ...], resolved: Resolved, choices: Choices | None) -> SwitchOn:
+    if node.same_grid:  # this version stops unless the datasets share a grid, and the gateway cannot read one
+        labels = [resolved.fields[p].label for p in node.same_grid if p in resolved.fields]
+        return SwitchOn(
+            False,
+            f"WBM {resolved.version} needs the datasets of {_join(labels)} on one grid, "
+            "which the gateway cannot check yet.",
+        )
+    if node.type in ("dataset", "file", "flag"):  # the module's own key holds the value
+        lacks = _lacks(node, choices)
+        if lacks is None:
+            return SwitchOn(True)
+        if lacks == "unreadable":
+            return SwitchOn(False, _UNREADABLE)
+        if node.type == "flag":
+            return SwitchOn(False, "It needs files beside the network file, which the wizard cannot add.")
+        if node.type == "file":
+            return SwitchOn(False, "It needs a file of its own, which cannot be chosen here yet.")
+        if lacks == _NEEDS_FIT:
+            return SwitchOn(False, f"The tree does not say which dataset fits {node.label} ({node.path}).")
+        return SwitchOn(False, f"It needs a dataset in {node.unit}, which the model input does not have.")
+    lacking: dict[str, list[str]] = {}
+    for path in required:
+        field = resolved.fields.get(path)
+        lacks = _lacks(field, choices) if field is not None else None
+        if lacks == "unreadable":
+            return SwitchOn(False, _UNREADABLE)
+        if lacks is not None:
+            unit = f", in {field.unit}" if lacks == _NEEDS_DATASET else ""
+            lacking.setdefault(lacks, []).append(f"{field.label} ({path}{unit})")
+    if not lacking:
+        return SwitchOn(True)
+    parts = []
+    sentences = []
+    if _NEEDS_FILE in lacking:
+        parts.append("a file, which cannot be chosen here yet: " + ", ".join(lacking[_NEEDS_FILE]))
+    elif _NEEDS_PART in lacking:  # a column or list names a part of such a file
+        parts.append("a part of a file, which cannot be chosen here yet: " + ", ".join(lacking[_NEEDS_PART]))
+    if _NEEDS_DATASET in lacking:
+        parts.append("a dataset the model input does not have: " + ", ".join(lacking[_NEEDS_DATASET]))
+    if _NEEDS_RASTER in lacking:
+        parts.append("a raster, which cannot be chosen here yet: " + ", ".join(lacking[_NEEDS_RASTER]))
+    if _NEEDS_DEFAULT in lacking:
+        parts.append("a value that WBM has no default for: " + ", ".join(lacking[_NEEDS_DEFAULT]))
+    if parts:
+        sentences.append("It needs " + "; ".join(parts) + ".")
+    if _NEEDS_FIT in lacking:
+        sentences.append("The tree does not say which dataset fits " + ", ".join(lacking[_NEEDS_FIT]) + ".")
+    return SwitchOn(False, " ".join(sentences))
+
+
+def switch_on_decisions(
+    resolved: Resolved, values: dict, choices: Choices | None
+) -> dict[str, SwitchOn]:
+    """For each module the snapshot's init has off and the tree lets the wizard switch (an
+    `editable: switch_off` module): whether it can be switched on. It can when everything it
+    requires can be given (`module_requirements`): a scalar starts at WBM's default, a dataset
+    that accepts a data `.init` is chosen from the model input (one in the field's unit must be
+    there, when the tree gives it a unit), one that accepts a number takes WBM's default
+    constant. A required file, column, list or raster, a flag that needs files
+    beside the network, and a required value WBM has no default for cannot be given. `choices`
+    is None when the model input could not be read, which a module that needs a dataset is
+    then refused for. A `required_if` child is not judged: it holds only for a form the wizard
+    does not offer."""
+    needs = module_requirements(resolved.version)
+    return {
+        path: _decide(node, needs.get(path, ()), resolved, choices)
+        for path, node in resolved.fields.items()
+        if node.kind == "module" and node.editable and module_state(path, values) == "off"
+    }
+
+
+def offered(decisions: dict[str, SwitchOn]) -> frozenset[str]:
+    """The init paths of the modules `decisions` offers."""
+    return frozenset(path for path, d in decisions.items() if d.offered)
+
+
+def needs_choices(custom_params: Any, resolved: Resolved, values: dict) -> bool:
+    """Whether `custom_params` names something of a module the snapshot has off (the module's own
+    key, or a field inside it), which only the draft's model input can say is allowed."""
+    for path in custom_params:
+        node = resolved.fields.get(path)
+        if node is None:
+            continue
+        modules = (*node.modules, node.path) if node.kind == "module" else node.modules
+        if any(module_state(m, values) == "off" for m in modules):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -334,8 +566,25 @@ def editable_now(resolved: Resolved, node: Node, values: dict, pending_off: froz
 # ---------------------------------------------------------------------------
 
 
-def render(resolved: Resolved, values: dict) -> list[dict]:
-    """The resolved nodes as the `groups` of GET .../model-parameters."""
+def _candidates_json(node: Node, choices: Choices) -> list[dict] | None:
+    """The datasets `node` is offered (those in its unit), or None when there are none."""
+    found = offered_candidates(node, choices)
+    return [
+        {
+            "value": c.path, "name": c.name, "code": c.code, "time_series": c.time_series,
+            "unit": c.unit, "disabled": field_reason(c, node.unit_contains),
+        }
+        for c in found
+    ] or None
+
+
+def render(resolved: Resolved, values: dict, choices: Choices | None = None) -> list[dict]:
+    """The resolved nodes as the `groups` of GET .../model-parameters. `choices` are the datasets
+    of the snapshot's model input (None when not read): a module the snapshot has off carries
+    whether it can be switched on, and a dataset field of one that can carries its candidates."""
+
+    decisions = switch_on_decisions(resolved, values, choices)
+    can_switch = offered(decisions)
 
     def default_of(node: Node):
         if node.default_from:
@@ -345,6 +594,14 @@ def render(resolved: Resolved, values: dict) -> list[dict]:
                 return text if text is not None else default_of(ref)
         return node.default
 
+    def picks(node: Node) -> bool:
+        """Whether the field or module is given its dataset from the model input: it takes a
+        data `.init`, and it sits in a module the same save switches on."""
+        if choices is None or "init" not in node.accepts:
+            return False
+        off = [m for m in (*node.modules, *([node.path] if node.kind == "module" else [])) if module_state(m, values) == "off"]
+        return bool(off) and all(m in can_switch for m in off)
+
     def one(node: Node) -> dict:
         if node.kind == "group":
             return {
@@ -353,18 +610,28 @@ def render(resolved: Resolved, values: dict) -> list[dict]:
             }
         if node.kind == "module":
             state = module_state(node.path, values)
+            decision = decisions.get(node.path)
             return {
                 "kind": "module", "key": node.key, "name": node.label, "doc": node.doc,
                 "tier": node.tier, "path": node.path, "state": state,
                 "switch_off": node.editable and state == "on",
+                "switch_on": decision.offered if decision else False,
+                "switch_on_reason": decision.reason if decision else None,
+                "edit_as": "number" if node.type == "dataset" and "number" in node.accepts else None,
+                # a module whose own key is the dataset (`openWaterEvap`) is switched on by choosing one
+                "candidates": _candidates_json(node, choices) if node.type == "dataset" and picks(node) else None,
                 "children": [one(c) for c in node.children],
             }
         options = available_options(node, values)
+        candidates = _candidates_json(node, choices) if node.type == "dataset" and picks(node) else None
         return {
             "kind": "field", "key": node.key, "label": node.label, "doc": node.doc,
             "tier": node.tier, "path": node.path, "type": node.type,
-            "editable": editable_now(resolved, node, values),
+            "editable": candidates is not None
+            or editable_now(resolved, node, values, switchable=can_switch),
             "edit_as": node.edit_as,
+            "required": node.required,
+            "candidates": candidates,
             "current": current_text(node, values),
             "default": default_of(node),
             "unit": node.unit,

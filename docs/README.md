@@ -58,7 +58,7 @@ run.
 | [local-development.md](architecture/local-development.md) | built | what runs on a laptop, what only in the cluster, and the traps in between |
 | [artifact-versioning.md](architecture/artifact-versioning.md) | **target** | the snapshot as a unit, the five versioned axes, storage shape, what runs where |
 | [simulation-reuse.md](architecture/simulation-reuse.md) | **target** | which runs need no compute (published output, saved run state) and a spool shared between runs |
-| [model-parameters.md](architecture/model-parameters.md) | **built** (section 6 target) | how a draft sets WBM's model parameters: the parameter tree, its resolution per WBM version, how a value reaches the init, what the wizard renders; the later work (dataset choices, forks) is target |
+| [model-parameters.md](architecture/model-parameters.md) | **built** (section 6 target, except "Switching a module on" and the checks before a submit) | how a draft sets WBM's model parameters: the parameter tree, its resolution per WBM version, how a value reaches the init, what the wizard renders, switching a module on with datasets of the model input, the checks before a submit; the later work (another dataset for a module that is on, forks) is target |
 
 Diagram sources are SVG in [`architecture/diagrams/`](architecture/diagrams/),
 rendered to PNG alongside them:

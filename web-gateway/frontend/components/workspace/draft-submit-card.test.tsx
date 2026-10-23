@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/workspace/job-1" }));
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
-import { fakeDraft, fakeModelParameters } from "@/lib/workspace/fixtures";
+import { fakeDraft, fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
 
 // What the server holds after the flush: not what the page's props said.
 const SAVED = fakeDraft("DRAFT", {
@@ -674,6 +674,22 @@ describe("DraftSubmitCard: the changed model parameters", () => {
       "Runoff from Glaciated AreasGlaciers = '' · switched off",
       "Infiltration methodwbmParam.Infiltration = HBV",
       "Runoff storage limitwbmParam.maxRffStorage = 500 · 500 mm",
+    ]);
+  });
+
+  it("says a module switched on without a value of its own", async () => {
+    const switchedOn = {
+      "Glaciers.glMelt": "/wbm/data_init/glaciers/discharge_m.init",
+      "Glaciers.glArea": "/wbm/data_init/glaciers/area_1km.init",
+    };
+    flush.mockResolvedValue({ ok: true, job: withChanges(switchedOn), withheld: [] });
+    card({ modelParameters: { status: "ready", tree: fakeSwitchOnTree() } });
+    await openDialog();
+    const row = within(dialog()).getByText("Model parameters").closest("div") as HTMLElement;
+    expect(within(row).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Runoff from Glaciated AreasGlaciers · switched on",
+      "Glacier area fractionGlaciers.glArea = /wbm/data_init/glaciers/area_1km.init · Glacier area fraction, 1 km",
+      "Glacier melt dischargeGlaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init · Glacier discharge, monthly",
     ]);
   });
 

@@ -1,0 +1,16 @@
+{
+Code_Name	=> 'root_depth',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name		=> 'Effective Rooting Depth modified from Yang et al. 2016',
+Var_Name	=> '',
+Units		=> 'mm',
+Var_Scale	=> 1000,
+Var_Offset	=> 0,
+Orig_Units	=> 'm',
+Bands		=> 1,
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/soil/Effective_Rooting_Depth_mod.tif',
+citation	=> 'https://doi.org/10.4225/08/5837b3aa9cb90; Yang, Y., Donohue, R.J., and McVicar, T.R. (2016), Global estimation of effective plant rooting depth: Implications for hydrological modeling, Water Resour. Res., 52, 8260-8276, doi:10.1002/2016WR019392. Modified by D. Grogan using the script /wbm/utilities/process_root_depth.R'
+}

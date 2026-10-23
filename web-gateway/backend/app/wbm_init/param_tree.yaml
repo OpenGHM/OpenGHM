@@ -34,8 +34,12 @@
 #             switch_off   a module (or switch group) with on_if: key_present, which the
 #                          wizard can switch off when the snapshot's init has it on
 #             Dataset, file, column, list and block fields have no `editable`: they are
-#             shown read-only for now. Switching a module on needs its files and is not
-#             offered
+#             shown read-only. A module the init has off is switched on by the wizard when
+#             everything its `required` children need can be given from the draft's model
+#             input: a scalar at its default, a dataset that accepts `init` from the model
+#             input's datasets, one that accepts `number` as its default constant. A
+#             required file, column, list or raster, or a flag that needs files beside the
+#             network, cannot be given, so the module is not offered
 #   draft_field  the draft field that already owns this init key (a name in
 #             JobParameters). The key is not a custom parameter; on a group it covers
 #             every descendant
@@ -65,6 +69,20 @@
 #   write: never     the key is never written (the toolkit supplies it)
 #   inert     WBM never reads the key; kept so that an init that carries it round-trips
 #   ascii     the value must be ASCII
+#   unit_contains   a dataset field: the text the chosen dataset's Units must contain. A map
+#             when only one code version checks it
+#   fit       a dataset field, or a module that is itself a dataset: what says which of the model
+#             input's datasets fit it, for the wizard to offer when a module is switched on. `unit`
+#             means the datasets whose unit is the field's `unit`. Without `fit` the tree does not
+#             say which dataset fits, no dataset is offered, and a field that takes no number
+#             keeps its module from being switched on
+#   reads_first_file   a dataset field: WBM opens the first file of the dataset (the file of its
+#             `Start_Date`) when it starts, to read the grid, whatever the run's dates. true; a map
+#             of code version -> true where only some versions do; or the init path of a module,
+#             where only a run with that module on does. The checks before a submit require that file
+#   same_grid   a module, a map of code version -> init key paths of its dataset fields: that
+#             version stops unless these datasets share one grid, which the gateway cannot read
+#             yet, so the module is not switched on for that version
 #   aliases   other keys WBM reads for the same setting; when the init has one, it wins
 #   form: block_or_file   the key takes a block {...} or the path of an .init holding it
 #   switch, on_if   a block that is on when its key holds a value: key_present is a value
@@ -116,7 +134,7 @@ tree:
     children:
       - { key: title, wbm: Comment, label: "Run description", type: string, tier: basic, editable: true, ascii: true,
           doc: "A free-text description of the run. ASCII characters only." }
-      - { key: project, wbm: Project, type: string, tier: basic, editable: true, ascii: true,
+      - { key: project, wbm: Project, label: "Project name", type: string, tier: basic, editable: true, ascii: true,
           doc: "A short project name, used in the output title. Defaults to 'My project'." }
       - { key: id, wbm: ID, type: string, tier: locked, pattern: "^[A-Za-z0-9_]+$", value: "{user}_{run_id}",
           doc: "The unique run ID: letters, digits and underscores, no spaces. Set by the gateway." }
@@ -128,13 +146,13 @@ tree:
               doc: "First day of the run, YYYY-MM-DD; YYYY-MM-00 gives a monthly time series. Optional when a spin-up start is set." }
           - { key: end, wbm: MT_Code_Name.Run_End, type: date, tier: basic, draft_field: temporal_range_end, rule: "end > start; empty -> climate.air_temp.primary must be set (the airTmin/airTmax form is not enough)",
               doc: "Last day of the run. If empty, the run ends where the air temperature dataset ends." }
-          - { key: time_series, wbm: MT_Code_Name.Time_Series, type: string, tier: advanced, editable: true, default: daily, pattern: {"22.1.1": "^(daily(\\{\\d+\\})?|monthly)$", "23.9.0": "^(daily(\\{\\d+\\})?|daily\\[\\d+(,\\d+)*(lastDay)?\\]|monthly)(:daily.*)?$"}, forms: {"22.1.1": [daily, "daily{N}", monthly], "23.9.0": [daily, "daily{N}", "daily[N]", "daily[N,...lastDay]", monthly, "<form>:daily..."]}, n_values: {"daily{N}": [1, 2, 3, 4, 6, 8, 12, 24]},
+          - { key: time_series, wbm: MT_Code_Name.Time_Series, label: "Output time step", type: string, tier: advanced, editable: true, default: daily, pattern: {"22.1.1": "^(daily(\\{\\d+\\})?|monthly)$", "23.9.0": "^(daily(\\{\\d+\\})?|daily\\[\\d+(,\\d+)*(lastDay)?\\]|monthly)(:daily.*)?$"}, forms: {"22.1.1": [daily, "daily{N}", monthly], "23.9.0": [daily, "daily{N}", "daily[N]", "daily[N,...lastDay]", monthly, "<form>:daily..."]}, n_values: {"daily{N}": [1, 2, 3, 4, 6, 8, 12, 24]},
               doc: "Output time step: 'daily', 'daily{N}' for N sub-daily steps (N is 1, 2, 3, 4, 6, 8, 12 or 24), or 'monthly'. WBM 23.9.0 also accepts 'daily[N]' for a step of N days and a ':daily...' suffix for the run step. The default is monthly when the run start ends in -00, otherwise daily." }
-          - { key: calendar, wbm: MT_Code_Name.Calendar, type: enum, tier: advanced, editable: true, default: standard, options: [standard, "366", "365"],
+          - { key: calendar, wbm: MT_Code_Name.Calendar, label: "Calendar", type: enum, tier: advanced, editable: true, default: standard, options: [standard, "366", "365"],
               doc: "'standard' is the 366-day calendar. The 360-day calendar is not offered because WBM cannot run it." }
-          - { key: file_size, wbm: MT_Code_Name.File_Size, type: enum, tier: advanced, editable: true, default: year, options: [year, month, day], rule: "forced to day for hourly runs; day is invalid with a monthly time series",
+          - { key: file_size, wbm: MT_Code_Name.File_Size, label: "Period per output file", type: enum, tier: advanced, editable: true, default: year, options: [year, month, day], rule: "forced to day for hourly runs; day is invalid with a monthly time series",
               doc: "How much of the run one output file holds." }
-          - { key: run_title, wbm: MT_Code_Name.Run_Title, type: string, tier: advanced, editable: true, ascii: true,
+          - { key: run_title, wbm: MT_Code_Name.Run_Title, label: "Output title", type: string, tier: advanced, editable: true, ascii: true,
               doc: "Title written into the output. Defaults to 'WBM-TrANS, ' followed by the project name." }
           - { key: credits, wbm: MT_Code_Name.credits, type: string, tier: locked, empty_is_value: true, write: never,
               doc: "Never written: when present it overrides WBM's configured default." }
@@ -152,13 +170,13 @@ tree:
         form: block_or_file
         doc: "Allowed keys: Start, End, Loops, State_ID, Force_ID_Date and, on WBM 23.9.0, Save_Vars. Always a nested block: flat spinup_* keys abort WBM."
         children:
-          - { key: loops, wbm: Spinup.Loops, type: int, tier: basic, editable: true, default: 0, min: 0, ui_max: 50,
+          - { key: loops, wbm: Spinup.Loops, label: "Spin-up loops", type: int, tier: basic, editable: true, default: 0, min: 0, ui_max: 50,
               doc: "Number of spin-up loops; 0 means no spin-up. A non-number counts as 0." }
-          - { key: start, wbm: Spinup.Start, type: date, tier: basic, editable: true, required_if: "loops > 0", show_if: "loops > 0",
+          - { key: start, wbm: Spinup.Start, label: "Spin-up start", type: date, tier: basic, editable: true, required_if: "loops > 0", show_if: "loops > 0",
               doc: "Start of the spin-up. The day is forced to the 1st." }
-          - { key: end, wbm: Spinup.End, type: date, tier: basic, editable: true, required_if: "loops > 0", show_if: "loops > 0", rule: "spinup.end > spinup.start",
+          - { key: end, wbm: Spinup.End, label: "Spin-up end", type: date, tier: basic, editable: true, required_if: "loops > 0", show_if: "loops > 0", rule: "spinup.end > spinup.start",
               doc: "End of the spin-up. The day is forced to the last day of its month." }
-          - { key: save_vars, wbm: Spinup.Save_Vars, type: enum, tier: advanced, editable: true, versions: ["23.9.0"], default: 0, options: [0, 1, 2],
+          - { key: save_vars, wbm: Spinup.Save_Vars, label: "Save spin-up aggregates", type: enum, tier: advanced, editable: true, versions: ["23.9.0"], default: 0, options: [0, 1, 2],
               doc: "1 saves monthly and yearly aggregates during spin-up, 2 yearly only, 0 none. WBM 22.1.1 aborts on the key, even with 0." }
           - { key: state_id, wbm: Spinup.State_ID, type: string, tier: locked,
               doc: "Run state to start from. Set by the gateway when it continues a previous run." }
@@ -199,11 +217,11 @@ tree:
   - group: domain
     label: "Model domain"
     children:
-      - { key: network, wbm: Network, type: dataset, tier: basic, accepts: [raster], kind: flow_direction_raster, required: true,
+      - { key: network, wbm: Network, label: "River network", type: dataset, tier: basic, accepts: [raster], kind: flow_direction_raster, required: true,
           doc: "GDAL file that sets the grid, resolution and extent. The file extension is part of the name. A circular network aborts WBM." }
       - { key: projection, wbm: Projection, type: enum, tier: locked, default: "epsg:4326", options: ["epsg:4326"], required: true,
           doc: "Always the lowercase string 'epsg:4326'; any other spelling aborts WBM." }
-      - { key: elevation, wbm: Elevation, type: dataset, tier: advanced, default: 0, unit: m, accepts: [init, number, raster],
+      - { key: elevation, wbm: Elevation, label: "Grid elevation", type: dataset, tier: advanced, default: 0, unit: m, accepts: [init, number, raster],
           doc: "Elevation of the grid: used by Penman-Monteith and FAO-56 PET, by open-water 'Calculate' and to convert specific humidity. A constant 0 counts as missing where a layer is required, so give a non-zero constant or a layer." }
 
   - group: routing
@@ -211,25 +229,26 @@ tree:
     label: "River routing"
     required: true
     children:
-      - { key: method, wbm: Routing.method, type: enum, tier: basic, editable: true, default: LRR, options: [LRR, Muskingum, Flush], required: true,
+      - { key: method, wbm: Routing.method, label: "Routing method", type: enum, tier: basic, editable: true, default: LRR, options: [LRR, Muskingum, Flush], required: true,
           doc: "River routing method; Flush is flow accumulation. On WBM 22.1.1 Muskingum is replaced by LRR (with a warning) when inter-basin transfers, water demand, irrigation or open-water evaporation is on. Muskingum suits coarse grids only." }
-      - { key: weighted_length, wbm: Routing.weightedLength, type: enum, tier: advanced, editable: true, default: "No", options: ["Yes", "No"], show_if: "method == LRR",
+      - { key: weighted_length, wbm: Routing.weightedLength, label: "Weighted reach length", type: enum, tier: advanced, editable: true, default: "No", options: ["Yes", "No"], show_if: "method == LRR",
           doc: "Weighted stream reach length in LRR routing. WBM reads any string without 'No' as yes, so only 'Yes' and 'No' are offered." }
-      - { key: velocity_method, wbm: Routing.velMethod, type: enum, tier: advanced, editable: true, default: Constant, options: [Constant, AASH],
+      - { key: velocity_method, wbm: Routing.velMethod, label: "Stream velocity method", type: enum, tier: advanced, editable: true, default: Constant, options: [Constant, AASH],
           doc: "Stream velocity: constant, or at-a-site hydraulics." }
-      - { key: velocity, wbm: Routing.velocity, type: number, tier: advanced, editable: true, default: 2.18, unit: km/h, show_if: "velocity_method == Constant",
+      - { key: velocity, wbm: Routing.velocity, label: "Stream velocity", type: number, tier: advanced, editable: true, default: 2.18, unit: km/h, show_if: "velocity_method == Constant",
           doc: "Stream velocity at 30 arc-minute resolution. WBM rescales it to the cell size of the network, so the velocity in use is higher on finer grids." }
-      - { key: beta, wbm: Routing.beta, type: number, tier: advanced, editable: true, default: 2, show_if: "method == Muskingum",
+      - { key: beta, wbm: Routing.beta, label: "Muskingum shape parameter", type: number, tier: advanced, editable: true, default: 2, show_if: "method == Muskingum",
           doc: "Shape parameter sigma of Muskingum routing." }
-      - { key: slope, wbm: Routing.slope, type: number, tier: advanced, editable: true, default: 0.0001, unit: "m/m (0.1 m/km)", show_if: "method == Muskingum" }
+      - { key: slope, wbm: Routing.slope, label: "Muskingum slope", type: number, tier: advanced, editable: true, default: 0.0001, unit: "m/m (0.1 m/km)", show_if: "method == Muskingum" }
       - group: stream_geometry
+        label: "Stream geometry"
         tier: advanced
         children:
-          - { key: eta, wbm: Routing.eta, type: number, editable: true, default: 0.25 }
-          - { key: nu, wbm: Routing.nu, type: number, editable: true, default: 0.4 }
-          - { key: tau, wbm: Routing.tau, type: number, editable: true, default: 8 }
-          - { key: phi, wbm: Routing.phi, type: number, editable: true, default: 0.58 }
-          - { key: aas_b, wbm: Routing.aas_b, type: number, editable: true, default: 0.1, show_if: "velocity_method == AASH",
+          - { key: eta, wbm: Routing.eta, label: "Depth coefficient", type: number, editable: true, default: 0.25 }
+          - { key: nu, wbm: Routing.nu, label: "Depth exponent", type: number, editable: true, default: 0.4 }
+          - { key: tau, wbm: Routing.tau, label: "Width coefficient", type: number, editable: true, default: 8 }
+          - { key: phi, wbm: Routing.phi, label: "Width exponent", type: number, editable: true, default: 0.58 }
+          - { key: aas_b, wbm: Routing.aas_b, label: "At-a-site exponent b", type: number, editable: true, default: 0.1, show_if: "velocity_method == AASH",
               doc: "f and m follow from b (b+f+m=1, b+f=m); delta and epsilon from eta, tau, nu and phi." }
 
   - group: climate
@@ -243,12 +262,12 @@ tree:
         unit: "mm/(hour|day|month)"
         required: true
         children:
-          - { key: primary, wbm: MT_Precip.Primary, type: dataset, accepts: [init], required: true,
+          - { key: primary, wbm: MT_Precip.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true,
               doc: "Precipitation dataset, a data .init file. Units must start mm/m (monthly), mm/d or mm/h; the series must be at least monthly." }
-          - { key: secondary, wbm: MT_Precip.Secondary, type: dataset, tier: advanced, accepts: [init] }
-          - { key: scale, wbm: MT_Precip.Scale, type: number, tier: advanced, editable: true, default: 1, min: 0,
+          - { key: secondary, wbm: MT_Precip.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init] }
+          - { key: scale, wbm: MT_Precip.Scale, label: "Precipitation scale factor", type: number, tier: advanced, editable: true, default: 1, min: 0,
               doc: "Scale factor (1.1 adds 10%)." }
-      - { key: precip_fraction, wbm: precipFraction, type: dataset, tier: advanced, unit: fraction, accepts: [init], required_if: "precip.primary Time_Series is monthly", rule: "must be empty (omitted) when precipitation is daily: a non-empty value is fatal; Units must start 'frac'",
+      - { key: precip_fraction, wbm: precipFraction, label: "Precipitation fraction", type: dataset, tier: advanced, unit: fraction, accepts: [init], required_if: "precip.primary Time_Series is monthly", rule: "must be empty (omitted) when precipitation is daily: a non-empty value is fatal; Units must start 'frac'",
           doc: "Daily fraction of monthly precipitation. Required when precipitation is monthly; absent when it is daily." }
       - key: air_temp
         label: "Air temperature"
@@ -260,14 +279,14 @@ tree:
         children:
           - { key: input_form, type: enum, default: mean, options: [mean, min_max], ui_only: true,
               doc: "Daily mean temperature, or minimum and maximum temperature to be averaged." }
-          - { key: primary, wbm: MT_airT.Primary, type: dataset, accepts: [init], required_if: "input_form == mean", show_if: "input_form == mean", empty_is_value: true,
+          - { key: primary, wbm: MT_airT.Primary, label: "Mean temperature dataset", type: dataset, reads_first_file: lapseDownscale, accepts: [init], required_if: "input_form == mean", show_if: "input_form == mean", empty_is_value: true,
               doc: "Mean air temperature dataset. Omitted, never empty, in the minimum/maximum form." }
-          - { key: secondary, wbm: MT_airT.Secondary, type: dataset, tier: advanced, accepts: [init], show_if: "input_form == mean" }
-          - { key: air_t_min, wbm: MT_airT.airTmin, type: dataset, accepts: [init], required_if: "input_form == min_max", show_if: "input_form == min_max" }
-          - { key: air_t_max, wbm: MT_airT.airTmax, type: dataset, accepts: [init], required_if: "input_form == min_max", show_if: "input_form == min_max" }
-      - { key: pet_method, wbm: PET, type: enum, tier: basic, editable: true, default: Hamon, options: [Hamon, Penman-Monteith, FAO-56], options_available_if: availability,
+          - { key: secondary, wbm: MT_airT.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], show_if: "input_form == mean" }
+          - { key: air_t_min, wbm: MT_airT.airTmin, label: "Minimum temperature dataset", type: dataset, accepts: [init], required_if: "input_form == min_max", show_if: "input_form == min_max" }
+          - { key: air_t_max, wbm: MT_airT.airTmax, label: "Maximum temperature dataset", type: dataset, accepts: [init], required_if: "input_form == min_max", show_if: "input_form == min_max" }
+      - { key: pet_method, wbm: PET, label: "PET method", type: enum, tier: basic, editable: true, default: Hamon, options: [Hamon, Penman-Monteith, FAO-56], options_available_if: availability,
           doc: "Potential evapotranspiration method. Penman-Monteith and FAO-56 need wind, humidity, cloud fraction and albedo datasets; Penman-Monteith also needs leaf area index and canopy height." }
-      - { key: pet_scale, wbm: PET.Scale, type: number, tier: advanced, editable: true, versions: ["23.9.0"], default: 1,
+      - { key: pet_scale, wbm: PET.Scale, label: "PET scale factor", type: number, tier: advanced, editable: true, versions: ["23.9.0"], default: 1,
           doc: "Multiplies land-cover PET. WBM 23.9.0 only: 22.1.1 aborts on a PET block." }
       - group: extra_drivers
         label: "Additional climate drivers"
@@ -282,8 +301,8 @@ tree:
             unit: m/s
             required_if: "pet_method in [Penman-Monteith, FAO-56] or any output ends with _twt"
             children:
-              - { key: primary, wbm: MT_windU.Primary, type: dataset, accepts: [init], required: true }
-              - { key: secondary, wbm: MT_windU.Secondary, type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
+              - { key: primary, wbm: MT_windU.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true }
+              - { key: secondary, wbm: MT_windU.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
                   doc: "Fills nodata cells of the primary dataset." }
           - key: wind_v
             label: "Wind speed V (north-south)"
@@ -292,8 +311,8 @@ tree:
             unit: m/s
             required_if: "pet_method in [Penman-Monteith, FAO-56] or any output ends with _twt"
             children:
-              - { key: primary, wbm: MT_windV.Primary, type: dataset, accepts: [init], required: true }
-              - { key: secondary, wbm: MT_windV.Secondary, type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
+              - { key: primary, wbm: MT_windV.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true }
+              - { key: secondary, wbm: MT_windV.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
                   doc: "Fills nodata cells of the primary dataset." }
           - key: humidity
             label: "Humidity"
@@ -303,8 +322,8 @@ tree:
             required_if: "pet_method in [Penman-Monteith, FAO-56] or any output ends with _twt"
             doc: "Relative humidity (%), specific humidity (kg/kg) or dew point (C). Kg/kg needs a non-zero elevation."
             children:
-              - { key: primary, wbm: MT_humidity.Primary, type: dataset, accepts: [init], required: true }
-              - { key: secondary, wbm: MT_humidity.Secondary, type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
+              - { key: primary, wbm: MT_humidity.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true }
+              - { key: secondary, wbm: MT_humidity.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
                   doc: "Fills nodata cells of the primary dataset." }
           - key: cloud_fraction
             label: "Cloud fraction"
@@ -313,8 +332,8 @@ tree:
             unit: fraction
             required_if: "pet_method in [Penman-Monteith, FAO-56] or any output ends with _twt"
             children:
-              - { key: primary, wbm: MT_cloudFr.Primary, type: dataset, accepts: [init], required: true }
-              - { key: secondary, wbm: MT_cloudFr.Secondary, type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
+              - { key: primary, wbm: MT_cloudFr.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true }
+              - { key: secondary, wbm: MT_cloudFr.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
                   doc: "Fills nodata cells of the primary dataset." }
           - key: albedo
             label: "Albedo"
@@ -325,10 +344,10 @@ tree:
             show_if: "pet_method in [Penman-Monteith, FAO-56]"
             doc: "Daylight average."
             children:
-              - { key: primary, wbm: MT_albedo.Primary, type: dataset, accepts: [init], required: true }
-              - { key: secondary, wbm: MT_albedo.Secondary, type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
+              - { key: primary, wbm: MT_albedo.Primary, label: "Primary dataset", type: dataset, accepts: [init], required: true }
+              - { key: secondary, wbm: MT_albedo.Secondary, label: "Secondary dataset", type: dataset, tier: advanced, accepts: [init], rule: "same Time_Series and Units as primary",
                   doc: "Fills nodata cells of the primary dataset." }
-      - { key: airT_yearly_clim, wbm: airT_yc, type: dataset, tier: advanced, unit: C, accepts: [init, number, raster], required_if: "any output name ends with _twt",
+      - { key: airT_yearly_clim, wbm: airT_yc, label: "Mean annual air temperature", type: dataset, tier: advanced, unit: C, accepts: [init, number, raster], required_if: "any output name ends with _twt",
           doc: "Mean annual 2 m air temperature: the base temperature of the water-temperature model, and a proxy for deep groundwater temperature." }
       - group: lapse_downscale
         wbm: lapseDownscale
@@ -340,25 +359,25 @@ tree:
         switch: true
         on_if: key_present
         children:
-          - { key: clim_elevation, wbm: lapseDownscale.climElevation, type: dataset, unit: m, accepts: [init, raster], required: true,
+          - { key: clim_elevation, wbm: lapseDownscale.climElevation, label: "Climate-driver elevation", type: dataset, unit: m, reads_first_file: true, accepts: [init, raster], required: true,
               doc: "Elevation of the climate drivers, a data .init or raster. A constant aborts WBM. A geopotential layer needs Var_Scale 0.1019716 in its data .init." }
-          - { key: net_elevation, wbm: lapseDownscale.netElevation, type: dataset, unit: m, accepts: [init, raster], required: true,
+          - { key: net_elevation, wbm: lapseDownscale.netElevation, label: "Network elevation", type: dataset, unit: m, reads_first_file: true, accepts: [init, raster], required: true,
               doc: "Elevation of the river network grid, a data .init or raster. A constant aborts WBM." }
-          - { key: lapse_rate, wbm: lapseDownscale.lapseRate, type: number, editable: true, default: -6.49, unit: C/km,
+          - { key: lapse_rate, wbm: lapseDownscale.lapseRate, label: "Lapse rate", type: number, editable: true, default: -6.49, unit: C/km,
               doc: "Temperature lapse rate, used only when it is a number." }
-          - { key: force_sec_temp, wbm: lapseDownscale.forceSecTemp, type: bool01, editable: true, default: 0,
+          - { key: force_sec_temp, wbm: lapseDownscale.forceSecTemp, label: "Allow secondary temperature", type: bool01, editable: true, default: 0,
               doc: "Allow downscaling when a Secondary air temperature dataset is used; otherwise WBM aborts." }
       - group: bias_correction
         label: "Climate bias correction"
         tier: advanced
         doc: "Each modelled/observed pair needs both members; a lone member is silently ignored. Datasets must be daily or monthly climatologies."
         children:
-          - { key: mod_precip, wbm: WM_mod_precip, type: dataset, unit: "mm/day | mm/month", accepts: [init], required_if: obs_precip,
+          - { key: mod_precip, wbm: WM_mod_precip, label: "Modeled precipitation", type: dataset, unit: "mm/day | mm/month", accepts: [init], required_if: obs_precip,
               doc: "Modeled precipitation within reference years." }
-          - { key: obs_precip, wbm: WM_obs_precip, type: dataset, accepts: [init], required_if: mod_precip,
+          - { key: obs_precip, wbm: WM_obs_precip, label: "Pseudo-observed precipitation", type: dataset, accepts: [init], required_if: mod_precip,
               doc: "Pseudo-observed precipitation within reference years." }
-          - { key: mod_airT, wbm: WM_mod_airT, type: dataset, unit: C, accepts: [init], required_if: obs_airT }
-          - { key: obs_airT, wbm: WM_obs_airT, type: dataset, accepts: [init], required_if: mod_airT }
+          - { key: mod_airT, wbm: WM_mod_airT, label: "Modeled air temperature", type: dataset, unit: C, accepts: [init], required_if: obs_airT }
+          - { key: obs_airT, wbm: WM_obs_airT, label: "Pseudo-observed air temperature", type: dataset, accepts: [init], required_if: mod_airT }
 
   - group: land
     label: "Soil and land surface"
@@ -371,15 +390,15 @@ tree:
         children:
           - { key: input_form, type: enum, default: awc, options: [awc, fc_wp], ui_only: true,
               doc: "If soilAWCapacity is given, FieldCap and WiltingPoint are not read." }
-          - { key: soil_awc, wbm: soilAWCapacity, type: dataset, unit: mm/m, accepts: [init, raster], required_if: "input_form == awc", show_if: "input_form == awc",
+          - { key: soil_awc, wbm: soilAWCapacity, label: "Available water capacity", type: dataset, unit: mm/m, accepts: [init, raster], required_if: "input_form == awc", show_if: "input_form == awc",
               doc: "Available water capacity, a data .init or raster. A constant aborts WBM." }
-          - { key: field_capacity, wbm: FieldCap, type: dataset, unit: fraction, accepts: [init, number, raster], required_if: "input_form == fc_wp", show_if: "input_form == fc_wp", rule: "FieldCap and WiltingPoint must not both be numbers" }
-          - { key: wilting_point, wbm: WiltingPoint, type: dataset, unit: fraction, accepts: [init, number, raster], required_if: "input_form == fc_wp", show_if: "input_form == fc_wp" }
-      - { key: rooting_depth, wbm: rootingDepth, type: dataset, tier: basic, unit: mm, accepts: [init, number, raster], required: true,
+          - { key: field_capacity, wbm: FieldCap, label: "Field capacity", type: dataset, unit: fraction, accepts: [init, number, raster], required_if: "input_form == fc_wp", show_if: "input_form == fc_wp", rule: "FieldCap and WiltingPoint must not both be numbers" }
+          - { key: wilting_point, wbm: WiltingPoint, label: "Wilting point", type: dataset, unit: fraction, accepts: [init, number, raster], required_if: "input_form == fc_wp", show_if: "input_form == fc_wp" }
+      - { key: rooting_depth, wbm: rootingDepth, label: "Rooting depth", type: dataset, tier: basic, unit: mm, accepts: [init, number, raster], required: true,
           doc: "Rooting depth. A constant works." }
-      - { key: land_collapse, wbm: landCollapse, type: enum, tier: advanced, editable: true, options: ["", average, dominant], values_accepted: {avg: average, one: dominant}, show_if: "modules.land_cover_et@enabled or modules.irrigated_crops@enabled",
+      - { key: land_collapse, wbm: landCollapse, label: "Land cover aggregation", type: enum, tier: advanced, editable: true, options: ["", average, dominant], values_accepted: {avg: average, one: dominant}, show_if: "modules.land_cover_et@enabled or modules.irrigated_crops@enabled",
           doc: "Empty uses all land covers or crops, 'average' averages them, 'dominant' uses the dominant type of each cell. Read only together with LandCover or Irrigation." }
-      - { key: canopy_height, wbm: canopyHt, type: dataset, tier: advanced, unit: m, accepts: [init, raster], required_if: "climate.pet_method == Penman-Monteith or any output name ends with _twt",
+      - { key: canopy_height, wbm: canopyHt, label: "Canopy height", type: dataset, tier: advanced, unit: m, accepts: [init, raster], required_if: "climate.pet_method == Penman-Monteith or any output name ends with _twt",
           doc: "Canopy height, a data .init or raster. A constant aborts WBM." }
 
   - group: hydrology_params
@@ -389,54 +408,58 @@ tree:
     form: block_or_file
     children:
       - group: soil_runoff
+        label: "Soil moisture and runoff"
         children:
-          - { key: alpha, wbm: wbmParam.alpha, type: number, editable: true, default: 5,
+          - { key: alpha, wbm: wbmParam.alpha, label: "Soil moisture drying coefficient", type: number, editable: true, default: 5,
               doc: "Soil moisture drying coefficient: 1 wet, 10 drier, 20 dry. A larger alpha makes AET less water-limited." }
-          - { key: infiltration, wbm: wbmParam.Infiltration, type: enum, editable: true, default: FrAMES, options: [FrAMES, HBV],
+          - { key: infiltration, wbm: wbmParam.Infiltration, label: "Infiltration method", type: enum, editable: true, default: FrAMES, options: [FrAMES, HBV],
               doc: "FrAMES or HBV. Anything that does not match HBV behaves as FrAMES." }
-          - { key: infiltr_frac, wbm: wbmParam.infiltrFrac, type: dataset, default: 0.5, range: [0, 1], calibration: {range: [0.4, 0.6]}, accepts: [init, number, raster],
+          - { key: infiltr_frac, wbm: wbmParam.infiltrFrac, label: "Groundwater infiltration fraction", type: dataset, default: 0.5, range: [0, 1], calibration: {range: [0.4, 0.6]}, accepts: [init, number, raster],
               doc: "Groundwater infiltration fraction of excess water." }
-          - { key: hbv_beta, wbm: wbmParam.HBV_Beta, type: number, editable: true, default: 60, show_if: "infiltration == HBV",
+          - { key: hbv_beta, wbm: wbmParam.HBV_Beta, label: "HBV recharge factor", type: number, editable: true, default: 60, show_if: "infiltration == HBV",
               doc: "Direct infiltration recharge factor for HBV." }
-          - { key: gw_beta, wbm: wbmParam.groundWatBETA, type: dataset, default: 0.0167, unit: "1/day", accepts: [init, number, raster],
+          - { key: gw_beta, wbm: wbmParam.groundWatBETA, label: "Baseflow release coefficient", type: dataset, default: 0.0167, unit: "1/day", accepts: [init, number, raster],
               doc: "Baseflow release coefficient from groundwater storage (a 60-day time scale)." }
-          - { key: rhrt2, wbm: wbmParam.RhRt2, type: dataset, default: {"23.9.0": 0.2, "22.1.1": 0.56}, calibration: {range: [0.05, 0.8]}, accepts: [init, number, raster],
+          - { key: rhrt2, wbm: wbmParam.RhRt2, label: "Runoff storage release coefficient", type: dataset, default: {"23.9.0": 0.2, "22.1.1": 0.56}, calibration: {range: [0.05, 0.8]}, accepts: [init, number, raster],
               doc: "Runoff storage release coefficient (Rhole/Rtank)^2. The default differs by version: 0.56 on WBM 22.1.1, 0.2 on 23.9.0. The same coefficient drives the irrigation pool." }
-          - { key: max_rff_storage, wbm: wbmParam.maxRffStorage, type: number, editable: true, default: 1000, unit: mm,
+          - { key: max_rff_storage, wbm: wbmParam.maxRffStorage, label: "Runoff storage limit", type: number, editable: true, default: 1000, unit: mm,
               doc: "Limit on runoff storage (1000 means practically no limit)." }
       - group: vegetation_evaporation
+        label: "Vegetation and evaporation"
         children:
-          - { key: c_leaf_max, wbm: wbmParam.CLeafMax, type: dataset, default: 6, unit: mm/s, accepts: [init, number, raster], show_if: "climate.pet_method in [Penman-Monteith, FAO-56]",
+          - { key: c_leaf_max, wbm: wbmParam.CLeafMax, label: "Maximum stomatal conductance", type: dataset, default: 6, unit: mm/s, accepts: [init, number, raster], show_if: "climate.pet_method in [Penman-Monteith, FAO-56]",
               doc: "Maximum leaf stomatal conductance, in mm/s." }
-          - { key: intercept_par, wbm: wbmParam.InterceptPar, type: number, editable: true, default: 0.2, unit: mm,
+          - { key: intercept_par, wbm: wbmParam.InterceptPar, label: "Canopy interception parameter", type: number, editable: true, default: 0.2, unit: mm,
               doc: "Canopy interception parameter; 0.15, 0.2 and 0.25 are common values." }
-          - { key: open_water_coeff, wbm: wbmParam.openWtrCoeff, type: number, editable: true, default: 1,
+          - { key: open_water_coeff, wbm: wbmParam.openWtrCoeff, label: "Open-water evaporation coefficient", type: number, editable: true, default: 1,
               doc: "Open-water evaporation as a multiple of PET, used when no openWaterEvap dataset is given." }
-          - { key: irr_gamma, wbm: wbmParam.irrGm, type: bool01, editable: true, default: 0,
+          - { key: irr_gamma, wbm: wbmParam.irrGm, label: "Soil moisture gamma (irrigation)", type: bool01, editable: true, default: 0,
               doc: "Soil moisture gamma function for irrigated crops." }
       - group: endorheic_basins
+        label: "Endorheic basins"
         children:
-          - { key: endorheic_dir, wbm: wbmParam.endorheicDir, type: bool01, editable: true, default: 0,
+          - { key: endorheic_dir, wbm: wbmParam.endorheicDir, label: "Endorheic flow direction", type: bool01, editable: true, default: 0,
               doc: "Use endorheic flow direction (-1) in the network; disables the next four options." }
-          - { key: exorheic_coast, wbm: wbmParam.exorheicCoast, type: bool01, editable: true, default: 1, show_if: "endorheic_dir == 0" }
-          - { key: endorheic_buffer, wbm: wbmParam.endorheicBuffer, type: number, editable: true, default: 0, unit: km, show_if: "endorheic_dir == 0" }
-          - { key: ocean_mask, wbm: wbmParam.oceanMask_file, type: dataset, accepts: [raster], show_if: "endorheic_dir == 0",
+          - { key: exorheic_coast, wbm: wbmParam.exorheicCoast, label: "Exorheic coast", type: bool01, editable: true, default: 1, show_if: "endorheic_dir == 0" }
+          - { key: endorheic_buffer, wbm: wbmParam.endorheicBuffer, label: "Endorheic buffer", type: number, editable: true, default: 0, unit: km, show_if: "endorheic_dir == 0" }
+          - { key: ocean_mask, wbm: wbmParam.oceanMask_file, label: "Ocean mask", type: dataset, accepts: [raster], show_if: "endorheic_dir == 0",
               doc: "GDAL raster only." }
-          - { key: endorheic_mask, wbm: wbmParam.endorheicMask, type: dataset, accepts: [init, raster], show_if: "endorheic_dir == 0" }
-          - { key: save_endorheic_mask, wbm: wbmParam.saveEndorhMask, type: bool01, editable: true, default: 0 }
+          - { key: endorheic_mask, wbm: wbmParam.endorheicMask, label: "Endorheic mask", type: dataset, accepts: [init, raster], show_if: "endorheic_dir == 0" }
+          - { key: save_endorheic_mask, wbm: wbmParam.saveEndorhMask, label: "Save endorheic mask", type: bool01, editable: true, default: 0 }
       - group: tracking_output
+        label: "Tracking and output"
         children:
-          - { key: comp_balance, wbm: wbmParam.compBalance, type: bool01, editable: true, default: 0, show_if: "any output name ends with _pg|_ps|_pr|_pu or _pst|_irr|_use|_rlt",
+          - { key: comp_balance, wbm: wbmParam.compBalance, label: "Component balance spreadsheets", type: bool01, editable: true, default: 0, show_if: "any output name ends with _pg|_ps|_pr|_pu or _pst|_irr|_use|_rlt",
               doc: "Write the tracking component balance as spreadsheets to the output folder. WBM forces it to 0 unless a primary-source or irrigation re-use component is on, and to 1 for some irrigation re-use outputs." }
-          - { key: reset_spinup_tracking, wbm: wbmParam.resetSpinupTracking, type: bool01, editable: true, default: 0,
+          - { key: reset_spinup_tracking, wbm: wbmParam.resetSpinupTracking, label: "Reset tracking after spin-up", type: bool01, editable: true, default: 0,
               doc: "Restart tracking after spin-up: 0 keeps representative mixtures, 1 accumulates a component flux during the run." }
-          - { key: n_irr_tracking, wbm: wbmParam.nIrrTracking, type: int, editable: true, default: 1,
+          - { key: n_irr_tracking, wbm: wbmParam.nIrrTracking, label: "Irrigation re-use cycles", type: int, editable: true, default: 1,
               doc: "Number of irrigation water re-use cycles tracked. With more than 1, WBM adds <var>_irr_<k> itself for every listed *_irr variable: do not list those names." }
-          - { key: output_scale, wbm: wbmParam.outputScale, type: enum, editable: true, default: Cell, options: [Cell, None],
+          - { key: output_scale, wbm: wbmParam.outputScale, label: "Output scaling", type: enum, editable: true, default: Cell, options: [Cell, None],
               doc: "'Cell' scales output per cell; anything else turns scaling off." }
-          - { key: nc4, wbm: wbmParam.NC4, type: bool01, editable: true, default: 1,
+          - { key: nc4, wbm: wbmParam.NC4, label: "Compressed NetCDF output", type: bool01, editable: true, default: 1,
               doc: "0 writes uncompressed classic NetCDF." }
-          - { key: nc_double, wbm: wbmParam.ncDouble, type: bool01, editable: true, versions: ["23.9.0"], default: 0,
+          - { key: nc_double, wbm: wbmParam.ncDouble, label: "Double-precision NetCDF", type: bool01, editable: true, versions: ["23.9.0"], default: 0,
               doc: "Double precision NetCDF. WBM 23.9.0 only: 22.1.1 ignores the key." }
           - { key: screen_print_scale, wbm: wbmParam.scrPrintScale, type: number, tier: locked, default: 1,
               doc: "Units of the on-screen balances relative to km3 (0.001 for small networks)." }
@@ -452,29 +475,30 @@ tree:
         form: block_or_file
         on_if: key_present
         children:
-          - { key: file, wbm: ConnectivityNetwork.File, type: file, accepts: [file], required: true,
+          - { key: file, wbm: ConnectivityNetwork.File, label: "Transfer file", type: file, accepts: [file], required: true,
               doc: "Spreadsheet of inter-basin transfers. Must exist." }
-          - { key: skip_lines, wbm: ConnectivityNetwork.SkipLines, type: int, editable: true, default: 0, required: true,
+          - { key: skip_lines, wbm: ConnectivityNetwork.SkipLines, label: "Header lines to skip", type: int, editable: true, default: 0, required: true,
               doc: "Header lines to skip. Required: always written." }
           - group: columns
+            label: "Transfer file columns"
             doc: "Column names in the transfer file."
             children:
-              - { key: id, wbm: ConnectivityNetwork.ID, type: column, required: true }
-              - { key: use, wbm: ConnectivityNetwork.Use, type: column,
+              - { key: id, wbm: ConnectivityNetwork.ID, label: "ID column", type: column, required: true }
+              - { key: use, wbm: ConnectivityNetwork.Use, label: "Use column", type: column,
                   doc: "Rows with an empty value in this column are skipped." }
-              - { key: from_lon, wbm: ConnectivityNetwork.FromLon, type: column, unit: DD, required: true }
-              - { key: from_lat, wbm: ConnectivityNetwork.FromLat, type: column, unit: DD, required: true }
-              - { key: to_lon, wbm: ConnectivityNetwork.ToLon, type: column, unit: DD, required: true }
-              - { key: to_lat, wbm: ConnectivityNetwork.ToLat, type: column, unit: DD, required: true }
-              - { key: transfer_len, wbm: ConnectivityNetwork.TransferLen, type: column, unit: km }
-              - { key: percent_flow, wbm: ConnectivityNetwork.PercentFlow, type: column }
-              - { key: min_flow, wbm: ConnectivityNetwork.MinFlow, type: column, unit: m3/s }
-              - { key: max_flow, wbm: ConnectivityNetwork.MaxFlow, type: column, unit: m3/s }
-              - { key: start_year, wbm: ConnectivityNetwork.StartYear, type: column }
-              - { key: end_year, wbm: ConnectivityNetwork.EndYear, type: column }
-          - { key: speculative, wbm: ConnectivityNetwork.Speculative, type: bool01, editable: true, default: 0,
+              - { key: from_lon, wbm: ConnectivityNetwork.FromLon, label: "From-longitude column", type: column, unit: DD, required: true }
+              - { key: from_lat, wbm: ConnectivityNetwork.FromLat, label: "From-latitude column", type: column, unit: DD, required: true }
+              - { key: to_lon, wbm: ConnectivityNetwork.ToLon, label: "To-longitude column", type: column, unit: DD, required: true }
+              - { key: to_lat, wbm: ConnectivityNetwork.ToLat, label: "To-latitude column", type: column, unit: DD, required: true }
+              - { key: transfer_len, wbm: ConnectivityNetwork.TransferLen, label: "Transfer length column", type: column, unit: km }
+              - { key: percent_flow, wbm: ConnectivityNetwork.PercentFlow, label: "Percent flow column", type: column }
+              - { key: min_flow, wbm: ConnectivityNetwork.MinFlow, label: "Minimum flow column", type: column, unit: m3/s }
+              - { key: max_flow, wbm: ConnectivityNetwork.MaxFlow, label: "Maximum flow column", type: column, unit: m3/s }
+              - { key: start_year, wbm: ConnectivityNetwork.StartYear, label: "Start year column", type: column }
+              - { key: end_year, wbm: ConnectivityNetwork.EndYear, label: "End year column", type: column }
+          - { key: speculative, wbm: ConnectivityNetwork.Speculative, label: "Use speculative transfers", type: bool01, editable: true, default: 0,
               doc: "A flag, not a column name: 1 also uses the rows whose 'Speculative' column is non-empty." }
-          - { key: lock_year, wbm: ConnectivityNetwork.Lock_Year, type: int, editable: true,
+          - { key: lock_year, wbm: ConnectivityNetwork.Lock_Year, label: "Transfer lock year", type: int, editable: true,
               doc: "Fix transfer operations to this year." }
       - module: reservoirs
         wbm: Reservoirs
@@ -484,40 +508,41 @@ tree:
         on_if: key_present
         doc: "Every published snapshot uses the file form: a block file in the model input. A block file keeps its unknown keys (Comment, Author, Citation, URL, DOI) unchanged."
         children:
-          - { key: file, wbm: Reservoirs.File, type: file, accepts: [file], required: true,
+          - { key: file, wbm: Reservoirs.File, label: "Reservoir file", type: file, accepts: [file], required: true,
               doc: "Spreadsheet of reservoirs. Must exist. The optional columns ForceTo_Lon and ForceTo_Lat force a reservoir onto the network." }
-          - { key: skip_lines, wbm: Reservoirs.SkipLines, type: int, editable: true, default: 0, required: true,
+          - { key: skip_lines, wbm: Reservoirs.SkipLines, label: "Header lines to skip", type: int, editable: true, default: 0, required: true,
               doc: "Header lines to skip. Required: always written." }
           - group: columns
+            label: "Reservoir file columns"
             doc: "Column names in the reservoir file."
             children:
-              - { key: id, wbm: Reservoirs.ID, type: column, required: true }
-              - { key: lon, wbm: Reservoirs.Lon, type: column, unit: DD, required: true }
-              - { key: lat, wbm: Reservoirs.Lat, type: column, unit: DD, required: true }
-              - { key: catch_area, wbm: Reservoirs.CatchArea, type: column, unit: km2,
+              - { key: id, wbm: Reservoirs.ID, label: "ID column", type: column, required: true }
+              - { key: lon, wbm: Reservoirs.Lon, label: "Longitude column", type: column, unit: DD, required: true }
+              - { key: lat, wbm: Reservoirs.Lat, label: "Latitude column", type: column, unit: DD, required: true }
+              - { key: catch_area, wbm: Reservoirs.CatchArea, label: "Catchment area column", type: column, unit: km2,
                   doc: "Give CatchArea, Capacity and Area together." }
-              - { key: capacity, wbm: Reservoirs.Capacity, type: column, unit: "mln m3",
+              - { key: capacity, wbm: Reservoirs.Capacity, label: "Capacity column", type: column, unit: "mln m3",
                   doc: "Effective storage, dead storage excluded." }
-              - { key: area, wbm: Reservoirs.Area, type: column }
-              - { key: start_year, wbm: Reservoirs.StartYear, type: column,
+              - { key: area, wbm: Reservoirs.Area, label: "Area column", type: column }
+              - { key: start_year, wbm: Reservoirs.StartYear, label: "Start year column", type: column,
                   doc: "A missing value defaults to 0 on WBM 23.9.0 only." }
-              - { key: end_year, wbm: Reservoirs.EndYear, type: column }
-              - { key: purpose, wbm: Reservoirs.Purpose, type: column }
-          - { key: search_dist, wbm: Reservoirs.search_dist, type: number, editable: true, default: 5, unit: km,
+              - { key: end_year, wbm: Reservoirs.EndYear, label: "End year column", type: column }
+              - { key: purpose, wbm: Reservoirs.Purpose, label: "Purpose column", type: column }
+          - { key: search_dist, wbm: Reservoirs.search_dist, label: "Search distance", type: number, editable: true, default: 5, unit: km,
               doc: "Search distance for matching upstream area to the network." }
-          - { key: search_tolerance, wbm: Reservoirs.search_tolerance, type: number, editable: true, default: 0.4,
+          - { key: search_tolerance, wbm: Reservoirs.search_tolerance, label: "Catchment area tolerance", type: number, editable: true, default: 0.4,
               doc: "Tolerance to catchment area mismatch." }
-          - { key: irr_frequency, wbm: Reservoirs.IrrFrequency, type: dataset, tier: advanced, accepts: [init],
+          - { key: irr_frequency, wbm: Reservoirs.IrrFrequency, label: "Irrigation demand frequency", type: dataset, tier: advanced, accepts: [init],
               doc: "Data .init (Merra_irrigationGross_Freq_dc.init)." }
-          - { key: small_reservoirs, wbm: Reservoirs.smReservoirFile, type: dataset, tier: advanced, unit: m3/km2, accepts: [raster],
+          - { key: small_reservoirs, wbm: Reservoirs.smReservoirFile, label: "Small reservoir capacity", type: dataset, tier: advanced, unit: m3/km2, accepts: [raster],
               doc: "Small irrigation reservoir capacity." }
-          - { key: dam_use_params, wbm: Reservoirs.damUseParams, type: file, tier: advanced, accepts: [file],
+          - { key: dam_use_params, wbm: Reservoirs.damUseParams, label: "Dam parameters by use", type: file, tier: advanced, accepts: [file],
               doc: "Operating parameters by dam use (6 rows, 8 or 9 columns)." }
-          - { key: dam_custom_params, wbm: Reservoirs.damCusParams, type: file, tier: advanced, accepts: [file],
+          - { key: dam_custom_params, wbm: Reservoirs.damCusParams, label: "Dam parameters by dam ID", type: file, tier: advanced, accepts: [file],
               doc: "Custom operating parameters by dam ID; needs a column named Dam_ID." }
-          - { key: obs_outflow_dir, wbm: Reservoirs.damObsOutflowDir, type: file, tier: advanced, accepts: [file],
+          - { key: obs_outflow_dir, wbm: Reservoirs.damObsOutflowDir, label: "Observed dam outflow folder", type: file, tier: advanced, accepts: [file],
               doc: "Folder of observed dam discharge files (*.csv with the columns DateTime and Q_out_m3d)." }
-          - { key: lock_year, wbm: Reservoirs.Lock_Year, type: int, tier: advanced, editable: true }
+          - { key: lock_year, wbm: Reservoirs.Lock_Year, label: "Lock year", type: int, tier: advanced, editable: true }
       - { module: open_water_evaporation, wbm: openWaterEvap, name: "Evaporation from Open Water", type: dataset, tier: advanced, editable: switch_off, unit: mm/day, accepts: [init], on_if: key_present,
           doc: "Absent: open-water evaporation is the open-water coefficient times PET. A data .init supplies a dataset. 'Calculate' needs the cloud, wind and humidity drivers and is not offered; a number is read as a Magic-Table ID and aborts. On WBM 22.1.1 a present openWaterEvap makes Muskingum fall back to LRR." }
       - module: open_water_flush_routing
@@ -529,11 +554,11 @@ tree:
         on_if: key_present
         doc: "Static or time series. MaskDataset is required whenever the block is on."
         children:
-          - { key: mask, wbm: openWater.MaskDataset, type: dataset, accepts: [init, raster], required: true,
+          - { key: mask, wbm: openWater.MaskDataset, label: "Land-cover index data", type: dataset, accepts: [init, raster], required: true,
               doc: "Land-cover index data. A time series is read as a dataset, a static layer as a layer." }
-          - { key: mask_value, wbm: openWater.openWaterMaskValue, type: number, editable: true, default: 0,
+          - { key: mask_value, wbm: openWater.openWaterMaskValue, label: "Open-water index value", type: number, editable: true, default: 0,
               doc: "Open-water index value in the land-cover data." }
-          - { key: fraction, wbm: openWater.fracOpenWater, type: dataset, tier: advanced, unit: fraction, accepts: [init, number, raster], rule: "a time-series init is not offered until WBM's handling of it is confirmed (warn)",
+          - { key: fraction, wbm: openWater.fracOpenWater, label: "Open-water fraction", type: dataset, tier: advanced, unit: fraction, accepts: [init, number, raster], rule: "a time-series init is not offered until WBM's handling of it is confirmed (warn)",
               doc: "Optional additional layer of open-water fraction." }
       - module: glaciated_area_runoff
         wbm: Glaciers
@@ -541,14 +566,15 @@ tree:
         editable: switch_off
         form: block_or_file
         on_if: key_present
-        unlocks_outputs: [glMelt]
+        unlocks_outputs: [glMelt, glArea, glVolume]
+        same_grid: {"23.9.0": [Glaciers.glMelt, Glaciers.glArea, Glaciers.glVolume]}
         doc: "WBM has no glacier module: it reads rasterized glacier area and glacier runoff."
         children:
-          - { key: melt, wbm: Glaciers.glMelt, type: dataset, unit: m3/s, accepts: [init], required: true,
+          - { key: melt, wbm: Glaciers.glMelt, label: "Glacier melt discharge", type: dataset, unit: m3/s, fit: unit, reads_first_file: true, accepts: [init], required: true,
               doc: "Monthly discharge per glacier outlet. Its resolution must match glArea." }
-          - { key: area, wbm: Glaciers.glArea, type: dataset, unit: fraction, accepts: [init], required: true,
+          - { key: area, wbm: Glaciers.glArea, label: "Glacier area fraction", type: dataset, unit: fraction, fit: unit, unit_contains: {"23.9.0": frac}, reads_first_file: {"23.9.0": true}, accepts: [init], required: true,
               doc: "Glacier area fraction. Its Units must contain 'frac' on WBM 23.9.0." }
-          - { key: volume, wbm: Glaciers.glVolume, type: dataset, unit: m3/pixel, accepts: [init], empty_is_value: true,
+          - { key: volume, wbm: Glaciers.glVolume, label: "Glacier water volume", type: dataset, unit: m3/pixel, fit: unit, reads_first_file: true, accepts: [init], empty_is_value: true,
               doc: "Optional, and only needed for total water mass per pixel. Omitted when empty, never ''." }
       - module: groundwater_3d
         wbm: Aquifers
@@ -560,53 +586,55 @@ tree:
         on_if: key_present
         doc: "WBM 23.9.0 only: 22.1.1 ignores the block. Aquifers need a long spin-up to equilibrate."
         children:
-          - { key: type, wbm: Aquifers.Type, type: enum, editable: true, options: [Virtual, Lumped, ModFlow], required: true,
+          - { key: type, wbm: Aquifers.Type, label: "Aquifer type", type: enum, editable: true, options: [Virtual, Lumped, ModFlow], required: true,
               doc: "ModFlow is matched exactly." }
-          - { key: gwt_use_coeff, wbm: Aquifers.gwtUseCoeff, type: number, editable: true, default: 1, range: [0, 1],
+          - { key: gwt_use_coeff, wbm: Aquifers.gwtUseCoeff, label: "Shallow groundwater use share", type: number, editable: true, default: 1, range: [0, 1],
               doc: "Share of shallow groundwater used before the aquifer is tapped." }
-          - { key: infilt_fr, wbm: Aquifers.aqfInfiltFr, type: dataset, default: 0.5, unit: fraction, accepts: [init, number, raster], empty_is_value: true }
+          - { key: infilt_fr, wbm: Aquifers.aqfInfiltFr, label: "Aquifer infiltration fraction", type: dataset, default: 0.5, unit: fraction, accepts: [init, number, raster], empty_is_value: true }
           - group: virtual_lumped
+            label: "Virtual and lumped aquifers"
             show_if: "type in [Virtual, Lumped]"
             children:
-              - { key: par_file, wbm: Aquifers.Aqf_Par_File, type: file, accepts: [file], required: true,
+              - { key: par_file, wbm: Aquifers.Aqf_Par_File, label: "Aquifer parameter file", type: file, accepts: [file], required: true,
                   doc: "CSV with the headers ID, Capacity (m3, optional), Sy, InfiltFrac, and Thickness and BaseElev (Lumped). Without Aqf_ID_File all cells are aquifer 1 and the file must contain ID 1." }
-              - { key: id_file, wbm: Aquifers.Aqf_ID_File, type: dataset, accepts: [init, raster],
+              - { key: id_file, wbm: Aquifers.Aqf_ID_File, label: "Aquifer ID map", type: dataset, accepts: [init, raster],
                   doc: "Optional; a plain path (no NETCDF: form). Ignored for ModFlow when Aqf_Clump is on." }
           - group: modflow
+            label: "ModFlow inputs"
             show_if: "type == ModFlow"
             doc: "DEM, Net_DEM and Aqf_Thick are required and cannot be constants. DEFAULT datasets are not offered."
             children:
-              - { key: dem, wbm: Aquifers.DEM, type: dataset, unit: m, accepts: [init, raster], required: true }
-              - { key: net_dem, wbm: Aquifers.Net_DEM, type: dataset, unit: m, accepts: [init, raster], required: true }
-              - { key: thickness, wbm: Aquifers.Aqf_Thick, type: dataset, unit: m, accepts: [init, raster], required: true }
-              - { key: conf_thick, wbm: Aquifers.Conf_Thick, type: dataset, default: 0, unit: m, accepts: [init, number, raster], empty_is_value: true }
-              - { key: head_top, wbm: Aquifers.H_DEM_T, type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_top (both for the same layer is fatal); no constant",
+              - { key: dem, wbm: Aquifers.DEM, label: "Land surface elevation", type: dataset, unit: m, accepts: [init, raster], required: true }
+              - { key: net_dem, wbm: Aquifers.Net_DEM, label: "Stream network elevation", type: dataset, unit: m, accepts: [init, raster], required: true }
+              - { key: thickness, wbm: Aquifers.Aqf_Thick, label: "Aquifer thickness", type: dataset, unit: m, accepts: [init, raster], required: true }
+              - { key: conf_thick, wbm: Aquifers.Conf_Thick, label: "Confined layer thickness", type: dataset, default: 0, unit: m, accepts: [init, number, raster], empty_is_value: true }
+              - { key: head_top, wbm: Aquifers.H_DEM_T, label: "Top-layer head elevation", type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_top (both for the same layer is fatal); no constant",
                   doc: "Head elevation above sea level of the top layer; defaults to Net_DEM." }
-              - { key: head_bottom, wbm: Aquifers.H_DEM_B, type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_bottom; no constant",
+              - { key: head_bottom, wbm: Aquifers.H_DEM_B, label: "Bottom-layer head elevation", type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_bottom; no constant",
                   doc: "Head elevation above sea level of the bottom layer; defaults to Net_DEM." }
-              - { key: head_depth_top, wbm: Aquifers.H_DEPTH_T, type: dataset, unit: m, accepts: [init, number, raster], rule: "mutually exclusive with head_top",
+              - { key: head_depth_top, wbm: Aquifers.H_DEPTH_T, label: "Top-layer head depth", type: dataset, unit: m, accepts: [init, number, raster], rule: "mutually exclusive with head_top",
                   doc: "Head depth below the DEM: head = DEM + value." }
-              - { key: head_depth_bottom, wbm: Aquifers.H_DEPTH_B, type: dataset, unit: m, accepts: [init, number, raster], rule: "mutually exclusive with head_bottom" }
-              - { key: sy, wbm: Aquifers.Aqf_Sy, type: dataset, default: 0.1, accepts: [init, number, raster], empty_is_value: true }
-              - { key: sy_conf, wbm: Aquifers.Aqf_SyCnfd, type: dataset, default: 0.01, accepts: [init, number, raster], empty_is_value: true,
+              - { key: head_depth_bottom, wbm: Aquifers.H_DEPTH_B, label: "Bottom-layer head depth", type: dataset, unit: m, accepts: [init, number, raster], rule: "mutually exclusive with head_bottom" }
+              - { key: sy, wbm: Aquifers.Aqf_Sy, label: "Specific yield", type: dataset, default: 0.1, accepts: [init, number, raster], empty_is_value: true }
+              - { key: sy_conf, wbm: Aquifers.Aqf_SyCnfd, label: "Confined storage coefficient", type: dataset, default: 0.01, accepts: [init, number, raster], empty_is_value: true,
                   doc: "Storage coefficient of the confined aquifer." }
-              - { key: ph, wbm: Aquifers.Aqf_Ph, type: dataset, default: -13.1, unit: "log10(m2)", accepts: [init, number, raster], empty_is_value: true,
+              - { key: ph, wbm: Aquifers.Aqf_Ph, label: "Near-surface horizontal permeability", type: dataset, default: -13.1, unit: "log10(m2)", accepts: [init, number, raster], empty_is_value: true,
                   doc: "Near-surface horizontal permeability, log10 m2; negative." }
-              - { key: kh, wbm: Aquifers.Aqf_Kh, type: dataset, default: 10.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: kv, wbm: Aquifers.Aqf_Kv, type: dataset, default: 1.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: kh_conf, wbm: Aquifers.Aqf_KhConf, type: dataset, default: 0.008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: kv_conf, wbm: Aquifers.Aqf_KvConf, type: dataset, default: 0.0008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: e_folding, wbm: Aquifers.eFolding, type: dataset, default: 120, unit: m, accepts: [init, number, raster], empty_is_value: true }
-              - { key: bed_resistance, wbm: Aquifers.BRes, type: dataset, default: 10, unit: day, accepts: [init, number, raster], empty_is_value: true,
+              - { key: kh, wbm: Aquifers.Aqf_Kh, label: "Horizontal hydraulic conductivity", type: dataset, default: 10.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: kv, wbm: Aquifers.Aqf_Kv, label: "Vertical hydraulic conductivity", type: dataset, default: 1.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: kh_conf, wbm: Aquifers.Aqf_KhConf, label: "Confined horizontal conductivity", type: dataset, default: 0.008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: kv_conf, wbm: Aquifers.Aqf_KvConf, label: "Confined vertical conductivity", type: dataset, default: 0.0008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: e_folding, wbm: Aquifers.eFolding, label: "E-folding depth", type: dataset, default: 120, unit: m, accepts: [init, number, raster], empty_is_value: true }
+              - { key: bed_resistance, wbm: Aquifers.BRes, label: "Riverbed resistance", type: dataset, default: 10, unit: day, accepts: [init, number, raster], empty_is_value: true,
                   doc: "Riverbed resistance, in days." }
-              - { key: sle, wbm: Aquifers.SLE, type: string, editable: true, default: 0,
+              - { key: sle, wbm: Aquifers.SLE, label: "SLE", type: string, editable: true, default: 0,
                   doc: "0, or a string starting with 'min' for min(Net_DEM)." }
-              - { key: boundary_flux, wbm: Aquifers.Aqf_BndFlx, type: bool01, editable: true, default: 0 }
-              - { key: clump, wbm: Aquifers.Aqf_Clump, type: bool01, editable: true, default: 0,
+              - { key: boundary_flux, wbm: Aquifers.Aqf_BndFlx, label: "Boundary flux", type: bool01, editable: true, default: 0 }
+              - { key: clump, wbm: Aquifers.Aqf_Clump, label: "Aquifer clumping", type: bool01, editable: true, default: 0,
                   doc: "Speeds up runs. Read only for ModFlow." }
-              - { key: well_max, wbm: Aquifers.wellMax, type: number, editable: true, default: 1000000, unit: m,
+              - { key: well_max, wbm: Aquifers.wellMax, label: "Maximum well depth", type: number, editable: true, default: 1000000, unit: m,
                   doc: "Well depth; 1e6 m means no limit. Read only for ModFlow." }
-              - { key: mf_steps, wbm: Aquifers.MF_steps, type: int, editable: true, default: 1,
+              - { key: mf_steps, wbm: Aquifers.MF_steps, label: "ModFlow steps", type: int, editable: true, default: 1,
                   doc: "Raise it when the log reports a stability criterion above 0.5." }
       - { module: springs, wbm: Springs, name: Springs, type: file, tier: advanced, editable: switch_off, versions: ["23.9.0"], accepts: [file], requires: [modules.groundwater_3d@enabled], on_if: key_present,
           doc: "CSV with the headers ID, Lon, Lat, Discharge and Elevation. WBM 23.9.0 only: 22.1.1 ignores it." }
@@ -623,45 +651,47 @@ tree:
         unlocks_outputs: [DIN_Conc_Cons, DIN_Conc_Dsch, DIN_Conc_Rnff, DIN_Denit, DIN_Land_Load, DIN_Load, DIN_WWTP_Input, DIN_WWTP_Load, DIN_WWTP_Removal]
         doc: "The block does nothing unless an output name starts with DIN, and with such an output the block is mandatory. The nine DIN outputs are accepted on both versions."
         children:
-          - { key: lu_sub, wbm: DIN.luSub, type: dataset, accepts: [init, number, raster], required: true,
+          - { key: lu_sub, wbm: DIN.luSub, label: "Developed land fraction", type: dataset, accepts: [init, number, raster], required: true,
               doc: "Land-use fraction, developed. Required." }
-          - { key: lu_agr, wbm: DIN.luAgr, type: dataset, accepts: [init, number, raster], required: true,
+          - { key: lu_agr, wbm: DIN.luAgr, label: "Agricultural land fraction", type: dataset, accepts: [init, number, raster], required: true,
               doc: "Land-use fraction, agriculture. Required." }
           - group: loading
+            label: "Loading parameters"
             children:
-              - { key: scale, wbm: DIN.scale, type: number, editable: true, default: 12.2 }
-              - { key: asym, wbm: DIN.asym, type: number, editable: true, default: 1.4, unit: "mg DIN/L" }
-              - { key: asym_ag, wbm: DIN.asym_ag, type: number, editable: true, default: 4.8, unit: "mg DIN/L", show_if: modules.irrigated_crops@enabled,
+              - { key: scale, wbm: DIN.scale, label: "Sigmoid scale", type: number, editable: true, default: 12.2 }
+              - { key: asym, wbm: DIN.asym, label: "Maximum DIN concentration", type: number, editable: true, default: 1.4, unit: "mg DIN/L" }
+              - { key: asym_ag, wbm: DIN.asym_ag, label: "Maximum concentration with irrigation", type: number, editable: true, default: 4.8, unit: "mg DIN/L", show_if: modules.irrigated_crops@enabled,
                   doc: "Used only when Irrigation is on." }
-              - { key: xmid_b, wbm: DIN.xMid_b, type: number, editable: true, default: 40.3 }
-              - { key: xmid_m, wbm: DIN.xMid_m, type: number, editable: true, default: 19.5 }
+              - { key: xmid_b, wbm: DIN.xMid_b, label: "Sigmoid midpoint b", type: number, editable: true, default: 40.3 }
+              - { key: xmid_m, wbm: DIN.xMid_m, label: "Sigmoid midpoint m", type: number, editable: true, default: 19.5 }
               - { key: bfi, wbm: DIN.BFI, type: number, tier: locked, default: 0.6, inert: true,
                   doc: "Stored but never used." }
           - group: removal
+            label: "Removal parameters"
             children:
-              - { key: slope, wbm: DIN.slope, type: number, editable: true, default: -0.493 }
-              - { key: intercept, wbm: DIN.intercept, type: number, editable: true, default: -2.975,
+              - { key: slope, wbm: DIN.slope, label: "Removal slope", type: number, editable: true, default: -0.493 }
+              - { key: intercept, wbm: DIN.intercept, label: "Removal intercept", type: number, editable: true, default: -2.975,
                   doc: "WBM reads the key 'intercept'." }
-              - { key: tnq, wbm: DIN.TnQ, type: number, editable: true, default: 2 }
-              - { key: tn_ref, wbm: DIN.TnRef, type: number, editable: true, default: 20, unit: C }
-              - { key: sz_res, wbm: DIN.SzRes, type: bool01, editable: true, default: 0,
+              - { key: tnq, wbm: DIN.TnQ, label: "Temperature factor", type: number, editable: true, default: 2 }
+              - { key: tn_ref, wbm: DIN.TnRef, label: "Reference temperature", type: number, editable: true, default: 20, unit: C }
+              - { key: sz_res, wbm: DIN.SzRes, label: "Seitzinger reservoir removal", type: bool01, editable: true, default: 0,
                   doc: "Seitzinger denitrification in reservoirs." }
           - group: wwtp
             wbm: DIN.WWTP
             label: "Wastewater treatment plants"
             children:
-              - { key: pop_density, wbm: DIN.WWTP.PopDensity, type: dataset, unit: persons/km2, accepts: [init], required_if: "wwtp used",
+              - { key: pop_density, wbm: DIN.WWTP.PopDensity, label: "Population density", type: dataset, unit: persons/km2, accepts: [init], required_if: "wwtp used",
                   doc: "Data .init only: a raster path aborts WBM." }
-              - { key: file, wbm: DIN.WWTP.WWTP_File, type: file, accepts: [file], required_if: "wwtp used" }
-              - { key: lon, wbm: DIN.WWTP.Lon, type: column }
-              - { key: lat, wbm: DIN.WWTP.Lat, type: column }
-              - { key: pop_served, wbm: DIN.WWTP.popYear, type: column }
-              - { key: t_level, wbm: DIN.WWTP.t_level, type: column,
+              - { key: file, wbm: DIN.WWTP.WWTP_File, label: "Plant file", type: file, accepts: [file], required_if: "wwtp used" }
+              - { key: lon, wbm: DIN.WWTP.Lon, label: "Longitude column", type: column }
+              - { key: lat, wbm: DIN.WWTP.Lat, label: "Latitude column", type: column }
+              - { key: pop_served, wbm: DIN.WWTP.popYear, label: "Population served column", type: column }
+              - { key: t_level, wbm: DIN.WWTP.t_level, label: "Treatment level column", type: column,
                   doc: "Treatment level column." }
-              - { key: ref_year, wbm: DIN.WWTP.refYear, type: int, editable: true,
+              - { key: ref_year, wbm: DIN.WWTP.refYear, label: "Reference year", type: int, editable: true,
                   doc: "A year, not a column name." }
-              - { key: per_capita_n, wbm: DIN.WWTP.perCapitaNLoad, type: number, editable: true, default: 0.019, unit: kg/person/day }
-              - { key: search_dist, wbm: DIN.WWTP.search_dist, type: number, editable: true, default: 5, unit: km }
+              - { key: per_capita_n, wbm: DIN.WWTP.perCapitaNLoad, label: "Per-capita nitrogen load", type: number, editable: true, default: 0.019, unit: kg/person/day }
+              - { key: search_dist, wbm: DIN.WWTP.search_dist, label: "Search distance", type: number, editable: true, default: 5, unit: km }
       - module: source_water_by_land_area
         wbm: Runoff_mask
         name: "Source water tracking by land area"
@@ -675,30 +705,32 @@ tree:
           - { key: mask_type, type: enum, default: polygon, options: [polygon, sub_pixel], ui_only: true,
               doc: "polygon: whole pixels with IDs; sub_pixel: layers of fractions that sum to 1." }
           - group: polygon
+            label: "Polygon masks"
             show_if: "mask_type == polygon"
             children:
-              - { key: mask_file, wbm: Runoff_mask.maskFile, type: dataset, accepts: [raster], required: true,
+              - { key: mask_file, wbm: Runoff_mask.maskFile, label: "Polygon ID raster", type: dataset, accepts: [raster], required: true,
                   doc: "Polygon IDs. GDAL raster only." }
-              - { key: att_file, wbm: Runoff_mask.attFile, type: file, accepts: [file], required: true, empty_is_value: true,
+              - { key: att_file, wbm: Runoff_mask.attFile, label: "Polygon attribute file", type: file, accepts: [file], required: true, empty_is_value: true,
                   doc: "CSV of polygon attributes. Selects the polygon branch." }
-              - { key: basin_id_file, wbm: Runoff_mask.basinIDFile, type: dataset, accepts: [raster], empty_is_value: true,
+              - { key: basin_id_file, wbm: Runoff_mask.basinIDFile, label: "Basin ID raster", type: dataset, accepts: [raster], empty_is_value: true,
                   doc: "Optional; reduces the output to these basins. GDAL raster only." }
           - group: sub_pixel
+            label: "Sub-pixel masks"
             show_if: "mask_type == sub_pixel"
             children:
-              - { key: mask_list, wbm: Runoff_mask.maskList, type: file, accepts: [file], required: true, empty_is_value: true,
+              - { key: mask_list, wbm: Runoff_mask.maskList, label: "Mask list file", type: file, accepts: [file], required: true, empty_is_value: true,
                   doc: "CSV listing at least two fraction layers. Selects the sub-pixel branch." }
-              - { key: col_file, wbm: Runoff_mask.ColFile, type: column, required: true,
+              - { key: col_file, wbm: Runoff_mask.ColFile, label: "File path column", type: column, required: true,
                   doc: "Column with the file paths." }
-          - { key: col_id, wbm: Runoff_mask.colID, type: column, required: true,
+          - { key: col_id, wbm: Runoff_mask.colID, label: "ID column", type: column, required: true,
               doc: "ID column in the CSV." }
-          - { key: col_name, wbm: Runoff_mask.colName, type: column, required: true,
+          - { key: col_name, wbm: Runoff_mask.colName, label: "Name column", type: column, required: true,
               doc: "Name column in the CSV." }
-          - { key: model, wbm: Runoff_mask.model, type: enum, editable: true, default: 0, options: {0: simple, 1: full},
+          - { key: model, wbm: Runoff_mask.model, label: "Model (simple or full)", type: enum, editable: true, default: 0, options: {0: simple, 1: full},
               doc: "Any true value means the full model." }
-          - { key: post_processing, wbm: Runoff_mask.PostProcessing, type: bool01, editable: true, default: 0,
+          - { key: post_processing, wbm: Runoff_mask.PostProcessing, label: "Include in post-processing", type: bool01, editable: true, default: 0,
               doc: "Include the mask outputs in post-processing." }
-      - { module: impervious_surface_runoff, wbm: Impervious, name: "Impervious Surface Runoff", type: dataset, tier: advanced, editable: switch_off, unit: fraction, accepts: [init, number, raster], on_if: key_present,
+      - { module: impervious_surface_runoff, wbm: Impervious, name: "Impervious Surface Runoff", type: dataset, tier: advanced, editable: switch_off, unit: fraction, fit: unit, accepts: [init, number, raster], on_if: key_present,
           doc: "Static or time series. A static value is a number, raster or data .init; a time series only a data .init. 0 counts as off." }
       - { module: canopy_interception, wbm: MT_LAI, name: "Canopy Interception of Precipitation", type: dataset, tier: advanced, editable: switch_off, unit: m2/m2, accepts: [init], required_if: "climate.pet_method == Penman-Monteith or any output name ends with _twt", on_if: key_present, rule: "must be a time series",
           doc: "Leaf area index, a time series. Turns on leaf water interception. Also required by Penman-Monteith PET and by the water-temperature model." }
@@ -710,31 +742,34 @@ tree:
         form: block_or_file
         on_if: key_present
         children:
-          - { key: population, wbm: WaterDemand.PopDensity, type: dataset, unit: people/km2, accepts: [init], required: true,
+          - { key: population, wbm: WaterDemand.PopDensity, label: "Population density", type: dataset, unit: people/km2, accepts: [init], required: true,
               doc: "Static or annual time series." }
           - group: domestic
+            label: "Domestic demand"
             children:
-              - { key: per_capita, wbm: WaterDemand.DomDemandPP, type: dataset, accepts: [init, number, raster], required: true,
+              - { key: per_capita, wbm: WaterDemand.DomDemandPP, label: "Domestic demand per capita", type: dataset, accepts: [init, number, raster], required: true,
                   doc: "Domestic demand per capita. Required." }
-              - { key: return_fr, wbm: WaterDemand.DomDemandReturnFr, type: number, editable: true, default: 0.84, range: [0, 1] }
-              - { key: search_km, wbm: WaterDemand.DomSearchDist, type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
+              - { key: return_fr, wbm: WaterDemand.DomDemandReturnFr, label: "Domestic return fraction", type: number, editable: true, default: 0.84, range: [0, 1] }
+              - { key: search_km, wbm: WaterDemand.DomSearchDist, label: "Domestic search distance", type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
                   doc: "Omitted when empty: an empty value would mean a 0 km search distance." }
           - group: industrial
+            label: "Industrial demand"
             children:
-              - { key: per_capita, wbm: WaterDemand.IndDemandPP, type: dataset, accepts: [init, number, raster], required: true,
+              - { key: per_capita, wbm: WaterDemand.IndDemandPP, label: "Industrial demand per capita", type: dataset, accepts: [init, number, raster], required: true,
                   doc: "Industrial demand per capita. Required." }
-              - { key: return_fr, wbm: WaterDemand.IndDemandReturnFr, type: number, editable: true, default: 0.89, range: [0, 1] }
-              - { key: search_km, wbm: WaterDemand.IndSearchDist, type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
+              - { key: return_fr, wbm: WaterDemand.IndDemandReturnFr, label: "Industrial return fraction", type: number, editable: true, default: 0.89, range: [0, 1] }
+              - { key: search_km, wbm: WaterDemand.IndSearchDist, label: "Industrial search distance", type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
                   doc: "Omitted when empty." }
           - group: livestock
+            label: "Livestock demand"
             children:
-              - { key: params, wbm: WaterDemand.LivestockParam, type: file, accepts: [file], required: true,
+              - { key: params, wbm: WaterDemand.LivestockParam, label: "Livestock parameter file", type: file, accepts: [file], required: true,
                   doc: "CSV; required and must exist. Needs a column named Stock." }
-              - { key: return_fr, wbm: WaterDemand.StkDemandReturnFr, type: number, editable: true, default: 0.95, range: [0, 1],
+              - { key: return_fr, wbm: WaterDemand.StkDemandReturnFr, label: "Livestock return fraction", type: number, editable: true, default: 0.95, range: [0, 1],
                   doc: "Return fraction in livestock water use." }
-              - { key: search_km, wbm: WaterDemand.StkSearchDist, type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
+              - { key: search_km, wbm: WaterDemand.StkSearchDist, label: "Livestock search distance", type: number, editable: true, default_from: Irrigation.IrrSearchDist, unit: km, empty_is_value: true,
                   doc: "Omitted when empty." }
-              - { key: ref_year, wbm: WaterDemand.StkRefYear, type: int, editable: true, default: 2005, empty_is_value: true,
+              - { key: ref_year, wbm: WaterDemand.StkRefYear, label: "Livestock reference year", type: int, editable: true, default: 2005, empty_is_value: true,
                   doc: "Omitted when empty." }
       - { module: land_cover_et, wbm: LandCover, name: "Land Cover-based ET", type: file, tier: advanced, editable: switch_off, accepts: [file], on_if: key_present,
           doc: "CSV file with a column named Description. Turns on land covers for the processes that use them. Only the spelling LandCover is read." }
@@ -748,57 +783,62 @@ tree:
         doc: "Irrigated crops. Needs a crop area, a crop parameter file and an irrigation efficiency."
         children:
           - group: crop_data
+            label: "Crop data"
             children:
-              - { key: crop_area_frac, wbm: Irrigation.CropAreaFrac, type: dataset, unit: fraction, accepts: [init, number, raster], required: true }
-              - { key: crop_area_frac_patch, wbm: Irrigation.CropAreaFracPatch, type: dataset, tier: advanced, accepts: [init, number, raster],
+              - { key: crop_area_frac, wbm: Irrigation.CropAreaFrac, label: "Crop area fraction", type: dataset, unit: fraction, accepts: [init, number, raster], required: true }
+              - { key: crop_area_frac_patch, wbm: Irrigation.CropAreaFracPatch, label: "Crop area fraction patch", type: dataset, tier: advanced, accepts: [init, number, raster],
                   doc: "Fills nodata cells of CropAreaFrac." }
-              - { key: crop_par_file, wbm: Irrigation.CropParFile, type: file, accepts: [file], required: true,
+              - { key: crop_par_file, wbm: Irrigation.CropParFile, label: "Crop parameter file", type: file, accepts: [file], required: true,
                   doc: "Crop parameters CSV for 26 crop categories. LandFracTS, Kc_TS and RootDepth cells are data .init paths; CropDepletionFactor is a number or a data .init." }
-              - { key: crop_par_file_patch, wbm: Irrigation.CropParFilePatch, type: file, tier: advanced, accepts: [file] }
-              - { key: extend_crop_ts, wbm: Irrigation.extendCropTS, type: bool01, editable: true, default: 0,
+              - { key: crop_par_file_patch, wbm: Irrigation.CropParFilePatch, label: "Crop parameter file patch", type: file, tier: advanced, accepts: [file] }
+              - { key: extend_crop_ts, wbm: Irrigation.extendCropTS, label: "Extend crop time series", type: bool01, editable: true, default: 0,
                   doc: "Extend the crop time series using the first and last years (for future scenarios)." }
           - group: water_sources
+            label: "Water sources"
             children:
-              - { key: sw_gw_ratio, wbm: Irrigation.SW_GW_ratio, type: dataset, accepts: [init, number, raster],
+              - { key: sw_gw_ratio, wbm: Irrigation.SW_GW_ratio, label: "Surface-to-groundwater ratio", type: dataset, accepts: [init, number, raster],
                   doc: "Surface-to-groundwater intake ratio. If absent, Order is used. Cannot be a time series." }
-              - { key: order, wbm: Irrigation.Order, type: enum, editable: true, default: 1, options: {0: "Groundwater first", 1: "Surface water first"}, show_if: "not sw_gw_ratio",
+              - { key: order, wbm: Irrigation.Order, label: "Source priority", type: enum, editable: true, default: 1, options: {0: "Groundwater first", 1: "Surface water first"}, show_if: "not sw_gw_ratio",
                   doc: "Which source irrigation takes from first: 0 groundwater, 1 stream. WBM uses it as a number, so it applies only when SW_GW_ratio is absent." }
-              - { key: search_dist, wbm: Irrigation.IrrSearchDist, type: number, editable: true, default: 100, unit: km, aliases: [Irrigation.SearchDist],
+              - { key: search_dist, wbm: Irrigation.IrrSearchDist, label: "Stream search distance", type: number, editable: true, default: 100, unit: km, aliases: [Irrigation.SearchDist],
                   doc: "Search distance for stream water. The old key SearchDist is an alias that wins when the init has it." }
-              - { key: extra_coeff, wbm: Irrigation.ExtraCoeff, type: dataset, default: 1.0, range: [0, 1], accepts: [init, number, raster],
+              - { key: extra_coeff, wbm: Irrigation.ExtraCoeff, label: "Withdrawal factor outside aquifers", type: dataset, default: 1.0, range: [0, 1], accepts: [init, number, raster],
                   doc: "Unsustainable groundwater withdrawal factor outside aquifers. Cannot be a time series." }
-              - { key: aqf_coeff, wbm: Irrigation.ExtraAqfCoeff, type: dataset, tier: advanced, versions: ["23.9.0"], default: 1.0, range: [0, 1], accepts: [init, number, raster], aliases: [Irrigation.AqfCoeff],
+              - { key: aqf_coeff, wbm: Irrigation.ExtraAqfCoeff, label: "Withdrawal factor over aquifers", type: dataset, tier: advanced, versions: ["23.9.0"], default: 1.0, range: [0, 1], accepts: [init, number, raster], aliases: [Irrigation.AqfCoeff],
                   doc: "Unsustainable withdrawal factor over aquifers. WBM 23.9.0 only: 22.1.1 ignores this key. The old key AqfCoeff is an alias that wins when the init has it." }
-              - { key: aqf_coeff_v1, wbm: Irrigation.AqfCoeff, type: dataset, tier: advanced, versions: ["22.1.1"], default: 1.0, range: [0, 1], accepts: [init, number, raster],
+              - { key: aqf_coeff_v1, wbm: Irrigation.AqfCoeff, label: "Withdrawal factor over aquifers", type: dataset, tier: advanced, versions: ["22.1.1"], default: 1.0, range: [0, 1], accepts: [init, number, raster],
                   doc: "The WBM 22.1.1 name of the aquifer withdrawal factor. Aquifers do not exist on 22.1.1, so it has no effect there." }
-              - { key: use_vis, wbm: Irrigation.useVIS, type: bool01, editable: true, default: 1,
+              - { key: use_vis, wbm: Irrigation.useVIS, label: "Virtual irrigation storage", type: bool01, editable: true, default: 1,
                   doc: "Virtual irrigation storage (daily irrigation withdrawal)." }
           - group: application
+            label: "Irrigation application"
             children:
-              - { key: efficiency, wbm: Irrigation.IrrEfficiency, type: dataset, unit: "%", accepts: [init, raster], required_if: "tech_application_file is empty",
+              - { key: efficiency, wbm: Irrigation.IrrEfficiency, label: "Irrigation efficiency", type: dataset, unit: "%", accepts: [init, raster], required_if: "tech_application_file is empty",
                   doc: "Irrigation efficiency in percent. Needs a data .init or raster: a constant aborts WBM, and so does leaving it out, unless IrrTechApplicationFile supplies the efficiency." }
-              - { key: return_coeff, wbm: Irrigation.ReturnCoeff, type: number, editable: true, default: 1.0, range: [0, 1],
+              - { key: return_coeff, wbm: Irrigation.ReturnCoeff, label: "Return flow to groundwater", type: number, editable: true, default: 1.0, range: [0, 1],
                   doc: "Share of irrigation return flow that goes to groundwater; the rest goes to surface runoff." }
-              - { key: daily_irr, wbm: Irrigation.dailyIrr, type: enum, editable: true, default: 0, options: {0: "By crop depletion factor", 1: Daily},
+              - { key: daily_irr, wbm: Irrigation.dailyIrr, label: "Irrigation demand mode", type: enum, editable: true, default: 0, options: {0: "By crop depletion factor", 1: Daily},
                   doc: "Not compatible with process-based irrigation efficiency." }
-              - { key: app_rate_max, wbm: Irrigation.irrAppRate, type: number, tier: advanced, editable: true, default: 50, unit: mm/day }
-              - { key: tech_delivery_file, wbm: Irrigation.IrrTechDeliveryFile, type: file, tier: advanced, accepts: [file],
+              - { key: app_rate_max, wbm: Irrigation.irrAppRate, label: "Maximum application rate", type: number, tier: advanced, editable: true, default: 50, unit: mm/day }
+              - { key: tech_delivery_file, wbm: Irrigation.IrrTechDeliveryFile, label: "Delivery technology file", type: file, tier: advanced, accepts: [file],
                   doc: "Delivery parameters for efficiency- or process-based modeling." }
-              - { key: tech_application_file, wbm: Irrigation.IrrTechApplicationFile, type: file, tier: advanced, accepts: [file] }
+              - { key: tech_application_file, wbm: Irrigation.IrrTechApplicationFile, label: "Application technology file", type: file, tier: advanced, accepts: [file] }
           - group: rice
+            label: "Rice paddies"
             children:
-              - { key: paddy_depth, wbm: Irrigation.ricePaddyDepth, type: number, editable: true, default: 50, unit: mm }
-              - { key: percolation, wbm: Irrigation.ricePercolation, type: dataset, default: 5, unit: mm/day, accepts: [init, number, raster] }
+              - { key: paddy_depth, wbm: Irrigation.ricePaddyDepth, label: "Paddy depth", type: number, editable: true, default: 50, unit: mm }
+              - { key: percolation, wbm: Irrigation.ricePercolation, label: "Paddy percolation rate", type: dataset, default: 5, unit: mm/day, accepts: [init, number, raster] }
           - group: area_growth
+            label: "Area growth"
             tier: advanced
             children:
-              - { key: irr_area_growth, wbm: Irrigation.irrAreaGrwth, type: number, editable: true, default: 0, unit: "1/yr",
+              - { key: irr_area_growth, wbm: Irrigation.irrAreaGrwth, label: "Irrigated area growth rate", type: number, editable: true, default: 0, unit: "1/yr",
                   doc: "Recommended 0.01179274." }
-              - { key: irr_growth_ref_year, wbm: Irrigation.irrGrwthRefYr, type: int, editable: true,
+              - { key: irr_growth_ref_year, wbm: Irrigation.irrGrwthRefYr, label: "Irrigated area reference year", type: int, editable: true,
                   doc: "Reference year, if the data is not a time series." }
-              - { key: crop_area_growth, wbm: Irrigation.crpAreaGrwth, type: number, editable: true, default: 0, unit: "1/yr",
+              - { key: crop_area_growth, wbm: Irrigation.crpAreaGrwth, label: "Crop area growth rate", type: number, editable: true, default: 0, unit: "1/yr",
                   doc: "Recommended 0.0023744." }
-              - { key: crop_growth_ref_year, wbm: Irrigation.crpGrwthRefYr, type: int, editable: true }
+              - { key: crop_growth_ref_year, wbm: Irrigation.crpGrwthRefYr, label: "Crop area reference year", type: int, editable: true }
       - { module: water_age, name: "Water age", on_if: {output_match: "^streamAge$"}, derived: true, suggested_outputs: [streamAge],
           doc: "Switched on by a streamAge output." }
       - { module: runoff_source_tracking, name: "Runoff source tracking", on_if: {output_suffix: [_gm, _sm, _rr, _bf]}, derived: true, suggested_outputs: [runoff_gm, runoff_sm, runoff_rr, runoff_bf, discharge_gm, discharge_sm, discharge_rr, discharge_bf],
@@ -830,7 +870,7 @@ tree:
           - { key: donor_res_mapping, wbm: WaterRights.donorResMapping, inert: true }
           - { key: dom_ex_thd, wbm: WaterRights.domExThd, type: number, default: 0, inert: true }
           - { key: cattle_ex_fr, wbm: WaterRights.cattleExFr, type: number, default: 0, inert: true }
-      - { module: usgs, wbm: USGS, type: file, tier: advanced, versions: ["23.9.0"], accepts: [file],
+      - { module: usgs, wbm: USGS, name: "USGS gauge metadata", type: file, tier: advanced, versions: ["23.9.0"], accepts: [file],
           doc: "USGS gauge metadata CSV. WBM 23.9.0 only: 22.1.1 ignores the key." }
 
   - group: outputs

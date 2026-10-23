@@ -53,8 +53,10 @@ import {
 import { useLeaveGuard, type LeaveTarget } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
+import { checkProblems, dateMessages } from "@/lib/workspace/draft-checks";
 import { useModelParameters } from "@/lib/workspace/use-model-parameters";
 import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
+import { useDraftChecks } from "@/lib/workspace/use-draft-checks";
 import { usePublishedAnswer } from "@/lib/workspace/use-published-answer";
 import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
 
@@ -304,6 +306,15 @@ function WizardBody({
     enabled: step === "review",
   });
 
+  // What the rules of the parameter tree say about the draft on screen (a dataset that ends
+  // before the run does, an output that needs a block). Asked once Review shows, and kept for
+  // the same parameters so Run settings can show a date error beside its input.
+  const checks = useDraftChecks({
+    datasetId,
+    parameters: local.parameters,
+    enabled: step === "review",
+  });
+
   // The field an Edit link or a "fix <field>" link asked to focus, until the
   // effect below has done it. `focusTick` makes a second request for the same
   // step (the step does not change, so nothing else would re-run the effect).
@@ -378,6 +389,15 @@ function WizardBody({
   const problems = useMemo(
     () => submitProblems(local, ctx, blockedReason, { withheld: isNew ? NO_FIELDS : saver.withheld, saving: false }),
     [local, ctx, blockedReason, isNew, saver.withheld]
+  );
+  // The errors among the checks stop a submit like the problems above do, and are listed with
+  // them; the steps' strip is about what the client knows, so they stay out of it.
+  const submitBlockers = useMemo(
+    () => [
+      ...problems,
+      ...(checks.status === "ready" ? checkProblems(checks.errors, local.parameters.custom_params) : []),
+    ],
+    [problems, checks, local.parameters.custom_params]
   );
   const problemSteps = useMemo(
     () => DRAFT_STEPS.filter((s) => problems.some((p) => p.step === s)),
@@ -606,7 +626,7 @@ function WizardBody({
       // Nothing is stored yet: Submit creates the draft first, once.
       <DraftSubmitCard
         jobId=""
-        problems={problems}
+        problems={submitBlockers}
         onFix={goTo}
         lastSubmitError={null}
         recommended={recommended}
@@ -625,7 +645,7 @@ function WizardBody({
     ) : (
       <DraftSubmitCard
         jobId={jobId}
-        problems={problems}
+        problems={submitBlockers}
         onFix={goTo}
         lastSubmitError={lastSubmitError}
         recommended={recommended}
@@ -811,6 +831,7 @@ function WizardBody({
                 modelParameters={modelParameters}
                 onRetryModelParameters={retryModelParameters}
                 startRefusal={isNew ? null : saver.startRefusal}
+                checks={checks.status === "ready" ? dateMessages(checks.errors) : undefined}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
                 onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
                 onRevertModelInput={() => setLocal((l) => ({ ...l, modelInputId: null }))}
@@ -827,6 +848,7 @@ function WizardBody({
                 onEditStep={goTo}
                 disabled={submitting}
                 publishedAnswer={publishedState}
+                checks={checks}
                 modelParameters={modelParameters}
                 submitArea={submitCard(publishedState.status === "answered")}
               />

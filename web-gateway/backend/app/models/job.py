@@ -765,6 +765,40 @@ class JobLogResponse(BaseModel):
     eof: bool = True
 
 
+class CheckFinding(BaseModel):
+    """One failed rule of the tree's `cross_rules` (`app.wbm_init.cross_rules`)."""
+
+    #: The rule's id in `param_tree.yaml`.
+    rule: str
+    level: Literal["error", "warn", "info"]
+    #: Plain sentences, one per thing wrong.
+    message: str
+    #: The init key paths it concerns, so the wizard can show it beside a field
+    #: (`MT_Code_Name.Run_End` is the run end date input).
+    paths: list[str] = Field(default_factory=list)
+
+
+class DraftChecksRequest(BaseModel):
+    """What a draft asks of its snapshot, as the editor holds it: the parameters on screen, saved
+    or not (a new draft has no id), as `PublishedAnswerRequest` does."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parameters: JobParameters
+
+
+class DraftChecksResponse(BaseModel):
+    """POST /repository/datasets/{id}/checks: the rules of the tree the draft fails. A submit
+    refuses for an error (422 `cross_rules_failed`, one entry each); a warning is shown and
+    refuses nothing."""
+
+    errors: list[CheckFinding]
+    #: The warnings and the notes (`level` says which).
+    warnings: list[CheckFinding]
+    #: False when the dataset files could not be read, so coverage was not judged; a warning says so.
+    files_checked: bool
+
+
 class SubmitRequest(BaseModel):
     """POST /jobs/{job_id}/submit body, optional. `rerun` says the person asked
     for a simulation of a draft its snapshot already answers (the published output

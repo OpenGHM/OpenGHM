@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 
 from math import ceil
 from typing import Literal
@@ -16,6 +17,7 @@ from app.core.database import get_db
 from app.core.roles import Permission
 from app.models.generated.model_input import OpenGHMModelInputMetadata
 from app.models.generated.snapshot import OpenGHMSnapshotMetadata
+from app.models.job import DraftChecksRequest, DraftChecksResponse
 from app.models.repository import (
     DatasetDetailResponse,
     DatasetResponse,
@@ -57,6 +59,7 @@ from app.services.catalogue import (
     newest_registered_first,
     parse_box,
 )
+from app.wbm_init import cross_rules
 from app.wbm_init import tree as parameter_tree
 
 router = APIRouter(prefix="/repository", tags=["repository"])
@@ -464,7 +467,11 @@ async def get_dataset_model_parameters(dataset_id: str) -> dict:
     value read from the snapshot's init (docs/architecture/model-parameters.md). Open, like
     ``get_dataset``: it holds nothing the published init does not. 404 when the id is not a
     snapshot; 503 ``init_unavailable`` when the init cannot be read, and 503
-    ``model_code_version_missing`` when the snapshot names no WBM version the tree knows."""
+    ``model_code_version_missing`` when the snapshot names no WBM version the tree knows. A module
+    the snapshot has off says whether it can be switched on (``switch_on``, ``switch_on_reason``)
+    and a dataset field of one that can carries its ``candidates``: the datasets of the
+    snapshot's model input. A model input that cannot be read is no failure: such a module is
+    then not offered, with that reason."""
     db = get_db()
     doc = await db["datasets"].find_one({"_id": dataset_id})
     if doc is None:
@@ -473,10 +480,40 @@ async def get_dataset_model_parameters(dataset_id: str) -> dict:
         loaded = await model_parameters.load(doc["document"], dataset_id)
     except model_parameters.Unavailable as exc:
         raise HTTPException(status_code=503, detail={"code": exc.code, "message": exc.message})
+    loaded = await model_parameters.with_choices(doc["document"], dataset_id, loaded)
     return {
         "code_version": loaded.code_version,
-        "groups": parameter_tree.render(loaded.resolved, loaded.values),
+        "groups": parameter_tree.render(loaded.resolved, loaded.values, loaded.choices),
     }
+
+
+@router.post("/datasets/{dataset_id}/checks")
+async def get_draft_checks(
+    dataset_id: str,
+    body: DraftChecksRequest,
+    _user: TokenPayload = Depends(require_permission(Permission.REPO_VIEW)),
+) -> DraftChecksResponse:
+    """What a submit of a draft of this snapshot would refuse or warn about: the tree's cross
+    rules (``cross_rules``) for the draft's parameters, dataset file coverage first. A POST
+    because the draft on screen is not always the draft as saved, and a new draft has no id:
+    the parameters are the body, as for ``published-answer``. Reads nothing a person could not
+    read anonymously, so any signed-in user may ask. ``files_checked`` is false when the model
+    input could not be read: that is a warning, not an error. 404 when the id is not a
+    snapshot; 503 ``init_unavailable`` and ``model_code_version_missing`` as for
+    ``model-parameters``."""
+    doc = await get_db()["datasets"].find_one({"_id": dataset_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    try:
+        loaded = await model_parameters.load(doc["document"], dataset_id)
+    except model_parameters.Unavailable as exc:
+        raise HTTPException(status_code=503, detail={"code": exc.code, "message": exc.message})
+    checks = await cross_rules.check(dataset_id, doc["document"], loaded, body.parameters)
+    return DraftChecksResponse(
+        errors=[dataclasses.asdict(f) for f in checks.errors],
+        warnings=[dataclasses.asdict(f) for f in checks.warnings],
+        files_checked=checks.files_checked,
+    )
 
 
 @router.get("/datasets/{dataset_id}/files")

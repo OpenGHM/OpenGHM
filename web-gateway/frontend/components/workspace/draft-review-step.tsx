@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Info } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClampedName } from "@/components/common/clamped-name";
@@ -23,7 +23,9 @@ import {
   type Recommended,
 } from "@/lib/jobs/compute";
 import { cn } from "@/lib/utils";
+import { dateMessages } from "@/lib/workspace/draft-checks";
 import { describeChanges } from "@/lib/workspace/model-parameters";
+import type { DraftChecksState } from "@/lib/workspace/use-draft-checks";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import type { DraftContext, DraftField, DraftLocal } from "@/lib/workspace/draft-state";
@@ -139,6 +141,51 @@ function AnswerSkeleton() {
   );
 }
 
+/** What the checks of the run say that the summary does not: still being asked, the
+ *  warnings and notes, or that they could not be asked. The errors are not here: the submit
+ *  card lists them, each with a way to fix it. */
+function CheckNotes({ checks }: { checks: DraftChecksState }) {
+  if (checks.status === "loading") {
+    return (
+      <p role="status" className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
+        <Loader2 className="mt-0.5 size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
+        Checking that the datasets cover the run…
+      </p>
+    );
+  }
+  if (checks.status === "error") {
+    return (
+      <p role="status" className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        We couldn&apos;t check the run against its datasets. You can still submit it; the submit checks it too.
+      </p>
+    );
+  }
+  if (checks.status !== "ready" || checks.warnings.length === 0) return null;
+  return (
+    <DraftSection title="Heads up">
+      <ul className="space-y-2">
+        {checks.warnings.map((note) => (
+          <li
+            key={note.rule}
+            className={cn(
+              "flex items-start gap-2 text-sm",
+              note.level === "info" ? "text-muted-foreground" : "text-warning"
+            )}
+          >
+            {note.level === "info" ? (
+              <Info className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="mt-1 size-3.5 shrink-0" aria-hidden="true" />
+            )}
+            <span className="min-w-0 break-words">{note.message}</span>
+          </li>
+        ))}
+      </ul>
+    </DraftSection>
+  );
+}
+
 /**
  * Step 3, "Review & submit": one list that says what will run, each line with
  * a way back to the step that edits it, and, last, the submit area
@@ -159,6 +206,11 @@ function AnswerSkeleton() {
  * secondary "Run anyway") goes under the card. Loading: a skeleton in place of
  * the submit area. Otherwise `submitArea` ends the panel as ever, with a note
  * above it when the check itself failed.
+ *
+ * `checks` is what the rules of the parameter tree say about the draft (`useDraftChecks`).
+ * The errors are the submit card's to list (it has a Fix link for each, and its button is off);
+ * the run period row also says the ones about a date, under the dates. The warnings and notes
+ * are a "Heads up" card, and a check still being asked or that failed is one line.
  */
 export function DraftReviewStep({
   datasetId,
@@ -169,6 +221,7 @@ export function DraftReviewStep({
   onEditStep,
   submitArea,
   publishedAnswer = { status: "none" },
+  checks = { status: "none" },
   modelParameters,
   disabled = false,
 }: {
@@ -180,6 +233,8 @@ export function DraftReviewStep({
   onEditStep: (step: DraftStep, field?: DraftField) => void;
   submitArea: ReactNode;
   publishedAnswer?: PublishedAnswerState;
+  /** The rules of the parameter tree the draft fails, for the notes and the date errors. */
+  checks?: DraftChecksState;
   /** The snapshot's parameter tree, for the names of the changed parameters;
    *  without it a change is listed by its key. */
   modelParameters?: ModelParametersState;
@@ -201,6 +256,7 @@ export function DraftReviewStep({
   const facts = found ? snapshotFacts(found) : [];
   const name = local.name.trim();
   const description = local.description.trim();
+  const dateErrors = dateMessages(checks.status === "ready" ? checks.errors : []);
 
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-4 border-0 p-0">
@@ -261,6 +317,14 @@ export function DraftReviewStep({
               edit={<EditLink step="run" field="start" label="run period" onEditStep={onEditStep} />}
             >
               {parameters.temporal_range_start || "No start date"} → {parameters.temporal_range_end || "No end date"}
+              {Array.from(new Set([dateErrors.start, dateErrors.end])).map(
+                (text) =>
+                  text && (
+                    <span key={text} className="mt-1 block font-sans text-[13px] text-destructive">
+                      {text}
+                    </span>
+                  )
+              )}
             </Row>
             <Row
               label="Output variables"
@@ -314,13 +378,22 @@ export function DraftReviewStep({
                 </span>
                 <ul className="mt-1 space-y-1">
                   {changes.map((change) => (
-                    <li key={change.path} className="min-w-0 text-[13px]">
+                    <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
                       {change.label && <span className="mr-1.5">{change.label}</span>}
-                      <code className="font-mono text-xs break-all text-muted-foreground">
-                        {change.path} = {change.value === "" ? "''" : change.value}
-                      </code>
-                      {change.shown !== change.value && (
-                        <span className="text-muted-foreground"> · {change.shown}</span>
+                      {change.kind === "switched_on" ? (
+                        <>
+                          <code className="font-mono text-xs break-all text-muted-foreground">{change.path}</code>
+                          <span className="text-muted-foreground"> · {change.shown}</span>
+                        </>
+                      ) : (
+                        <>
+                          <code className="font-mono text-xs break-all text-muted-foreground">
+                            {change.path} = {change.value === "" ? "''" : change.value}
+                          </code>
+                          {change.shown !== change.value && (
+                            <span className="text-muted-foreground"> · {change.shown}</span>
+                          )}
+                        </>
                       )}
                     </li>
                   ))}
@@ -329,6 +402,8 @@ export function DraftReviewStep({
             )}
           </dl>
         </DraftSection>
+
+        <CheckNotes checks={checks} />
 
         {publishedAnswer.status === "loading" && <AnswerSkeleton />}
         {publishedAnswer.status === "error" && (

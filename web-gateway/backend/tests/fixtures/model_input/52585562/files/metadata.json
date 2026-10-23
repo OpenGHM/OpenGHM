@@ -1,0 +1,284 @@
+{
+  "$schema": "https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json",
+  "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
+  "slug": "wbm_ancillary_data_v2.0.0",
+  "about": {
+    "name": "WBM Inputs [CONUS]",
+    "description": "The global ancillary dataset the University of New Hampshire's WBM model draws its non-forcing inputs from: crop calendars and coefficients (MIRCA2000), glacier area and discharge (RGI-6, ERA-Interim hindcast), irrigation efficiency, dam capacity, and harmonized soil available water capacity.",
+    "datePublished": "2022-02-23",
+    "tags": ["ancillary-data", "climate-forcing", "river-network"],
+    "creator": [
+      {
+        "name": "Danielle Grogan",
+        "email": "danielle.grogan@unh.edu"
+      },
+      {
+        "name": "Shan Zuidema",
+        "email": "shan.zuidema@unh.edu"
+      },
+      {
+        "name": "Stanley Glidden",
+        "email": "stanley.glidden@unh.edu"
+      }
+    ],
+    "license": "GPL-3.0-only",
+    "keywords": [
+      "Water Balance Model",
+      "ancillary data",
+      "hydrology",
+      "MIRCA2000",
+      "RGI-6 glaciers"
+    ],
+    "url": "https://openghm.org/model-inputs/52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d"
+  },
+  "coverage": {
+    "spatialCoverage": {
+      "northlimit": 57.1667,
+      "southlimit": 21.75,
+      "eastlimit": -60.5833,
+      "westlimit": -127.8333,
+      "units": "Decimal degrees",
+      "projection": "EPSG:4326"
+    },
+    "temporalCoverage": {
+      "start": "1980-01-01",
+      "end": "2019-12-31"
+    }
+  },
+  "networks": [
+    {
+      "file": "network/hyd_5m_CONUS_mississippi_patched.asc",
+      "spatialCoverage": {
+        "northlimit": 57.1667,
+        "southlimit": 21.75,
+        "eastlimit": -60.5833,
+        "westlimit": -127.8333,
+        "units": "Decimal degrees",
+        "projection": "EPSG:4326"
+      },
+      "resolution": {
+        "value": 5,
+        "unit": "arc-minute"
+      }
+    },
+    {
+      "file": "network/Merrimack_stn210_Subset.tif"
+    }
+  ],
+  "datasets": [
+    {
+      "code": "merra2_prectotcorr_d",
+      "init": "data_init/climate/merra2_prectotcorr_d.init",
+      "name": "MERRA2 Total Surface Precipitation, bias corrected, Daily",
+      "unit": "mm/day",
+      "timeSeries": "daily",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2018-12-31"
+      },
+      "project": "MERRA2",
+      "metadataLink": "https://gmao.gsfc.nasa.gov/reanalysis/MERRA-2/",
+      "citation": "The Modern-Era Retrospective Analysis for Research and Applications, Version 2 (MERRA-2), Ronald Gelaro, et al., 2017, J. Clim., doi: 10.1175/JCLI-D-16-0758.1"
+    },
+    {
+      "code": "merra2_t2m_d",
+      "init": "data_init/climate/merra2_t2m_d.init",
+      "name": "MERRA2 Temperature at 2m, Daily",
+      "unit": "C",
+      "timeSeries": "daily",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2019-12-31"
+      },
+      "project": "MERRA2",
+      "metadataLink": "https://gmao.gsfc.nasa.gov/reanalysis/MERRA-2/",
+      "citation": "The Modern-Era Retrospective Analysis for Research and Applications, Version 2 (MERRA-2), Ronald Gelaro, et al., 2017, J. Clim., doi: 10.1175/JCLI-D-16-0758.1"
+    },
+    {
+      "code": "MC_nonrice_irr_CDF_av",
+      "init": "data_init/crops/CDF/MC_nonrice_irr_CDF_av.init",
+      "name": "Nonrice, irrigated crop depletion factor (CDF), MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_rice_irr_CDF_av",
+      "init": "data_init/crops/CDF/MC_rice_irr_CDF_av.init",
+      "name": "rice, irrigated crop depletion factor (CDF), MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_nonrice_irr_Kc_av",
+      "init": "data_init/crops/KcTS/MC_nonrice_irr_Kc_av.init",
+      "name": "Nonrice, irrigated crop coefficient (Kc), MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_rfd_Kc_av",
+      "init": "data_init/crops/KcTS/MC_rfd_Kc_av.init",
+      "name": "Rainfed crop coefficient (Kc), MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_rice_irr_Kc_av",
+      "init": "data_init/crops/KcTS/MC_rice_irr_Kc_av.init",
+      "name": "Rice, irrigated crop coefficient (Kc), MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_fallow_fr",
+      "init": "data_init/crops/LandFracTS/MC_fallow_fr.init",
+      "name": "Fallow, MIRCA land cover dataset",
+      "unit": "fraction",
+      "timeSeries": "daily_clim"
+    },
+    {
+      "code": "MC_nonrice_irr_fr_av",
+      "init": "data_init/crops/LandFracTS/MC_nonrice_irr_fr_av.init",
+      "name": "Nonrice, irrigated, MIRCA average land collapse",
+      "unit": "fraction",
+      "timeSeries": "daily_clim"
+    },
+    {
+      "code": "MC_rfd_fr_av",
+      "init": "data_init/crops/LandFracTS/MC_rfd_fr_av.init",
+      "name": "Rainfed crops, MIRCA average land collapse",
+      "unit": "fraction",
+      "timeSeries": "daily_clim"
+    },
+    {
+      "code": "MC_rice_irr_fr_av",
+      "init": "data_init/crops/LandFracTS/MC_rice_irr_fr_av.init",
+      "name": "Rice, irrigated, MIRCA average land collapse",
+      "unit": "fraction",
+      "timeSeries": "daily_clim"
+    },
+    {
+      "code": "MC_rice_irr_AddedWater_av",
+      "init": "data_init/crops/added_water/MC_rice_irr_AddedWater_av.init",
+      "name": "rice, irrigated added water for paddy flooding, MIRCA-Complete average land collapse",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_nonrice_irr_awCap_av",
+      "init": "data_init/crops/awCap/MC_nonrice_irr_awCap_av.init",
+      "name": "Nonrice, irrigated available water capacity, MIRCA-Complete average land collapse",
+      "unit": "mm",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_rfd_awCap_av",
+      "init": "data_init/crops/awCap/MC_rfd_awCap_av.init",
+      "name": "Rainfed crops available water capacity, MIRCA-Complete average land collapse",
+      "unit": "mm",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "MC_rice_irr_awCap_av",
+      "init": "data_init/crops/awCap/MC_rice_irr_awCap_av.init",
+      "name": "Rice, irrigated available water capacity, MIRCA-Complete average land collapse",
+      "unit": "mm",
+      "timeSeries": "daily_clim",
+      "metadataLink": "https://www.uni-frankfurt.de/45218023/MIRCA"
+    },
+    {
+      "code": "mirca_cropAreaFraction",
+      "init": "data_init/crops/mirca_cropAreaFraction.init",
+      "name": "MIRCA2000 crop area as fraction of cell area",
+      "unit": "fraction",
+      "citation": "Portmann, F. T., Siebert, S. & Döll, P. (2010): MIRCA2000 – Global monthly irrigated and rainfed crop areas around the year 2000: A new high-resolution data set for agricultural and hydrological modeling, Global Biogeochemical Cycles, 24, GB 1011, doi:10.1029/2008GB003435."
+    },
+    {
+      "code": "rice_percolationRate",
+      "init": "data_init/crops/rice_percolationRate.init",
+      "name": "Percolation rate of water through rice paddies",
+      "unit": "mm/day",
+      "timeSeries": "yearly_clim"
+    },
+    {
+      "code": "glacier_RDI40_6min_ERA-Interim_hindcast_Discharge_m",
+      "init": "data_init/glaciers/glacier_RDI40_6min_ERA-Interim_hindcast_Discharge_m.init",
+      "name": "Glacier Discharge, model (v.2; 6min) ERA-Interim hindcast, monthly",
+      "unit": "m3/sec",
+      "timeSeries": "monthly",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2012-12-31"
+      },
+      "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
+    },
+    {
+      "code": "glacier_RDI40_6min_ERA-Interim_hindcast_Volume_y",
+      "init": "data_init/glaciers/glacier_RDI40_6min_ERA-Interim_hindcast_Volume_y.init",
+      "name": "Glacier Volume, model (v.2; 6min) ERA-Interim hindcast, yearly",
+      "unit": "m3",
+      "timeSeries": "yearly",
+      "temporalCoverage": {
+        "start": "1980-01-01",
+        "end": "2012-12-31"
+      },
+      "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
+    },
+    {
+      "code": "global_rgi6_glaciers_area_1km",
+      "init": "data_init/glaciers/global_rgi6_glaciers_area_1km.init",
+      "name": "Global Glacier Area Fraction, RGI-6, 1 km resolution",
+      "unit": "fraction",
+      "timeSeries": "yearly_clim",
+      "citation": "Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054."
+    },
+    {
+      "code": "FAO_SW_GW_ratio_mod",
+      "init": "data_init/irrigation/FAO_SWGW_ratio_mod.init",
+      "name": "FAO ratio of surface to total irrigation abstractions",
+      "timeSeries": "yearly_clim",
+      "citation": "FAO (2015) https://www.fao.org/aquastat/statistics/query/index.html;jsessionid=71F6F6340C470CFBE92D71489546AA39.  Derived data"
+    },
+    {
+      "code": "Merra_irrigationGross_Freq_dc",
+      "init": "data_init/irrigation/Merra_irrigationGross_Freq_dc.init",
+      "name": "Gross Irrigation Daily Frequency in WBM simulation with MERRA climate drivers",
+      "unit": "unitless",
+      "timeSeries": "daily_clim"
+    },
+    {
+      "code": "fao_irrEfficiency",
+      "init": "data_init/irrigation/irrEfficiency.init",
+      "name": "Irrigation efficiency",
+      "unit": "fraction",
+      "timeSeries": "yearly_clim",
+      "citation": "Döll, P., and Siebert, S., Global modeling of irrigation water requirements, Water Resour. Res., 38( 4), doi:10.1029/2001WR000355, 2002."
+    },
+    {
+      "code": "root_depth",
+      "init": "data_init/soil/Effective_Rooting_Depth_mod.init",
+      "name": "Effective Rooting Depth modified from Yang et al. 2016",
+      "unit": "mm",
+      "timeSeries": "yearly_clim",
+      "citation": "https://doi.org/10.4225/08/5837b3aa9cb90; Yang, Y., Donohue, R.J., and McVicar, T.R. (2016), Global estimation of effective plant rooting depth: Implications for hydrological modeling, Water Resour. Res., 52, 8260-8276, doi:10.1002/2016WR019392. Modified by D. Grogan using the script /wbm/utilities/process_root_depth.R"
+    },
+    {
+      "code": "harmonized_AWC_5min",
+      "init": "data_init/soil/harmonized_AWC_5min.init",
+      "name": "Harmonized Soil Map Available Water Capacity",
+      "unit": "mm",
+      "timeSeries": "yearly_clim",
+      "citation": "Fischer, G., F. Nachtergaele, S. Prieler, H.T. van Velthuizen, L. Verelst, D. Wiberg, 2008. Global Agro-ecological Zones Assessment for Agriculture (GAEZ 2008). IIASA, Laxenburg, Austria and FAO, Rome, Italy."
+    },
+    {
+      "code": "harmonized_AWC_5min_mer",
+      "init": "data_init/soil/harmonized_AWC_5min_mer.init",
+      "name": "Harmonized Soil Map Available Water Capacity Merrimack Basin Extent and Resolution",
+      "unit": "mm",
+      "timeSeries": "yearly_clim",
+      "citation": "Fischer, G., F. Nachtergaele, S. Prieler, H.T. van Velthuizen, L. Verelst, D. Wiberg, 2008. Global Agro-ecological Zones Assessment for Agriculture (GAEZ 2008). IIASA, Laxenburg, Austria and FAO, Rome, Italy."
+    }
+  ]
+}

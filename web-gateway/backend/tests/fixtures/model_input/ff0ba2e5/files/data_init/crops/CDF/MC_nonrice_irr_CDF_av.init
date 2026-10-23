@@ -1,0 +1,20 @@
+{
+Code_Name	=> 'MC_nonrice_irr_CDF_av',
+Time_Series	=> 'daily_clim',
+Start_Date	=> '0000-01-01',
+End_Date	=> '0000-12-31',
+Name		=> 'Nonrice, irrigated crop depletion factor (CDF), MIRCA-Complete average land collapse',
+Var_Name	=> 'MC_nonrice_irr_CDF_av',
+Units		=> '',
+Var_Scale	=> ,
+Var_Offset	=> 0,
+Orig_Units	=> '',
+Bands		=> 365,
+Processing	=> '',
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/crops/CDF_av/MC_nonrice_irr_CDF_av.nc',
+
+Comment 	=> 'Area-weighted average of all non-rice irrigated crop depletion factors. Crop types, calendars, and areas are from the MIRCA crop dataset.  Each crop Kc value and associated growing stage length is from Table 1 in Siebert S and Doll P, 2010, Quanitifying blue and green virtual water contentents in global crop production as well as potential production losses without irrigation. Journal of Hydrology, 384, 198-217.',
+
+MetadataLink    => 'https://www.uni-frankfurt.de/45218023/MIRCA'
+}

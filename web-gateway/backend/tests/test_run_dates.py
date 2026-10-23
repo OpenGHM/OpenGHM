@@ -24,6 +24,10 @@ from route_helpers import make_job, make_user, token_for
 
 AGGREGATED_INIT = """{
 ID		=> 'wbm_test',
+Output_vars	=> 'runoff',
+Network		=> '/wbm/data/network/n.asc',
+Routing		=> 'LRR',
+soilAWCapacity	=> '/wbm/data_init/soil/a.init',
 MT_Code_Name	=>  {
           File_Size	=> 'year',
           MT_ID		=> 'WMB_test_runoff',

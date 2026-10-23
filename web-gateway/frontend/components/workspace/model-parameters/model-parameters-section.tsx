@@ -11,12 +11,16 @@ import { cn } from "@/lib/utils";
 import {
   changedBelow,
   indexByPath,
+  isSwitchedOn,
   moduleIsOn,
   pathsBelow,
+  resetModule,
   resetPath,
   setFieldValue,
   switchOffModule,
+  switchOnModule,
   type CustomParams,
+  type ParamField,
   type ParamGroup,
   type ParamModule,
   type ParamNode,
@@ -29,6 +33,10 @@ interface Ctx {
   /** The backend's message by init key path. */
   errors: Record<string, string>;
   update: (next: CustomParams | null) => void;
+  /** The modules the person switched on and has chosen nothing for yet: a block module is
+   *  on in the draft by what it sets, so these are on only while the section is. */
+  opened: ReadonlySet<string>;
+  setOpened: (path: string, on: boolean) => void;
 }
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -166,49 +174,86 @@ function GroupView({ group, ctx, inline }: { group: ParamGroup; ctx: Ctx; inline
   );
 }
 
+/** The one field of a module that is itself a dataset (`Impervious`): the module's own key, a
+ *  choice among its candidates and, where it takes a number, a constant. */
+function ownDatasetField(mod: ParamModule): ParamField | null {
+  const candidates = mod.candidates ?? [];
+  if (candidates.length === 0 && mod.edit_as !== "number") return null;
+  return {
+    kind: "field",
+    key: mod.key,
+    label: "Dataset",
+    doc: null,
+    tier: mod.tier,
+    path: mod.path,
+    type: "dataset",
+    editable: true,
+    required: true,
+    edit_as: mod.edit_as ?? null,
+    candidates,
+    current: null,
+    default: null,
+    unit: null,
+    options: null,
+    min: null,
+    max: null,
+    calibration: null,
+    show_if: null,
+  };
+}
+
 /**
  * A module the init can have on: a card with its state, a "Switch off" when the
  * tree allows it (`""` on the module's key), and its own parameters while it is
- * on. A module switched off here says so and has a Reset; a module the snapshot
- * has off shows no parameters (switching one on is later work).
+ * on. A module switched off here says so and has a Reset. A module the snapshot has
+ * off has a "Switch on" when the backend says everything it requires can be chosen
+ * from the model input (`switch_on`): the module's parameters appear, its required
+ * datasets to be chosen, and Reset takes it back off. Where it cannot, the card says why.
  */
 function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: boolean }) {
-  const on = moduleIsOn(mod, ctx.custom);
+  const on = moduleIsOn(mod, ctx.custom, ctx.opened);
   const switchedOff = mod.state === "on" && !on;
+  const switchedOn = isSwitchedOn(mod, ctx.custom, ctx.opened);
   const error = ctx.errors[mod.path];
   const changed = changedBelow(mod, ctx.custom).length;
-  const status = on ? "On" : switchedOff ? "Switched off" : "Off in this snapshot";
-  const action = switchedOff ? (
+  const status = on ? (switchedOn ? "Switched on" : "On") : switchedOff ? "Switched off" : "Off in this snapshot";
+  const own = switchedOn ? ownDatasetField(mod) : null;
+  const button = (label: string, run: () => void) => (
     <Button
       type="button"
       variant="outline"
       size="sm"
-      aria-label={`Reset ${mod.name}`}
+      aria-label={`${label} ${mod.name}`}
       className="min-h-10 sm:min-h-8"
-      onClick={() => ctx.update(resetPath(ctx.custom, mod.path))}
+      onClick={run}
     >
-      Reset
+      {label}
     </Button>
-  ) : on && mod.switch_off ? (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      aria-label={`Switch off ${mod.name}`}
-      className="min-h-10 sm:min-h-8"
-      onClick={() => ctx.update(switchOffModule(ctx.custom, mod))}
-    >
-      Switch off
-    </Button>
-  ) : null;
+  );
+  const action = switchedOff
+    ? button("Reset", () => ctx.update(resetPath(ctx.custom, mod.path)))
+    : switchedOn
+      ? button("Reset", () => {
+          ctx.setOpened(mod.path, false);
+          ctx.update(resetModule(ctx.custom, mod));
+        })
+      : on && mod.switch_off
+        ? button("Switch off", () => ctx.update(switchOffModule(ctx.custom, mod)))
+        : mod.state === "off" && mod.switch_on
+          ? button("Switch on", () => {
+              ctx.setOpened(mod.path, true);
+              ctx.update(switchOnModule(ctx.custom, mod));
+            })
+          : null;
+  const cannot = mod.state === "off" && !on && !mod.switch_on && mod.switch_on_reason;
 
   return (
     <div
       data-param-path={mod.path}
-      data-changed={switchedOff || undefined}
+      data-changed={switchedOff || switchedOn || undefined}
       className={cn(
         "my-2 space-y-1 rounded-[14px] border px-3.5 py-3",
-        switchedOff ? "border-primary/50" : "border-border/70"
+        switchedOff || switchedOn ? "border-primary/50" : "border-border/70"
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -217,7 +262,13 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-              on ? "bg-success/10 text-success" : switchedOff ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+              on
+                ? switchedOn
+                  ? "bg-primary/10 text-primary"
+                  : "bg-success/10 text-success"
+                : switchedOff
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
             )}
           >
             {status}
@@ -227,13 +278,22 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
       </div>
       <code className="block font-mono text-[11.5px] break-all text-muted-foreground">{mod.path}</code>
       {mod.doc && <p className="text-[13px] leading-normal text-muted-foreground">{mod.doc}</p>}
+      {cannot && <p className="text-[13px] leading-normal text-muted-foreground">Can&apos;t be switched on here. {mod.switch_on_reason}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {on && mod.state === "on" && mod.children.length > 0 && (
+      {own && (
+        <ParamFieldRow
+          field={own}
+          custom={ctx.custom}
+          onChange={(value) => ctx.update(setFieldValue(ctx.custom, own, value))}
+          onReset={() => ctx.update(resetPath(ctx.custom, own.path))}
+        />
+      )}
+      {on && mod.children.length > 0 && (
         <Disclosure
           title="Settings"
           tone="quiet"
           meta={changed > 0 ? `${changed} changed` : undefined}
-          openOnMount={changed > 0}
+          openOnMount={changed > 0 || switchedOn}
           forceOpen={mod.children.some((n) => hasErrorBelow(n, ctx.errors))}
         >
           <Nodes nodes={mod.children} ctx={ctx} inline={inline || mod.tier === "advanced"} />
@@ -320,7 +380,15 @@ export function ModelParametersSection({
   onRetry?: () => void;
 }) {
   const changed = custom ? Object.keys(custom).length : 0;
-  const ctx: Ctx = { custom, errors, update: onChange };
+  const [opened, setOpenedSet] = useState<ReadonlySet<string>>(new Set());
+  const setOpened = (path: string, on: boolean) =>
+    setOpenedSet((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(path);
+      else next.delete(path);
+      return next;
+    });
+  const ctx: Ctx = { custom, errors, update: onChange, opened, setOpened };
   const known = state.status === "ready" ? indexByPath(state.tree) : null;
   const extraKeys = Object.keys(custom ?? {}).filter((key) => !known?.has(key));
   // A message for a key the tree lacks is shown with that key, and one for a

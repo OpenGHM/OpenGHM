@@ -4,7 +4,10 @@
  * and the pure rules for editing a draft's `parameters.custom_params` with it.
  *
  * `custom_params` maps an init key path (`wbmParam.alpha`) to a string. A module
- * is switched off by `""` on its own path. A key that equals the snapshot's
+ * is switched off by `""` on its own path. A module the snapshot has off is
+ * switched on by the keys it requires: a block module (`Glaciers`) by its fields,
+ * each dataset chosen from the model input's `candidates`; a module that is itself
+ * a dataset (`Impervious`) by a value on its own path. A key that equals the snapshot's
  * current value is not kept: the backend drops it on save, so the editor never
  * writes one, and the draft holds only real changes.
  *
@@ -34,6 +37,20 @@ export interface FieldOption {
   label: string;
 }
 
+/** A dataset of the snapshot's model input that a field can be given: the wire
+ *  shape of an entry of `candidates`. */
+export interface DatasetCandidate {
+  /** The data init as a run init writes it: the value of the key. */
+  value: string;
+  name: string;
+  /** `Code_Name`: not unique in a model input, so `value` is the identity. */
+  code: string;
+  time_series: string;
+  unit: string;
+  /** Why WBM cannot read it for this field (shown, and not chosen); null when it can. */
+  disabled: string | null;
+}
+
 export interface ParamField {
   kind: "field";
   key: string;
@@ -48,6 +65,12 @@ export interface ParamField {
    *  wizard edits it as a number, which replaces the dataset for every grid cell.
    *  Null or absent for every other field. */
   edit_as?: "number" | null;
+  /** The tree says a module that is on must set it. */
+  required?: boolean;
+  /** The datasets of the model input in this field's unit that it is given one from, in a
+   *  module the snapshot has off and the draft can switch on. Null or absent otherwise: a
+   *  field the tree gives no unit has none, and takes a constant where `edit_as` says so. */
+  candidates?: DatasetCandidate[] | null;
   /** The snapshot init's value as text; null means the key is absent. */
   current: string | null;
   /** WBM's default, resolved for the code version. */
@@ -74,6 +97,14 @@ export interface ParamModule {
   state: "on" | "off";
   /** The tree allows switching it off and it is on. */
   switch_off: boolean;
+  /** The snapshot has it off and everything it requires can be given from the model input. */
+  switch_on?: boolean;
+  /** Why not, as a sentence, when it is off and `switch_on` is false. */
+  switch_on_reason?: string | null;
+  /** A module that is itself a dataset (`Impervious`) is switched on by choosing one of these
+   *  (datasets in its unit), or by a constant where `edit_as` is `"number"`. */
+  candidates?: DatasetCandidate[] | null;
+  edit_as?: "number" | null;
   children: ParamNode[];
 }
 
@@ -104,17 +135,21 @@ export const INIT_UNAVAILABLE = "init_unavailable";
 /** The types the wizard edits; the others are shown, not changed. */
 const EDITABLE_TYPES: ReadonlySet<FieldType> = new Set(["number", "int", "enum", "bool01", "string", "date"]);
 
-/** A field the wizard may change: the tree says so, and its type is a scalar or
- *  it is a dataset edited as a constant number (`edit_as`). */
+/** Whether a field is given a dataset from the model input (a module being switched on). */
+export const hasCandidates = (field: ParamField): boolean => field.candidates != null && field.candidates.length > 0;
+
+/** A field the wizard may change: the tree says so, and its type is a scalar, or
+ *  it is a dataset edited as a constant number (`edit_as`) or chosen from the
+ *  model input (`candidates`). */
 export const isEditableField = (field: ParamField): boolean =>
-  field.editable && (EDITABLE_TYPES.has(field.type) || field.edit_as === "number");
+  field.editable && (EDITABLE_TYPES.has(field.type) || field.edit_as === "number" || hasCandidates(field));
 
 /** The type the wizard treats a field as: a dataset edited as a number is a number. */
 export const valueType = (field: ParamField): FieldType => (field.edit_as === "number" ? "number" : field.type);
 
 /** Whether a field is a dataset the draft would replace with a constant number. */
 export const isConstantForDataset = (field: ParamField): boolean =>
-  field.edit_as === "number" && isEditableField(field);
+  field.edit_as === "number" && isEditableField(field) && !hasCandidates(field);
 
 const has = (custom: CustomParams | null | undefined, path: string): boolean =>
   custom != null && Object.prototype.hasOwnProperty.call(custom, path);
@@ -190,10 +225,25 @@ export function defaultDiffers(field: ParamField): boolean {
 }
 
 /** Whether a module is on in this draft: switched off by `""`, else as the
- *  snapshot's init has it. */
-export function moduleIsOn(mod: ParamModule, custom: CustomParams | null | undefined): boolean {
+ *  snapshot's init has it; a module the snapshot has off is on once the draft
+ *  sets something of it, or while it is `opened` (switched on, nothing chosen yet). */
+export function moduleIsOn(
+  mod: ParamModule,
+  custom: CustomParams | null | undefined,
+  opened?: ReadonlySet<string>
+): boolean {
   if (has(custom, mod.path)) return custom![mod.path] !== "";
-  return mod.state === "on";
+  if (mod.state === "on") return true;
+  return opened?.has(mod.path) === true || mod.children.flatMap(pathsBelow).some((path) => has(custom, path));
+}
+
+/** Whether the draft switches on a module the snapshot has off. */
+export function isSwitchedOn(
+  mod: ParamModule,
+  custom: CustomParams | null | undefined,
+  opened?: ReadonlySet<string>
+): boolean {
+  return mod.state === "off" && moduleIsOn(mod, custom, opened);
 }
 
 /** A value as a person reads it: an option's label, a flag as On/Off, and the
@@ -201,6 +251,8 @@ export function moduleIsOn(mod: ParamModule, custom: CustomParams | null | undef
 export function displayValue(field: ParamField, value: string | number | null): string {
   if (value === null || value === undefined) return "Not set";
   const text = String(value);
+  const dataset = field.candidates?.find((c) => c.value === text);
+  if (dataset) return dataset.name;
   if (field.type === "enum") {
     const option = field.options?.find((o) => o.value === text);
     return option ? option.label : text;
@@ -232,8 +284,8 @@ export function setFieldValue(
   value: string
 ): CustomParams | null {
   const next = { ...custom };
-  // An emptied constant is the dataset back: nothing to change.
-  const emptied = field.edit_as === "number" && value.trim() === "";
+  // An emptied constant is the dataset back, an emptied choice is no choice: nothing to change.
+  const emptied = (field.edit_as === "number" || hasCandidates(field)) && value.trim() === "";
   if (emptied || sameValue(valueType(field), value, field.current)) delete next[field.path];
   else next[field.path] = value;
   return orNull(next);
@@ -256,6 +308,27 @@ export function switchOffModule(custom: CustomParams | null, mod: ParamModule): 
   return orNull(next);
 }
 
+/** Switch a module the snapshot has off on: each required scalar starts at WBM's
+ *  default. The datasets it requires are chosen by the person (`setFieldValue`);
+ *  until then the module is only `opened`, and the backend refuses a save that
+ *  leaves one out. */
+export function switchOnModule(custom: CustomParams | null, mod: ParamModule): CustomParams | null {
+  const next = { ...custom };
+  for (const field of allFields(mod.children)) {
+    if (field.required && field.editable && EDITABLE_TYPES.has(field.type) && field.default !== null && !has(next, field.path)) {
+      next[field.path] = String(field.default);
+    }
+  }
+  return orNull(next);
+}
+
+/** Take a module the draft switched on back off: everything set of it goes. */
+export function resetModule(custom: CustomParams | null, mod: ParamModule): CustomParams | null {
+  const next = { ...custom };
+  for (const path of pathsBelow(mod)) delete next[path];
+  return orNull(next);
+}
+
 /** The paths of `custom` that are changes to something below `node` (itself included). */
 export function changedBelow(node: ParamNode, custom: CustomParams | null | undefined): string[] {
   return pathsBelow(node).filter((path) => has(custom, path));
@@ -264,6 +337,9 @@ export function changedBelow(node: ParamNode, custom: CustomParams | null | unde
 // ─── Showing what changed ────────────────────────────────────────────────────
 
 export interface ChangedEntry {
+  /** `switched_on` is the line for a module the draft switches on: it has no key of its own
+   *  (a block module is on by its fields), so it has no value. */
+  kind: "change" | "switched_on";
   path: string;
   /** The tree's name for it; null when the tree is not loaded or lacks the key. */
   label: string | null;
@@ -274,21 +350,29 @@ export interface ChangedEntry {
 }
 
 /** What the draft changes, one entry per key, in key order. With the tree, a
- *  key has its label and a readable value. */
+ *  key has its label and a readable value (a dataset by its name), and a module
+ *  the draft switches on has a line of its own before its keys. */
 export function describeChanges(custom: CustomParams | null | undefined, tree: ModelParameters | null): ChangedEntry[] {
   if (!custom) return [];
   const index = tree ? indexByPath(tree) : null;
-  return Object.keys(custom)
-    .sort()
-    .map((path) => {
-      const value = custom[path];
-      const node = index?.get(path);
-      if (!node) return { path, label: null, value, shown: value };
-      if (node.kind === "module") {
-        return { path, label: node.name, value, shown: value === "" ? "switched off" : value };
+  const entries: ChangedEntry[] = Object.keys(custom).map((path) => {
+    const value = custom[path];
+    const node = index?.get(path);
+    if (!node) return { kind: "change", path, label: null, value, shown: value };
+    if (node.kind === "module") {
+      const dataset = node.candidates?.find((c) => c.value === value);
+      return { kind: "change", path, label: node.name, value, shown: value === "" ? "switched off" : (dataset?.name ?? value) };
+    }
+    return { kind: "change", path, label: node.label, value, shown: displayValue(node, value) };
+  });
+  if (tree) {
+    for (const mod of allModules(tree.groups)) {
+      if (isSwitchedOn(mod, custom) && !has(custom, mod.path)) {
+        entries.push({ kind: "switched_on", path: mod.path, label: mod.name, value: "", shown: "switched on" });
       }
-      return { path, label: node.label, value, shown: displayValue(node, value) };
-    });
+    }
+  }
+  return entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.kind === "switched_on" ? -1 : 1));
 }
 
 // ─── The 422 ─────────────────────────────────────────────────────────────────

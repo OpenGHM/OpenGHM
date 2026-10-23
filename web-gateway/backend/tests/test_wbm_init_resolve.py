@@ -21,10 +21,13 @@ WYOMING = reader.read((FIXTURES / "wbm_init" / "Wyoming_tracking.init").read_tex
 
 NODE_KEYS = {
     "group": {"kind", "key", "label", "doc", "tier", "children"},
-    "module": {"kind", "key", "name", "doc", "tier", "path", "state", "switch_off", "children"},
+    "module": {
+        "kind", "key", "name", "doc", "tier", "path", "state", "switch_off", "switch_on",
+        "switch_on_reason", "edit_as", "candidates", "children",
+    },
     "field": {
-        "kind", "key", "label", "doc", "tier", "path", "type", "editable", "edit_as", "current", "default",
-        "unit", "options", "min", "max", "calibration", "show_if",
+        "kind", "key", "label", "doc", "tier", "path", "type", "editable", "edit_as", "required",
+        "candidates", "current", "default", "unit", "options", "min", "max", "calibration", "show_if",
     },
 }
 FIELD_TYPES = {

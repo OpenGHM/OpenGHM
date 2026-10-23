@@ -1,0 +1,17 @@
+{
+Code_Name => 'FAO_SW_GW_ratio_mod',
+Time_Series =>	'yearly_clim',
+Start_Date =>	'0000-00-00',
+End_Date =>	'0000-00-00',
+Name	 =>	'FAO ratio of surface to total irrigation abstractions',
+Var_Name =>	'',
+Units =>	'',
+Var_Scale =>	'1',
+Var_Offset =>	'0',
+Orig_Units =>	'',
+Bands =>	'1',
+Processing =>	'',
+Projection =>	'epsg:4326',
+File_Path => '/wbm/data/irrigation/FAO_SWGW_ratio_mod.tif;',
+citation  => 'FAO (2015) https://www.fao.org/aquastat/statistics/query/index.html;jsessionid=71F6F6340C470CFBE92D71489546AA39.  Derived data'
+}

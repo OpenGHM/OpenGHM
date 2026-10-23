@@ -27,7 +27,7 @@ import type {
   PreviousJob,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
-import type { ModelParameters, ParamField } from "@/lib/workspace/model-parameters";
+import type { DatasetCandidate, ModelParameters, ParamField } from "@/lib/workspace/model-parameters";
 
 const HOUR = 3_600_000;
 
@@ -859,6 +859,137 @@ export function fakeModelParameters(): ModelParameters {
                 label: "Glacier melt ratio",
                 current: "1",
                 default: 1,
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** An entry of a field's `candidates`: a dataset of the model input, one WBM can read unless
+ *  `disabled` says why not. */
+export function fakeCandidate(path: string, overrides: Partial<DatasetCandidate> = {}): DatasetCandidate {
+  const code = path.split("/").pop()!.replace(/\.init$/, "");
+  return {
+    value: path,
+    name: code,
+    code,
+    time_series: "yearly_clim",
+    unit: "fraction",
+    disabled: null,
+    ...overrides,
+  };
+}
+
+/**
+ * The resolved tree of a v2-like snapshot (WBM 23.9.0) that has its modules off, cut down to
+ * four of them: Glaciers, which can be switched on (each field is offered the dataset of its own
+ * unit, and the area fraction has one that WBM 23.9.0 cannot read); Irrigation, which cannot (it
+ * requires a file); Impervious, a module that is itself a dataset and takes a constant too; and
+ * DIN, whose dataset fields have no unit, so they take constants alone, with a required scalar
+ * that has a default.
+ */
+export function fakeSwitchOnTree(): ModelParameters {
+  const melt = fakeCandidate("/wbm/data_init/glaciers/discharge_m.init", {
+    name: "Glacier discharge, monthly", time_series: "monthly", unit: "m3/sec",
+  });
+  const volume = fakeCandidate("/wbm/data_init/glaciers/volume_y.init", {
+    name: "Glacier volume, yearly", time_series: "yearly", unit: "m3",
+  });
+  const area = fakeCandidate("/wbm/data_init/glaciers/area_1km.init", {
+    name: "Glacier area fraction, 1 km",
+  });
+  const renamed = fakeCandidate("/wbm/data_init/irrigation/efficiency.init", {
+    name: "Irrigation efficiency",
+    disabled: "Its Code_Name (fao_irrEfficiency) differs from its file name, which WBM 23.9.0 refuses.",
+  });
+  const areaChoices = [area, renamed];
+  return {
+    code_version: "23.9.0",
+    groups: [
+      {
+        kind: "group",
+        key: "modules",
+        label: "Modules",
+        doc: null,
+        tier: "basic",
+        children: [
+          {
+            kind: "module",
+            key: "glaciated_area_runoff",
+            name: "Runoff from Glaciated Areas",
+            doc: "WBM reads rasterized glacier area and glacier runoff.",
+            tier: "basic",
+            path: "Glaciers",
+            state: "off",
+            switch_off: false,
+            switch_on: true,
+            switch_on_reason: null,
+            candidates: null,
+            children: [
+              fakeParamField("Glaciers.glMelt", {
+                key: "melt", label: "Glacier melt discharge", type: "dataset", required: true, candidates: [melt],
+                unit: "m3/s",
+              }),
+              fakeParamField("Glaciers.glArea", {
+                key: "area", label: "Glacier area fraction", type: "dataset", required: true, candidates: areaChoices,
+                unit: "fraction",
+              }),
+              fakeParamField("Glaciers.glVolume", {
+                key: "volume", label: "Glacier water volume", type: "dataset", required: false,
+                candidates: [volume], unit: "m3/pixel",
+              }),
+            ],
+          },
+          {
+            kind: "module",
+            key: "irrigated_crops",
+            name: "Irrigated crops",
+            doc: null,
+            tier: "basic",
+            path: "Irrigation",
+            state: "off",
+            switch_off: false,
+            switch_on: false,
+            switch_on_reason: "It needs a file, which cannot be chosen here yet: Crop parameter file (Irrigation.CropParFile).",
+            candidates: null,
+            children: [fakeParamField("Irrigation.ReturnCoeff", { label: "Return coefficient", editable: false })],
+          },
+          {
+            kind: "module",
+            key: "impervious_surface_runoff",
+            name: "Impervious surface runoff",
+            doc: null,
+            tier: "basic",
+            path: "Impervious",
+            state: "off",
+            switch_off: false,
+            switch_on: true,
+            switch_on_reason: null,
+            edit_as: "number",
+            candidates: [area, renamed],
+            children: [],
+          },
+          {
+            kind: "module",
+            key: "nitrogen",
+            name: "Nitrogen tracking",
+            doc: null,
+            tier: "basic",
+            path: "DIN",
+            state: "off",
+            switch_off: false,
+            switch_on: true,
+            switch_on_reason: null,
+            candidates: null,
+            children: [
+              fakeParamField("DIN.luSub", {
+                key: "lu_sub", label: "Developed land fraction", type: "dataset", required: true, edit_as: "number",
+              }),
+              fakeParamField("DIN.scale", {
+                key: "scale", label: "Loading scale", required: true, default: 2, min: 0,
               }),
             ],
           },

@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import copy
+import dataclasses
 import logging
 import math
 import posixpath
@@ -69,6 +70,8 @@ from app.services import (
     sbatch_refusal,
     slurm,
 )
+from app.wbm_init import cross_rules
+from app.wbm_init import tree as wbm_tree
 from app.wbm_init import validate as wbm_validate
 
 logger = logging.getLogger(__name__)
@@ -674,7 +677,9 @@ async def _checked_custom_params(
     refused key; 503 `init_unavailable` when the snapshot's init cannot be read, since
     nothing can be checked without it; 422 `model_code_version_missing` for a snapshot with
     no WBM version the tree knows. `variables` is the draft's output list: a module is not
-    switched off while it still holds an output that needs it."""
+    switched off while it still holds an output that needs it. A module the snapshot has off
+    is switched on with datasets of the draft's model input, which are read here only when
+    `custom_params` names such a module."""
     try:
         loaded = await model_parameters.load(snapshot, dataset_id)
     except model_parameters.Unavailable as exc:
@@ -686,7 +691,10 @@ async def _checked_custom_params(
             exc.message,
         )
     kept = wbm_validate.drop_unchanged(custom_params, loaded.resolved, loaded.values)
-    errors = wbm_validate.validate(kept, loaded.resolved, loaded.values, variables)
+    if wbm_tree.needs_choices(kept, loaded.resolved, loaded.values):
+        # a module the snapshot has off: only the draft's model input says what it can be given
+        loaded = await model_parameters.with_choices(snapshot, dataset_id, loaded)
+    errors = wbm_validate.validate(kept, loaded.resolved, loaded.values, variables, loaded.choices)
     if errors:
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -825,6 +833,34 @@ async def _refuse_dates_outside_aggregation(
             latest_start=violation.latest_start,
             earliest_end=violation.earliest_end,
         )
+
+
+async def _cross_rule_checks(job: JobDB, snapshot: dict) -> cross_rules.Checks | None:
+    """The tree's cross rules for the draft as stored (`app.wbm_init.cross_rules`), or None when
+    the snapshot's parameters cannot be read (no init, no WBM version the tree knows): nothing
+    can be judged then, which blocks nothing, like the run-date checks."""
+    try:
+        loaded = await model_parameters.load(snapshot, job.dataset_id)
+    except model_parameters.Unavailable:
+        return None
+    return await cross_rules.check(job.dataset_id, snapshot, loaded, job.parameters)
+
+
+async def _refuse_failed_cross_rules(job: JobDB, snapshot: dict) -> None:
+    """422 `cross_rules_failed` with one entry per error rule the draft fails, before the queue:
+    a dataset that ends early or a Msk output without its block passes WBM's one-step test and
+    stops the real run, after the wait and perhaps months of simulated time. A warning refuses
+    nothing, and neither does a file store that could not be read."""
+    checks = await _cross_rule_checks(job, snapshot)
+    if checks is None or not checks.errors:
+        return
+    raise _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "cross_rules_failed",
+        "This draft would stop when it runs, so it was not sent: "
+        + " ".join(f.message for f in checks.errors),
+        errors=[dataclasses.asdict(f) for f in checks.errors],
+    )
 
 
 _ANVIL_NOT_CONFIGURED = (
@@ -997,6 +1033,7 @@ async def submit_simulation(
             job.parameters.temporal_range_start,
             job.parameters.temporal_range_end,
         )
+        await _refuse_failed_cross_rules(job, snapshot)
 
         now = datetime.now(timezone.utc)
         sim_id = _generate_sim_id(now)

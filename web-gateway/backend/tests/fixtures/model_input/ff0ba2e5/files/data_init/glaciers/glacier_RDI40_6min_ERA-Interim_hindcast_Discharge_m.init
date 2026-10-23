@@ -1,0 +1,17 @@
+{
+Code_Name	=> 'glacier_RDI40_6min_ERA-Interim_hindcast_Discharge_m',
+Time_Series	=> 'monthly',
+Start_Date	=> '1980-01-00',
+End_Date	=> '2012-12-00',
+Name	=> ' Glacier Discharge, model (v.2; 6min) ERA-Interim hindcast, monthly',
+Var_Name	=> 'Discharge',
+Units	=> 'm3/sec',
+Var_Scale	=> 3.858e-07,
+Var_Offset	=> 0,
+Orig_Units	=> 'm3/month',
+Bands	=> 12,
+Processing	=> 'noScale',
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/glaciers/glacier_RDI40_6min__YEAR__m.nc;',
+citation	=> 'Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054.'
+}
