@@ -1,0 +1,18 @@
+{
+Area => 'Area',
+Capacity => 'Capacity',
+CatchArea => 'CatchArea',
+File => '/wbm/data/dams/HydConDams_Global_2021_v2.0.csv',
+ID => 'ID',
+IrrFrequency => '/wbm/data_init/irrigation/Merra_irrigationGross_Freq_dc.init',
+Lat => 'Lat',
+Lon => 'Lon',
+Purpose => 'Purpose',
+SkipLines => 0,
+StartYear => 'StartYear',
+Comment  => "Integration of select NID dams with GRanD v1.3 supplemented with large natural lakes from GLWD",
+Author  => "Morrison, Rachel and Zuidema, Shan",
+Citation => "Hydrologically Consistent Dams Database (version 2.0)",
+URL  => "https://doi.org/10.7910/DVN/5YBWWI",
+DOI  => "10.7910/DVN/5YBWWI"
+}

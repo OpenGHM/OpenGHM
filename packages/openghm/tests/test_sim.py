@@ -18,8 +18,9 @@ from openghm import Config, assets, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.types import SpoolPlan
+from openghm.wbm_init import Changes, InitEditor, to_python as w_to_python
 from openghm.sim import (
-    SubmitOptions, _set_perl_key, build_persim_init, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
+    SubmitOptions, build_persim_init, build_run, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
     list_simulations, find_simulation, resolve_job_id, read_sidecar,
     build_sacct_argv, parse_sacct, sacct_primary, build_scancel_argv,
     slurm_log_path, tail_lines, wbm_threads,
@@ -53,6 +54,7 @@ _METADATA = {
             "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
         },
         "modelInput": {"id": "2" * 64},
+        "modelCode": {"name": "wbm", "version": "23.9.0", "treeHash": "3" * 64},
     },
 }
 
@@ -137,22 +139,60 @@ def test_submit_staging_lists(tmp_path):
     assert built.staged_copies[0].dst == f"{base}/wbm_init"
 
 
-def test_persim_init_normalizes_paths_and_overrides(tmp_path):
+RUN_START, RUN_END = "MT_Code_Name.Run_Start", "MT_Code_Name.Run_End"
+CODE_VERSION = "23.9.0"
+
+
+def _changes(set=None, unset=None, version=CODE_VERSION) -> Changes:
+    return Changes(code_version=version, set=dict(set or {}), unset=list(unset or []))
+
+
+def _period(start=None, end=None) -> dict:
+    """The ``set`` of a changes file for a run period."""
+    return {**({RUN_START: start} if start else {}), **({RUN_END: end} if end else {})}
+
+
+def test_persim_init_normalizes_paths_and_applies_changes(tmp_path):
     snap = _make_snapshot(tmp_path)
     _ctx, built = build_submit(
         SubmitOptions(snapshot_dir=str(snap), simulation_id="sim-abc",
-                      run_end="2001-12-31", spinup_loops=2, output_vars="runoff"),
+                      changes=_changes({RUN_END: "2001-12-31", "Spinup.Loops": 2, "Output_vars": "runoff"})),
         _config(tmp_path),
     )
     init = _gen(built, "wbm_init/wbm_test.init").content
     assert "Output_dir => '/wbm/wbm_output/sim-abc'" in init  # was relative
     assert "spool_dir  => '/wbm/spool/'" in init              # was 'spool/'
     assert "Run_Start  => '2000-01-01'" in init               # untouched
-    assert "Run_End    => '2001-12-31'" in init               # overridden
-    assert "Output_vars => 'runoff'" in init                  # overridden
+    assert "Run_End    => '2001-12-31'" in init               # changed
+    assert "Output_vars => 'runoff'" in init                  # changed
     assert "Loops => 2" in init
-    # \bStart\b must not have clobbered Run_Start
-    assert "Start => '2000-01-01'" in init
+    # Spinup.Start is a different key from MT_Code_Name.Run_Start, and neither was touched
+    assert "Start => '2000-01-01'" in init and init.count("2000-01-01") == 2
+
+
+def test_a_run_without_changes_has_only_its_output_paths_normalized():
+    out = build_persim_init(_INIT_TEMPLATE, "sim9", SubmitOptions(simulation_id="sim9"))
+    assert out == (_INIT_TEMPLATE
+                   .replace("'wbm/wbm_output/WBM_test'", "'/wbm/wbm_output/sim9'")
+                   .replace("'spool/'", "'/wbm/spool/'"))
+
+
+def test_a_changes_file_cannot_move_the_output_dir_or_the_spool():
+    out = build_persim_init(_INIT_TEMPLATE, "sim9", SubmitOptions(simulation_id="sim9", changes=_changes(
+        {"MT_Code_Name.Output_dir": "/elsewhere", "MT_Code_Name.spool_dir": "/else/"})))
+    assert "Output_dir => '/wbm/wbm_output/sim9'" in out and "spool_dir  => '/wbm/spool/'" in out
+    assert "/else" not in out
+
+
+def test_an_init_with_a_top_level_output_dir_is_normalized_too():
+    out = build_persim_init("{\n  Output_dir => 'rel/path',\n  spool_dir => 'x',\n}\n", "sim9",
+                            SubmitOptions(simulation_id="sim9"))
+    assert out == "{\n  Output_dir => '/wbm/wbm_output/sim9',\n  spool_dir => '/wbm/spool/',\n}\n"
+
+
+def test_an_init_with_no_output_dir_is_refused():
+    with pytest.raises(OpenghmError, match="Output_dir"):
+        build_persim_init("{ MT_Code_Name => { Run_End => '2000-12-31' } }", "sim9", SubmitOptions(simulation_id="sim9"))
 
 
 # the v2 wbm_test.init's MT_Code_Name block: Run_End but no Run_Start, tab-indented
@@ -168,94 +208,96 @@ _V2_INIT = (
 )
 
 
-# the same block with 'day' files: every day starts a file, so any --run-start goes
+# the same block with 'day' files: every day starts a file, so any Run_Start goes
 _V2_FREE = _V2_INIT.replace("'year'", "'day'")
 # and without File_Size at all: WBM's default is one file per year
 _V2_NO_FILE_SIZE = _V2_INIT.replace("          File_Size\t=> 'year',\n", "")
 
 
-def _build(template, **kw):
-    return build_persim_init(template, "sim1", SubmitOptions(snapshot_dir="x", simulation_id="sim1", **kw))
+def _build(template, set=None, unset=None):
+    changes = _changes(set, unset) if (set or unset) else None
+    return build_persim_init(template, "sim1", SubmitOptions(snapshot_dir="x", simulation_id="sim1", changes=changes))
 
 
-def test_run_start_inserted_before_run_end_when_init_has_none():
-    out = _build(_V2_FREE, run_start="2000-03-01")
+def test_run_start_is_added_at_the_end_of_the_block_when_init_has_none():
+    out = _build(_V2_FREE, _period("2000-03-01"))
     assert (
         "          Output_dir\t=> '/wbm/wbm_output/sim1',\n"
+        "          Run_End\t=> '2001-12-31',\n"
         "          Run_Start => '2000-03-01',\n"
-        "          Run_End\t=> '2001-12-31'\n"
+        "        },\n"
     ) in out
     assert out.count("Run_Start") == 1 and out.count("Run_End") == 1
-    # the inserted key is found by the same pattern: a second replace works
-    again = _set_perl_key(out, "Run_Start", "1999-01-01", quote=True, required=True, label="x")
+    # the added key is found by the same path: a second change replaces it
+    again = _build(out, _period("1999-01-01"))
     assert "Run_Start => '1999-01-01'," in again and "2000-03-01" not in again
 
 
 def test_run_start_replaced_in_place_when_present():
     out = _build(_V2_FREE.replace("          Run_End", "          Run_Start => '2000-01-01',\n          Run_End"),
-                 run_start="2000-03-01")
+                 _period("2000-03-01"))
     assert out.count("Run_Start") == 1
     assert "Run_Start => '2000-03-01'," in out
 
 
 def test_run_start_with_both_keys_replaces_and_leaves_run_end():
     # no File_Size, so the year rule applies: start on January 1
-    out = _build(_INIT_TEMPLATE, run_start="2000-01-01")
+    out = _build(_INIT_TEMPLATE, _period("2000-01-01"))
     assert "Run_Start  => '2000-01-01'," in out
     assert "Run_End    => '2000-12-31'," in out
     assert out.count("Run_Start") == 1
 
 
 def test_run_start_year_files_accepts_jan_1():
-    out = _build(_V2_INIT, run_start="2000-01-01")
+    out = _build(_V2_INIT, _period("2000-01-01"))
     assert "Run_Start => '2000-01-01'," in out
 
 
 def test_run_start_year_files_rejects_mid_year_and_suggests_jan_1():
     with pytest.raises(OpenghmError) as e:
-        _build(_V2_INIT, run_start="2000-03-01")
+        _build(_V2_INIT, _period("2000-03-01"))
     msg = str(e.value)
-    assert msg.startswith("--run-start 2000-03-01:")
+    assert msg.startswith("MT_Code_Name.Run_Start 2000-03-01:")
     assert "File_Size 'year'" in msg and "Use 2000-01-01." in msg
 
 
 def test_run_start_year_files_rejects_jan_2():
     with pytest.raises(OpenghmError, match="Use 2000-01-01"):
-        _build(_V2_INIT, run_start="2000-01-02")
+        _build(_V2_INIT, _period("2000-01-02"))
 
 
 _MONTH_INIT = _V2_INIT.replace("'year'", "'month'")
 
 
 def test_run_start_month_files_accepts_the_1st():
-    out = _build(_MONTH_INIT, run_start="2000-03-01")
+    out = _build(_MONTH_INIT, _period("2000-03-01"))
     assert "Run_Start => '2000-03-01'," in out
 
 
 def test_run_start_month_files_rejects_the_15th_and_suggests_the_1st():
     with pytest.raises(OpenghmError) as e:
-        _build(_MONTH_INIT, run_start="2000-03-15")
+        _build(_MONTH_INIT, _period("2000-03-15"))
     msg = str(e.value)
     assert "File_Size 'month'" in msg and "one output file per month" in msg and "Use 2000-03-01." in msg
 
 
 def test_run_start_unchecked_with_day_files_or_another_value():
-    assert "Run_Start => '2000-03-15'," in _build(_V2_FREE, run_start="2000-03-15")
+    assert "Run_Start => '2000-03-15'," in _build(_V2_FREE, _period("2000-03-15"))
     other = _V2_INIT.replace("'year'", "'decade'")
-    assert "Run_Start => '2000-03-15'," in _build(other, run_start="2000-03-15")
+    assert "Run_Start => '2000-03-15'," in _build(other, _period("2000-03-15"))
 
 
 def test_run_start_without_file_size_is_the_year_rule():
     # Code-read (WBM.pm:495, set_default(File_Size, 'year')), not a finished v1 run.
-    assert "Run_Start => '2000-01-01'," in _build(_V2_NO_FILE_SIZE, run_start="2000-01-01")
+    assert "Run_Start => '2000-01-01'," in _build(_V2_NO_FILE_SIZE, _period("2000-01-01"))
     with pytest.raises(OpenghmError) as e:
-        _build(_V2_NO_FILE_SIZE, run_start="2000-03-01")
+        _build(_V2_NO_FILE_SIZE, _period("2000-03-01"))
     msg = str(e.value)
-    assert msg.startswith("--run-start 2000-03-01:")
+    assert msg.startswith("MT_Code_Name.Run_Start 2000-03-01:")
     assert "sets no File_Size" in msg and "one output file per year by default" in msg
     assert "Use 2000-01-01." in msg
     with pytest.raises(OpenghmError, match="Use 2000-01-01"):
-        _build(_V2_NO_FILE_SIZE, run_start="2000-01-02")
+        _build(_V2_NO_FILE_SIZE, _period("2000-01-02"))
 
 
 def test_run_start_without_file_size_but_with_time_series_is_unchecked():
@@ -264,72 +306,79 @@ def test_run_start_without_file_size_but_with_time_series_is_unchecked():
         tpl = _V2_NO_FILE_SIZE.replace(
             "          MT_ID", f"          Time_Series\t=> '{series}',\n          MT_ID"
         )
-        assert "Run_Start => '2000-03-15'," in _build(tpl, run_start="2000-03-15"), series
+        assert "Run_Start => '2000-03-15'," in _build(tpl, _period("2000-03-15")), series
 
 
 def test_run_start_with_an_unreadable_file_size_value_is_unchecked():
     # the key is there, so it is not "absent": only a quoted value is read
     tpl = _V2_INIT.replace("'year'", "$size")
-    assert "Run_Start => '2000-03-15'," in _build(tpl, run_start="2000-03-15")
+    assert "Run_Start => '2000-03-15'," in _build(tpl, _period("2000-03-15"))
 
 
 def test_run_start_check_reads_double_quoted_and_spaced_file_size():
     tpl = _V2_INIT.replace("File_Size\t=> 'year'", 'File_Size => "year"')
     with pytest.raises(OpenghmError, match="Use 2000-01-01"):
-        _build(tpl, run_start="2000-03-01")
+        _build(tpl, _period("2000-03-01"))
 
 
-def test_run_start_check_only_applies_when_run_start_given():
-    _build(_V2_INIT, run_end="2001-06-30")  # File_Size 'year', no --run-start: fine
+def test_run_start_check_only_applies_when_the_changes_set_run_start():
+    _build(_V2_INIT, _period(end="2001-06-30"))  # File_Size 'year', no Run_Start in the changes: fine
+    _build(_V2_INIT.replace("Run_End", "Run_Start => '2000-03-01',\n          Run_End"),
+           {"Output_vars": "runoff"})            # a start the init has and the changes leave alone: fine
 
 
-def test_run_start_without_either_key_still_raises():
-    with pytest.raises(OpenghmError, match="--run-start: key 'Run_Start' not found"):
-        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_start="2000-01-01")
+def test_run_start_check_reads_the_start_the_changes_give_for_the_whole_block():
+    with pytest.raises(OpenghmError, match="Use 2000-01-01"):
+        _build(_V2_INIT, {"MT_Code_Name": {"File_Size": "year", "Output_dir": "x", "Run_Start": "2000-03-01"}})
 
 
-def test_run_end_without_either_key_still_raises():
-    with pytest.raises(OpenghmError, match="--run-end: key 'Run_End' not found"):
-        _build("{ MT_Code_Name => { Output_dir => 'x' } }", run_end="2001-12-31")
+def test_run_start_creates_the_block_when_the_init_has_none():
+    out = _build("{ MT_Code_Name => { Output_dir => 'x' } }", _period("2000-01-01"))
+    assert w_to_python(out)["MT_Code_Name"] == {"Output_dir": "/wbm/wbm_output/sim1", "Run_Start": "2000-01-01"}
+    out = _build("{ Output_dir => 'x' }", _period(end="2001-12-31"))
+    assert w_to_python(out)["MT_Code_Name"] == {"Run_End": "2001-12-31"}
 
 
-def test_run_end_inserted_after_run_start_when_init_has_none():
+def test_run_end_is_added_after_the_last_entry_when_init_has_none():
     # Run_Start is the last entry, so it has no comma of its own to begin with
     tpl = "{\n  MT_Code_Name => {\n\tOutput_dir => 'x',\n\tRun_Start => '2000-01-01'\n  },\n}\n"
-    out = _build(tpl, run_end="2001-12-31")
+    out = _build(tpl, _period(end="2001-12-31"))
     assert "\tRun_Start => '2000-01-01',\n\tRun_End => '2001-12-31',\n  }," in out
     # and when Run_Start already has its comma, none is doubled
-    out = _build(tpl.replace("'2000-01-01'\n", "'2000-01-01',\n\tOther => 1\n"), run_end="2001-12-31")
-    assert "'2000-01-01',\n\tRun_End => '2001-12-31',\n\tOther => 1\n" in out
+    out = _build(tpl.replace("'2000-01-01'\n", "'2000-01-01',\n\tOther => 1\n"), _period(end="2001-12-31"))
+    assert "'2000-01-01',\n\tOther => 1,\n\tRun_End => '2001-12-31',\n  }," in out
 
 
 def test_insert_keeps_tab_indentation():
     tpl = "{\n\tMT_Code_Name => {\n\t\tOutput_dir => 'x',\n\t\tRun_End => '2001-12-31'\n\t},\n}\n"
-    out = _build(tpl, run_start="2000-01-01")
-    assert "\t\tRun_Start => '2000-01-01',\n\t\tRun_End => '2001-12-31'\n" in out
+    out = _build(tpl, _period("2000-01-01"))
+    assert "\t\tRun_End => '2001-12-31',\n\t\tRun_Start => '2000-01-01',\n\t}," in out
 
 
 def test_insert_into_one_line_hash_stays_on_the_line():
     tpl = "{ MT_Code_Name => { Output_dir => 'x', Run_End => '2001-12-31' } }\n"
-    out = _build(tpl, run_start="2000-01-01")
-    assert "Run_Start => '2000-01-01', Run_End => '2001-12-31' }" in out
+    out = _build(tpl, _period("2000-01-01"))
+    assert "Run_End => '2001-12-31', Run_Start => '2000-01-01' }" in out
 
 
-def test_start_key_lookup_does_not_match_run_start_for_insert():
-    # \bStart\b must not see Run_Start, so a Spinup-less init with only Run_Start still raises
+def test_spinup_start_does_not_touch_run_start():
+    # the old regex for Start found the first Start there was; a key path is exact
     tpl = "{ MT_Code_Name => { Output_dir => 'x', Run_Start => '2000-01-01' } }\n"
-    with pytest.raises(OpenghmError, match="--spinup-start"):
-        _build(tpl, spinup_start="1999-01-01")
+    out = _build(tpl, {"Spinup.Start": "1999-01-01"})
+    assert w_to_python(out) == {
+        "MT_Code_Name": {"Output_dir": "/wbm/wbm_output/sim1", "Run_Start": "2000-01-01"},
+        "Spinup": {"Start": "1999-01-01"},
+    }
 
 
 @pytest.mark.skipif(shutil.which("perl") is None, reason="perl not installed")
-@pytest.mark.parametrize("kw,key,expected", [
-    ({"run_start": "2000-03-01"}, "Run_Start", "2000-03-01"),
-    ({"run_end": "2002-06-30"}, "Run_End", "2002-06-30"),
+@pytest.mark.parametrize("set_,key,expected", [
+    (_period("2000-03-01"), "Run_Start", "2000-03-01"),
+    (_period(end="2002-06-30"), "Run_End", "2002-06-30"),
 ])
-def test_inserted_init_is_valid_perl(kw, key, expected):
-    tpl = _V2_FREE if "run_start" in kw else _V2_FREE.replace("Run_End\t=> '2001-12-31'", "Run_Start => '2000-01-01'")
-    out = _build(tpl, **kw)
+def test_changed_init_is_valid_perl(set_, key, expected):
+    tpl = _V2_FREE if RUN_START in set_ else _V2_FREE.replace("Run_End\t=> '2001-12-31'", "Run_Start => '2000-01-01'")
+    out = _build(tpl, set_)
     res = subprocess.run(
         ["perl", "-e", f"my $h = do {{ local $/; eval <STDIN> }}; die $@ if $@; print $h->{{MT_Code_Name}}{{{key}}}"],
         input=out, capture_output=True, text=True,
@@ -861,7 +910,7 @@ _V2_AGGREGATED = (
 
 def test_the_run_that_failed_on_anvil_is_refused_before_staging():
     with pytest.raises(OpenghmError) as exc:
-        _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2000-12-31")
+        _build(_V2_AGGREGATED, _period("2000-01-01", "2000-12-31"))
     msg = str(exc.value)
     assert "starting in 2001" in msg and "ends on 2000-12-31" in msg
     assert "on or after 2001-12-31" in msg
@@ -870,27 +919,27 @@ def test_the_run_that_failed_on_anvil_is_refused_before_staging():
 
 def test_a_late_start_is_refused_with_the_latest_start():
     with pytest.raises(OpenghmError, match="starts on 2002-01-01.*on or before 2001-12-31"):
-        _build(_V2_AGGREGATED, run_start="2002-01-01")
+        _build(_V2_AGGREGATED, _period("2002-01-01"))
 
 
 def test_dates_that_contain_the_aggregation_year_are_accepted():
-    _build(_V2_AGGREGATED, run_start="2001-01-01", run_end="2001-12-31")
-    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2001-12-31")
+    _build(_V2_AGGREGATED, _period("2001-01-01", "2001-12-31"))
+    _build(_V2_AGGREGATED, _period("2000-01-01", "2001-12-31"))
     # the 360-day calendar's last day: left to WBM, which knows the calendar
-    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2001-12-30")
+    _build(_V2_AGGREGATED, _period("2000-01-01", "2001-12-30"))
     # past the year: its last complete year is still 2001
-    _build(_V2_AGGREGATED, run_start="2000-01-01", run_end="2002-06-30")
+    _build(_V2_AGGREGATED, _period("2000-01-01", "2002-06-30"))
 
 
-def test_the_published_run_is_not_rechecked_without_an_override():
-    # Same init, a start and an end the snapshot never changed: no flag, no check.
+def test_the_published_run_is_not_rechecked_without_a_change_of_its_dates():
+    # Same init, a start and an end the snapshot never changed: no changes, no check.
     _build(_V2_AGGREGATED)
-    _build(_V2_AGGREGATED.replace("Spinup =>", "Output_vars => 'x',\nSpinup =>"), output_vars="runoff")
+    _build(_V2_AGGREGATED.replace("Spinup =>", "Output_vars => 'x',\nSpinup =>"), {"Output_vars": "runoff"})
 
 
-def test_a_start_override_is_checked_against_the_inits_own_end():
-    # --run-start alone: the end is the init's 2001-12-31, so only the start can fail.
-    _build(_V2_AGGREGATED, run_start="2001-01-01")
+def test_a_start_change_is_checked_against_the_inits_own_end():
+    # Run_Start alone: the end is the init's 2001-12-31, so only the start can fail.
+    _build(_V2_AGGREGATED, _period("2001-01-01"))
 
 
 @pytest.mark.parametrize(
@@ -907,7 +956,7 @@ def test_no_aggregation_window_no_rule(pp):
     tpl = _V2_AGGREGATED.replace(
         "          TA_multi_year_start\t=> 2001,\n          TA_multi_year_timestep\t=> 2,\n", pp + "\n"
     )
-    _build(tpl, run_start="2000-01-01", run_end="2000-12-31")
+    _build(tpl, _period("2000-01-01", "2000-12-31"))
 
 
 def test_quoted_aggregation_year_and_a_run_start_in_the_init_are_read():
@@ -915,12 +964,12 @@ def test_quoted_aggregation_year_and_a_run_start_in_the_init_are_read():
         "Run_End\t=> '2001-12-31'", "Run_Start => '2000-03-01',\n          Run_End\t=> '2001-12-31'"
     )
     with pytest.raises(OpenghmError, match="ends on 2000-12-31"):
-        _build(tpl, run_end="2000-12-31")
+        _build(tpl, _period(end="2000-12-31"))
 
 
 def test_an_init_with_no_run_end_is_left_alone():
     tpl = _V2_AGGREGATED.replace("          Run_End\t=> '2001-12-31'\n", "          Run_Start => '2000-01-01'\n")
-    _build(tpl, run_start="2000-01-01")  # WBM would take the forcing's last day: unknown here
+    _build(tpl, _period("2000-01-01"))  # WBM would take the forcing's last day: unknown here
 
 
 # ── post-processing: PostProcessing => { Run => 1 } ───────────────────────────
@@ -930,6 +979,12 @@ def test_an_init_with_no_run_end_is_left_alone():
 # openghm/post_processing.py). The inits are real ones, from tests/fixtures/post_processing/.
 
 _PP_FIXTURES = Path(__file__).parent / "fixtures" / "post_processing"
+#: The changes file of a post-processing choice: ``PostProcessing.Run`` is 0 for standard, 1 for climatology.
+_PP_RUN = {"standard": 0, "climatology": 1}
+
+
+def _pp_changes(choice: str) -> Changes:
+    return _changes({"PostProcessing.Run": _PP_RUN[choice]})
 
 
 def _pp_snapshot(tmp_path: Path, init: str) -> Path:
@@ -982,7 +1037,7 @@ def test_a_post_processing_run_forks_as_many_as_the_job_has_cores(tmp_path, init
     template = (_PP_FIXTURES / init).read_text()
     for kw, cores in (({}, 16), ({"cores": 52}, 52)):
         built, staged, side = _staged_init(
-            tmp_path, init, **kw, **({"post_processing": "climatology"} if init != "fc66a2cd_wbm_SHORT.init" else {}))
+            tmp_path, init, **kw, **({"changes": _pp_changes("climatology")} if init != "fc66a2cd_wbm_SHORT.init" else {}))
         assert block_value(staged, "Forks") == str(cores)
         assert f"#SBATCH --cpus-per-task={cores}" in _gen(built, ".sbatch").content
         assert side["post_processing"]["forks"] == cores and side["post_processing"]["forks_value"] == original
@@ -1001,7 +1056,8 @@ def test_a_run_without_post_processing_keeps_its_forks_byte_for_byte(tmp_path):
     # asked off on an init that asks for it: Run => 0, Forks as the init has it
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard"), _config(tmp_path))
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes("standard")),
+        _config(tmp_path))
     assert block_value(_gen(built, "wbm_init/wbm_test.init").content, "Forks") == "8"
 
 
@@ -1117,25 +1173,25 @@ def test_an_init_without_post_processing_is_unchanged(tmp_path):
     assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
 
 
-def test_run_value_overrides_do_not_disturb_the_held_run(tmp_path):
-    """--run-start/--run-end edit Run_Start/Run_End; the PostProcessing block's Run is its own."""
+def test_run_value_changes_do_not_disturb_the_held_run(tmp_path):
+    """Run_Start/Run_End are edited as MT_Code_Name keys; the PostProcessing block's Run is its own."""
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     _ctx, built = build_submit(
-        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", run_start="2000-01-01", run_end="2000-12-31"),
+        SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_changes(_period("2000-01-01", "2000-12-31"))),
         _config(tmp_path))
     staged = _gen(built, "wbm_init/wbm_test.init").content
     assert "Run_End    => '2000-12-31'" in staged and "Run_Start  => '2000-01-01'" in staged
     assert json.loads(_gen(built, "simulation.json").content)["post_processing"]["run_value"] == "1"
 
 
-# ── --post-processing standard|climatology ─────────────────────────────────────
+# ── PostProcessing.Run in a changes file: 0 standard, 1 climatology ────────────
 
 
 def test_post_processing_climatology_asks_for_a_run_the_init_did_not(tmp_path):
     """fc66a2cd's wbm_test.init says Run => 0: staged held at 0, the sidecar records what was asked."""
     from openghm.post_processing import requested_run_value
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_test.init")
-    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="climatology")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes("climatology"))
     _ctx, built = build_submit(opts, _config(tmp_path))
     assert requested_run_value(_gen(built, "wbm_init/wbm_test.init").content) == "0"
     pp = json.loads(_gen(built, "simulation.json").content)["post_processing"]
@@ -1183,7 +1239,7 @@ def test_a_walltime_given_is_used_as_written_with_post_processing(tmp_path, caps
 
 def test_a_run_that_does_not_post_process_ignores_the_post_processing_time(tmp_path, capsys):
     snap = _pp_snapshot_with_time(tmp_path, "1:30:00")
-    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes("standard"))
     _ctx, built = build_submit(opts, _config(tmp_path))
     assert "#SBATCH --time=15:00" in _gen(built, ".sbatch").content
     assert capsys.readouterr().err == ""
@@ -1195,9 +1251,16 @@ def test_post_processing_climatology_adds_the_time_the_init_did_not_ask_for(tmp_
         (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text(encoding="utf-8"))
     plain = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))[1]
     assert "#SBATCH --time=15:00" in _gen(plain, ".sbatch").content
-    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="climatology")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes("climatology"))
     built = build_submit(opts, _config(tmp_path))[1]
     assert "#SBATCH --time=2:15:00" in _gen(built, ".sbatch").content
+
+
+def _spinup_converted(text: str) -> str:
+    """``text`` as a changes file leaves it before it edits anything: flat Spinup_* keys made a block."""
+    ed = InitEditor(text)
+    ed.convert_flat_spinup()
+    return ed.text
 
 
 def test_post_processing_standard_turns_a_requested_run_off(tmp_path):
@@ -1205,38 +1268,42 @@ def test_post_processing_standard_turns_a_requested_run_off(tmp_path):
     from openghm.post_processing import block_value, requested_run_value, set_block_value, set_run_value
     snap = _pp_snapshot(tmp_path, "fc66a2cd_wbm_SHORT.init")
     template = (snap / "wbm_init" / "wbm_test.init").read_text()
-    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing="standard")
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes("standard"))
     _ctx, built = build_submit(opts, _config(tmp_path))
     staged = _gen(built, "wbm_init/wbm_test.init").content
     assert requested_run_value(staged) == "0"
-    assert staged == set_run_value(build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1")), "0")
+    # the SHORT init has flat Spinup_* keys, which a changes file converts; nothing else differs
+    plain = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1"))
+    assert staged == set_run_value(_spinup_converted(plain), "0")
     assert "post_processing" not in json.loads(_gen(built, "simulation.json").content)
     body = _gen(built, ".sbatch").content
     assert "rc=" not in body and "post-process" not in body
 
 
-def test_post_processing_overrides_only_the_blocks_run_value():
+def test_post_processing_changes_only_the_blocks_run_value():
     from openghm.post_processing import requested_run_value
     template = (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text()
     plain = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1"))
-    out = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="climatology"))
+    out = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", changes=_pp_changes("climatology")))
     assert requested_run_value(out) == "1" and requested_run_value(plain) == "0"
     assert out.replace("Run\t\t=> 1", "Run\t\t=> 0") == plain
 
 
-def test_without_the_post_processing_flag_the_init_is_byte_for_byte_what_it_was():
+def test_without_changes_the_init_is_byte_for_byte_what_it_was():
     for init in ("fc66a2cd_wbm_test.init", "fc66a2cd_wbm_SHORT.init"):
         template = (_PP_FIXTURES / init).read_text()
         a = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1"))
-        b = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing=None))
+        b = build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", changes=_changes()))
         assert a == b
+        # normalizing the paths is all that was done
+        assert a == build_persim_init(a, "sim1", SubmitOptions(simulation_id="sim1"))
 
 
 @pytest.mark.parametrize("choice", ["standard", "climatology"])
 def test_post_processing_is_refused_on_an_init_without_a_block(tmp_path, choice):
     snap = _make_snapshot(tmp_path)         # the shared _INIT_TEMPLATE has no PostProcessing block
-    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", post_processing=choice)
-    with pytest.raises(OpenghmError, match="no PostProcessing block with a Run key"):
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_pp_changes(choice))
+    with pytest.raises(OpenghmError, match="PostProcessing.Run: this init has no PostProcessing block with a Run key"):
         build_submit(opts, _config(tmp_path))
 
 
@@ -1244,10 +1311,75 @@ def test_post_processing_is_refused_on_a_block_without_a_run_key():
     template = "{\n  MT_Code_Name => { Output_dir => 'x', Run_Start => '2000-01-01' },\n" \
                "  PostProcessing => { Polygon_Aggregation => , Var_list => 'a b' },\n}\n"
     with pytest.raises(OpenghmError, match="no PostProcessing block with a Run key"):
-        build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="climatology"))
+        build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", changes=_pp_changes("climatology")))
 
 
-def test_post_processing_rejects_a_value_that_is_not_a_choice():
+def test_post_processing_run_that_is_not_a_number_or_string_is_refused():
     template = (_PP_FIXTURES / "fc66a2cd_wbm_test.init").read_text()
-    with pytest.raises(OpenghmError, match="standard, climatology"):
-        build_persim_init(template, "sim1", SubmitOptions(simulation_id="sim1", post_processing="daily"))
+    with pytest.raises(OpenghmError, match="boolean"):
+        build_persim_init(template, "sim1", SubmitOptions(
+            simulation_id="sim1", changes=_changes({"PostProcessing.Run": True})))
+
+
+# ── --changes: the snapshot's WBM version, and what simulation.json records ───
+
+
+def test_the_changes_are_recorded_in_simulation_json(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    changes = _changes({RUN_END: "2001-12-31", "wbmParam": {"alpha": 3}}, ["Comment"])
+    _ctx, built = build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=changes),
+                               _config(tmp_path))
+    assert json.loads(_gen(built, "simulation.json").content)["changes"] == {
+        "code_version": "23.9.0", "set": {RUN_END: "2001-12-31", "wbmParam": {"alpha": 3}}, "unset": ["Comment"]}
+    _ctx, built = build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim2", changes=changes),
+                            _config(tmp_path))
+    assert json.loads(_gen(built, "simulation.json").content)["changes"]["set"][RUN_END] == "2001-12-31"
+
+
+def test_a_run_without_changes_records_none(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    for build in (build_submit, build_run):
+        _ctx, built = build(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+        assert "changes" not in json.loads(_gen(built, "simulation.json").content)
+
+
+def test_changes_for_another_wbm_version_are_refused_before_anything_is_staged(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1",
+                         changes=_changes({RUN_END: "2001-12-31"}, version="22.1.1"))
+    with pytest.raises(OpenghmError, match=r"code_version '22\.1\.1'.*'23\.9\.0'"):
+        build_submit(opts, _config(tmp_path))
+    with pytest.raises(OpenghmError, match="code_version"):
+        build_run(opts, _config(tmp_path))
+    assert not (tmp_path / "out").exists()
+
+
+def test_changes_are_refused_on_a_snapshot_with_no_model_code_version(tmp_path):
+    md = json.loads(json.dumps(_METADATA))
+    del md["uses"]["modelCode"]
+    snap = _make_snapshot(tmp_path, metadata=md)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_changes({RUN_END: "2001-12-31"}))
+    with pytest.raises(OpenghmError, match="uses.modelCode.version is missing"):
+        build_submit(opts, _config(tmp_path))
+    # a run with no changes does not need it
+    build_submit(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path))
+
+
+def test_a_key_fatal_for_the_snapshots_version_is_refused_by_the_run(tmp_path):
+    md = json.loads(json.dumps(_METADATA))
+    md["uses"]["modelCode"]["version"] = "22.1.1"
+    snap = _make_snapshot(tmp_path, metadata=md)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1",
+                         changes=_changes({"Spinup.Save_Vars": 0}, version="22.1.1"))
+    with pytest.raises(OpenghmError, match="Spinup.Save_Vars"):
+        build_submit(opts, _config(tmp_path))
+    other = tmp_path / "b"                                     # on a 23.9.0 snapshot it is fine
+    build_submit(SubmitOptions(snapshot_dir=str(_make_snapshot(other)), simulation_id="sim1",
+                               changes=_changes({"Spinup.Save_Vars": 0})), _config(other))
+
+
+def test_a_changes_file_with_a_flat_spinup_key_is_refused_by_the_run(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_changes({"Spinup_Start": "2000-01-01"}))
+    with pytest.raises(OpenghmError, match="Spinup_Start"):
+        build_submit(opts, _config(tmp_path))

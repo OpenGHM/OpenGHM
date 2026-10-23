@@ -1,0 +1,16 @@
+{
+Code_Name	=> 'fao_irrEfficiency',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name	=> 'Irrigation efficiency ',
+Var_Name	=> 'IrrEfficiency',
+Units	=> 'fraction',
+Var_Scale	=> '',
+Var_Offset	=> '',
+Orig_Units	=> 'fraction',
+Bands	=> 1,
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/irrigation/Global_Crops_IrrEfficiencyGlobalExtent_30min.nc;',
+citation	=> 'Döll, P., and Siebert, S., Global modeling of irrigation water requirements, Water Resour. Res., 38( 4), doi:10.1029/2001WR000355, 2002.'
+}

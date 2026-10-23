@@ -161,7 +161,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
 | `openghm sim submit [PATH]` | `sbatch` + `singularity` WBM run | snapshot folder (default cwd) w/ `metadata.json`; split-mount; `--spool cache\|fresh` (default `cache`); writes `simulation.json` |
-| `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, the `sim run` init overrides) |
+| `openghm spool variant [PATH]` | `perl` in the pinned image | print a snapshot's spool variant and what it is made of, as JSON (`--init`, `--changes`) |
 | `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`); `--all` deletes every unit no running simulation holds, whatever the quota says |
 | `openghm spool status [--json]` | `myquota` | print the scratch quota (files and bytes) and what the spool cache holds per variant, with the unexpired leases; deletes nothing |
 | `openghm output inventory <work dir>\|--snapshot <id>` | h5py (extra `output`) | describe a run's WBM output: the files and years that exist, each variable with its units and display settings, the grid; see [Reading output](#reading-output-openghm-output) |
@@ -473,6 +473,65 @@ the model input the snapshot links (`uses.modelInput.id`), found at
 `--dry-run` prints the plan without either. `simulation.json` records `model_input`
 and `model_input_path`.
 
+### Changes file (`--changes`)
+
+`sim run`, `sim submit` and `spool variant` take `--changes PATH`, a JSON file of edits to the
+snapshot's init (ADR 0038). It names init key paths, names joined by dots, one per nested block
+(`MT_Code_Name.Run_End`):
+
+```json
+{
+  "code_version": "23.9.0",
+  "set": {
+    "MT_Code_Name.Run_End": "2005-12-31",
+    "Output_vars": "runoff discharge",
+    "PostProcessing.Run": 1,
+    "wbmParam": { "alpha": 3 }
+  },
+  "unset": ["Irrigation.irrAreaGrwth"]
+}
+```
+
+- `code_version` (required) must equal the snapshot's `uses.modelCode.version`. A snapshot with no
+  `uses.modelCode.version` refuses any changes file. `set` and `unset` are optional; any other
+  top-level field is an error.
+- `set` maps a key path to a string, a number, or an object, which is written as a block. A missing
+  key, and any block on the way to it, is created. Setting a key that exists replaces its value (an
+  object replaces the whole block). `null`, `true`/`false` and arrays are errors.
+- `unset` lists key paths to remove; a key that is not there is left alone.
+- The run applies `unset` first, then `set` in the order written.
+
+**The editor** (`openghm/wbm_init.py`) reads the init as WBM's `read_init` does (a Perl hash:
+comments, single and double quotes, barewords, `=> ,` as `''`, doubled and trailing commas) and edits
+the text in place: every byte it does not change stays as it was, and a new key is added at the end of
+its block with the indentation of the block's last entry. Values are written by fixed rules:
+
+- a string is a single-quoted literal with `\` and `'` escaped;
+- a number is written with a leading digit (`0.5`, never `.5`);
+- an object is a block, one entry per line;
+- flat top-level `Spinup_Start`, `Spinup_End`, `Spinup_Loops` and `spinup_state_ID` (both WBM
+  versions stop on them) are first turned into one `Spinup` block, where the first of them was.
+
+A key path whose parent is a non-empty string is an error (`Routing.velocity` when `Routing =>
+'LRR'`: write the whole `Routing` block as an object), and one whose parent is a block file (a path
+with a `/`) is an error too: block files are not edited. An empty parent (`Irrigation => ''`) becomes
+the block. `Output_dir` and `spool_dir` are always set to the run's own after the changes, so a changes
+file cannot move them.
+
+**Checks.** Before anything is staged, a changes file is refused, naming the key, for: a malformed key
+path; a `code_version` that is not the snapshot's; a non-ASCII character in a key or a string value;
+a value that is not a string, a number or an object; a key fatal for WBM, on both versions
+(`FreeWaterEvap`, `MT_relHumidity`, a top-level `spinup_*`) and on 22.1.1 (`Spinup.Save_Vars`, `PET`
+as a block, a `Time_Series` with `[`). Whether a value suits the model is not checked. Three checks run
+on the edited init, only when the changes touch their keys: a changed `MT_Code_Name.Run_Start` must
+start on the first day of an output file; a changed `Run_Start` or `Run_End` must suit a multi-year
+`PostProcessing` aggregation; and `PostProcessing.Run` needs an init that has a `PostProcessing` block
+with a `Run` key.
+
+The applied file is recorded as `changes` in the run's `simulation.json` (absent when there was none).
+The seven per-key options this replaces (`--run-start`, `--run-end`, `--output-vars`, `--spinup-start`,
+`--spinup-end`, `--spinup-loops`, `--post-processing`) are removed.
+
 **Spool** (`--spool`), what WBM reads in place of rebuilding a forcing day:
 
 - `cache` (the default): the run's own `output_base/<id>/spool`, read-write, shared
@@ -618,7 +677,7 @@ state (`<run id>.spinup.*`) is not read by a resume and does not count below. Ar
   `cell_area/` is kept. One line on stderr says how many files.
 - **checks that WBM reached the end** after it exits 0: the last per-day line of
   `wbm_output/<id>/<run id>.log` (which WBM appends to across reruns) must be a `File ...
-  (<date>)` line dated the init's `Run_End`, after `--run-end`. Otherwise it says `WBM stopped on
+  (<date>)` line dated the init's `Run_End`, as a changes file may have set it. Otherwise it says `WBM stopped on
   <date>, before the run's end <Run_End>` (or that the log has no day line), does not
   post-process, and exits 65. This also catches WBM's "Nothing to do" exit 0.
 
@@ -674,10 +733,11 @@ step took on the reference period (absent means it was not measured). When the r
 and the field is absent, the command warns on stderr and uses the walltime alone. A `--walltime` is
 used as written, with or without post-processing.
 
-`--post-processing standard|climatology` (on `sim run` and `sim submit`) sets that `Run` to `0` or
-`1` in the run's init, so a run can ask for the daily, monthly and yearly climatologies, or turn them
-off, whatever the snapshot's init says. It is an error (exit 2) on an init with no `PostProcessing`
-block, or none with a `Run` key in it; without the flag the init is left as it is.
+A changes file that sets `PostProcessing.Run` to `0` or `1` (see [Changes file](#changes-file---changes))
+makes the run ask for the daily, monthly and yearly climatologies (`1`), or turns them off (`0`),
+whatever the snapshot's init says. It is an error (exit 2) on an init with no `PostProcessing`
+block, or none with a `Run` key in it; a changes file that does not set `PostProcessing.Run` leaves
+the init's own value as it is.
 
 **WBM threads.** Both pass `wbm.pl` `-t N` (`wbm_threads` in `sim.py`): one thread
 per core the run holds, at most 8, which is all `wbm.pl` accepts. `submit` knows the
@@ -704,6 +764,7 @@ openghm snapshot fetch <id> --dest /path/to/snap && cd /path/to/snap   # or any 
 # Local, foreground (no SLURM):
 openghm sim run --id smoke                  # runs here; records exit_code in simulation.json
 openghm sim run --id smoke --walltime 22:30:00   # the spool lease lasts 22 h 30 min (inside a 22:30:00 job)
+openghm sim run --id smoke --changes changes.json   # the init edited by a changes file (see above)
 
 # On a SLURM cluster:
 openghm sim submit --id run-001             # sbatch the job; records the job id

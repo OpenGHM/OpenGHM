@@ -1446,22 +1446,37 @@ def _cli_config(tmp_path: Path) -> Path:
 
 def test_cli_spool_variant_prints_the_variant_and_its_inputs_as_json(tmp_path, bucket, monkeypatch):
     snap = _runnable(tmp_path, bucket, monkeypatch)
-    seen = []
+    seen, inits = [], []
+    changes = tmp_path / "changes.json"
+    changes.write_text(json.dumps({"code_version": "23.9.0", "set": {"MT_Code_Name.Run_End": "2001-12-31"}}))
 
     def evaluator(plan):
         seen.append(plan)
+        host = next(h for h, c in plan.eval_mounts if c == "/wbm/wbm_init")
+        inits.append((Path(host) / "wbm_test.init").read_text())     # the init as the changes file left it
         return copy.deepcopy(INIT)
 
     monkeypatch.setattr(spool, "container_evaluator", evaluator)
     out = CliRunner().invoke(cli, ["spool", "variant", str(snap), "--config", str(_cli_config(tmp_path)),
-                                   "--run-end", "2001-12-31"])
+                                   "--changes", str(changes)])
     assert out.exit_code == 0, out.output
+    assert "Run_End => '2001-12-31'" in inits[0]
     got = json.loads(out.output)
     assert got["variant"] == _vid(seen[0]) and got["network"] == NET and got["years"] == [1998, 2002]
     assert got["dir"] == str(tmp_path / "spools" / MID / NET / got["variant"])
     assert got["inputs"]["network"] == _sha("network") and "Output_vars" not in got["inputs"]["init"]
     # the same code path as sim: the init under evaluation is the one sim generates for the run
     assert seen[0].init_container == "/wbm/wbm_init/wbm_test.init" and seen[0].sim_id == "variant"
+
+
+def test_cli_spool_variant_refuses_a_changes_file_for_another_wbm_version(tmp_path, bucket, monkeypatch):
+    snap = _runnable(tmp_path, bucket, monkeypatch)
+    monkeypatch.setattr(spool, "container_evaluator", lambda plan: copy.deepcopy(INIT))
+    changes = tmp_path / "changes.json"
+    changes.write_text(json.dumps({"code_version": "22.1.1", "set": {"Output_vars": "runoff"}}))
+    out = CliRunner().invoke(cli, ["spool", "variant", str(snap), "--config", str(_cli_config(tmp_path)),
+                                   "--changes", str(changes)])
+    assert out.exit_code == 2 and "code_version '22.1.1'" in out.output
 
 
 def test_cli_spool_variant_init_option_and_errors(tmp_path, bucket, monkeypatch):

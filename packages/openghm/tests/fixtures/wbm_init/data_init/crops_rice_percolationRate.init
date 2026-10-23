@@ -1,0 +1,17 @@
+{
+Code_Name	=> 'rice_percolationRate',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name	=> 'Percolation rate of water through rice paddies ',
+Var_Name	=> 'RicePercolationRate',
+Units	=> 'mm/day',
+Var_Scale	=> ,
+Var_Offset	=> 0,
+Orig_Units	=> 'mm/day',
+Bands	=> 1,
+Processing	=> ,
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/crops/RicePercolationRate.nc',
+Comment		=> 'Percolation rates are determined by the soil drainage category in the FAO/UNESCO (2003) soil map of the world: http://www.fao.org/soils-portal/soil-survey/soil-maps-and-databases/faounesco-soil-map-of-the-world/en/.  Conversion of soil drainage category to rice paddy percolation rates is described in: Wisser D, S Frolking, EM Douglas, BM Fekete, CJ Vörösmarty, AH Schumann (2008) Global irrigation water demand: Variability and uncertainties arising from agricultural and climate data sets, Geophysical Research Letters, 35, L24408, doi:10.1029/2008GL035296.' 
+}

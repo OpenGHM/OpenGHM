@@ -37,6 +37,7 @@ from ..spool import (
 from ..temporal import TemporalOptions, build_temporal
 from ..network import NetworkOptions
 from ..types import BuiltCommand
+from ..wbm_init import Changes, load_changes
 from .render import (
     present, present_sim_list, present_sim_status, present_sim_logs, present_sim_cancel,
 )
@@ -120,6 +121,21 @@ def output_options(f):
     for opt in reversed(options):
         f = opt(f)
     return f
+
+
+def changes_option(f):
+    """``--changes PATH``, shared by ``sim submit``, ``sim run`` and ``spool variant``: the init edits."""
+    return click.option(
+        "--changes", "changes_path", default=None, metavar="PATH",
+        help="JSON file of edits to the snapshot's init: {\"code_version\": \"<the snapshot's WBM version>\", "
+             "\"set\": {\"Key.Path\": value}, \"unset\": [\"Key.Path\"]}; a key path is names joined by dots, "
+             "one per nested block (MT_Code_Name.Run_End)",
+    )(f)
+
+
+def _load_changes(path: Optional[str]) -> Optional[Changes]:
+    """The ``--changes`` file, or ``None`` when the option was not given."""
+    return load_changes(path) if path else None
 
 
 def manage_options(f):
@@ -321,16 +337,7 @@ def sim_group() -> None:
 @click.option("--partition", default=None, help="SLURM partition (default: config)")
 @click.option("--output-base", "output_base", default=None, metavar="DIR",
               help="per-sim work/output root (default: config)")
-@click.option("--run-start", "run_start", default=None, metavar="YYYY-MM-DD", help="init override: Run_Start")
-@click.option("--run-end", "run_end", default=None, metavar="YYYY-MM-DD", help="init override: Run_End")
-@click.option("--output-vars", "output_vars", default=None, help="init override: Output_vars")
-@click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
-@click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
-@click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
-@click.option("--post-processing", "post_processing", type=click.Choice(["standard", "climatology"]),
-              default=None,
-              help="init override: PostProcessing.Run (standard = 0, climatology = 1: daily, monthly and "
-                   "yearly climatologies); refused when the init has no PostProcessing block with a Run")
+@changes_option
 @click.option("--user-info", "user_info", default=None,
               help="submitter info recorded in simulation.json (provenance only)")
 @output_options
@@ -340,12 +347,11 @@ def sim_submit_cmd(**p) -> None:
         snapshot_dir=p["path"], simulation_id=p["sim_id"],
         cores=p["cores"], walltime=p["walltime"], account=p["account"],
         partition=p["partition"], output_base=p["output_base"], spool=p["spool"],
-        run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
-        spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
-        post_processing=p["post_processing"], user_info=p["user_info"], verbose=p["verbose"],
+        user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
+        opts.changes = _load_changes(p["changes_path"])
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_submit(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
                                   check_assets=not p["dry_run"])
@@ -369,21 +375,12 @@ def sim_submit_cmd(**p) -> None:
               help="unique simulation ID (per-sim work/output paths)")
 @click.option("--output-base", "output_base", default=None, metavar="DIR",
               help="per-sim work/output root (default: config)")
-@click.option("--run-start", "run_start", default=None, metavar="YYYY-MM-DD", help="init override: Run_Start")
-@click.option("--run-end", "run_end", default=None, metavar="YYYY-MM-DD", help="init override: Run_End")
-@click.option("--output-vars", "output_vars", default=None, help="init override: Output_vars")
-@click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
-@click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
-@click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
 @click.option("--walltime", default=None, metavar="TIME",
               help="how long this run may last, as SLURM writes it (MM:SS, HH:MM:SS, D-HH, D-HH:MM:SS); "
                    "recorded in simulation.json, where the spool lease takes its length "
                    "(default: the metadata's recommendedCompute.walltime, plus its postProcessingWalltime "
                    "when the run post-processes)")
-@click.option("--post-processing", "post_processing", type=click.Choice(["standard", "climatology"]),
-              default=None,
-              help="init override: PostProcessing.Run (standard = 0, climatology = 1: daily, monthly and "
-                   "yearly climatologies); refused when the init has no PostProcessing block with a Run")
+@changes_option
 @click.option("--user-info", "user_info", default=None,
               help="submitter info recorded in simulation.json (provenance only)")
 @output_options
@@ -395,13 +392,12 @@ def sim_run_cmd(**p) -> None:
     """
     opts = SubmitOptions(
         snapshot_dir=p["path"], simulation_id=p["sim_id"], output_base=p["output_base"],
-        walltime=p["walltime"], spool=p["spool"], run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
-        spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
-        post_processing=p["post_processing"], user_info=p["user_info"], verbose=p["verbose"],
+        walltime=p["walltime"], spool=p["spool"], user_info=p["user_info"], verbose=p["verbose"],
     )
     now = None if p["dry_run"] else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     layout = None
     try:
+        opts.changes = _load_changes(p["changes_path"])
         cfg = load_config(path=p["config_path"]).config
         ctx, built = build_run(opts, cfg, runtime=p.get("runtime"), sif=p.get("sif"), now=now,
                               check_assets=not p["dry_run"])
@@ -664,12 +660,7 @@ def spool_group() -> None:
 @click.argument("path", default=".", metavar="[PATH]")
 @click.option("--init", "init", default=None, metavar="NAME",
               help="init file in the snapshot's wbm_init/ (default: the metadata's)")
-@click.option("--run-start", "run_start", default=None, metavar="YYYY-MM-DD", help="init override: Run_Start")
-@click.option("--run-end", "run_end", default=None, metavar="YYYY-MM-DD", help="init override: Run_End")
-@click.option("--output-vars", "output_vars", default=None, help="init override: Output_vars")
-@click.option("--spinup-start", "spinup_start", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.Start")
-@click.option("--spinup-end", "spinup_end", default=None, metavar="YYYY-MM-DD", help="init override: Spinup.End")
-@click.option("--spinup-loops", "spinup_loops", type=int, default=None, help="init override: Spinup.Loops")
+@changes_option
 @click.option("--config", "config_path", default=None, metavar="PATH",
               help="config file (default: ~/.openghm/config.toml)")
 @click.option("--runtime", type=click.Choice(["singularity", "apptainer", "docker"]),
@@ -691,10 +682,9 @@ def spool_variant_cmd(**p) -> None:
 
     opts = SubmitOptions(
         snapshot_dir=p["path"], simulation_id="variant", spool="cache", init=p["init"],
-        run_start=p["run_start"], run_end=p["run_end"], output_vars=p["output_vars"],
-        spinup_start=p["spinup_start"], spinup_end=p["spinup_end"], spinup_loops=p["spinup_loops"],
     )
     try:
+        opts.changes = _load_changes(p["changes_path"])
         cfg = load_config(path=p["config_path"]).config
         with tempfile.TemporaryDirectory(prefix="openghm-variant-") as scratch:
             opts.output_base = scratch      # the staged init and an empty spool, thrown away

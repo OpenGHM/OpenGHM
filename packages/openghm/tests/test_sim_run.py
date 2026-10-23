@@ -45,6 +45,7 @@ _METADATA = {
             "https": "https://example.test/containers/wbm-v2-lite/2.0.0/wbm-v2-lite-2.0.0.sif",
         },
         "modelInput": {"id": "2" * 64},
+        "modelCode": {"name": "wbm", "version": "23.9.0", "treeHash": "3" * 64},
     },
 }
 
@@ -396,6 +397,19 @@ def _fake_run(tmp_path, monkeypatch, init, *, wbm_code=0, wbm_last_day="2001-12-
     return fake, snap
 
 
+def _changes_file(tmp_path, set_=None, unset=None, code_version="23.9.0", name="changes.json") -> str:
+    """A changes file under ``tmp_path``; its path."""
+    body = {"code_version": code_version, **({"set": set_} if set_ else {}), **({"unset": unset} if unset else {})}
+    path = tmp_path / name
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return str(path)
+
+
+def _pp_file(tmp_path, choice) -> str:
+    """The changes file of a post-processing choice: PostProcessing.Run 0 (standard) or 1 (climatology)."""
+    return _changes_file(tmp_path, {"PostProcessing.Run": {"standard": 0, "climatology": 1}[choice]})
+
+
 def _invoke(tmp_path, snap, *args):
     from click.testing import CliRunner
     from openghm.cli.main import cli
@@ -515,7 +529,7 @@ def test_sim_run_forks_as_many_as_slurm_cpus_per_task_and_puts_the_init_back(tmp
 
 def test_sim_run_without_slurm_cpus_leaves_forks_as_the_init_has_it(tmp_path, monkeypatch):
     fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_test.init")
-    out = _invoke(tmp_path, snap, "--post-processing", "climatology")
+    out = _invoke(tmp_path, snap, "--changes", _pp_file(tmp_path, "climatology"))
     assert out.exit_code == 0, out.output
     assert fake.forks_during_wbm == "4" and fake.forks_values() == ["4", "4"]
     pp = fake.sidecar()["post_processing"]
@@ -548,7 +562,7 @@ def test_sim_run_after_a_failed_wbm_still_puts_forks_back(tmp_path, monkeypatch)
 def test_a_run_that_asks_for_no_post_processing_keeps_forks_untouched(tmp_path, monkeypatch):
     monkeypatch.setenv("SLURM_CPUS_PER_TASK", "32")
     fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
-    out = _invoke(tmp_path, snap, "--post-processing", "standard")
+    out = _invoke(tmp_path, snap, "--changes", _pp_file(tmp_path, "standard"))
     assert out.exit_code == 0, out.output
     assert fake.forks_during_wbm == "8" and fake.forks_values() == ["8", "8"]
     assert "post_processing" not in fake.sidecar()
@@ -624,13 +638,13 @@ def test_sim_post_process_without_a_sidecar_keeps_wbms_code(tmp_path):
         assert out.exit_code == want and "post-processing could not be completed" in out.output
 
 
-# ── --post-processing standard|climatology (CLI) ───────────────────────────────
+# ── --changes with PostProcessing.Run: 0 standard, 1 climatology (CLI) ─────────
 
 
 def test_cli_sim_run_climatology_on_a_run_0_init_runs_post_processing(tmp_path, monkeypatch):
     """fc66a2cd's wbm_test.init (Run => 0): WBM sees Run => 0, the step runs, the init gets Run => 1 back."""
     fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_test.init")
-    out = _invoke(tmp_path, snap, "--post-processing", "climatology")
+    out = _invoke(tmp_path, snap, "--changes", _pp_file(tmp_path, "climatology"))
     assert out.exit_code == 0, out.output
     assert fake.run_during_wbm == "0"
     assert len(fake.pp_calls) == 1
@@ -642,7 +656,7 @@ def test_cli_sim_run_climatology_on_a_run_0_init_runs_post_processing(tmp_path, 
 def test_cli_sim_run_standard_on_a_run_1_init_runs_no_post_processing(tmp_path, monkeypatch):
     """fc66a2cd's SHORT init (Run => 1) with standard: Run => 0 staged, no step, nothing recorded."""
     fake, snap = _fake_run(tmp_path, monkeypatch, "fc66a2cd_wbm_SHORT.init")
-    out = _invoke(tmp_path, snap, "--post-processing", "standard")
+    out = _invoke(tmp_path, snap, "--changes", _pp_file(tmp_path, "standard"))
     assert out.exit_code == 0, out.output
     assert fake.run_during_wbm == "0" and fake.pp_calls == []
     assert "post_processing" not in fake.sidecar()
@@ -651,9 +665,9 @@ def test_cli_sim_run_standard_on_a_run_1_init_runs_no_post_processing(tmp_path, 
 
 def test_cli_sim_run_post_processing_on_an_init_without_a_block_exits_2(tmp_path):
     snap = _make_snapshot(tmp_path)
-    out = _invoke(tmp_path, snap, "--post-processing", "climatology", "--dry-run")
+    out = _invoke(tmp_path, snap, "--changes", _pp_file(tmp_path, "climatology"), "--dry-run")
     assert out.exit_code == 2
-    assert "openghm: --post-processing climatology: this init has no PostProcessing block" in out.output
+    assert "openghm: PostProcessing.Run: this init has no PostProcessing block" in out.output
 
 
 def test_cli_sim_submit_post_processing_is_refused_the_same_way(tmp_path):
@@ -662,14 +676,69 @@ def test_cli_sim_submit_post_processing_is_refused_the_same_way(tmp_path):
     snap = _make_snapshot(tmp_path)
     out = CliRunner().invoke(cli, [
         "sim", "submit", str(snap), "--id", "sim1", "--spool", "fresh", "--dry-run",
-        "--config", str(_cli_config(tmp_path)), "--post-processing", "standard"])
+        "--config", str(_cli_config(tmp_path)), "--changes", _pp_file(tmp_path, "standard")])
     assert out.exit_code == 2
-    assert "openghm: --post-processing standard" in out.output
+    assert "openghm: PostProcessing.Run: this init has no PostProcessing block" in out.output
 
 
-def test_cli_sim_post_processing_choice_is_checked_by_click(tmp_path):
-    out = _invoke(tmp_path, _make_snapshot(tmp_path), "--post-processing", "daily", "--dry-run")
-    assert out.exit_code == 2 and "daily" in out.output
+def test_cli_sim_run_refuses_a_changes_file_that_is_not_usable_with_exit_2(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    bad_json = tmp_path / "bad.json"
+    bad_json.write_text("{nope", encoding="utf-8")
+    cases = [
+        (str(tmp_path / "missing.json"), "cannot read the changes file"),
+        (str(bad_json), "cannot read the changes file"),
+        (_changes_file(tmp_path, {"Output_vars": "runoff"}, code_version="22.1.1", name="a.json"), "code_version '22.1.1'"),
+        (_changes_file(tmp_path, {"Bad Key": 1}, name="b.json"), "not an init key path"),
+        (_changes_file(tmp_path, {"PostProcessing.Run": True}, name="c.json"), "boolean"),
+        (_changes_file(tmp_path, {"FreeWaterEvap": "x"}, name="d.json"), "FreeWaterEvap"),
+    ]
+    for path, message in cases:
+        out = _invoke(tmp_path, snap, "--changes", path, "--dry-run")
+        assert out.exit_code == 2 and message in out.output, (path, out.output)
+    assert not (tmp_path / "out").exists()
+
+
+def test_the_seven_per_key_options_are_gone_and_changes_replaces_them():
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    removed = ["--run-start", "--run-end", "--output-vars", "--post-processing",
+               "--spinup-start", "--spinup-end", "--spinup-loops"]
+    for command, takes_removed in ((["sim", "run"], removed), (["sim", "submit"], removed),
+                                   (["spool", "variant"], [r for r in removed if r != "--post-processing"])):
+        out = CliRunner().invoke(cli, [*command, "--help"])
+        assert out.exit_code == 0, out.output
+        assert "--changes PATH" in out.output, command
+        for option in takes_removed:
+            assert option not in out.output, (command, option)
+            gone = CliRunner().invoke(cli, [*command, option, "x"])
+            assert gone.exit_code == 2 and "No such option" in gone.output, (command, option)
+
+
+def test_cli_sim_run_records_the_changes_in_the_sidecar(tmp_path):
+    snap = _make_snapshot(tmp_path)
+    path = _changes_file(tmp_path, {"MT_Code_Name.Run_End": "2001-12-31", "Output_vars": "runoff discharge"},
+                         ["Comment"])
+    out = _invoke(tmp_path, snap, "--changes", path, "--dry-run", "--json")
+    assert out.exit_code == 0, out.output
+    files = {Path(f["hostPath"]).name: f["content"] for f in json.loads(out.stdout)["generatedFiles"]}
+    assert json.loads(files["simulation.json"])["changes"] == json.loads(Path(path).read_text())
+    assert "Output_vars => 'runoff discharge'," in files["wbm_test.init"]
+    assert "Run_End => '2001-12-31'," in files["wbm_test.init"]
+
+
+def test_cli_sim_submit_takes_a_changes_file_too(tmp_path):
+    from click.testing import CliRunner
+    from openghm.cli.main import cli
+    snap = _make_snapshot(tmp_path)
+    path = _changes_file(tmp_path, {"MT_Code_Name.Run_End": "2002-12-31"})
+    out = CliRunner().invoke(cli, [
+        "sim", "submit", str(snap), "--id", "sim1", "--spool", "fresh", "--dry-run", "--json",
+        "--config", str(_cli_config(tmp_path)), "--changes", path])
+    assert out.exit_code == 0, out.output
+    files = {Path(f["hostPath"]).name: f["content"] for f in json.loads(out.stdout)["generatedFiles"]}
+    assert "Run_End => '2002-12-31'," in files["wbm_test.init"]
+    assert json.loads(files["simulation.json"])["changes"]["set"] == {"MT_Code_Name.Run_End": "2002-12-31"}
 
 
 # ── rerunning on a work directory that holds a run (ADR 0037) ───────────────────

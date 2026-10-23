@@ -1,0 +1,17 @@
+{
+Code_Name	=> 'global_rgi6_glaciers_area_1km',
+Time_Series	=> 'yearly_clim',
+Start_Date	=> '0000-00-00',
+End_Date	=> '0000-00-00',
+Name		=> 'Global Glacier Area Fraction, RGI-6, 1 km resolution',
+Param_Name	=> 'Area Fraction',
+Var_Name	=> '',
+Units		=> 'fraction',
+Var_Scale	=> 1,
+Var_Offset	=> 0,
+Orig_Units	=> 'fraction',
+Bands		=> 1,
+Projection	=> 'epsg:4326',
+File_Path	=> '/wbm/data/glaciers/global_rgi6_glaciers_1km.tif;',
+citation	=> 'Huss, M., and Hock, R. (2015) A new model for global glacier change and sea-level rise. Frontiers in Earth Science (3) doi: 10.3389/feart.2015.00054.'
+}

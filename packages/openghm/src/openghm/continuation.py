@@ -115,7 +115,7 @@ def layout_from_init(work_dir: str, sim_id: str, init_text: str) -> Optional[Run
 
 
 def layout_for_run(built: BuiltCommand) -> Optional[RunLayout]:
-    """The layout of the run a ``sim run`` command stages: its per-sim init, with the overrides
+    """The layout of the run a ``sim run`` command stages: its per-sim init, with the changes
     applied, is one of ``built.generated_files``. ``None`` when that cannot be told."""
     sidecar = sidecar_path(built)
     if not sidecar:
