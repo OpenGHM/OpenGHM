@@ -81,6 +81,11 @@ const GROUP_FIELDS: Record<DraftGroup, readonly DraftField[]> = {
  *  Both stop applying as soon as the value they refused changes. */
 export interface ServerRefusals {
   start?: { value: string; message: string; suggestion: string | null };
+  /** The keys of `custom_params` the server refused (`invalid_custom_params`),
+   *  with the value that was sent for each and its message. A key is withheld
+   *  and its message shown for as long as its value is the one that was refused;
+   *  the rest of the parameters still save. */
+  custom?: { message: string; sent: Record<string, string>; errors: Record<string, string> };
   groups?: Partial<
     Record<DraftGroup, { fingerprint: string; message: string; fields: DraftField[] }>
   >;
@@ -275,6 +280,20 @@ export function buildDraftPatch(
       if (refused) errors.start = refused.message;
     }
   }
+  // Custom parameters the server refused stay out of the patch while their value
+  // is the one it refused; the saved value (or none) goes in their place.
+  const refusedKeys = refusedCustomKeys(refusals, want.parameters.custom_params);
+  if (refusedKeys.length > 0) {
+    const custom = { ...want.parameters.custom_params };
+    for (const key of refusedKeys) {
+      const saved = have.parameters.custom_params;
+      if (saved && key in saved) custom[key] = saved[key];
+      else delete custom[key];
+    }
+    parameters = { ...parameters, custom_params: canonicalCustom(custom) };
+    withheld.add("custom");
+    errors.custom = refusals.custom!.message;
+  }
   if (fingerprint(parameters) !== fingerprint(have.parameters)) {
     const refusal = refusedGroup(refusals, "parameters", parameters);
     if (refusal) withhold(refusal.fields, refusal.message);
@@ -362,6 +381,48 @@ export function fieldsForPaths(paths: readonly string[]): DraftField[] {
     }
   }
   return DRAFT_FIELDS.filter((field) => found.has(field));
+}
+
+/** The keys of `custom` that the server refused with the value now on screen. */
+function refusedCustomKeys(refusals: ServerRefusals, custom: Record<string, string> | null): string[] {
+  const refused = refusals.custom;
+  if (!refused || !custom) return [];
+  return Object.keys(refused.errors).filter((key) => key in custom && custom[key] === refused.sent[key]);
+}
+
+/** The server's message for each custom parameter that is still the value it
+ *  refused, by init key path, for the field to show. */
+export function customErrorsFor(refusals: ServerRefusals, local: DraftLocal): Record<string, string> {
+  const custom = local.parameters.custom_params;
+  const refused = refusals.custom;
+  if (!refused) return {};
+  return Object.fromEntries(refusedCustomKeys(refusals, custom).map((key) => [key, refused.errors[key]]));
+}
+
+/** Remember the keys the server refused as `custom_params` (a 422
+ *  `invalid_custom_params`): `errors` is its message for each path, and the value
+ *  sent for each is read from `patch`. What an earlier refusal recorded is kept,
+ *  so that keys refused one at a time are all withheld together. An answer that
+ *  names no path of the patch is any other refusal of the parameters. */
+export function refuseCustom(
+  refusals: ServerRefusals,
+  patch: DraftUpdateRequest,
+  failure: { message: string; errors: Record<string, string> | null }
+): ServerRefusals {
+  const sent = patch.parameters?.custom_params ?? {};
+  const errors = Object.fromEntries(Object.entries(failure.errors ?? {}).filter(([path]) => path in sent));
+  if (Object.keys(errors).length === 0) {
+    return refuseGroups(refusals, patch, { message: failure.message, paths: ["parameters.custom_params"] });
+  }
+  const before = refusals.custom;
+  return {
+    ...refusals,
+    custom: {
+      message: failure.message,
+      sent: { ...before?.sent, ...Object.fromEntries(Object.keys(errors).map((path) => [path, sent[path]])) },
+      errors: { ...before?.errors, ...errors },
+    },
+  };
 }
 
 /** Remember that the server refused `start` as a run start. */
@@ -495,7 +556,7 @@ export function submitProblems(
   if (aggregation.start) add("start", aggregation.start);
   if (aggregation.end) add("end", aggregation.end);
 
-  const { variables, spatial_domain: spatial, custom_params: custom } = local.parameters;
+  const { variables, spatial_domain: spatial } = local.parameters;
   if (variables.length === 0) add("variables", "Choose at least one output variable.");
   else if (!variables.every((name) => VARIABLE_NAME.test(name))) {
     add("variables", "Output variables must be names made of letters, digits and underscores.");
@@ -503,10 +564,6 @@ export function submitProblems(
   if (spatial !== null && !isSnapshotDomain(spatial, ctx.dataset)) {
     add("spatial", "A spatial subset can't run yet. Switch it off to submit.");
   }
-  if (custom && Object.keys(custom).length > 0) {
-    add("custom", "Custom parameters can't run yet. Remove them to submit.");
-  }
-
   // Not saved: a submit would run the saved value, not this one.
   for (const field of save.withheld) {
     add(field, `${FIELD_LABELS[field]} isn't saved yet. Fix it to continue.`);

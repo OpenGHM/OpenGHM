@@ -5,9 +5,11 @@ import {
   canonical,
   canonicalKey,
   clientProblem,
+  customErrorsFor,
   fieldsForPaths,
   fromJob,
   isDirty,
+  refuseCustom,
   refuseGroups,
   refuseStart,
   submitProblems,
@@ -419,6 +421,80 @@ describe("buildDraftPatch: a group the server refused", () => {
   });
 });
 
+describe("buildDraftPatch: custom parameters the server refused", () => {
+  const job = draft({ parameters: { ...draft().parameters, custom_params: { "wbmParam.Infiltration": "HBV" } } });
+  const local = edited(job, {
+    params: {
+      temporal_range_end: "2002-12-31",
+      custom_params: { "wbmParam.Infiltration": "HBV", "wbmParam.alpha": "abc", Glaciers: "" },
+    },
+  });
+  const sent = buildDraftPatch(local, job, FOUND).patch!;
+  const errors = { "wbmParam.alpha": "Enter a number." };
+  const refusals = refuseCustom({}, sent, { message: "Some model parameters are not valid.", errors });
+
+  it("sends the rest of the parameters, with the refused key left out, and withholds only custom", () => {
+    expect(sent.parameters!.custom_params).toEqual({
+      Glaciers: "",
+      "wbmParam.Infiltration": "HBV",
+      "wbmParam.alpha": "abc",
+    });
+    const out = buildDraftPatch(local, job, FOUND, refusals);
+    expect(out.patch!.parameters).toMatchObject({
+      temporal_range_end: "2002-12-31",
+      custom_params: { Glaciers: "", "wbmParam.Infiltration": "HBV" },
+    });
+    expect(out.withheld).toEqual(["custom"]);
+    expect(out.errors).toEqual({ custom: "Some model parameters are not valid." });
+  });
+
+  it("puts the saved value of a refused key back, so an edit of a saved key is not half sent", () => {
+    const edit = edited(job, { params: { custom_params: { "wbmParam.Infiltration": "bogus" } } });
+    const refused = refuseCustom({}, { parameters: edit.parameters }, {
+      message: "Not valid.",
+      errors: { "wbmParam.Infiltration": "Choose FrAMES or HBV." },
+    });
+    const out = buildDraftPatch(edit, job, FOUND, refused);
+    // The saved value is what the patch would carry, so there is nothing to send.
+    expect(out.patch).toBeNull();
+    expect(out.withheld).toEqual(["custom"]);
+  });
+
+  it("says what is wrong at each key while its value is the refused one", () => {
+    expect(customErrorsFor(refusals, local)).toEqual(errors);
+    const fixed = edited(job, { params: { custom_params: { "wbmParam.alpha": "7" } } });
+    expect(customErrorsFor(refusals, fixed)).toEqual({});
+    expect(buildDraftPatch(fixed, job, FOUND, refusals).withheld).toEqual([]);
+  });
+
+  it("sends the key again once its value changes", () => {
+    const fixed = edited(job, { params: { custom_params: { "wbmParam.alpha": "7" } } });
+    const out = buildDraftPatch(fixed, job, FOUND, refusals);
+    expect(out.patch!.parameters!.custom_params).toEqual({ "wbmParam.alpha": "7" });
+  });
+
+  it("keeps earlier refused keys when another is refused, so they are not sent in turn for ever", () => {
+    const next = edited(job, { params: { custom_params: { "wbmParam.alpha": "abc", "wbmParam.maxRffStorage": "-1" } } });
+    const again = refuseCustom(refusals, buildDraftPatch(next, job, FOUND, refusals).patch ?? { parameters: next.parameters }, {
+      message: "Some model parameters are not valid.",
+      errors: { "wbmParam.maxRffStorage": "At least 0." },
+    });
+    expect(Object.keys(again.custom!.errors).sort()).toEqual(["wbmParam.alpha", "wbmParam.maxRffStorage"]);
+    expect(customErrorsFor(again, next)).toEqual({
+      "wbmParam.alpha": "Enter a number.",
+      "wbmParam.maxRffStorage": "At least 0.",
+    });
+  });
+
+  it("an answer that names no key of the patch refuses the parameters group as a whole", () => {
+    const whole = refuseCustom({}, sent, { message: "No.", errors: { "not.sent": "x" } });
+    expect(whole.custom).toBeUndefined();
+    const out = buildDraftPatch(local, job, FOUND, whole);
+    expect(out.withheld).toContain("custom");
+    expect(out.patch).toBeNull();
+  });
+});
+
 describe("fieldsForPaths", () => {
   it("places a validation error's path on the field", () => {
     expect(fieldsForPaths(["slurm_config.cores"])).toEqual(["cores"]);
@@ -631,11 +707,15 @@ describe("submitProblems", () => {
     expect(problems(whole, UNAVAILABLE)).toHaveLength(1);
   });
 
-  it("custom parameters, but not an empty set", () => {
-    expect(problems(edited(ok, { params: { custom_params: { A: "1" } } }))).toEqual([
-      { field: "custom", step: "run", message: "Custom parameters can't run yet. Remove them to submit." },
-    ]);
+  it("custom parameters are no longer refused: the backend checks them", () => {
+    expect(problems(edited(ok, { params: { custom_params: { A: "1" } } }))).toEqual([]);
     expect(problems(edited(ok, { params: { custom_params: {} } }))).toEqual([]);
+  });
+
+  it("a custom parameter the server refused is not saved, so a submit waits for it", () => {
+    expect(
+      problems(edited(ok, { params: { custom_params: { A: "1" } } }), FOUND, null, { withheld: ["custom"], saving: false })
+    ).toEqual([{ field: "custom", step: "run", message: "Model parameters isn't saved yet. Fix it to continue." }]);
   });
 
   it("still saving, last", () => {

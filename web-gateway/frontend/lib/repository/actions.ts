@@ -1,6 +1,9 @@
 "use server";
 
 import { getApiClient } from "@/lib/api-client";
+import { describeFailure } from "@/lib/action-failure";
+import type { ActionResult } from "@/lib/jobs/types";
+import type { ModelParameters } from "@/lib/workspace/model-parameters";
 import {
   CATALOGUE_FACET_KEYS,
   CATALOGUE_PAGE_SIZE,
@@ -115,6 +118,27 @@ export async function fetchDatasetById(id: string): Promise<Dataset | null> {
       return null;
     }
     throw error;
+  }
+}
+
+/**
+ * The parameter tree for a snapshot's WBM version, with the current value of
+ * every field from the snapshot's init
+ * (`GET .../datasets/{id}/model-parameters`). The draft wizard's Model
+ * parameters section renders it. Anyone who may read the snapshot may ask.
+ * Failures come back as data: `not_found` is a dataset that is not a snapshot,
+ * a 503 `init_unavailable` an init that could not be read. A 20 s timeout: the
+ * first read of an init goes to the public bucket.
+ */
+export async function fetchModelParameters(id: string): Promise<ActionResult<ModelParameters>> {
+  try {
+    const client = await getApiClient({ allowAnonymous: true, timeoutMs: 20_000 });
+    const response = await client.get<ModelParameters>(
+      `/api/v1/repository/datasets/${encodeURIComponent(id)}/model-parameters`
+    );
+    return { ok: true, data: response.data };
+  } catch (error: unknown) {
+    return describeFailure(error, [404]);
   }
 }
 

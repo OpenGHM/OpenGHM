@@ -1,5 +1,5 @@
 """The bash body a gateway job runs (ADR 0025): a golden for the default v2
-draft, the flags a changed draft adds, and hostile inputs.
+draft, the changes file (ADR 0038) a changed draft adds, and hostile inputs.
 
 Pure: no Mongo, no request, no SSH.
 """
@@ -16,6 +16,7 @@ import pytest
 from app.models.job import JobParameters, SlurmConfig, SpatialDomain
 from app.services import job_script
 from app.services.job_script import SubmitInputError, render_job_body
+from route_helpers import changes_in
 
 EXAMPLE = (
     Path(__file__).parents[3]
@@ -27,6 +28,7 @@ LOCK = "/home/x-openghm/apps/openghm/locks/fetch.lock"
 SNAPSHOT_ID = "fc66a2cdeee9d456f83bc0b0a6f00cd447b0194c124a3bb4008a02990779ec89"
 SIM_ID = "sim-20260930-0a1b2c"
 WORK_DIR = f"/anvil/scratch/x-openghm/simulations/{SIM_ID}"
+CODE_VERSION = "23.9.0"
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +58,8 @@ def _params(snapshot: dict, **changes) -> JobParameters:
 def test_default_v2_draft_renders_the_golden_body_with_no_overrides(v2):
     overrides = job_script.run_overrides(_params(v2), v2)
     assert overrides == job_script.RunOverrides(None, None, None)
-    body = _body(**overrides.__dict__)
+    assert overrides.changes == {}
+    body = _body(changes=overrides.changes, code_version=CODE_VERSION)
     assert body == f"""\
 set -euo pipefail
 OPENGHM={HOME}/bin/openghm
@@ -136,7 +139,7 @@ def test_the_outcome_writer_is_python_3_9_stdlib_only():
     assert imported <= {"json", "os", "re", "socket", "sys", "tempfile", "collections", "datetime"}
 
 
-def test_a_changed_period_and_variables_add_exactly_those_flags(v2):
+def test_a_changed_period_and_variables_become_one_changes_file(v2):
     params = _params(
         v2,
         temporal_range_start="2000-06-01",
@@ -147,24 +150,148 @@ def test_a_changed_period_and_variables_add_exactly_those_flags(v2):
     assert overrides == job_script.RunOverrides(
         "2000-06-01", "2001-06-30", "runoff discharge"
     )
-    run_line = _body(**overrides.__dict__).splitlines()[-2]
+    assert overrides.changes == {
+        "MT_Code_Name.Run_Start": "2000-06-01",
+        "MT_Code_Name.Run_End": "2001-06-30",
+        "Output_vars": "runoff discharge",
+    }
+    body = _body(changes=overrides.changes, code_version=CODE_VERSION)
+    assert changes_in(body) == {
+        "code_version": CODE_VERSION,
+        "set": {
+            "MT_Code_Name.Run_Start": "2000-06-01",
+            "MT_Code_Name.Run_End": "2001-06-30",
+            "Output_vars": "runoff discharge",
+        },
+    }
+    run_line = body.splitlines()[-2]
     assert run_line == (
         f'step run "$OPENGHM" sim run --config "$CONFIG" "$CACHE/snapshots/{SNAPSHOT_ID}" '
-        f"--id {SIM_ID} --run-start 2000-06-01 --run-end 2001-06-30 "
-        "--output-vars 'runoff discharge' --spool cache"
+        f'--id {SIM_ID} --changes "$OG_WORK_DIR/changes.json" --spool cache'
     )
+    for removed in ("--run-start", "--run-end", "--output-vars", "--post-processing"):
+        assert removed not in body
 
 
-def test_only_what_differs_from_the_snapshot_is_passed(v2):
+def test_the_changes_file_is_written_just_before_sim_run_by_the_script_itself(v2):
+    """A continuation (ADR 0037) runs the stored script again, so the file comes from
+    the script, into the work directory, through a heredoc nothing expands in."""
+    body = _body(changes={"Output_vars": "runoff"}, code_version=CODE_VERSION)
+    lines = body.splitlines()
+    assert lines[-1] == "OG_PHASE=check"
+    assert lines[-2].startswith('step run "$OPENGHM" sim run ')
+    assert lines[-3] == "OPENGHM_CHANGES"
+    assert lines[-4] == "}"
+    opening = lines.index("cat > \"$OG_WORK_DIR/changes.json\" <<'OPENGHM_CHANGES'")
+    assert lines[opening - 1] == 'mkdir -p "$OG_WORK_DIR"'
+    fetch = next(i for i, line in enumerate(lines) if line.startswith("step fetch"))
+    assert fetch < opening < len(lines) - 2
+
+
+def test_the_changes_file_is_ascii_sorted_json():
+    body = _body(
+        changes={"Output_vars": "runoff", "MT_Code_Name.Run_End": "2000-12-31", "wbmParam.alpha": 0.5},
+        code_version=CODE_VERSION,
+    )
+    start = body.index("<<'OPENGHM_CHANGES'\n") + len("<<'OPENGHM_CHANGES'\n")
+    text = body[start : body.index("\nOPENGHM_CHANGES\n", start)]
+    assert text.isascii()
+    assert text == json.dumps(json.loads(text), sort_keys=True, indent=2)
+    assert list(json.loads(text)["set"]) == sorted(json.loads(text)["set"])
+
+
+def test_a_draft_with_no_difference_writes_no_changes_file_and_passes_no_flag():
+    for body in (_body(), _body(changes={}, code_version=CODE_VERSION), _body(changes=None)):
+        assert "OPENGHM_CHANGES" not in body
+        assert "changes.json" not in body
+        assert "--changes" not in body
+
+
+def test_only_what_differs_from_the_snapshot_is_in_the_changes(v2):
     only_end = job_script.run_overrides(_params(v2, temporal_range_end="2000-12-31"), v2)
     assert only_end == job_script.RunOverrides(None, "2000-12-31", None)
+    assert only_end.changes == {"MT_Code_Name.Run_End": "2000-12-31"}
     only_vars = job_script.run_overrides(_params(v2, variables=["runoff"]), v2)
     assert only_vars == job_script.RunOverrides(None, None, "runoff")
+    assert only_vars.changes == {"Output_vars": "runoff"}
+
+
+@pytest.mark.parametrize(
+    "choice, run", [("standard", 0), ("climatology", 1)]
+)
+def test_the_post_processing_choice_is_the_integer_run_of_its_block(choice, run):
+    changes = job_script.RunOverrides(post_processing=choice).changes
+    assert changes == {"PostProcessing.Run": run}
+    assert type(changes["PostProcessing.Run"]) is int
+    body = _body(changes=changes, code_version=CODE_VERSION)
+    assert changes_in(body)["set"] == {"PostProcessing.Run": run}
+
+
+def test_the_changes_need_the_snapshots_code_version():
+    with pytest.raises(SubmitInputError, match="modelCode"):
+        _body(changes={"Output_vars": "runoff"})
+    with pytest.raises(SubmitInputError, match="modelCode"):
+        _body(changes={"Output_vars": "runoff"}, code_version="")
+
+
+def test_the_code_version_is_read_from_uses_model_code(v2):
+    assert job_script.model_code_version(v2) == v2["uses"]["modelCode"]["version"] == CODE_VERSION
+    assert job_script.model_code_version({}) is None
+    assert job_script.model_code_version({"uses": {}}) is None
+    assert job_script.model_code_version({"uses": {"modelCode": {"version": ""}}}) is None
 
 
 def test_the_body_is_valid_bash(v2):
-    body = _body(run_start="2000-06-01", output_vars="runoff discharge")
+    body = _body(
+        changes={"MT_Code_Name.Run_Start": "2000-06-01", "Output_vars": "runoff discharge"},
+        code_version=CODE_VERSION,
+    )
     subprocess.run(["bash", "-n"], input=body, text=True, check=True)
+
+
+def test_bash_writes_the_changes_file_exactly(tmp_path):
+    """Run the heredoc itself: the file bash writes is the JSON, byte for byte, even
+    with `$`, backticks, quotes and a line that is the delimiter's prefix in a value."""
+    changes = {
+        "Output_vars": "runoff discharge",
+        "Odd.Value": "$(touch /tmp/x) `id` \"q\" 'q' \\ OPENGHM_CHANGES é",
+        "PostProcessing.Run": 1,
+    }
+    body = _body(changes=changes, code_version=CODE_VERSION)
+    script = body[body.index('mkdir -p "$OG_WORK_DIR"') : body.index("step run")]
+    work = tmp_path / "work"
+    subprocess.run(
+        ["bash", "-c", "set -euo pipefail\n" + script],
+        env={"OG_WORK_DIR": str(work), "PATH": "/usr/bin:/bin"},
+        check=True,
+    )
+    written = (work / "changes.json").read_text()
+    assert json.loads(written) == {"code_version": CODE_VERSION, "set": changes}
+    assert written == job_script.render_changes_file(changes, CODE_VERSION) + "\n"
+    assert written.isascii()
+
+
+# ---- the changes file's own checks ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key", ["", "a b", "a..b", ".a", "a.", "1a", "a-b", "a;b", "a\nb", "$(id)", "a.b c"]
+)
+def test_a_key_that_is_not_an_init_key_path_is_refused(key):
+    with pytest.raises(SubmitInputError, match="init key path"):
+        job_script.render_changes_file({key: 1}, CODE_VERSION)
+
+
+@pytest.mark.parametrize("value", [None, True, [1], {"a": 1}, float("nan"), float("inf")])
+def test_a_value_that_is_not_a_string_or_a_number_is_refused(value):
+    with pytest.raises(SubmitInputError):
+        job_script.render_changes_file({"wbmParam.alpha": value}, CODE_VERSION)
+
+
+@pytest.mark.parametrize("value", [2, -1, True, "1", 0.5])
+def test_post_processing_run_is_zero_or_one(value):
+    with pytest.raises(SubmitInputError):
+        job_script.render_changes_file({"PostProcessing.Run": value}, CODE_VERSION)
 
 
 # ---- the period and variables a draft may ask for ---------------------------
@@ -240,17 +367,17 @@ def test_the_fetch_lock_is_outside_the_cache_and_quoted():
 
 
 @pytest.mark.parametrize(
-    "flag, value",
+    "key, value",
     [
-        ("run_start", "2000-01-01'; touch /tmp/x; echo '"),
-        ("run_end", "$(touch /tmp/x)"),
-        ("output_vars", "runoff; touch /tmp/x"),
-        ("output_vars", ""),
+        ("MT_Code_Name.Run_Start", "2000-01-01'; touch /tmp/x; echo '"),
+        ("MT_Code_Name.Run_End", "$(touch /tmp/x)"),
+        ("Output_vars", "runoff; touch /tmp/x"),
+        ("Output_vars", ""),
     ],
 )
-def test_a_hostile_flag_value_is_refused(flag, value):
+def test_a_hostile_changes_value_is_refused(key, value):
     with pytest.raises(SubmitInputError):
-        _body(**{flag: value})
+        _body(changes={key: value}, code_version=CODE_VERSION)
 
 
 # ---- SLURM time and the walltime headroom -----------------------------------
@@ -388,10 +515,8 @@ def test_each_unsupported_field_is_named(v2):
     assert job_script.unsupported_fields(_params(v2), "some-model-input", v2) == [
         "model_input_id"
     ]
-    assert job_script.unsupported_fields(_params(v2, custom_params={"a": "1"}), None, v2) == [
-        "parameters.custom_params"
-    ]
-    assert job_script.unsupported_fields(_params(v2, custom_params={}), None, v2) == []
+    # Custom parameters ride in the changes file (app.wbm_init), so they are not refused here.
+    assert job_script.unsupported_fields(_params(v2, custom_params={"a": "1"}), None, v2) == []
 
 
 # ---- the walltime the toolkit's spool lease lasts for ------------------------
@@ -406,9 +531,11 @@ def test_the_walltime_asked_of_slurm_is_passed_to_sim_run(walltime):
     )
 
 
-def test_the_walltime_comes_after_the_overrides_and_before_the_spool():
-    run_line = _body(run_start="2000-06-01", output_vars="runoff", walltime="22:30").splitlines()[-2]
-    assert run_line.endswith("--run-start 2000-06-01 --output-vars runoff --walltime 22:30 --spool cache")
+def test_the_walltime_comes_after_the_changes_and_before_the_spool():
+    run_line = _body(
+        changes={"Output_vars": "runoff"}, code_version=CODE_VERSION, walltime="22:30"
+    ).splitlines()[-2]
+    assert run_line.endswith('--changes "$OG_WORK_DIR/changes.json" --walltime 22:30 --spool cache')
 
 
 def test_without_a_walltime_no_flag_is_passed():

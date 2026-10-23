@@ -31,7 +31,7 @@ from app.models.job import (
 from app.services import job_script, slurm
 
 from conftest import REMOTE_BASE
-from route_helpers import NOW, make_job, make_user, token_for
+from route_helpers import NOW, changes_in, make_job, make_user, token_for
 
 # conftest fakes these for the route tests; the leftovers tests below want the
 # real ones, and this module is imported before any fixture runs.
@@ -120,7 +120,7 @@ def test_a_submit_is_accepted_and_the_job_records_everything(client, db, draft, 
     assert event["detail"]["sim_id"] == body["sim_id"]
 
 
-def test_a_changed_period_reaches_the_script_as_flags(client, db, draft, sent):
+def test_a_changed_period_reaches_the_script_as_a_changes_file(client, db, draft, sent):
     assert _patch(
         client,
         parameters={
@@ -131,9 +131,57 @@ def test_a_changed_period_reaches_the_script_as_flags(client, db, draft, sent):
     ).status_code == 200
     assert client.post(SUBMIT, headers=HEADERS).status_code == 202
     script = sent[0][2]
-    assert "--run-start 2000-03-01" in script
-    assert "--run-end" not in script  # equal to the snapshot's own
-    assert "--output-vars runoff" in script
+    # The end equals the snapshot's own, so it is not in the file.
+    assert changes_in(script) == {
+        "code_version": "23.9.0",
+        "set": {"MT_Code_Name.Run_Start": "2000-03-01", "Output_vars": "runoff"},
+    }
+    assert '--changes "$OG_WORK_DIR/changes.json"' in script
+    for removed in ("--run-start", "--run-end", "--output-vars", "--post-processing"):
+        assert removed not in script
+
+
+def test_the_stored_script_carries_the_changes_file_for_a_continuation(client, db, draft, sent):
+    """ADR 0037 reruns the stored script as it is, so the file is in the script."""
+    assert _patch(
+        client,
+        parameters={
+            "temporal_range_start": "2000-01-01",
+            "temporal_range_end": "2000-06-30",
+            "variables": ["runoff", "discharge"],
+        },
+    ).status_code == 200
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    stored = db.jobs.docs["job-1"]["submit_script"]["body"]
+    assert stored == sent[0][2]
+    assert changes_in(stored)["set"] == {"MT_Code_Name.Run_End": "2000-06-30"}
+
+
+def test_a_snapshot_with_no_code_version_refuses_a_submit_that_has_changes(client, db, draft, sent):
+    del db.datasets.docs["ds-1"]["document"]["uses"]
+    assert _patch(
+        client,
+        parameters={
+            "temporal_range_start": "2000-01-01",
+            "temporal_range_end": "2000-06-30",
+            "variables": ["runoff", "discharge"],
+        },
+    ).status_code == 200
+    r = client.post(SUBMIT, headers=HEADERS)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "model_code_version_missing"
+    assert "uses.modelCode.version" in r.json()["detail"]["message"]
+    assert sent == []
+    stored = db.jobs.docs["job-1"]
+    assert stored["status"] == "DRAFT"
+    assert stored["last_submit_error"]["code"] == "model_code_version_missing"
+
+
+def test_a_snapshot_with_no_code_version_still_runs_as_published(client, db, draft, sent):
+    """No difference, no changes file, so nothing needs the version."""
+    del db.datasets.docs["ds-1"]["document"]["uses"]
+    assert client.post(SUBMIT, headers=HEADERS).status_code == 202
+    assert changes_in(sent[0][2]) is None
 
 
 def test_the_drafts_cores_and_the_snapshots_walltime_are_what_slurm_is_asked_for(client, db, draft, sent):
@@ -219,17 +267,6 @@ def test_the_active_job_limit_answers_429_and_leaves_the_draft(client, db, draft
                 }
             },
             ["parameters.spatial_domain"],
-        ),
-        (
-            {
-                "parameters": {
-                    "temporal_range_start": "2000-01-01",
-                    "temporal_range_end": "2000-12-31",
-                    "variables": ["runoff", "discharge"],
-                    "custom_params": {"a": "1"},
-                }
-            },
-            ["parameters.custom_params"],
         ),
     ],
 )

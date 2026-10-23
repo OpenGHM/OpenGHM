@@ -9,6 +9,8 @@ import {
   canonicalKey,
   clientProblem,
   fingerprint,
+  customErrorsFor,
+  refuseCustom,
   refuseGroups,
   refuseStart,
   type DraftContext,
@@ -17,6 +19,7 @@ import {
   type ServerRefusals,
 } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS } from "@/lib/workspace/draft-wizard";
+import { customParamErrors, INVALID_CUSTOM_PARAMS } from "@/lib/workspace/model-parameters";
 
 export type SaveState =
   /** The server holds what is on screen; `at` is its `updated_at`. */
@@ -56,6 +59,9 @@ interface UseDraftSaver {
   saved: Job;
   /** What the server said about a field it did not take, by field. */
   serverErrors: Partial<Record<DraftField, string>>;
+  /** What the server said about each custom parameter it refused, by init key
+   *  path, for as long as the value on screen is the one it refused. */
+  customErrors: Record<string, string>;
   /** The server's refusal of the current start date, in `RunStartNote`'s
    *  `problem` shape; null once the start changes. */
   startRefusal: { message: string; suggestion: string | null } | null;
@@ -227,11 +233,16 @@ function createSaver(initialSaved: Job, initialLatest: Latest) {
               message: result.message,
               suggestion: result.suggestedStart ?? null,
             })
-          : refuseGroups(refusals, patch, {
-              message: result.message,
-              code: result.code,
-              paths: result.fields,
-            });
+          : result.code === INVALID_CUSTOM_PARAMS
+            ? refuseCustom(refusals, patch, {
+                message: result.message,
+                errors: customParamErrors(result),
+              })
+            : refuseGroups(refusals, patch, {
+                message: result.message,
+                code: result.code,
+                paths: result.fields,
+              });
       if (lastRefused === patchKey) {
         // The same patch refused again, so the refusal did not take hold.
         host.commit({ failure: { message: result.message, localKey } });
@@ -389,5 +400,7 @@ export function useDraftSaver({
       ? { message: start.message, suggestion: start.suggestion }
       : null;
 
-  return { state, unsaved, saved: engine.saved, serverErrors: errors, startRefusal, withheld, flush, suspend, resume, retry };
+  const customErrors = useMemo(() => customErrorsFor(engine.refusals, local), [engine.refusals, local]);
+
+  return { state, unsaved, saved: engine.saved, serverErrors: errors, customErrors, startRefusal, withheld, flush, suspend, resume, retry };
 }

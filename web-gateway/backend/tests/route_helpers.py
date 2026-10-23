@@ -17,6 +17,7 @@ as it would against a real database, and a route's JSON carries the offset.
 from __future__ import annotations
 
 import copy
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -25,6 +26,20 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.roles import Role
 from app.core.security import create_access_token
+
+
+def changes_in(script: str) -> dict | None:
+    """The changes file (ADR 0038) a job script writes for `sim run`, read back out
+    of its heredoc, or None when the script writes none. Checks the two ends agree:
+    the heredoc is there exactly when `sim run` is given `--changes`."""
+    opening = "<<'OPENGHM_CHANGES'\n"
+    has_flag = '--changes "$OG_WORK_DIR/changes.json"' in script
+    if opening not in script:
+        assert not has_flag and "changes.json" not in script
+        return None
+    assert has_flag
+    start = script.index(opening) + len(opening)
+    return json.loads(script[start : script.index("\nOPENGHM_CHANGES\n", start)])
 
 
 def bson_roundtrip(value: Any) -> Any:

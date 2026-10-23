@@ -18,6 +18,7 @@ import { DraftStepHeading } from "@/components/workspace/draft-step-heading";
 import { RunPeriodBar } from "@/components/workspace/run-period-bar";
 import { useWizardHelp } from "@/components/workspace/wizard-help-context";
 import { WizardHelpButton } from "@/components/workspace/wizard-help-panel";
+import { ModelParametersSection } from "@/components/workspace/model-parameters/model-parameters-section";
 import { OutputChoiceSection } from "@/components/workspace/output-choice-field";
 import {
   OutputVariablesSection,
@@ -35,6 +36,7 @@ import {
   type DraftContext,
   type DraftField,
 } from "@/lib/workspace/draft-state";
+import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 
 /**
  * The server refused this start. Its message ends with "Start on X instead."
@@ -61,10 +63,16 @@ function serverStartProblem(refusal: { message: string; suggestion: string | nul
  * two dates (`describeRunPeriodLimits`); a date that breaks it says so in red
  * under its own field, and a bad start offers the nearest good one.
  *
+ * The Model parameters section follows (`ModelParametersSection`), closed
+ * until asked for: the parameters of WBM's init for the snapshot's code version,
+ * which write `parameters.custom_params`. It needs the snapshot's parameter tree
+ * (`modelParameters`, `useModelParameters`, loaded once by the wizard); without
+ * it the section is not drawn.
+ *
  * It also has to deal with what a draft can hold that this screen never
  * creates, so that it can be taken away (a submit refuses each of them, ADR
  * 0025). They are shown only when the draft has them:
- * - a stored spatial subset or custom parameters can be removed;
+ * - a stored spatial subset can be removed;
  * - a model input of the draft's own can be reverted to the snapshot's;
  * - stored variables the snapshot does not list stay in the list, marked, until
  *   unticked.
@@ -90,7 +98,10 @@ export function DraftRunStep({
   description,
   autoFocusName = false,
   serverErrors,
+  customErrors,
   startRefusal,
+  modelParameters,
+  onRetryModelParameters,
   onNameChange,
   onDescriptionChange,
   onParametersChange,
@@ -115,8 +126,15 @@ export function DraftRunStep({
   autoFocusName?: boolean;
   /** What the server said about a field it did not take. */
   serverErrors: Partial<Record<DraftField, string>>;
+  /** What the server said about each custom parameter it refused, by init key
+   *  path (`useDraftSaver().customErrors`). */
+  customErrors?: Record<string, string>;
   /** The server's refusal of the current start (`useDraftSaver().startRefusal`). */
   startRefusal: { message: string; suggestion: string | null } | null;
+  /** The snapshot's parameter tree (`useModelParameters`); absent, no Model
+   *  parameters section is drawn. */
+  modelParameters?: ModelParametersState;
+  onRetryModelParameters?: () => void;
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;
   onParametersChange: (parameters: JobParameters) => void;
@@ -176,8 +194,6 @@ export function DraftRunStep({
 
   // Cases the toolkit cannot run.
   const spatial = parameters.spatial_domain;
-  const custom = parameters.custom_params;
-  const customEntries = custom ? Object.entries(custom) : [];
 
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-4 border-0 p-0">
@@ -337,61 +353,42 @@ export function DraftRunStep({
           onChange={(post_processing) => set({ post_processing })}
         />
 
-        {(spatial !== null || customEntries.length > 0) && (
+        {modelParameters && (
+          <ModelParametersSection
+            state={modelParameters}
+            custom={parameters.custom_params}
+            errors={customErrors}
+            error={serverErrors.custom ?? null}
+            onChange={(custom_params) => set({ custom_params })}
+            onRetry={onRetryModelParameters}
+          />
+        )}
+
+        {spatial !== null && (
           <DraftSection title="Settings that can't run yet">
-            {spatial !== null && (
-              <div className="flex flex-col gap-2 text-xs text-warning sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <p className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                    This draft has a spatial subset. Only the model snapshot&apos;s whole domain can run:
-                    remove it to submit.
-                  </p>
-                  <p className="ml-5 font-mono text-muted-foreground">
-                    N{spatial.north} S{spatial.south} E{spatial.east} W{spatial.west}
-                  </p>
-                  {serverErrors.spatial && <p className="ml-5 text-destructive">{serverErrors.spatial}</p>}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-10 shrink-0 sm:min-h-8"
-                  {...draftField("spatial")}
-                  onClick={() => set({ spatial_domain: null })}
-                >
-                  Remove
-                </Button>
+            <div className="flex flex-col gap-2 text-xs text-warning sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <p className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                  This draft has a spatial subset. Only the model snapshot&apos;s whole domain can run:
+                  remove it to submit.
+                </p>
+                <p className="ml-5 font-mono text-muted-foreground">
+                  N{spatial.north} S{spatial.south} E{spatial.east} W{spatial.west}
+                </p>
+                {serverErrors.spatial && <p className="ml-5 text-destructive">{serverErrors.spatial}</p>}
               </div>
-            )}
-            {customEntries.length > 0 && (
-              <div className="flex flex-col gap-2 text-xs text-warning sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 space-y-1">
-                  <p className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                    This draft has custom parameters, which can&apos;t run yet: remove them to submit.
-                  </p>
-                  <ul className="ml-5 font-mono text-muted-foreground">
-                    {customEntries.map(([key, value]) => (
-                      <li key={key} className="break-all">
-                        {key} = {value}
-                      </li>
-                    ))}
-                  </ul>
-                  {serverErrors.custom && <p className="ml-5 text-destructive">{serverErrors.custom}</p>}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-10 shrink-0 sm:min-h-8"
-                  {...draftField("custom")}
-                  onClick={() => set({ custom_params: null })}
-                >
-                  Remove
-                </Button>
-              </div>
-            )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 shrink-0 sm:min-h-8"
+                {...draftField("spatial")}
+                onClick={() => set({ spatial_domain: null })}
+              >
+                Remove
+              </Button>
+            </div>
           </DraftSection>
         )}
 

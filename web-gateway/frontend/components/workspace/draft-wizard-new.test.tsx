@@ -33,6 +33,7 @@ vi.mock("@/lib/workspace/use-published-answer", () => ({
 }));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
+  fetchModelParameters: vi.fn(() => new Promise(() => {})),
 }));
 vi.mock("sonner", () => ({ toast }));
 vi.mock("next/navigation", () => ({

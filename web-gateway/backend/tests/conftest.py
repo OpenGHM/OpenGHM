@@ -77,6 +77,7 @@ def db(monkeypatch) -> FakeDB:
         "_id": "ds-1",
         "document": {
             "about": {"name": "Dataset one"},
+            "uses": {"modelCode": {"name": "wbm", "version": "23.9.0", "treeHash": "0" * 64}},
             "simulation": {
                 "spatialCoverage": {
                     "northlimit": 57.1667, "southlimit": 21.75,

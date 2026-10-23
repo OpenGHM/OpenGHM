@@ -503,6 +503,9 @@ export type ActionFailure =
       /** A 422 `invalid_about` answer's `errors`, one per problem. `path` is
        *  the dotted path of the field (`about.tags.0`), null when it names none. */
       errors?: ActionFieldError[];
+      /** A 422 `invalid_custom_params` answer's `errors`: one message per init
+       *  key path (`wbmParam.alpha`). */
+      fieldErrors?: Record<string, string>;
     };
 
 /** One problem a refusal names about a field of what was sent. */

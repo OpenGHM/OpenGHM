@@ -60,7 +60,8 @@ The init is read over Anvil S3's public HTTPS, as the backend has no S3
 credentials: `<S3_PUBLIC_BASE_URL>/<S3_BUCKET>/snapshots/<id>/wbm_init/<init>`,
 where `<init>` is the snapshot's `simulation.init` (a path relative to
 `wbm_init/`, docs/reference/metadata-format.md). A snapshot is immutable by id,
-so a successful read is kept for the life of the process. A failed read is not
+so a successful read is kept for the life of the process, as text (`read_init_text`),
+which the rules and the model parameters (`app.wbm_init`) both read. A failed read is not
 a rule: it answers `None`, nothing is blocked, and the read is not retried for
 `_RETRY_AFTER` seconds so a page of edits does not each wait on a dead network.
 """
@@ -361,7 +362,7 @@ def check_run_start(
     """None when `start` may start a simulation, or when nothing is known to forbid it.
 
     A start equal to the snapshot's own is the published simulation's, which the
-    toolkit does not re-check (it checks only a `--run-start` override), so it
+    toolkit does not re-check (it checks only a `MT_Code_Name.Run_Start` change), so it
     is allowed here too. A value that is not an ISO date is not this check's to
     refuse: the submit's own date check does that."""
     if alignment not in ("year", "month") or not _ISO_DATE_RE.match(start):
@@ -471,7 +472,9 @@ def check_run_dates(
 # Reading the init
 # ---------------------------------------------------------------------------
 
-#: (snapshot id, init) -> rules. Only successful reads: immutable by id.
+#: (snapshot id, init) -> the init's text. Only successful reads: immutable by id.
+_texts: dict[tuple[str, str], str] = {}
+#: (snapshot id, init) -> rules, derived from `_texts`.
 _rules: dict[tuple[str, str], InitRules] = {}
 #: (snapshot id, init) -> monotonic time of the last failed read.
 _failed_at: dict[tuple[str, str], float] = {}
@@ -479,6 +482,7 @@ _failed_at: dict[tuple[str, str], float] = {}
 
 def reset() -> None:
     """Forget what was read (tests)."""
+    _texts.clear()
     _rules.clear()
     _failed_at.clear()
 
@@ -495,15 +499,16 @@ async def _fetch_init(url: str) -> str:
         return response.text
 
 
-async def read_init_rules(snapshot: dict, snapshot_id: str) -> InitRules | None:
-    """The rules of a snapshot (its catalogue `document`), or None when its init
-    cannot be read: no `simulation.init`, or the S3 read failed."""
+async def read_init_text(snapshot: dict, snapshot_id: str) -> str | None:
+    """The text of a snapshot's init (its catalogue `document`), the one cached read every
+    consumer shares (the run-date rules, the model parameters). None when it cannot be read:
+    no `simulation.init`, or the S3 read failed."""
     init = (snapshot.get("simulation") or {}).get("init")
     if not isinstance(init, str) or not init:
         return None
     key = (snapshot_id, init)
-    if key in _rules:
-        return _rules[key]
+    if key in _texts:
+        return _texts[key]
     failed = _failed_at.get(key)
     if failed is not None and time.monotonic() - failed < _RETRY_AFTER:
         return None
@@ -511,10 +516,24 @@ async def read_init_rules(snapshot: dict, snapshot_id: str) -> InitRules | None:
     try:
         content = await _fetch_init(url)
     except Exception as exc:  # network, HTTP status, decoding: all mean "could not check"
-        logger.warning("Could not read %s to find its run-date rules: %s", url, exc)
+        logger.warning("Could not read %s: %s", url, exc)
         _failed_at[key] = time.monotonic()
         return None
     _failed_at.pop(key, None)
+    _texts[key] = content
+    return content
+
+
+async def read_init_rules(snapshot: dict, snapshot_id: str) -> InitRules | None:
+    """The rules of a snapshot (its catalogue `document`), or None when its init
+    cannot be read: no `simulation.init`, or the S3 read failed."""
+    init = (snapshot.get("simulation") or {}).get("init")
+    key = (snapshot_id, init)
+    if isinstance(init, str) and key in _rules:
+        return _rules[key]
+    content = await read_init_text(snapshot, snapshot_id)
+    if content is None:
+        return None
     _rules[key] = rules_from_init(content)
     return _rules[key]
 

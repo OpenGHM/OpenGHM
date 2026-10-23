@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeDraft, fakeModelParameters } from "@/lib/workspace/fixtures";
+import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 
 afterEach(cleanup);
 
@@ -155,7 +156,7 @@ describe("DraftReviewStep: the summary", () => {
     expect(within(row("Output variables")).getByText(/discharge, runoff/)).toBeTruthy();
     expect(within(row("Output variables")).queryByRole("button", { name: "show all" })).toBeNull();
     expect(screen.queryByText("Spatial subset")).toBeNull();
-    expect(screen.queryByText("Custom parameters")).toBeNull();
+    expect(screen.queryByText("Model parameters")).toBeNull();
   });
 
   it("shows only the first few of many variables, and all of them on request", () => {
@@ -170,7 +171,7 @@ describe("DraftReviewStep: the summary", () => {
     expect(within(line).getByRole("button", { name: "show fewer" }).getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("shows a stored spatial subset and custom parameters, and an empty variable list", () => {
+  it("shows a stored spatial subset and model parameters, and an empty variable list", () => {
     const { onEditStep } = review({
       local: {
         ...LOCAL,
@@ -183,12 +184,55 @@ describe("DraftReviewStep: the summary", () => {
       },
     });
     expect(within(row("Spatial subset")).getByText("N5 S-5 E5 W-5")).toBeTruthy();
-    expect(within(row("Custom parameters")).getByText("2 custom parameters")).toBeTruthy();
+    expect(within(row("Model parameters")).getByText("2 changed")).toBeTruthy();
+    expect(within(row("Model parameters")).getByText("a = 1")).toBeTruthy();
+    expect(within(row("Model parameters")).getByText("b = 2")).toBeTruthy();
     expect(within(row("Output variables")).getByText("None chosen")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit spatial subset" }));
     expect(onEditStep).toHaveBeenLastCalledWith("run", "spatial");
-    fireEvent.click(screen.getByRole("button", { name: "Edit custom parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
     expect(onEditStep).toHaveBeenLastCalledWith("run", "custom");
+  });
+
+  describe("the changed model parameters", () => {
+    const withChanges = (modelParameters?: ModelParametersState) =>
+      review({
+        modelParameters,
+        local: {
+          ...LOCAL,
+          parameters: {
+            ...LOCAL.parameters,
+            custom_params: { "wbmParam.maxRffStorage": "500", Glaciers: "", "wbmParam.Infiltration": "HBV" },
+          },
+        },
+      });
+
+    it("lists each path = value, with the parameter's name and a readable value, once the tree is known", () => {
+      withChanges({ status: "ready", tree: fakeModelParameters() });
+      const list = row("Model parameters");
+      expect(within(list).getByText("3 changed")).toBeTruthy();
+      const items = within(list).getAllByRole("listitem").map((li) => li.textContent);
+      expect(items).toEqual([
+        "Runoff from Glaciated AreasGlaciers = '' · switched off",
+        "Infiltration methodwbmParam.Infiltration = HBV",
+        "Runoff storage limitwbmParam.maxRffStorage = 500 · 500 mm",
+      ]);
+    });
+
+    it("lists the keys alone while the tree is not there", () => {
+      withChanges({ status: "loading" });
+      const items = within(row("Model parameters")).getAllByRole("listitem").map((li) => li.textContent);
+      expect(items).toEqual([
+        "Glaciers = ''",
+        "wbmParam.Infiltration = HBV",
+        "wbmParam.maxRffStorage = 500",
+      ]);
+    });
+
+    it("has no row when nothing is changed", () => {
+      review({ local: { ...LOCAL, parameters: { ...LOCAL.parameters, custom_params: {} } } });
+      expect(screen.queryByText("Model parameters")).toBeNull();
+    });
   });
 
   it("shows the compute it will ask for, and where an unset value comes from", () => {

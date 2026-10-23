@@ -23,18 +23,20 @@ every run an empty `WBM_run_state/`. So WBM computes every day of the spinup
 and the run; it warps only the inputs the shared spool cache does not already
 hold (§4).
 
-What a draft can change today is narrow. The wizard bounds the run period to
-the snapshot's `simulation.temporalCoverage`, the output variables are chosen
-from the snapshot's list, and a submit naming a model input, a spatial domain or
-custom parameters is refused (`unsupported_fields`, open item 9). So **every run
-the gateway can submit today asks for output the snapshot already carries**, with
-one exception: a draft can ask for WBM's climatology, which no published snapshot
-holds (the post-processing choice, [gateway.md](gateway.md)). Apart from that, a draft
+What a draft can change today is narrower than WBM's init. The wizard bounds the run
+period to the snapshot's `simulation.temporalCoverage`, the output variables are chosen
+from the snapshot's list, and a submit naming a model input or a spatial domain is
+refused (`unsupported_fields`, open item 9). Custom model parameters are not refused:
+they run, through the changes file ([gateway.md](gateway.md), "Jobs"). So **a run the
+gateway submits asks for output the snapshot already carries**, with two exceptions.
+A draft can ask for WBM's climatology, which no published snapshot holds (the
+post-processing choice, [gateway.md](gateway.md)), and a draft with custom parameters
+changes the model, so the published output does not answer it. Apart from those, a draft
 asks for a period inside the published one and variables among the published
 ones. Such a draft is now answered from that output instead of run (section 3),
 unless the person asks for a rerun. A draft that asks for climatology is not
-answered by a snapshot whose own init did not (`climatology_not_published`), so it
-runs.
+answered by a snapshot whose own init did not (`climatology_not_published`), and a draft
+with custom parameters is not answered at all (`custom_params`), so each runs.
 
 The cost of that, measured on Anvil (toolkit README, "WBM threads" and the
 spool measurement after it): a published Global run is 20 simulated years
@@ -77,7 +79,7 @@ from fields it already holds.
 |---|---|---|
 | **Published** | same model input, domain and parameters as the snapshot; period inside the published one; variables among the published ones; no climatology unless the snapshot's init asked for it | nothing; the draft is answered by the snapshot's `wbm_output/` |
 | **Continue** | as Published, but the period ends after the published end | WBM from the snapshot's end-of-run state, for the added years only |
-| **Compute** | anything else: another model input, domain or parameters (once open item 9 allows them) | WBM from an empty state, spinup included, as today |
+| **Compute** | anything else: custom model parameters (a draft's `custom_params`, which run today), and another model input or domain (once open item 9 allows them) | WBM from an empty state, spinup included, as today |
 
 ### Published
 
@@ -164,7 +166,9 @@ and what a gateway job passes):
   without what only names or times the run (its ID, dates, spinup, output
   variables and directories). That is coarser than one variant per dataset: a
   draft that changes a dataset or a model parameter gets a directory of its
-  own. It is exact for what a draft changes today, its period and variables.
+  own, since the variant hashes the init as the changes file edits it
+  (`openghm.spool.STRIPPED_KEYS` lists what is left out). It is exact for a draft's
+  period and variables, and coarser than needed for a parameter that changes no input.
   A finer key needs the list of datasets a run reads, and WBM's own list
   (`build_spool_batch.pl`) leaves some out (`luAgr`, `CropAreaFrac`, the
   irrigation efficiency, among others), so the toolkit does not plan a

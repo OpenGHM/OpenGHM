@@ -1,7 +1,7 @@
 """The output choice of a snapshot draft (mission 2026-10-08-climatology-can-be-asked-for):
 what a snapshot's init asks of WBM's post-processing (`run_start.post_processing_from_init`),
 `postProcessing` on GET /repository/datasets/{id}, `parameters.post_processing` on a draft,
-the 422 `post_processing_unavailable` of a PATCH and a submit, the `--post-processing` flag,
+the 422 `post_processing_unavailable` of a PATCH and a submit, the `PostProcessing.Run` change,
 and the published answer's `climatology_not_published`.
 
 The init fixtures in tests/fixtures/post_processing/ are copies of the toolkit's
@@ -24,7 +24,7 @@ from app.models.job import JobDB, JobParameters, read_stored_parameters
 from app.services import job_script, published_answer, run_start, slurm
 from app.services.job_script import SubmitInputError, render_job_body
 
-from route_helpers import make_job, make_user, token_for
+from route_helpers import changes_in, make_job, make_user, token_for
 from test_job_script import CACHE, HOME, LOCK, SIM_ID, SNAPSHOT_ID, WORK_DIR
 from test_published_answer import V2_ID, V2_LISTING, Bucket
 
@@ -532,12 +532,12 @@ def test_post_processing_unavailable_keeps_its_precedence_without_a_measurement(
     assert r.json()["detail"]["code"] == "post_processing_unavailable"
 
 
-def test_climatology_over_a_standard_snapshot_passes_the_flag(client, db, draft, monkeypatch, sent):
+def test_climatology_over_a_standard_snapshot_sets_run_to_1(client, db, draft, monkeypatch, sent):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "climatology"
     r = client.post("/api/v1/jobs/job-1/submit", headers=HEADERS)
     assert r.status_code == 202, r.text
-    assert "--post-processing climatology" in sent[0]
+    assert changes_in(sent[0]) == {"code_version": "23.9.0", "set": {"PostProcessing.Run": 1}}
 
 
 @pytest.mark.parametrize(
@@ -549,31 +549,31 @@ def test_climatology_over_a_standard_snapshot_passes_the_flag(client, db, draft,
         ("fc66a2cd_wbm_SHORT.init", None),
     ],
 )
-def test_a_choice_equal_to_the_snapshots_own_passes_no_flag(client, db, draft, monkeypatch, sent, init, value):
+def test_a_choice_equal_to_the_snapshots_own_changes_nothing(client, db, draft, monkeypatch, sent, init, value):
     _serve(monkeypatch, fixture(init))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = value
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert "--post-processing" not in sent[0]
+    assert changes_in(sent[0]) is None
 
 
-def test_standard_over_a_climatology_snapshot_passes_the_flag(client, db, draft, monkeypatch, sent):
+def test_standard_over_a_climatology_snapshot_sets_run_to_0(client, db, draft, monkeypatch, sent):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_SHORT.init"))
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "standard"
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert "--post-processing standard" in sent[0]
+    assert changes_in(sent[0]) == {"code_version": "23.9.0", "set": {"PostProcessing.Run": 0}}
 
 
-def test_an_unreadable_init_passes_a_set_choice(client, db, draft, sent):
+def test_an_unreadable_init_changes_run_for_a_set_choice(client, db, draft, sent):
     db.jobs.docs["job-1"]["parameters"]["post_processing"] = "standard"
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert "--post-processing standard" in sent[0]
+    assert changes_in(sent[0]) == {"code_version": "23.9.0", "set": {"PostProcessing.Run": 0}}
 
 
 def test_a_draft_stored_before_the_field_submits_as_before(client, db, draft, monkeypatch, sent):
     _serve(monkeypatch, fixture("fc66a2cd_wbm_test.init"))
     assert "post_processing" not in db.jobs.docs["job-1"]["parameters"]
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert "--post-processing" not in sent[0]
+    assert changes_in(sent[0]) is None
 
 
 def test_a_stored_unknown_value_does_not_break_reading_or_submitting(client, db, draft, monkeypatch, sent):
@@ -583,7 +583,7 @@ def test_a_stored_unknown_value_does_not_break_reading_or_submitting(client, db,
     assert r.status_code == 200
     assert r.json()["parameters"]["post_processing"] is None
     assert client.post("/api/v1/jobs/job-1/submit", headers=HEADERS).status_code == 202
-    assert "--post-processing" not in sent[0]
+    assert changes_in(sent[0]) is None
 
 
 # ---- the walltime of a run that post-processes ---------------------------------------------
@@ -731,16 +731,20 @@ def test_overrides_carry_the_choice_only_when_it_differs_from_the_snapshots_own(
     assert d(None, None) is None
 
 
-def test_the_flag_goes_before_walltime_and_is_validated():
+def test_the_choice_is_written_as_run_in_the_changes_file_before_walltime():
     kwargs = dict(snapshot_id=SNAPSHOT_ID, sim_id=SIM_ID, openghm_home=HOME, cache_dir=CACHE,
-                  fetch_lock=LOCK, work_dir=WORK_DIR)
-    body = render_job_body(**kwargs, post_processing="climatology", walltime="01:00:00")
-    run = next(line for line in body.splitlines() if " sim run " in line and "snapshot" not in line.split()[0])
-    assert run.endswith("--post-processing climatology --walltime 01:00:00 --spool cache")
-    assert "--post-processing" not in render_job_body(**kwargs)
+                  fetch_lock=LOCK, work_dir=WORK_DIR, code_version="23.9.0")
+    for choice, run in (("standard", 0), ("climatology", 1)):
+        changes = job_script.RunOverrides(post_processing=choice).changes
+        body = render_job_body(**kwargs, changes=changes, walltime="01:00:00")
+        assert changes_in(body) == {"code_version": "23.9.0", "set": {"PostProcessing.Run": run}}
+        assert body.splitlines()[-2].endswith(
+            '--changes "$OG_WORK_DIR/changes.json" --walltime 01:00:00 --spool cache'
+        )
+    assert changes_in(render_job_body(**kwargs)) is None
     for bad in ("none", "climatology; rm -rf /", "", "Standard"):
         with pytest.raises(SubmitInputError):
-            render_job_body(**kwargs, post_processing=bad)
+            job_script.RunOverrides(post_processing=bad).changes
 
 
 # ---- the published answer -----------------------------------------------------------------------

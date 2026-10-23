@@ -73,6 +73,7 @@ import re
 import shlex
 from dataclasses import dataclass
 from datetime import date
+from typing import Mapping, Union
 
 from app.models.job import MAX_RUN_SECONDS, MAX_WALLTIME_SECONDS, JobParameters
 
@@ -81,6 +82,9 @@ class SubmitInputError(ValueError):
     """An input the job body or job spec cannot be built from. `str()` is a
     message meant for the person who owns the draft."""
 
+
+# What a changes file may set a key to (ADR 0038): a string or a number.
+ChangeValue = Union[str, int, float]
 
 # The toolkit accepts `[A-Za-z0-9._-]+` for a snapshot id (fetch.py `_ID_RE`)
 # and for `--id` (sim.py `_SIM_ID_RE`). Both end up as a path component and as
@@ -91,7 +95,7 @@ _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # inside double quotes in the script, so it stays to a conservative alphabet.
 _COMMIT_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
 # A WBM output variable is an identifier (`runoff`, `streamAge`, `discharge_ps`).
-# They are joined with spaces into one `--output-vars` value, so whitespace in
+# They are joined with spaces into one `Output_vars` value, so whitespace in
 # a name would silently become two variables.
 _VARIABLE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -350,15 +354,18 @@ def render_job_body(
     cache_dir: str,
     fetch_lock: str,
     work_dir: str,
-    run_start: str | None = None,
-    run_end: str | None = None,
-    output_vars: str | None = None,
-    post_processing: str | None = None,
+    changes: Mapping[str, ChangeValue] | None = None,
+    code_version: str | None = None,
     walltime: str | None = None,
 ) -> str:
-    """The job's bash body. `run_start`, `run_end`, `output_vars` and `post_processing`
-    are passed to `sim run` only when given — the caller gives one only when the draft
-    differs from the snapshot's own value (see `run_overrides`).
+    """The job's bash body. `changes` are the init edits the draft makes, init key
+    path -> value (`RunOverrides.changes`): the caller gives only what differs from
+    the snapshot's own init. With any, the body writes them, with `code_version`
+    (the snapshot's `uses.modelCode.version`), as the JSON changes file
+    `$OG_WORK_DIR/changes.json` through a quoted heredoc just before `sim run`, and
+    passes `--changes` to it (ADR 0038). The script is stored with the job and a
+    continuation (ADR 0037) runs it as it is, so the script itself rewrites the file
+    each time. Without any, there is no file and no `--changes`.
 
     `walltime` is the value the job asks SLURM for (`--time`, as
     `slurm.resolve_compute` resolves it, in SLURM's own syntax): the toolkit's
@@ -395,19 +402,15 @@ def render_job_body(
             f"The work directory must be an absolute path ending in /{sim_id} (got {work_dir!r})"
         )
 
+    changes_file = render_changes_file(changes, code_version) if changes else None
+
     run = [
         'step run "$OPENGHM" sim run --config "$CONFIG"',
         f'"$CACHE/snapshots/{snapshot_id}"',
         f"--id {sim_id}",
     ]
-    if run_start is not None:
-        run.append(f"--run-start {shlex.quote(_check_date('run start', run_start))}")
-    if run_end is not None:
-        run.append(f"--run-end {shlex.quote(_check_date('run end', run_end))}")
-    if output_vars is not None:
-        run.append(f"--output-vars {shlex.quote(_check_output_vars(output_vars))}")
-    if post_processing is not None:
-        run.append(f"--post-processing {_check_post_processing(post_processing)}")
+    if changes_file is not None:
+        run.append(f'--changes "$OG_WORK_DIR/{CHANGES_FILENAME}"')
     if walltime is not None:
         run.append(f"--walltime {shlex.quote(_check_walltime(walltime))}")
     run.append("--spool cache")
@@ -435,9 +438,94 @@ def render_job_body(
             'mkdir -p "$CACHE/snapshots"',
             f'step fetch flock {shlex.quote(lock)} "$OPENGHM" snapshot fetch --config "$CONFIG" '
             f'{snapshot_id} --dest "$CACHE/snapshots/{snapshot_id}"',
+            *([_changes_heredoc(changes_file)] if changes_file is not None else []),
             " ".join(run),
             "OG_PHASE=check",
         ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# The changes file (ADR 0038)
+# ---------------------------------------------------------------------------
+
+CHANGES_FILENAME = "changes.json"
+_CHANGES_DELIMITER = "OPENGHM_CHANGES"
+_KEY_PATH_RE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
+
+# The init key paths a submit sets today, and what each is checked against.
+RUN_START_KEY = "MT_Code_Name.Run_Start"
+RUN_END_KEY = "MT_Code_Name.Run_End"
+OUTPUT_VARS_KEY = "Output_vars"
+POST_PROCESSING_KEY = "PostProcessing.Run"
+# `post_processing` choice -> `PostProcessing.Run`, the toolkit's own mapping
+# (`POST_PROCESSING_CHOICES`): standard is Run 0, climatology is Run 1.
+_POST_PROCESSING_RUN = {"standard": 0, "climatology": 1}
+
+
+def render_changes_file(changes: Mapping[str, ChangeValue], code_version: str | None) -> str:
+    """The changes file's JSON (`{"code_version", "set"}`, ADR 0038): sorted keys,
+    two-space indent, ASCII only (`ensure_ascii`), so no byte of it can be a quote of
+    the heredoc that carries it and WBM never sees a non-ASCII byte. Every key must be
+    an init key path; the four a submit sets are checked as they were when each was a
+    flag. Raises `SubmitInputError` for a key or value that is not safe to write, and
+    for changes with no `code_version`, which the toolkit would refuse."""
+    if not code_version or not isinstance(code_version, str):
+        raise SubmitInputError(
+            "The snapshot names no WBM code version (uses.modelCode.version), "
+            "so its init cannot be edited."
+        )
+    checked: dict[str, ChangeValue] = {}
+    for key, value in changes.items():
+        if not isinstance(key, str) or not _KEY_PATH_RE.match(key):
+            raise SubmitInputError(f"{key!r} is not an init key path.")
+        checked[key] = _check_change(key, value)
+    text = json.dumps(
+        {"code_version": code_version, "set": checked},
+        sort_keys=True,
+        ensure_ascii=True,
+        indent=2,
+    )
+    # Cannot happen: a line of this JSON starts with a brace, a quote or spaces,
+    # and a heredoc ends only at a line that is its delimiter alone. Kept as the
+    # one line that would turn a mistake here into a script that runs the rest of
+    # the file.
+    if any(line == _CHANGES_DELIMITER for line in text.splitlines()):
+        raise SubmitInputError("The changes file cannot be written into the job script.")
+    return text
+
+
+def _check_change(key: str, value: ChangeValue) -> ChangeValue:
+    if key == RUN_START_KEY:
+        return _check_date("run start", value)
+    if key == RUN_END_KEY:
+        return _check_date("run end", value)
+    if key == OUTPUT_VARS_KEY:
+        return _check_output_vars(value) if isinstance(value, str) else _bad_value(key)
+    if key == POST_PROCESSING_KEY:
+        if isinstance(value, bool) or value not in _POST_PROCESSING_RUN.values():
+            raise SubmitInputError("The output choice must be 'standard' or 'climatology'.")
+        return value
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        _bad_value(key)
+    if isinstance(value, float) and not math.isfinite(value):
+        _bad_value(key)
+    return value
+
+
+def _bad_value(key: str):
+    raise SubmitInputError(f"The value for {key} must be a string or a number.")
+
+
+def _changes_heredoc(changes_file: str) -> str:
+    """Bash that writes the changes file into the work directory. The delimiter is
+    quoted, so bash expands nothing in the JSON. `mkdir -p`: `sim run` makes the
+    directory later, and a continuation finds it there already."""
+    return (
+        'mkdir -p "$OG_WORK_DIR"\n'
+        f'cat > "$OG_WORK_DIR/{CHANGES_FILENAME}" <<\'{_CHANGES_DELIMITER}\'\n'
+        f"{changes_file}\n"
+        f"{_CHANGES_DELIMITER}"
     )
 
 
@@ -529,6 +617,15 @@ def with_headroom(walltime: str) -> str:
     Mirrored by `withHeadroom` in the frontend's lib/jobs/compute.ts."""
     seconds = _headroom_seconds(parse_slurm_time(walltime))
     return format_slurm_time(min(seconds, MAX_WALLTIME_SECONDS))
+
+
+def model_code_version(snapshot: dict) -> str | None:
+    """The snapshot's `uses.modelCode.version`, which a changes file must repeat as
+    its `code_version` (ADR 0038). None when the document has none."""
+    uses = snapshot.get("uses")
+    code = uses.get("modelCode") if isinstance(uses, dict) else None
+    version = code.get("version") if isinstance(code, dict) else None
+    return version if isinstance(version, str) and version else None
 
 
 def post_processing_walltime(snapshot: dict) -> str | None:
@@ -635,17 +732,37 @@ def snapshot_defaults(snapshot: dict) -> JobParameters:
 
 @dataclass(frozen=True)
 class RunOverrides:
-    """The `sim run` flags a draft needs. `None` means "the snapshot's own
-    value": no flag is passed and the toolkit's init is untouched."""
+    """The init edits a draft needs. `None` means "the snapshot's own value": the
+    key is not in the changes file and the init is untouched there."""
 
     run_start: str | None = None
     run_end: str | None = None
     output_vars: str | None = None
     post_processing: str | None = None
 
+    @property
+    def changes(self) -> dict[str, ChangeValue]:
+        """The edits as init key paths and values, what `render_job_body` writes
+        into the changes file (ADR 0038): the dates as `YYYY-MM-DD`, the output
+        variables as one space-separated string, the post-processing choice as the
+        integer `PostProcessing.Run` (standard 0, climatology 1). Empty when the
+        draft differs from the snapshot nowhere."""
+        out: dict[str, ChangeValue] = {}
+        if self.run_start is not None:
+            out[RUN_START_KEY] = self.run_start
+        if self.run_end is not None:
+            out[RUN_END_KEY] = self.run_end
+        if self.output_vars is not None:
+            out[OUTPUT_VARS_KEY] = self.output_vars
+        if self.post_processing is not None:
+            out[POST_PROCESSING_KEY] = _POST_PROCESSING_RUN[
+                _check_post_processing(self.post_processing)
+            ]
+        return out
+
 
 def _post_processing_override(value: str | None, own: str | None) -> str | None:
-    """The flag value for a draft's choice: none when the draft leaves it unset or
+    """The choice a draft sends: none when the draft leaves it unset or
     asks for what the snapshot's init already has. `own` is None when the init
     could not be read, and then any set choice is passed (the toolkit, which reads
     the init, is the last line)."""
@@ -657,8 +774,8 @@ def _post_processing_override(value: str | None, own: str | None) -> str | None:
 def run_overrides(
     parameters: JobParameters, snapshot: dict, own_post_processing: str | None = None
 ) -> RunOverrides:
-    """The flags that turn the snapshot's init into the draft's simulation, in the
-    toolkit's formats: dates as `YYYY-MM-DD`, output variables as one
+    """The edits that turn the snapshot's init into the draft's simulation, in the
+    toolkit's formats (`RunOverrides.changes` gives them as a changes file's keys): dates as `YYYY-MM-DD`, output variables as one
     space-separated string (WBM's `Output_vars` is whitespace-separated).
 
     A value equal to the snapshot's own is not passed: a draft left at its
@@ -693,10 +810,11 @@ def run_overrides(
 def unsupported_fields(
     parameters: JobParameters, model_input_id: str | None, snapshot: dict
 ) -> list[str]:
-    """The fields of a draft the toolkit has no flag for yet (ADR 0025,
-    open item 9): a model-input override, a spatial domain other than the
-    snapshot's own, custom init parameters. A submit that names any of them is
-    refused rather than run without them."""
+    """The fields of a draft the changes file has no entry for yet (ADR 0025,
+    open item 9): a model-input override and a spatial domain other than the
+    snapshot's own. A submit that names any of them is refused rather than run
+    without them. Custom parameters are not here: the changes file carries them
+    (`app.wbm_init.validate.typed_changes`)."""
     fields: list[str] = []
     if model_input_id:
         fields.append("model_input_id")
@@ -704,8 +822,6 @@ def unsupported_fields(
         parameters.spatial_domain, snapshot
     ):
         fields.append("parameters.spatial_domain")
-    if parameters.custom_params:
-        fields.append("parameters.custom_params")
     return fields
 
 

@@ -10,7 +10,7 @@ import random
 import string
 import uuid
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -62,12 +62,14 @@ from app.models.user import TokenPayload
 from app.services import (
     job_live,
     job_script,
+    model_parameters,
     publish,
     published_answer,
     run_start,
     sbatch_refusal,
     slurm,
 )
+from app.wbm_init import validate as wbm_validate
 
 logger = logging.getLogger(__name__)
 
@@ -588,6 +590,19 @@ async def update_simulation(
             await _refuse_unavailable_post_processing(
                 doc["dataset_id"], envelope["document"], changes["parameters"]["post_processing"]
             )
+        custom_params = changes["parameters"].get("custom_params")
+        if envelope is not None and custom_params:
+            # What equals the snapshot's own value is not a change and is not kept.
+            # The variables it is checked against are the ones being saved with it, else
+            # the stored draft's.
+            variables = (
+                changes["parameters"]["variables"]
+                if "variables" in changes["parameters"]
+                else (doc.get("parameters") or {}).get("variables")
+            )
+            changes["parameters"]["custom_params"], _ = await _checked_custom_params(
+                doc["dataset_id"], envelope["document"], custom_params, variables or ()
+            )
 
     if "slurm_config" in changes:
         # Only the fields the client sent change; `null` goes back to the
@@ -647,6 +662,42 @@ def _not_a_draft(current: str) -> HTTPException:
     )
 
 
+async def _checked_custom_params(
+    dataset_id: str,
+    snapshot: dict,
+    custom_params: dict[str, str],
+    variables: Sequence[str] = (),
+) -> tuple[dict[str, str], model_parameters.Loaded]:
+    """A draft's `custom_params` without the entries that equal the snapshot's own value,
+    after checking the rest against the parameter tree resolved for the snapshot's WBM
+    version (`app.wbm_init.validate`). 422 `invalid_custom_params` with one message per
+    refused key; 503 `init_unavailable` when the snapshot's init cannot be read, since
+    nothing can be checked without it; 422 `model_code_version_missing` for a snapshot with
+    no WBM version the tree knows. `variables` is the draft's output list: a module is not
+    switched off while it still holds an output that needs it."""
+    try:
+        loaded = await model_parameters.load(snapshot, dataset_id)
+    except model_parameters.Unavailable as exc:
+        raise _error(
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if exc.code == "init_unavailable"
+            else status.HTTP_422_UNPROCESSABLE_ENTITY,
+            exc.code,
+            exc.message,
+        )
+    kept = wbm_validate.drop_unchanged(custom_params, loaded.resolved, loaded.values)
+    errors = wbm_validate.validate(kept, loaded.resolved, loaded.values, variables)
+    if errors:
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "invalid_custom_params",
+            "These model parameters cannot be used: "
+            + "; ".join(f"{path}: {message}" for path, message in errors.items()),
+            errors=errors,
+        )
+    return kept, loaded
+
+
 async def _refuse_unaligned_start(dataset_id: str, snapshot: dict, start: str) -> None:
     """422 when the snapshot's model cannot start a simulation on `start` (WBM writes a
     simulation's first step into band 1 of an output file, so a start must be the first
@@ -677,7 +728,7 @@ async def _refuse_unavailable_post_processing(
 
     Two refusals, in this order. `post_processing_unavailable`: the draft asks for a
     choice (`standard` or `climatology`) of a snapshot whose init has no
-    `PostProcessing` block with a `Run` to set, where the toolkit refuses the flag
+    `PostProcessing` block with a `Run` to set, where the toolkit refuses the change
     after a queue wait. `climatology_unavailable`: the draft asks for `climatology`
     while `CLIMATOLOGY_ENABLED` is off, or of a snapshot with no measured
     post-processing time (`recommendedCompute.postProcessingWalltime`), so there is
@@ -912,11 +963,21 @@ async def submit_simulation(
             raise _error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "unsupported_fields",
-                "These settings cannot run yet, because the toolkit has no option for "
-                f"them: {', '.join(fields)}. Reset them to the snapshot's own values "
+                "These settings cannot run yet, because a run cannot apply them: "
+                f"{', '.join(fields)}. Reset them to the snapshot's own values "
                 "and submit again.",
                 fields=fields,
             )
+
+        # The draft's model parameters, checked again against the tree: the snapshot
+        # and the tree do not change under a draft, but nothing else vouches for a
+        # stored draft. Typed for the changes file.
+        custom_changes: dict[str, job_script.ChangeValue] = {}
+        if job.parameters.custom_params:
+            kept, loaded = await _checked_custom_params(
+                job.dataset_id, snapshot, job.parameters.custom_params, job.parameters.variables
+            )
+            custom_changes = wbm_validate.typed_changes(kept, loaded.resolved, loaded.values)
 
         await _refuse_unavailable_post_processing(
             job.dataset_id, snapshot, job.parameters.post_processing
@@ -945,6 +1006,20 @@ async def submit_simulation(
             overrides = job_script.run_overrides(
                 job.parameters, snapshot, rules.post_processing if rules else None
             )
+            # The draft's own fields win for their own keys; they never overlap
+            # with custom parameters, which refuse a key a draft field owns.
+            changes = {**custom_changes, **overrides.changes}
+            code_version = job_script.model_code_version(snapshot)
+            if changes and code_version is None:
+                # The changes file must name the WBM version it was written for
+                # (ADR 0038), and the toolkit refuses one that does not.
+                raise _error(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "model_code_version_missing",
+                    "This snapshot does not say which WBM version it runs "
+                    "(uses.modelCode.version), so the changes in this draft cannot be "
+                    "applied. Reset them to the snapshot's own values to run it as published.",
+                )
             # What sbatch is asked for (`--time`), told to the toolkit too so the
             # spool lease lasts as long as the job can. A recommendation over one
             # job's 96 h is capped there (`with_headroom`): the run continues in
@@ -958,10 +1033,8 @@ async def submit_simulation(
                 cache_dir=settings.ANVIL_CACHE_DIR,
                 fetch_lock=settings.ANVIL_FETCH_LOCK,
                 work_dir=work_dir,
-                run_start=overrides.run_start,
-                run_end=overrides.run_end,
-                output_vars=overrides.output_vars,
-                post_processing=overrides.post_processing,
+                changes=changes,
+                code_version=code_version,
                 walltime=walltime,
             )
             toolkit = {"home": home, "commit": job_script.toolkit_commit(home)}

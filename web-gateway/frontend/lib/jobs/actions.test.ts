@@ -414,6 +414,24 @@ describe("publishDraft", () => {
     ]);
   });
 
+  it("carries a 422 invalid_custom_params' errors as one message per key path", async () => {
+    patch.mockRejectedValue(
+      refused(422, {
+        code: "invalid_custom_params",
+        message: "Some model parameters are not valid.",
+        errors: { "wbmParam.alpha": "Enter a number.", "Glaciers": "", "wbmParam.Infiltration": "Choose FrAMES or HBV." },
+      })
+    );
+    const result = await updateDraft("j", {});
+    expect(result).toMatchObject({ ok: false, reason: "error", status: 422, code: "invalid_custom_params" });
+    // An entry with no sentence is dropped, like an empty `errors` list item.
+    expect((result as { fieldErrors?: unknown }).fieldErrors).toEqual({
+      "wbmParam.alpha": "Enter a number.",
+      "wbmParam.Infiltration": "Choose FrAMES or HBV.",
+    });
+    expect((result as { errors?: unknown }).errors).toBeUndefined();
+  });
+
   it("carries a 503's code and message, as a submit does", async () => {
     post.mockRejectedValue(refused(503, { code: "anvil_unreachable", message: "Anvil could not be reached." }));
     await expect(publishDraft("j", about)).resolves.toMatchObject({

@@ -5,7 +5,8 @@ import type { Dataset, PostProcessingSettings } from "@/lib/repository/types";
 
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import type { DraftContext } from "@/lib/workspace/draft-state";
-import { fakeDataset } from "@/lib/workspace/fixtures";
+import { fakeDataset, fakeModelParameters } from "@/lib/workspace/fixtures";
+import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 
 afterEach(cleanup);
 
@@ -51,6 +52,7 @@ function manyVariables() {
   });
 }
 const FOUND: DraftContext = { dataset, snapshotState: "found" };
+const PARAMETER_TREE: ModelParametersState = { status: "ready", tree: fakeModelParameters() };
 const NO_SNAPSHOT: DraftContext = { dataset: null, snapshotState: "unavailable" };
 
 const PARAMETERS: JobParameters = {
@@ -159,17 +161,19 @@ describe("the draft run step: fields the wizard can focus", () => {
       parameters: {
         ...PARAMETERS,
         spatial_domain: { north: 5, south: -5, east: 5, west: -5 },
-        custom_params: { a: "1" },
       },
+      modelParameters: PARAMETER_TREE,
     });
     openVariables();
     const marked = (field: string) => document.querySelector(`[data-draft-field="${field}"]`) as HTMLElement;
     expect(marked("start")).toBe(start());
     expect(marked("end")).toBe(end());
     expect(marked("cores")).toBe(screen.getByLabelText("Cores"));
-    const removes = screen.getAllByRole("button", { name: "Remove" });
-    expect(marked("spatial")).toBe(removes[0]);
-    expect(marked("custom")).toBe(removes[1]);
+    expect(marked("spatial")).toBe(screen.getByRole("button", { name: "Remove" }));
+    // Model parameters are closed: the button that opens them is what an Edit link presses.
+    expect(document.querySelector('[data-draft-reveals~="custom"]')).toBe(
+      screen.getByRole("button", { name: "Edit model parameters" })
+    );
     // A short list: focus goes to its first checkbox.
     expect(marked("variables").querySelector("input")).toBe(checkbox("discharge"));
   });
@@ -572,7 +576,7 @@ describe("the draft run step: output variables", () => {
 describe("the draft run step: what a submit refuses", () => {
   const subset = { north: 5, south: -5, east: 5, west: -5 };
 
-  it("shows nothing about a spatial subset, or a custom parameter, a draft does not have", () => {
+  it("shows nothing about a spatial subset a draft does not have", () => {
     step();
     expect(screen.queryByText(/spatial subset/i)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /spatial/i })).toBeNull();
@@ -589,20 +593,102 @@ describe("the draft run step: what a submit refuses", () => {
     expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, spatial_domain: null });
   });
 
-  it("lists stored custom parameters and removes them", () => {
-    const { onParametersChange } = step({
-      parameters: { ...PARAMETERS, custom_params: { alpha: "1", beta: "two" } },
-    });
-    expect(screen.getByText(/This draft has custom parameters/)).toBeTruthy();
-    expect(screen.getByText("alpha = 1")).toBeTruthy();
-    expect(screen.getByText("beta = two")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: null });
+  it("lists no custom parameters here: they are the Model parameters section's now", () => {
+    step({ parameters: { ...PARAMETERS, custom_params: { alpha: "1" } } });
+    expect(screen.queryByText(/can't run yet/)).toBeNull();
+    expect(screen.queryByText("alpha = 1")).toBeNull();
   });
 
-  it("says nothing about custom parameters when there are none", () => {
-    step({ parameters: { ...PARAMETERS, custom_params: {} } });
-    expect(screen.queryByText(/custom parameters/)).toBeNull();
+  it("keeps the spatial subset in its own block, without a custom parameters line", () => {
+    step({
+      parameters: { ...PARAMETERS, spatial_domain: subset, custom_params: { "wbmParam.alpha": "7" } },
+      modelParameters: PARAMETER_TREE,
+    });
+    expect(screen.getByText(/Settings that can't run yet/)).toBeTruthy();
+    expect(screen.queryByText(/custom parameters/i)).toBeNull();
+  });
+});
+
+describe("the draft run step: model parameters", () => {
+  const sectionHeading = () => screen.queryByRole("heading", { level: 3, name: "Model parameters" });
+
+  it("has a Model parameters section, closed, after post-processing and before compute", () => {
+    step({ modelParameters: PARAMETER_TREE });
+    const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(titles.indexOf("Model parameters")).toBe(titles.indexOf("Post-processing") + 1);
+    expect(titles.indexOf("Compute")).toBe(titles.indexOf("Model parameters") + 1);
+    expect(screen.getByText("WBM 22.1.1 · No parameters changed")).toBeTruthy();
+    expect(screen.queryByLabelText("Soil moisture drying coefficient")).toBeNull();
+  });
+
+  it("draws nothing for them when no tree was given", () => {
+    step();
+    expect(sectionHeading()).toBeNull();
+  });
+
+  it("shows how many parameters the draft changes", () => {
+    step({
+      modelParameters: PARAMETER_TREE,
+      parameters: { ...PARAMETERS, custom_params: { "wbmParam.alpha": "7", Glaciers: "" } },
+    });
+    expect(screen.getByText("WBM 22.1.1 · 2 parameters changed")).toBeTruthy();
+  });
+
+  it("writes a changed value into custom_params with the rest of the parameters, and a reset takes it out", () => {
+    const first = step({ modelParameters: PARAMETER_TREE });
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: /^WBM parameters/ }));
+    fireEvent.change(screen.getByLabelText("Soil moisture drying coefficient"), { target: { value: "7" } });
+    expect(first.onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: { "wbmParam.alpha": "7" } });
+    first.unmount();
+
+    const second = step({
+      modelParameters: PARAMETER_TREE,
+      parameters: { ...PARAMETERS, custom_params: { "wbmParam.alpha": "7" } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Soil moisture drying coefficient" }));
+    expect(second.onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: null });
+  });
+
+  it("switches a module off with an empty value", () => {
+    const { onParametersChange } = step({ modelParameters: PARAMETER_TREE });
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: /^WBM parameters/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Switch off Runoff from Glaciated Areas" }));
+    expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: { Glaciers: "" } });
+  });
+
+  it("shows the backend's messages at the fields, and the message for the whole set", () => {
+    step({
+      modelParameters: PARAMETER_TREE,
+      parameters: { ...PARAMETERS, custom_params: { "wbmParam.alpha": "abc" } },
+      customErrors: { "wbmParam.alpha": "Enter a number." },
+      serverErrors: { custom: "Some model parameters are not valid." },
+    });
+    expect(screen.getByText("Some model parameters are not valid.")).toBeTruthy();
+    expect(screen.getByLabelText("Soil moisture drying coefficient").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Enter a number.")).toBeTruthy();
+  });
+
+  it("is still a section, and says so, when the tree could not be read; the rest of the step works", () => {
+    const retry = vi.fn();
+    const { onNameChange } = step({
+      modelParameters: { status: "unavailable" },
+      onRetryModelParameters: retry,
+    });
+    expect(screen.getByText("Not available for this snapshot")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Still works" } });
+    expect(onNameChange).toHaveBeenCalledWith("Still works");
+  });
+
+  it("switches its controls off while a submit is under way", () => {
+    step({
+      disabled: true,
+      modelParameters: PARAMETER_TREE,
+      parameters: { ...PARAMETERS, custom_params: { "wbmParam.alpha": "7" } },
+    });
+    expect(screen.getByRole("button", { name: "Edit model parameters" }).matches(":disabled")).toBe(true);
   });
 });
 

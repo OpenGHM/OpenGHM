@@ -60,6 +60,7 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
   let suggestedStart: string | null | undefined;
   let conflictReason: string | undefined;
   let errors: ActionFieldError[] | undefined;
+  let fieldErrors: Record<string, string> | undefined;
   if (typeof detail === "string") {
     message = detail;
   } else if (Array.isArray(detail)) {
@@ -95,6 +96,12 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
     if (Array.isArray(d.errors)) {
       const listed = d.errors.map(fieldError).filter((e): e is ActionFieldError => e !== null);
       if (listed.length > 0) errors = listed;
+    } else if (d.errors && typeof d.errors === "object") {
+      // `invalid_custom_params`: a map of init key path to message.
+      const entries = Object.entries(d.errors as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim() !== ""
+      );
+      if (entries.length > 0) fieldErrors = Object.fromEntries(entries);
     }
   }
   if (message === null || message.trim() === "") {
@@ -107,7 +114,7 @@ export function describeFailure(error: unknown, notFoundStatuses: number[]): Act
       message = "Request failed.";
     }
   }
-  return { ok: false, reason: "error", message, status, code, fields, suggestedStart, conflictReason, errors };
+  return { ok: false, reason: "error", message, status, code, fields, suggestedStart, conflictReason, errors, fieldErrors };
 }
 
 function noAnswer(code: string | undefined, message: string): ActionFailure {

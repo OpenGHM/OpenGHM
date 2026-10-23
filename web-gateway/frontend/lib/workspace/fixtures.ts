@@ -27,6 +27,7 @@ import type {
   PreviousJob,
 } from "@/lib/jobs/types";
 import type { Dataset } from "@/lib/repository/types";
+import type { ModelParameters, ParamField } from "@/lib/workspace/model-parameters";
 
 const HOUR = 3_600_000;
 
@@ -695,5 +696,174 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
     licenseUrl: "https://spdx.org/licenses/GPL-3.0-only.html",
     generatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
+  };
+}
+
+// ─── Model parameters ────────────────────────────────────────────────────────
+
+/** A scalar field of the parameter tree, with the defaults a basic, editable
+ *  one has. Only what a test names is set. */
+export function fakeParamField(
+  path: string,
+  overrides: Partial<ParamField> = {}
+): ParamField {
+  return {
+    kind: "field",
+    key: path.split(".").pop()!.toLowerCase(),
+    label: path,
+    doc: null,
+    tier: "basic",
+    path,
+    type: "number",
+    editable: true,
+    current: null,
+    default: null,
+    unit: null,
+    options: null,
+    min: null,
+    max: null,
+    calibration: null,
+    show_if: null,
+    ...overrides,
+  };
+}
+
+/**
+ * The resolved parameter tree of a Wyoming-like snapshot (WBM 22.1.1), cut down
+ * to a handful of nodes: the wire shape of
+ * `GET /api/v1/repository/datasets/{id}/model-parameters`, with a field of each
+ * editable type, a read-only dataset, a module that can be switched off, and an
+ * advanced field and group.
+ */
+export function fakeModelParameters(): ModelParameters {
+  return {
+    code_version: "22.1.1",
+    groups: [
+      {
+        kind: "group",
+        key: "run",
+        label: "Run",
+        doc: null,
+        tier: "basic",
+        children: [
+          fakeParamField("Comment", {
+            key: "title",
+            label: "Run description",
+            type: "string",
+            current: "Wyoming baseline",
+            doc: "Free text kept in the init.",
+          }),
+          fakeParamField("Spinup.Loops", {
+            key: "loops",
+            label: "Spin-up loops",
+            type: "int",
+            current: "0",
+            default: 0,
+            min: 0,
+          }),
+          fakeParamField("Spinup.Start", {
+            key: "start",
+            label: "Spin-up start",
+            type: "date",
+            current: "2001-01-01",
+            show_if: "loops > 0",
+          }),
+        ],
+      },
+      {
+        kind: "group",
+        key: "hydrology_params",
+        label: "WBM parameters (wbmParam)",
+        doc: null,
+        tier: "basic",
+        children: [
+          fakeParamField("wbmParam.alpha", {
+            key: "alpha",
+            label: "Soil moisture drying coefficient",
+            current: "5",
+            default: 5,
+            calibration: [1, 20],
+            doc: "1 wet, 10 drier, 20 dry. A larger alpha makes AET less water-limited.",
+          }),
+          fakeParamField("wbmParam.Infiltration", {
+            key: "infiltration",
+            label: "Infiltration method",
+            type: "enum",
+            current: "FrAMES",
+            default: "FrAMES",
+            options: [
+              { value: "FrAMES", label: "FrAMES" },
+              { value: "HBV", label: "HBV" },
+            ],
+          }),
+          fakeParamField("wbmParam.endorheicDir", {
+            key: "endorheic_dir",
+            label: "Endorheic directions",
+            type: "bool01",
+            current: "0",
+            default: 0,
+          }),
+          fakeParamField("wbmParam.RhRt2", {
+            key: "rhrt2",
+            label: "Runoff storage release coefficient",
+            type: "dataset",
+            editable: false,
+            current: "0.56",
+            default: 0.56,
+          }),
+          fakeParamField("wbmParam.groundWatBETA", {
+            key: "gw_beta",
+            label: "Groundwater baseflow coefficient",
+            type: "dataset",
+            edit_as: "number",
+            current: "/wbm/data_init/groundwater/beta.init",
+            default: 0.0167,
+            unit: "1/day",
+          }),
+          fakeParamField("wbmParam.HBV_Beta", {
+            key: "hbv_beta",
+            label: "HBV direct infiltration recharge factor",
+            tier: "advanced",
+            current: null,
+            default: 60,
+            show_if: "infiltration == HBV",
+          }),
+          fakeParamField("wbmParam.maxRffStorage", {
+            key: "max_rff_storage",
+            label: "Runoff storage limit",
+            tier: "advanced",
+            current: "1000",
+            default: 1000,
+            unit: "mm",
+            min: 0,
+          }),
+          {
+            kind: "module",
+            key: "glaciated_area_runoff",
+            name: "Runoff from Glaciated Areas",
+            doc: "WBM reads rasterized glacier area and glacier runoff.",
+            tier: "basic",
+            path: "Glaciers",
+            state: "on",
+            switch_off: true,
+            children: [
+              fakeParamField("Glaciers.glMelt", {
+                key: "melt",
+                label: "Glacier melt",
+                type: "dataset",
+                editable: false,
+                current: "/wbm/data_init/glacier_melt.init",
+              }),
+              fakeParamField("Glaciers.glRatio", {
+                key: "ratio",
+                label: "Glacier melt ratio",
+                current: "1",
+                default: 1,
+              }),
+            ],
+          },
+        ],
+      },
+    ],
   };
 }

@@ -31,6 +31,7 @@ vi.mock("@/lib/workspace/use-published-answer", () => ({
 }));
 vi.mock("@/lib/repository/actions", () => ({
   fetchModelInputById: vi.fn(() => new Promise(() => {})),
+  fetchModelParameters: vi.fn(() => new Promise(() => {})),
 }));
 vi.mock("sonner", () => ({ toast }));
 // The address bar is the router: what a test pushes is what `useSearchParams` reads.
@@ -42,7 +43,9 @@ vi.mock("next/navigation", () => ({
 
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { clearDraftCache, readDraftCache, writeDraftCache } from "@/lib/workspace/draft-cache";
-import { fakeDataset, fakeDraft } from "@/lib/workspace/fixtures";
+import { fetchModelParameters } from "@/lib/repository/actions";
+import { fakeDataset, fakeDraft, fakeModelParameters } from "@/lib/workspace/fixtures";
+import { forgetModelParameters } from "@/lib/workspace/use-model-parameters";
 import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 beforeAll(() => {
@@ -635,6 +638,86 @@ describe("the Post-processing choice is saved like the run period", () => {
     pressSave();
     await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
     expect(updateDraft.mock.calls[0][1]).toEqual({ about: { name: "Colorado", description: null } });
+  });
+});
+
+describe("model parameters are saved like the run period", () => {
+  const params = vi.mocked(fetchModelParameters);
+  const alpha = () => screen.getByLabelText("Soil moisture drying coefficient") as HTMLInputElement;
+  const reach = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "Edit model parameters" }));
+    const group = screen.getByRole("button", { name: /^WBM parameters/ });
+    if (group.getAttribute("aria-expanded") === "false") fireEvent.click(group);
+  };
+
+  beforeEach(() => {
+    forgetModelParameters();
+    params.mockReset();
+    params.mockResolvedValue({ ok: true, data: fakeModelParameters() });
+  });
+
+  it("loads the snapshot's tree, and a change is Unsaved changes, sent by Save draft inside parameters", async () => {
+    wizard({ step: "run" });
+    expect(await screen.findByText("WBM 22.1.1 · No parameters changed")).toBeTruthy();
+    expect(params).toHaveBeenCalledWith(dataset.id);
+    await reach();
+    fireEvent.change(alpha(), { target: { value: "7" } });
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    await pause(1_500);
+    expect(updateDraft).not.toHaveBeenCalled();
+    pressSave();
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
+    expect(updateDraft).toHaveBeenCalledWith("job-1", {
+      parameters: { ...JOB.parameters, custom_params: { "wbmParam.alpha": "7" } },
+    });
+    await waitFor(() => expect(screen.queryByText("Unsaved changes")).toBeNull());
+    expect(screen.getByText("WBM 22.1.1 · 1 parameter changed")).toBeTruthy();
+  });
+
+  it("puts the backend's message at the field when the save is refused, and clears it when the value changes", async () => {
+    updateDraft.mockResolvedValueOnce({
+      ok: false,
+      reason: "error",
+      status: 422,
+      code: "invalid_custom_params",
+      message: "Some model parameters are not valid.",
+      fieldErrors: { "wbmParam.alpha": "Enter a number." },
+    });
+    wizard({ step: "run" });
+    await reach();
+    fireEvent.change(alpha(), { target: { value: "abc" } });
+    pressSave();
+    await waitFor(() => expect(screen.getByText("Enter a number.")).toBeTruthy());
+    expect(alpha().getAttribute("aria-invalid")).toBe("true");
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    fireEvent.change(alpha(), { target: { value: "7" } });
+    expect(screen.queryByText("Enter a number.")).toBeNull();
+    updateDraft.mockImplementation(fakeServer());
+    pressSave();
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(2));
+    expect(updateDraft.mock.calls[1][1]).toEqual({
+      parameters: { ...JOB.parameters, custom_params: { "wbmParam.alpha": "7" } },
+    });
+  });
+
+  it("does not stop a submit for custom parameters, and names them on Review", async () => {
+    wizard({
+      step: "review",
+      job: { ...JOB, parameters: { ...JOB.parameters, custom_params: { "wbmParam.alpha": "7" } } },
+    });
+    const row = (await screen.findByText("Model parameters", { selector: "dt" })).closest("div")!;
+    await waitFor(() => expect(within(row).getByText("Soil moisture drying coefficient")).toBeTruthy());
+    expect(within(row).getByText("wbmParam.alpha = 7")).toBeTruthy();
+    expect(screen.queryByText(/can't run yet/)).toBeNull();
+  });
+
+  it("keeps the rest of the wizard working when the parameters are unavailable", async () => {
+    params.mockResolvedValue({ ok: false, reason: "error", status: 503, code: "init_unavailable", message: "x" });
+    wizard({ step: "run" });
+    expect(await screen.findByText("Not available for this snapshot")).toBeTruthy();
+    type("Colorado");
+    pressSave();
+    await waitFor(() => expect(updateDraft).toHaveBeenCalledTimes(1));
   });
 });
 

@@ -243,7 +243,8 @@ not send such a start, and the submit area on Review lists it with a link to the
 field, which keeps Submit off.
 `PATCH /jobs/{id}` (when the start changes) and the submit (every start) answer
 `422 run_start_not_aligned` for the same start. A rule that cannot be read
-blocks nothing, and the toolkit's own check stays as the last line.
+blocks nothing, and the toolkit's own check stays as the last line: it runs when the
+changes file (below) sets `MT_Code_Name.Run_Start`, on the init as edited.
 
 The same init also limits the simulation's *end*. With `TA_multi_year_start` and
 `TA_multi_year_timestep` both set in its `PostProcessing` block, WBM stops at
@@ -267,9 +268,9 @@ coverage leaves one date; the gateway words it the same way
 an edit stores whatever the person is part-way through typing. A date equal to
 the snapshot's own is not held to it (the published simulation passed), and December 30
 is let through, as a 360-day calendar's last day that the init does not
-announce. `openghm sim run` and `sim submit` check the same rule on a
-`--run-start` or `--run-end` override (`_check_run_dates_vs_aggregation`) and
-stop before staging.
+announce. `openghm sim run` and `sim submit` check the same rule when the changes
+file sets `MT_Code_Name.Run_Start` or `MT_Code_Name.Run_End`
+(`_check_run_dates_vs_aggregation`, on the init as edited) and stop before staging.
 
 WBM always writes the daily, monthly and yearly output, which is all a published snapshot holds, whenever
 the init has a `PostProcessing` block. A draft chooses whether WBM's post-processing also runs after the
@@ -310,12 +311,13 @@ whenever the settings are known, also while the checkbox is disabled, and nothin
 init's `Forks` to the cores the job holds (`sim.py`) and puts the init's own value back afterwards. Review, the submit
 confirmation and the job page say "On" or "Off".
 A snapshot whose choice is `none` shows the checkbox disabled. `PATCH /jobs/{id}` stores the value with
-the rest of `parameters`, and the submit passes `--post-processing <value>` to `sim run` only when the
-value is set and differs from the snapshot's own (a snapshot whose init could not be read gets the flag
-for any set value, and the toolkit has the last word). A set value on a `none` snapshot is refused with
+the rest of `parameters`, and the submit writes `PostProcessing.Run` into the changes file (below), `0` for
+`standard` and `1` for `climatology`, only when the value is set and differs from the snapshot's own (a
+snapshot whose init could not be read gets the change for any set value, and the toolkit has the last
+word). A set value on a `none` snapshot is refused with
 `422 post_processing_unavailable`, on the PATCH and on the submit; an init that cannot be read blocks
 nothing. A stored value that is neither choice reads as `null`, so an old draft is never unreadable. The
-toolkit applies the flag to the staged init, and its post-processing step runs, checks and records the
+toolkit applies the change to the staged init, and its post-processing step runs, checks and records the
 result ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
 
 **Climatology is switched off, and where on it needs a measurement.** One flat percentage cannot cover both a
@@ -336,6 +338,57 @@ saying it is not available yet, the same for both causes, when `climatologyAvail
 stored draft that asks for it shows checked, can still be unchecked, and has the 422 on the field. The gate only stops a draft from asking for it:
 a snapshot whose own init says `Run => 1` still post-processes when it is run with its defaults, and its
 walltime then includes `postProcessingWalltime` where the snapshot has one.
+
+**A draft's model parameters** ([model-parameters.md](model-parameters.md),
+[ADR 0038](../decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md)).
+`parameters.custom_params` is `{init key path: string}` (`{"wbmParam.alpha": "3.5"}`), or
+`null` for none; `""` on a module's own path (`Glaciers`) switches that module off.
+`PATCH /jobs/{id}` checks it when the request carries a non-empty `custom_params` and the
+snapshot is still in the catalogue; a PATCH that leaves it out, or sends none, reads nothing.
+The check is `web-gateway/backend/app/wbm_init/validate.py` against the parameter tree resolved for the snapshot's WBM
+version, with the snapshot's init for the current values (`web-gateway/backend/app/services/model_parameters.py`):
+- **Dropped first.** A key whose value equals the snapshot's own (the same text, or the same
+  number) is not a change and is not stored, so the draft keeps only real changes, as the
+  period overrides do.
+- **Refused.** An unknown key, a key outside the version, a key a draft field owns, a locked
+  or inert one; a value that is not ASCII, is not in the form of its type, or is outside its
+  options or range; an empty value other than a module's switch-off; a field of a module that
+  is off; a field in a block the init sets from a file; and a module switched off while the
+  draft's output variables still need it. An output variable the module unlocks
+  (`unlocks_outputs` in the tree) must be removed first, and Glaciers is also refused while any
+  variable ends in `_pg`; the message is at the module's path and names the variables. The
+  variables checked are those sent in the same PATCH, else the stored draft's. The answer is `422` with
+  `detail = {code: "invalid_custom_params", message, errors: {path: message}}`, one message per
+  refused key, and nothing of the PATCH is written. The wizard keeps the refused keys out of the
+  save and shows each message at its field.
+- **Unreadable.** The check needs the init: when it cannot be read or parsed the answer is
+  `503 init_unavailable`, and a snapshot that names no WBM version the tree covers (22.1.1 or
+  23.9.0) is `422 model_code_version_missing`. The submit gives the same answers (below).
+
+`GET /api/v1/repository/datasets/{id}/model-parameters` serves the tree the wizard renders.
+- **Request.** No query. It is open like `GET /repository/datasets/{id}`: it holds nothing the
+  snapshot's public init does not.
+- **Response.** `{code_version, groups}`: the tree for the snapshot's `uses.modelCode.version`,
+  as nested nodes. A `group` has `children`. A `module` has `path` (its init key), `state`
+  (`on` or `off`, from the snapshot's init), `switch_off` (the tree allows switching it off and
+  it is on) and `children`. A `field` has `path`, `type`, `editable`, `edit_as`, `current` (the
+  init's value as text, `null` when the key is absent), `default` (resolved for the version), `unit`,
+  `options` (`{value, label}`), `min`, `max`, `calibration`, `show_if` and `doc`. Every node has
+  `tier` (`basic` or `advanced`). `editable` is true only for a field that can be set now: a
+  scalar, or a dataset field with `edit_as: "number"`, and not when its module is off or a file
+  sets its block. `edit_as` is `"number"` for a dataset field whose `accepts` lists a number, which
+  the wizard edits as a constant (WBM reads it as that value in every grid cell, replacing the
+  dataset), and `null` for every other field. Left out: what the version
+  excludes, `locked`, `inert` and never-written keys, keys a draft field owns, and groups
+  left empty.
+- **Errors.** `404` for an id the catalogue does not hold; `503` with
+  `detail = {code, message}` for `init_unavailable` (the init cannot be read; a failed read is
+  not tried again for 60 s) and for `model_code_version_missing`.
+
+Run settings renders that tree as a **Model parameters** section, closed until asked for, and
+the Review step lists the keys the draft changes
+([model-parameters.md](model-parameters.md) section 5). The step's "Settings that can't run
+yet" block now holds only a stored spatial subset.
 
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
@@ -732,8 +785,60 @@ for the public commit it was built from:
    `--time` the job asks SLURM for>` and `--spool cache`: the run links the days
    the shared spool cache holds and hands it the days it built after exiting 0
    ([simulation-reuse.md](simulation-reuse.md) §4), and its lease on them lasts
-   as long as the job can. `--run-start`, `--run-end`, `--output-vars` and
-   `--post-processing` are passed only when the draft differs from the snapshot's own values.
+   as long as the job can. When the draft differs from the snapshot, it also gets
+   `--changes "$OG_WORK_DIR/changes.json"`, a file the script writes itself just
+   before this step (below).
+
+**The changes file** ([ADR 0038](../decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md)).
+A draft's edits to its snapshot's WBM init reach `sim run` as one JSON file, not as
+options (`job_script.render_changes_file`):
+
+```json
+{
+  "code_version": "23.9.0",
+  "set": {
+    "MT_Code_Name.Run_End": "2001-06-30",
+    "Output_vars": "runoff discharge",
+    "PostProcessing.Run": 1
+  }
+}
+```
+
+- **Keys** are init key paths. A submit sets up to four from the draft's own fields, and only
+  the ones whose value differs from the snapshot's own (`job_script.run_overrides` decides, as
+  it did when each was a flag): `MT_Code_Name.Run_Start` and `MT_Code_Name.Run_End`
+  (`YYYY-MM-DD`), `Output_vars` (the variables joined by one space) and `PostProcessing.Run`
+  (the integer `0` for `standard`, `1` for `climatology`). It adds one entry for each key of the
+  draft's `custom_params`. A draft that differs nowhere writes no file and passes no
+  `--changes`: it runs the published init.
+- **Custom parameters** are checked again at submit, against the tree, in the same way and
+  with the same `422 invalid_custom_params` as the PATCH: a stored draft is not trusted. What
+  now equals the snapshot's value is dropped again. They are then typed by their field
+  (`validate.typed_changes`): an `int` and a `bool01` become integers, a `number` a number, a
+  module switched off `""` and every other value text; a dataset field edited as a number
+  (`edit_as`) is sent as a number, as a `number` is. A setting the init holds under an alias
+  is written to the alias. The draft's own fields win for their own keys, though the two never
+  overlap, since a key a draft field owns is refused as a custom parameter. A key must be an
+  init key path and a value a string or a finite number, or the render raises
+  `422 invalid_parameters`.
+- **`code_version`** is the snapshot's `uses.modelCode.version`
+  (`job_script.model_code_version`), which the toolkit checks against the snapshot it
+  runs. A draft with changes whose snapshot names no version is refused with
+  `422 model_code_version_missing`, before anything is queued (custom parameters are
+  refused by the same code earlier, when the snapshot has no version the tree covers).
+- **The script writes the file.** The body puts the JSON into
+  `changes.json` in the job's work directory (`$OG_WORK_DIR`) with a quoted heredoc (`<<'OPENGHM_CHANGES'`, after
+  `mkdir -p "$OG_WORK_DIR"`), so bash expands nothing in it. The JSON is
+  `json.dumps` with sorted keys and `ensure_ascii`, which makes it ASCII (WBM 23.9.0 aborts on
+  any other byte) and gives no line that could end the heredoc. A continuation job
+  (ADR 0037) runs the stored script as it is, and so writes the same file again. Each
+  value is checked as it was when it was a flag (a real date, output variables made of
+  letters, digits and underscores, a `Run` of `0` or `1`) and refused with
+  `422 invalid_parameters` otherwise.
+- **The toolkit's checks** stay as they were and run on the init as edited
+  (`openghm.sim.build_persim_init`): run-start alignment, the aggregation window, and
+  the refusal of `PostProcessing.Run` on an init with no `PostProcessing` block. The
+  applied file is recorded in the run's `simulation.json`.
 
 Before the fetch the body turns SLURM's requeue off for its own job: Anvil
 requeues a batch job after a node failure (`JobRequeue=1`, `MaxBatchRequeue=5`,
@@ -818,12 +923,20 @@ submitting.
 - A draft the snapshot answers, unless the body says `{"rerun": true}`: 409
   `answered_by_published`, before the Anvil checks. A rerun is audited with
   `rerun: true`. A listing that fails lets the submit through.
-- A draft that overrides its model input, subsets the snapshot's spatial
-  domain, or sets custom parameters: 422 `unsupported_fields`. The toolkit
-  has no option for these yet (open item 9).
+- A draft that overrides its model input or subsets the snapshot's spatial
+  domain: 422 `unsupported_fields`, with `fields` naming `model_input_id` and
+  `parameters.spatial_domain`. The toolkit has no option for these yet (open item 9). Custom
+  parameters are not in the list: they run.
+- Custom parameters the tree refuses: 422 `invalid_custom_params`, with `errors`, one message per
+  key (above). The submit checks a module's switch-off against the stored draft's output variables. When the snapshot's init cannot be read they cannot be checked, so the
+  answer is 503 `init_unavailable` and nothing is queued; a draft with no custom parameters
+  does not read the init for this.
+- A draft with changes against a snapshot that names no WBM version
+  (`uses.modelCode.version`): 422 `model_code_version_missing`. The changes file
+  needs it (above).
 - A set post-processing choice on a snapshot whose init has no post-processing setting
   to change: 422 `post_processing_unavailable`. An init that cannot be read
-  blocks nothing, and the toolkit refuses the flag there as the last line.
+  blocks nothing, and the toolkit refuses the change there as the last line.
 - A start date the snapshot's model cannot start a simulation on: 422
   `run_start_not_aligned`, with `suggested_start` when a valid start lies inside
   the snapshot's period.
@@ -850,7 +963,8 @@ submitting.
 After a refusal the draft goes **back to DRAFT**, with `last_submit_error`
 `{code, message, at}`. Every refusal of a submit replaces it, the ones before
 the claim included (`answered_by_published`, `unsupported_fields`,
-`post_processing_unavailable`, the run-date refusals, `anvil_not_configured`, an
+`invalid_custom_params`, `init_unavailable`,
+`post_processing_unavailable`, `model_code_version_missing`, the run-date refusals, `anvil_not_configured`, an
 account that may not run, the active-job limit), so a reopened draft never shows
 the reason of an earlier try; the claim itself clears it. A refusal's message always
 ends in a full stop (`sbatch_refusal.sentence`), so "Your draft is unchanged."

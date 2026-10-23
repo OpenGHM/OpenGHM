@@ -61,7 +61,7 @@ _LIST_TIMEOUT = 10.0
 _YEAR_FILE_RE = re.compile(r"^wbm_(\d{4})\.nc$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-# `job_script.unsupported_fields` names fields; the page switches on codes.
+# `job_script.unsupported_fields` (and the custom parameters) name fields; the page switches on codes.
 _UNSUPPORTED_REASONS = {
     "model_input_id": (
         "model_input_override",
@@ -178,14 +178,14 @@ def _reasons(
     """Every way the draft differs from the snapshot, without any network.
     `own_post_processing` is what the snapshot's init asks of post-processing
     (`run_start.InitRules.post_processing`), or None when it could not be read."""
+    fields = job_script.unsupported_fields(parameters, model_input_id, snapshot)
+    # Custom parameters run (the changes file carries them) but change the model,
+    # so the published output does not answer a draft that has any.
+    if parameters.custom_params:
+        fields.append("parameters.custom_params")
     reasons = [
         PublishedAnswerReason(code=code, message=message)
-        for code, message in (
-            _UNSUPPORTED_REASONS[field]
-            for field in job_script.unsupported_fields(
-                parameters, model_input_id, snapshot
-            )
-        )
+        for code, message in (_UNSUPPORTED_REASONS[field] for field in fields)
     ]
     simulation = snapshot.get("simulation") or {}
     coverage = simulation.get("temporalCoverage") or {}

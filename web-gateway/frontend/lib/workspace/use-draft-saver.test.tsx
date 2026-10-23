@@ -912,3 +912,71 @@ describe("the loop breaker", () => {
     ]);
   });
 });
+
+describe("422 invalid_custom_params", () => {
+  const refusal = failure(422, {
+    code: "invalid_custom_params",
+    message: "Some model parameters are not valid.",
+    fieldErrors: { "wbmParam.alpha": "Enter a number." },
+  });
+  const withCustom = (base: DraftLocal, custom: Record<string, string>, end = "2003-12-31"): DraftLocal => ({
+    ...base,
+    parameters: { ...base.parameters, temporal_range_end: end, custom_params: custom },
+  });
+
+  it("shows the message at the key, saves the rest at once, and withholds only the custom parameters", async () => {
+    const server = fakeServer();
+    update.mockResolvedValueOnce(refusal);
+    update.mockImplementation(server.impl);
+    const { result, set, base } = setup();
+
+    set(withCustom(base, { "wbmParam.alpha": "abc", Glaciers: "" }, "2002-12-31"));
+    await save(result);
+
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(patches()[0]!.parameters!.custom_params).toEqual({ Glaciers: "", "wbmParam.alpha": "abc" });
+    expect(patches()[1]!.parameters).toMatchObject({
+      temporal_range_end: "2002-12-31",
+      custom_params: { Glaciers: "" },
+    });
+    expect(result.current.customErrors).toEqual({ "wbmParam.alpha": "Enter a number." });
+    expect(result.current.withheld).toEqual(["custom"]);
+    expect(result.current.serverErrors.custom).toBe("Some model parameters are not valid.");
+    expect(result.current.state).toEqual({
+      kind: "refused",
+      fields: ["custom"],
+      message: "Some model parameters are not valid.",
+    });
+  });
+
+  it("is not asked again for the same value, and clears when the value changes", async () => {
+    const server = fakeServer();
+    update.mockResolvedValueOnce(refusal);
+    update.mockImplementation(server.impl);
+    const { result, set, base } = setup();
+
+    set(withCustom(base, { "wbmParam.alpha": "abc" }));
+    await save(result);
+    expect(update).toHaveBeenCalledTimes(1);
+    await save(result);
+    expect(update).toHaveBeenCalledTimes(1);
+
+    set(withCustom(base, { "wbmParam.alpha": "7" }));
+    expect(result.current.customErrors).toEqual({});
+    expect(result.current.serverErrors.custom).toBeUndefined();
+    await save(result);
+    expect(patches()[1]!.parameters!.custom_params).toEqual({ "wbmParam.alpha": "7" });
+    expect(result.current.state.kind).toBe("saved");
+  });
+
+  it("an answer without a map of keys withholds the custom parameters as a whole", async () => {
+    update.mockResolvedValue(failure(422, { code: "invalid_custom_params", message: "Not valid." }));
+    const { result, set, base } = setup();
+    set(withCustom(base, { "wbmParam.alpha": "abc" }));
+    await save(result);
+    await wait(10_000);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(result.current.withheld).toContain("custom");
+    expect(result.current.customErrors).toEqual({});
+  });
+});

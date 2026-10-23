@@ -108,7 +108,7 @@ export const FIELD_LABELS: Record<DraftField, string> = {
   end: "End date",
   variables: "Output variables",
   spatial: "Spatial subset",
-  custom: "Custom parameters",
+  custom: "Model parameters",
   postProcessing: "Post-processing",
   cores: "Cores",
   name: "Name",

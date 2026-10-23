@@ -170,9 +170,10 @@ def test_a_one_date_range_is_said_as_a_date_not_as_x_to_x():
 def test_the_gateway_and_the_toolkit_agree_on_which_dates_are_refused():
     """The toolkit's own check (`openghm.sim`, a dev-only import here) is the
     last line. The gateway holds a date to the window only when it differs from
-    the snapshot's, which is what the toolkit does with its overrides."""
+    the snapshot's, which is what the toolkit does with the dates a changes file sets."""
     from openghm.errors import OpenghmError
     from openghm.sim import SubmitOptions, build_persim_init
+    from openghm.wbm_init import Changes
 
     rule = run_start.aggregation_start_year_from_init(AGGREGATED_INIT)
     starts = ["2000-01-01", "2001-01-01", "2001-12-31", "2002-01-01"]
@@ -181,7 +182,11 @@ def test_the_gateway_and_the_toolkit_agree_on_which_dates_are_refused():
         for end in ends:
             if start > end:
                 continue
-            opts = SubmitOptions(snapshot_dir="x", simulation_id="s", run_start=start, run_end=end)
+            changes = Changes(
+                code_version="23.9.0",
+                set={"MT_Code_Name.Run_Start": start, "MT_Code_Name.Run_End": end},
+            )
+            opts = SubmitOptions(snapshot_dir="x", simulation_id="s", changes=changes)
             try:
                 build_persim_init(AGGREGATED_INIT, "s", opts)
                 toolkit_refuses = False

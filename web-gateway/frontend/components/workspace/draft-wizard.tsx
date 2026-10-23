@@ -53,6 +53,7 @@ import {
 import { useLeaveGuard, type LeaveTarget } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
+import { useModelParameters } from "@/lib/workspace/use-model-parameters";
 import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
 import { usePublishedAnswer } from "@/lib/workspace/use-published-answer";
 import { useSaveNewDraft } from "@/lib/workspace/use-save-new-draft";
@@ -267,6 +268,9 @@ function WizardBody({
   const saver = useDraftSaver({ jobId, initialSaved: initialJob, local, ctx, disabled: isNew });
   const { flush, suspend, resume } = saver;
   const modelInput = useCatalogueModelInput(effectiveModelInputId(local.modelInputId, ctx.dataset));
+  // The snapshot's parameter tree: the Model parameters section renders it, and
+  // Review names the changed parameters with it. Nothing else waits for it.
+  const { state: modelParameters, retry: retryModelParameters } = useModelParameters(datasetId);
 
   // ── The step ──────────────────────────────────────────────────────────────
   // The server's reading first. Afterwards the URL is the truth: our own pushes
@@ -801,6 +805,9 @@ function WizardBody({
                 onNameChange={(value) => setLocal((l) => ({ ...l, name: value }))}
                 onDescriptionChange={(value) => setLocal((l) => ({ ...l, description: value }))}
                 serverErrors={isNew ? NO_ERRORS : saver.serverErrors}
+                customErrors={isNew ? undefined : saver.customErrors}
+                modelParameters={modelParameters}
+                onRetryModelParameters={retryModelParameters}
                 startRefusal={isNew ? null : saver.startRefusal}
                 onParametersChange={(parameters) => setLocal((l) => ({ ...l, parameters }))}
                 onSlurmChange={(slurm) => setLocal((l) => ({ ...l, slurm }))}
@@ -818,6 +825,7 @@ function WizardBody({
                 onEditStep={goTo}
                 disabled={submitting}
                 publishedAnswer={publishedState}
+                modelParameters={modelParameters}
                 submitArea={submitCard(publishedState.status === "answered")}
               />
             )}

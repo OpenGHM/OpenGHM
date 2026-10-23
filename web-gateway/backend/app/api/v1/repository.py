@@ -42,7 +42,14 @@ from app.models.repository import (
     snapshot_links,
 )
 from app.models.user import TokenPayload
-from app.services import job_script, published_answer, run_start, tree_archive, tree_browse
+from app.services import (
+    job_script,
+    model_parameters,
+    published_answer,
+    run_start,
+    tree_archive,
+    tree_browse,
+)
 from app.services.catalogue import (
     CatalogueQuery,
     InvalidBoundingBox,
@@ -50,6 +57,7 @@ from app.services.catalogue import (
     newest_registered_first,
     parse_box,
 )
+from app.wbm_init import tree as parameter_tree
 
 router = APIRouter(prefix="/repository", tags=["repository"])
 
@@ -448,6 +456,27 @@ async def get_dataset_links(dataset_id: str) -> SnapshotLinks:
     links.containerSize = sizes.get(links.containerUrl)
     links.output = output
     return links
+
+
+@router.get("/datasets/{dataset_id}/model-parameters")
+async def get_dataset_model_parameters(dataset_id: str) -> dict:
+    """The WBM parameter tree resolved for the snapshot's code version, with each field's
+    value read from the snapshot's init (docs/architecture/model-parameters.md). Open, like
+    ``get_dataset``: it holds nothing the published init does not. 404 when the id is not a
+    snapshot; 503 ``init_unavailable`` when the init cannot be read, and 503
+    ``model_code_version_missing`` when the snapshot names no WBM version the tree knows."""
+    db = get_db()
+    doc = await db["datasets"].find_one({"_id": dataset_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    try:
+        loaded = await model_parameters.load(doc["document"], dataset_id)
+    except model_parameters.Unavailable as exc:
+        raise HTTPException(status_code=503, detail={"code": exc.code, "message": exc.message})
+    return {
+        "code_version": loaded.code_version,
+        "groups": parameter_tree.render(loaded.resolved, loaded.values),
+    }
 
 
 @router.get("/datasets/{dataset_id}/files")

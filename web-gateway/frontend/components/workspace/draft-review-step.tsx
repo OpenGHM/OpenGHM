@@ -23,6 +23,8 @@ import {
   type Recommended,
 } from "@/lib/jobs/compute";
 import { cn } from "@/lib/utils";
+import { describeChanges } from "@/lib/workspace/model-parameters";
+import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import type { DraftContext, DraftField, DraftLocal } from "@/lib/workspace/draft-state";
 import type { DraftStep } from "@/lib/workspace/draft-wizard";
@@ -167,6 +169,7 @@ export function DraftReviewStep({
   onEditStep,
   submitArea,
   publishedAnswer = { status: "none" },
+  modelParameters,
   disabled = false,
 }: {
   datasetId: string;
@@ -177,6 +180,9 @@ export function DraftReviewStep({
   onEditStep: (step: DraftStep, field?: DraftField) => void;
   submitArea: ReactNode;
   publishedAnswer?: PublishedAnswerState;
+  /** The snapshot's parameter tree, for the names of the changed parameters;
+   *  without it a change is listed by its key. */
+  modelParameters?: ModelParametersState;
   /** Everything off, while a submit is under way. */
   disabled?: boolean;
 }) {
@@ -186,7 +192,10 @@ export function DraftReviewStep({
   const estimate = estimatedRunSeconds(recommended, postProcessing);
   const coresWarning = describeCoresBelowRecommendedShort(slurm, recommended);
   const spatial = parameters.spatial_domain;
-  const customCount = parameters.custom_params ? Object.keys(parameters.custom_params).length : 0;
+  const changes = describeChanges(
+    parameters.custom_params,
+    modelParameters?.status === "ready" ? modelParameters.tree : null
+  );
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
   const title = basisTitle(ctx, datasetTitle);
   const facts = found ? snapshotFacts(found) : [];
@@ -295,12 +304,27 @@ export function DraftReviewStep({
                 </span>
               </Row>
             )}
-            {customCount > 0 && (
+            {changes.length > 0 && (
               <Row
-                label="Custom parameters"
-                edit={<EditLink step="run" field="custom" label="custom parameters" onEditStep={onEditStep} />}
+                label="Model parameters"
+                edit={<EditLink step="run" field="custom" label="model parameters" onEditStep={onEditStep} />}
               >
-                {customCount} custom parameter{customCount === 1 ? "" : "s"}
+                <span className="font-medium">
+                  {changes.length} changed
+                </span>
+                <ul className="mt-1 space-y-1">
+                  {changes.map((change) => (
+                    <li key={change.path} className="min-w-0 text-[13px]">
+                      {change.label && <span className="mr-1.5">{change.label}</span>}
+                      <code className="font-mono text-xs break-all text-muted-foreground">
+                        {change.path} = {change.value === "" ? "''" : change.value}
+                      </code>
+                      {change.shown !== change.value && (
+                        <span className="text-muted-foreground"> · {change.shown}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </Row>
             )}
           </dl>

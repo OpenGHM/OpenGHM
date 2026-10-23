@@ -58,6 +58,7 @@ run.
 | [local-development.md](architecture/local-development.md) | built | what runs on a laptop, what only in the cluster, and the traps in between |
 | [artifact-versioning.md](architecture/artifact-versioning.md) | **target** | the snapshot as a unit, the five versioned axes, storage shape, what runs where |
 | [simulation-reuse.md](architecture/simulation-reuse.md) | **target** | which runs need no compute (published output, saved run state) and a spool shared between runs |
+| [model-parameters.md](architecture/model-parameters.md) | **built** (section 6 target) | how a draft sets WBM's model parameters: the parameter tree, its resolution per WBM version, how a value reaches the init, what the wizard renders; the later work (dataset choices, forks) is target |
 
 Diagram sources are SVG in [`architecture/diagrams/`](architecture/diagrams/),
 rendered to PNG alongside them:
@@ -79,6 +80,7 @@ repository.
 | [snapshot-layout.md](reference/snapshot-layout.md) | the on-disk snapshot tree, component sizes, `SHA256SUMS`, the snapshot id |
 | [snapshot-spec.md](reference/snapshot-spec.md) | where the spec lives, what a version consists of, version rules |
 | [metadata-format.md](reference/metadata-format.md) | `metadata.json`, the container lock record, `containers/manifest.json` |
+| [wbm-init.md](reference/wbm-init.md) | how WBM 22.1.1 and 23.9.0 treat init values, as read in the code and measured on Anvil: the evidence behind the parameter tree |
 | [open-items.md](reference/open-items.md) | what is still undecided |
 
 Four more live in the private `openghm-ops` repository, because they describe
@@ -135,6 +137,7 @@ and 0012 were folded into 0010.
 | [0035](decisions/0035-cilogon-is-ordinary-sso.md) | CILogon is ordinary single sign-on: a matching email connects, a connected identity signs in | accepted |
 | [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted |
 | [0037](decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md) | A run longer than one job continues in the next job, from WBM's last saved state | accepted |
+| [0038](decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md) | A run gets its init edits as one changes file, and the gateway owns the parameter schema | accepted |
 
 ## Missions
 

@@ -144,7 +144,7 @@ def test_a_start_that_is_not_a_date_is_left_to_the_date_check():
 
 
 def test_the_snapshots_own_start_is_not_rechecked_like_the_toolkit():
-    # The toolkit checks a --run-start override only; the published start is the published simulation's.
+    # The toolkit checks a changed MT_Code_Name.Run_Start only; the published start is the published simulation's.
     assert run_start.check_run_start("year", "2000-03-01", snapshot_start="2000-03-01") is None
 
 
