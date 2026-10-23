@@ -128,8 +128,9 @@ def changes_option(f):
     return click.option(
         "--changes", "changes_path", default=None, metavar="PATH",
         help="JSON file of edits to the snapshot's init: {\"code_version\": \"<the snapshot's WBM version>\", "
-             "\"set\": {\"Key.Path\": value}, \"unset\": [\"Key.Path\"]}; a key path is names joined by dots, "
-             "one per nested block (MT_Code_Name.Run_End)",
+             "\"set\": {\"Key.Path\": value}, \"unset\": [\"Key.Path\"], \"forks\": [{\"from\": \"/wbm/data_init/x.init\", "
+             "\"to\": \"/wbm/wbm_init/datasets/x__1.init\", \"set\": {\"Var_Scale\": 1.1}}]}; a key path is names "
+             "joined by dots, one per nested block (MT_Code_Name.Run_End); a fork is a copy of a data .init",
     )(f)
 
 

@@ -18,7 +18,7 @@ from openghm import Config, assets, spec
 from openghm.errors import OpenghmError
 from openghm.run import stage_files
 from openghm.types import SpoolPlan
-from openghm.wbm_init import Changes, InitEditor, to_python as w_to_python
+from openghm.wbm_init import Changes, Fork, InitEditor, to_python as w_to_python
 from openghm.sim import (
     SubmitOptions, build_persim_init, build_run, build_submit, parse_slurm_job_id, record_slurm_job_id, sidecar_path,
     list_simulations, find_simulation, resolve_job_id, read_sidecar,
@@ -1383,3 +1383,166 @@ def test_a_changes_file_with_a_flat_spinup_key_is_refused_by_the_run(tmp_path):
     opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_changes({"Spinup_Start": "2000-01-01"}))
     with pytest.raises(OpenghmError, match="Spinup_Start"):
         build_submit(opts, _config(tmp_path))
+
+
+# ── forks: copies of data .init files in the run's wbm_init (ADR 0039) ─────────
+
+_FIXTURE_DATA_INIT = Path(__file__).parent / "fixtures" / "wbm_init" / "data_init"
+_T2M = "/wbm/data_init/climate/merra2_t2m_d.init"
+_T2M_TO = "/wbm/wbm_init/datasets/merra2_t2m_d__0a1b2c3d.init"
+_EFF = "/wbm/data_init/irrigation/irrEfficiency.init"
+_EFF_TO = "/wbm/wbm_init/datasets/irrEfficiency__4e5f6a7b.init"
+
+
+def _with_data_inits(root: Path, snap: Path) -> Path:
+    """Put two shipped data inits into the cached model input of ``snap``; returns its ``data_init``."""
+    data_init = Path(_config(root).model_input_path("2" * 64)) / "data_init"
+    for name, rel in (("climate_merra2_t2m_d.init", "climate/merra2_t2m_d.init"),
+                      ("irrigation_irrEfficiency.init", "irrigation/irrEfficiency.init")):
+        (data_init / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_FIXTURE_DATA_INIT / name, data_init / rel)
+    return data_init
+
+
+def _fork_changes(*forks: Fork, set=None) -> Changes:
+    return Changes(code_version=CODE_VERSION, forks=list(forks), set=dict(set or {}))
+
+
+def _fork_run(tmp_path, *forks, set=None, **kw):
+    snap = _make_snapshot(tmp_path)
+    _with_data_inits(tmp_path, snap)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_fork_changes(*forks, set=set), **kw)
+    return snap, opts
+
+
+def test_a_run_stages_each_fork_in_its_wbm_init_beside_the_run_init(tmp_path):
+    snap, opts = _fork_run(
+        tmp_path, Fork(_T2M, _T2M_TO, {"Var_Scale": 1.1}), Fork(_EFF, _EFF_TO),
+        set={"MT_airT.Primary": _T2M_TO, "Irrigation.Efficiency": _EFF_TO})
+    for build in (build_run, build_submit):
+        _ctx, built = build(opts, _config(tmp_path))
+        work = tmp_path / "out" / "sim1" / "wbm_init"
+        names = [f.host_path for f in built.generated_files]
+        assert str(work / "datasets" / "merra2_t2m_d__0a1b2c3d.init") in names
+        assert str(work / "datasets" / "irrEfficiency__4e5f6a7b.init") in names
+        stage_files(built)
+        t2m = w_to_python((work / "datasets" / "merra2_t2m_d__0a1b2c3d.init").read_text())
+        assert (t2m["Code_Name"], t2m["Var_Scale"], t2m["Units"]) == ("merra2_t2m_d__0a1b2c3d", "1.1", "C")
+        eff = (work / "datasets" / "irrEfficiency__4e5f6a7b.init").read_text()
+        assert eff.isascii() and w_to_python(eff)["Code_Name"] == "irrEfficiency__4e5f6a7b"
+        run_init = w_to_python((work / "wbm_test.init").read_text())
+        assert run_init["MT_airT"]["Primary"] == _T2M_TO and run_init["Irrigation"]["Efficiency"] == _EFF_TO
+        shutil.rmtree(tmp_path / "out")
+
+
+def test_the_fork_is_staged_after_the_snapshots_wbm_init_is_copied(tmp_path):
+    snap, opts = _fork_run(tmp_path, Fork(_T2M, _T2M_TO), set={"MT_airT.Primary": _T2M_TO})
+    _ctx, built = build_run(opts, _config(tmp_path))
+    assert [c.src for c in built.staged_copies] == [str(snap / "wbm_init")]
+    assert any(f.host_path.endswith("merra2_t2m_d__0a1b2c3d.init") for f in built.generated_files)   # written after the copy
+
+
+def test_the_original_in_the_model_input_is_not_touched(tmp_path):
+    snap, opts = _fork_run(tmp_path, Fork(_EFF, _EFF_TO, {"Var_Scale": 2}))
+    before = (_with_data_inits(tmp_path, snap) / "irrigation" / "irrEfficiency.init").read_bytes()
+    stage_files(build_run(opts, _config(tmp_path))[1])
+    assert (_with_data_inits(tmp_path, snap) / "irrigation" / "irrEfficiency.init").read_bytes() == before
+
+
+def test_the_forks_are_recorded_in_simulation_json(tmp_path):
+    _snap, opts = _fork_run(tmp_path, Fork(_T2M, _T2M_TO, {"Var_Scale": 1.1}), set={"MT_airT.Primary": _T2M_TO})
+    for build in (build_submit, build_run):
+        _ctx, built = build(opts, _config(tmp_path))
+        assert json.loads(_gen(built, "simulation.json").content)["changes"]["forks"] == [
+            {"from": _T2M, "to": _T2M_TO, "set": {"Var_Scale": 1.1}}]
+
+
+def test_the_original_may_be_named_through_the_model_inputs_root(tmp_path):
+    _snap, opts = _fork_run(tmp_path, Fork("/wbm/data/data_init/climate/merra2_t2m_d.init", _T2M_TO))
+    _ctx, built = build_run(opts, _config(tmp_path))
+    assert w_to_python(_gen(built, "merra2_t2m_d__0a1b2c3d.init").content)["Var_Name"] == "T2M"
+
+
+@pytest.mark.parametrize("fork, message", [
+    (Fork("/wbm/data_init/climate/nope.init", _T2M_TO), r"forks\[0\]: from .* is not a file of the model input"),
+    (Fork(_T2M, "/wbm/wbm_init/wbm_test.init"), r"forks\[0\]: to .* already a file of the snapshot's wbm_init"),
+    (Fork(_T2M, "/wbm/wbm_init/old/x.init"), r"already a file of the snapshot's wbm_init"),
+    (Fork(_T2M, "/wbm/data_init/x.init"), r"forks\[0\]: to"),
+])
+def test_a_fork_that_cannot_be_made_is_refused_before_anything_is_staged(tmp_path, fork, message):
+    snap, opts = _fork_run(tmp_path, fork)
+    (snap / "wbm_init" / "old").mkdir()
+    (snap / "wbm_init" / "old" / "x.init").write_text("{}\n")
+    for build in (build_run, build_submit):
+        with pytest.raises(OpenghmError, match=message):
+            build(opts, _config(tmp_path))
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_fork_of_a_block_file_or_a_file_that_is_not_utf8_is_refused(tmp_path):
+    snap, opts = _fork_run(tmp_path, Fork("/wbm/data_init/dams/block.init", _T2M_TO))
+    block = Path(_config(tmp_path).model_input_path("2" * 64)) / "data_init" / "dams" / "block.init"
+    block.parent.mkdir()
+    block.write_text("{ Comment => 'a block file' }\n")
+    with pytest.raises(OpenghmError, match="no Code_Name"):
+        build_run(opts, _config(tmp_path))
+    block.write_bytes(b"{ Code_Name => 'a', Note => 'D\xf6ll' }\n")
+    with pytest.raises(OpenghmError, match="not UTF-8"):
+        build_run(opts, _config(tmp_path))
+
+
+def test_a_fork_needs_the_model_input_in_its_cache(tmp_path):
+    snap = _make_snapshot(tmp_path, cache_model_input=False)
+    opts = SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1", changes=_fork_changes(Fork(_T2M, _T2M_TO)))
+    with pytest.raises(OpenghmError, match="forks, which are copied from the model input"):
+        build_run(opts, _config(tmp_path), check_assets=False)
+    # a run with no forks still plans without it
+    build_run(SubmitOptions(snapshot_dir=str(snap), simulation_id="sim1"), _config(tmp_path), check_assets=False)
+
+
+def test_a_fork_is_refused_by_the_checks_before_the_model_input_is_read(tmp_path):
+    snap, opts = _fork_run(tmp_path, Fork(_T2M, _T2M_TO, {"Code_Name": "x"}))
+    with pytest.raises(OpenghmError, match="Code_Name"):
+        build_run(opts, _config(tmp_path))
+
+
+# -- the spool variant sees a fork
+
+_HAS_PERL = shutil.which("perl") is not None and subprocess.run(
+    ["perl", "-MJSON::PP", "-MDigest::SHA", "-e1"], capture_output=True).returncode == 0
+
+
+def _evaluate_staged(plan, work: Path) -> dict:
+    """What ``spool.container_evaluator`` returns for the staged run init, with the container's
+    ``/wbm/wbm_init`` bind resolved to ``work/wbm_init`` (perl runs on the host)."""
+    from openghm import spool
+
+    def host_run(argv, **kw):
+        perl = argv.index("perl")
+        args = list(argv[perl:])
+        init = work / "wbm_init" / posixpath_name(args[-1])
+        resolved = work / "resolved.init"
+        resolved.write_text(init.read_text().replace("/wbm/wbm_init/", str(work / "wbm_init") + "/"))
+        args[-1] = str(resolved)
+        return subprocess.run(args, **kw)
+
+    return spool.container_evaluator(plan, run=host_run)
+
+
+def posixpath_name(path: str) -> str:
+    return path.rsplit("/", 1)[-1]
+
+
+@pytest.mark.skipif(not _HAS_PERL, reason="no perl with JSON::PP on this host")
+def test_the_spool_variant_is_computed_from_the_staged_fork_so_a_new_value_is_a_new_variant(tmp_path):
+    digests = {}
+    for scale in (1.1, 1.2):
+        root = tmp_path / str(scale)
+        snap, opts = _fork_run(root, Fork(_T2M, _T2M_TO, {"Var_Scale": scale}), set={"MT_airT.Primary": _T2M_TO})
+        _ctx, built = build_run(opts, _config(root))
+        stage_files(built)
+        init = _evaluate_staged(built.spool, root / "out" / "sim1")
+        primary = init["MT_airT"]["Primary"]
+        assert primary["init_file"].endswith("/datasets/merra2_t2m_d__0a1b2c3d.init")   # a file perl found: the fork
+        digests[scale] = primary["sha256"]
+    assert digests[1.1] != digests[1.2]

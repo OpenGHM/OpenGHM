@@ -492,6 +492,27 @@ def test_a_fresh_publish_writes_the_tree_and_fetch_reads_it_back(run, meta_path,
     assert json.loads((dest / "metadata.json").read_text())["id"] == NEW
 
 
+def test_a_fork_in_the_runs_wbm_init_is_published_with_its_snapshot(run, meta_path, store, tmp_path):
+    """ADR 0039: a run that forked a data .init has the copy in ``wbm_init/datasets/``, and the snapshot
+    carries it: planned, in SHA256SUMS, uploaded, and read back by fetch."""
+    fork = b"{\nCode_Name => 'p__0a1b2c3d',\nVar_Scale => 1.1,\n}\n"
+    (run / "wbm_init" / "datasets").mkdir()
+    (run / "wbm_init" / "datasets" / "p__0a1b2c3d.init").write_bytes(fork)
+    rel = "wbm_init/datasets/p__0a1b2c3d.init"
+    plan = _plan(run, meta_path, store, tmp_path)
+    assert rel in [a.rel for a in plan.actions if a.kind == "upload"]
+    assert fetch.parse_sums(plan.sums_bytes.decode())[rel] == hashlib.sha256(fork).hexdigest()
+    go(run, meta_path, store)
+    assert store.objects[f"snapshots/{NEW}/{rel}"].body == fork
+    dest = tmp_path / "fetched"
+    cfg = Config(sif_dir=str(tmp_path / "sif"), model_input_dir=str(tmp_path / "mi"))
+    got = fetch.fetch_snapshot(fetch.FetchOptions(snapshot_id=NEW, dest=str(dest), image=False, model_input=False,
+                                                  base_url=store.url), cfg)
+    assert got.ok, got.failed
+    assert (dest / rel).read_bytes() == fork
+    assert spec.validate_folder(dest, spec="snapshot-spec").ok
+
+
 def test_uploading_in_parallel_gives_the_same_tree(run, meta_path, store):
     go(run, meta_path, store, jobs=4)
     # the phases still end in SHA256SUMS, then metadata.json

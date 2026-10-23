@@ -23,9 +23,10 @@ This module has three parts.
    and ``'`` escaped; an integer or float the way Python writes it, which always has a leading
    digit (``0.5``, never ``.5``); an object as a block, one entry per line.
 3. **The changes file** (:class:`Changes`, :func:`load_changes`, :func:`check_changes`,
-   :func:`apply_changes`): ``code_version``, ``set`` (key path to value) and ``unset`` (key
-   paths). The checks are the minimal ones of ADR 0038: they refuse what would make the file
-   unusable, and nothing about whether a value suits the model.
+   :func:`apply_changes`): ``code_version``, ``forks`` (copies of data ``.init`` files, ADR 0039),
+   ``set`` (key path to value) and ``unset`` (key paths). The checks are the minimal ones of
+   ADR 0038: they refuse what would make the file unusable, and nothing about whether a value
+   suits the model.
 
 A key path is names joined by dots, one per nested block (``MT_Code_Name.Run_End``).
 """
@@ -35,7 +36,9 @@ from __future__ import annotations
 import json
 import math
 import os
+import posixpath
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -558,6 +561,28 @@ class InitEditor:
 
 
 @dataclass
+class Fork:
+    """A copy of a data ``.init`` the run reads, with some keys set (ADR 0039).
+
+    ``source`` (``from`` in the file) is a container path under ``/wbm/data/`` or
+    ``/wbm/data_init/``; ``to`` is the copy's, under ``/wbm/wbm_init/``; ``set`` maps top-level
+    descriptor keys to a string or a number. The run init is pointed at ``to`` by an ordinary
+    ``set`` of the changes file, not by the fork.
+    """
+
+    source: str
+    to: str
+    set: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """The fork's JSON: ``from``, ``to``, and ``set`` only when it has something in it."""
+        out: Dict[str, Any] = {"from": self.source, "to": self.to}
+        if self.set:
+            out["set"] = self.set
+        return out
+
+
+@dataclass
 class Changes:
     """A changes file: edits to a snapshot's init, for the WBM ``code_version`` it was written for."""
 
@@ -566,10 +591,14 @@ class Changes:
     set: Dict[str, Any] = field(default_factory=dict)
     #: Key paths to remove.
     unset: List[str] = field(default_factory=list)
+    #: Copies of data ``.init`` files, made before ``set`` and ``unset`` are applied.
+    forks: List[Fork] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        """The file's JSON: ``set`` and ``unset`` only when they have something in them."""
+        """The file's JSON: ``forks``, ``set`` and ``unset`` only when they have something in them."""
         out: Dict[str, Any] = {"code_version": self.code_version}
+        if self.forks:
+            out["forks"] = [f.to_dict() for f in self.forks]
         if self.set:
             out["set"] = self.set
         if self.unset:
@@ -577,15 +606,17 @@ class Changes:
         return out
 
 
-_CHANGES_FIELDS = ("code_version", "set", "unset")
+_CHANGES_FIELDS = ("code_version", "forks", "set", "unset")
+_FORK_FIELDS = ("from", "to", "set")
 
 
 def load_changes(source: Union[str, "os.PathLike[str]", dict]) -> Changes:
     """A :class:`Changes` from a JSON file (a path) or an already-read dict.
 
-    Shape: ``{"code_version": "23.9.0", "set": {"Key.Path": value, ...}, "unset": ["Key.Path"]}``;
-    ``code_version`` is required, ``set`` and ``unset`` are optional. Any other top-level field
-    is an error. Whether the paths and values are fit to write is :func:`check_changes`.
+    Shape: ``{"code_version": "23.9.0", "forks": [{"from": "/wbm/data_init/x.init", "to":
+    "/wbm/wbm_init/datasets/x__1.init", "set": {"Var_Scale": 1.1}}], "set": {"Key.Path": value, ...},
+    "unset": ["Key.Path"]}``; ``code_version`` is required, ``forks``, ``set`` and ``unset`` are
+    optional. Any other top-level field is an error. Whether the paths and values are fit to write is :func:`check_changes`.
     """
     label = "changes"
     if isinstance(source, dict):
@@ -614,7 +645,28 @@ def load_changes(source: Union[str, "os.PathLike[str]", dict]) -> Changes:
     unsets = data.get("unset", [])
     if not isinstance(unsets, list) or not all(isinstance(p, str) for p in unsets):
         raise OpenghmError(f"the {label}: unset must be a list of key paths")
-    return Changes(code_version=version, set=dict(sets), unset=list(unsets))
+    return Changes(code_version=version, set=dict(sets), unset=list(unsets), forks=_load_forks(data.get("forks", []), label))
+
+
+def _load_forks(raw: Any, label: str) -> List[Fork]:
+    if not isinstance(raw, list) or not all(isinstance(f, dict) for f in raw):
+        raise OpenghmError(f"the {label}: forks must be a list of objects with from, to and set")
+    forks = []
+    for i, item in enumerate(raw):
+        unknown = sorted(k for k in item if k not in _FORK_FIELDS)
+        if unknown:
+            raise OpenghmError(
+                f"the {label}: forks[{i}] has unknown field(s) {', '.join(repr(k) for k in unknown)}; "
+                f"the fields are {', '.join(_FORK_FIELDS)}"
+            )
+        for name in ("from", "to"):
+            if not isinstance(item.get(name), str) or not item[name]:
+                raise OpenghmError(f"the {label}: forks[{i}] needs {name}, a container path (a string)")
+        sets = item.get("set", {})
+        if not isinstance(sets, dict):
+            raise OpenghmError(f"the {label}: forks[{i}].set must be an object of descriptor key to value")
+        forks.append(Fork(source=item["from"], to=item["to"], set=dict(sets)))
+    return forks
 
 
 #: Top-level keys both WBM versions stop on when they merely exist (``WBM.pm`` lines 281-282, 22.1.1: 258-259).
@@ -646,6 +698,7 @@ def check_changes(changes: Changes, code_version_of_snapshot: str) -> None:
     * a ``code_version`` that is not ``code_version_of_snapshot`` (``uses.modelCode.version``);
     * a key path that is malformed, or a non-ASCII character in a key or a string value;
     * a value that is not a string, a number or an object;
+    * a fork that :func:`check_forks` refuses;
     * keys fatal for WBM, on both versions: a top-level ``FreeWaterEvap``, ``MT_relHumidity`` or
       ``spinup_*`` (any case); on 22.1.1 only: ``Spinup.Save_Vars``, ``PET`` as an object or any
       ``PET.<child>``, and a ``Time_Series`` value with a ``[`` in it.
@@ -657,6 +710,7 @@ def check_changes(changes: Changes, code_version_of_snapshot: str) -> None:
             f"the changes file's code_version {changes.code_version!r} is not this snapshot's "
             f"WBM version {code_version_of_snapshot!r} (uses.modelCode.version)"
         )
+    check_forks(changes.forks)
     legacy = code_version_of_snapshot == _LEGACY_VERSION
     for path in changes.unset:
         _check_text("unset", path)
@@ -700,6 +754,139 @@ _FATAL_WHY = {
     "FreeWaterEvap": "a removed key: WBM stops when the init has it, even as ''",
     "MT_relHumidity": "a removed key: WBM stops when the init has it, even as ''",
 }
+
+
+# ── forks ──────────────────────────────────────────────────────────────────────
+
+#: Where a fork's original may be (the model input's root and its ``data_init/``) and where its
+#: copy goes (the run's own ``wbm_init/``): the container paths ``sim`` binds.
+FORK_FROM_ROOTS = ("/wbm/data/", "/wbm/data_init/")
+FORK_TO_ROOT = "/wbm/wbm_init/"
+_FORK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.init$", re.ASCII)
+
+#: What NFKD leaves non-ASCII, and its ASCII spelling (ADR 0039). Anything else is refused.
+_ASCII_TABLE = {
+    **{c: "-" for c in "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"},
+    **{c: "'" for c in "\u2018\u2019\u201a\u201b"},
+    **{c: '"' for c in "\u201c\u201d\u201e"},
+    "\u2026": "...", "\u00b0": "deg", "\u00b5": "u", "\u03bc": "u", "\u00d7": "x", "\u00b1": "+/-",
+    "\u00df": "ss", "\u00e6": "ae", "\u00c6": "AE", "\u0153": "oe", "\u0152": "OE",
+    "\u00f8": "o", "\u00d8": "O", "\u0111": "d", "\u0110": "D", "\u0142": "l", "\u0141": "L",
+}
+
+
+def to_ascii(text: str, label: str = "the text") -> str:
+    """``text`` as ASCII: NFKD with the combining marks dropped (``o`` for ``\u00f6``), then
+    :data:`_ASCII_TABLE` for what does not decompose. Raises :class:`OpenghmError` naming the
+    character and its line when one has no spelling: it is never replaced by ``?``."""
+    if text.isascii():
+        return text
+    out: List[str] = []
+    for ch in text:
+        spelled = ch if ord(ch) < 128 else _spell(ch)
+        if spelled is None:
+            line = text.count("\n", 0, text.index(ch)) + 1
+            raise OpenghmError(
+                f"{label}: {ch!r} (U+{ord(ch):04X}, line {line}) has no ASCII spelling; "
+                "the toolkit does not guess one"
+            )
+        out.append(spelled)
+    return "".join(out)
+
+
+def _spell(ch: str) -> Optional[str]:
+    """The ASCII spelling of one non-ASCII character, or ``None``. A combining mark has none to
+    write (``""``): it is dropped with the decomposition of the letter it sat on."""
+    if ch in _ASCII_TABLE:
+        return _ASCII_TABLE[ch]
+    out: List[str] = []
+    for c in unicodedata.normalize("NFKD", ch):
+        if unicodedata.combining(c):
+            continue
+        if ord(c) < 128:
+            out.append(c)
+        elif c in _ASCII_TABLE:
+            out.append(_ASCII_TABLE[c])
+        else:
+            return None
+    return "".join(out)
+
+
+def _fork_path(label: str, path: str, roots: Tuple[str, ...]) -> None:
+    if not path.startswith(roots) or path != posixpath.normpath(path) or ".." in path.split("/"):
+        raise OpenghmError(
+            f"{label} {path!r} is not a normalised container path under {' or '.join(roots)} "
+            "(no '..', no '//', no trailing '/')"
+        )
+    if not path.endswith(".init"):
+        raise OpenghmError(f"{label} {path!r} is not an .init file")
+
+
+def check_forks(forks: List[Fork]) -> None:
+    """Refuse a fork that cannot be made, naming it. Raises :class:`OpenghmError` for:
+
+    * ``from`` that is not an ``.init`` under ``/wbm/data/`` or ``/wbm/data_init/``, or ``to`` that
+      is not one under ``/wbm/wbm_init/`` (normalised, no ``..``), or a ``to`` basename that is not
+      letters, digits, ``.``, ``_`` and ``-``;
+    * a ``set`` key that is not a plain top-level name, ``Code_Name`` (the toolkit sets it), or a
+      value that is not a string or a number, or a string that is not ASCII;
+    * two forks with the same ``to``.
+
+    That the original exists, is a descriptor and that ``to`` is free are checked where the
+    model input and the snapshot are known (``sim``).
+    """
+    seen = set()
+    for i, fork in enumerate(forks):
+        where = f"forks[{i}]"
+        _fork_path(f"{where}: from", fork.source, FORK_FROM_ROOTS)
+        _fork_path(f"{where}: to", fork.to, (FORK_TO_ROOT,))
+        if not _FORK_NAME_RE.match(posixpath.basename(fork.to)):
+            raise OpenghmError(
+                f"{where}: to {fork.to!r} must end in a file name of letters, digits, '.', '_' and '-' "
+                "ending in .init (it becomes the copy's Code_Name)"
+            )
+        if fork.to in seen:
+            raise OpenghmError(f"{where}: to {fork.to!r} is the copy of another fork too")
+        seen.add(fork.to)
+        for key, value in fork.set.items():
+            label = f"{where}: set {key!r}"
+            if not isinstance(key, str) or not _KEY_RE.match(key):
+                raise OpenghmError(f"{label}: not a descriptor key (a plain name; keys are top level)")
+            if key == "Code_Name":
+                raise OpenghmError(f"{label}: Code_Name is the copy's file name, which the toolkit sets")
+            if isinstance(value, (dict, list)):
+                raise OpenghmError(f"{label}: a descriptor value is a string or a number, not a {type(value).__name__}")
+            format_value(value, label=label)                 # a bool, null or a number WBM cannot read
+            if isinstance(value, str):
+                _check_text(label, value)
+
+
+def fork_source_path(model_input_dir: str, source: str) -> str:
+    """The host path of ``source`` (a container path of ``/wbm/data/`` or ``/wbm/data_init/``) in
+    the model input at ``model_input_dir``: ``/wbm/data/`` is its root and ``/wbm/data_init/`` its
+    ``data_init/``, so ``/wbm/data/data_init/x`` and ``/wbm/data_init/x`` are one file."""
+    if source.startswith("/wbm/data_init/"):
+        return os.path.join(model_input_dir, "data_init", *source[len("/wbm/data_init/"):].split("/"))
+    return os.path.join(model_input_dir, *source[len("/wbm/data/"):].split("/"))
+
+
+def fork_text(original: str, fork: Fork) -> str:
+    """The text of ``fork``'s copy: ``original`` as ASCII, ``fork.set`` written by the editor's
+    rules, and ``Code_Name`` the copy's file name without ``.init`` (what WBM 23.9.0 requires of a
+    data ``.init``). Raises :class:`OpenghmError` when ``original`` is not an init or has no
+    ``Code_Name``: a block file is not a dataset descriptor and is not forked."""
+    text = to_ascii(original, f"the original {fork.source}")
+    try:
+        entry = parse(text).last("Code_Name")
+    except InitSyntaxError as e:
+        raise OpenghmError(f"the original {fork.source}: {e}")
+    if entry is None or not isinstance(entry.value, Scalar):
+        raise OpenghmError(f"the original {fork.source} has no Code_Name, so it is not a dataset descriptor")
+    ed = InitEditor(text, convert_spinup=False)
+    for key, value in fork.set.items():
+        ed.set(key, value)
+    ed.set("Code_Name", posixpath.basename(fork.to)[:-len(".init")])
+    return ed.text
 
 
 def apply_changes(text: str, changes: Changes) -> str:

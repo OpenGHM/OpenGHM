@@ -138,6 +138,7 @@ and 0012 were folded into 0010.
 | [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted |
 | [0037](decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md) | A run longer than one job continues in the next job, from WBM's last saved state | accepted |
 | [0038](decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md) | A run gets its init edits as one changes file, and the gateway owns the parameter schema | accepted |
+| [0039](decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md) | A draft edits a data `.init` as its own copy, a fork the changes file carries | accepted |
 
 ## Missions
 

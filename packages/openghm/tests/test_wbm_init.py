@@ -676,3 +676,208 @@ def test_touches_says_whether_a_change_reaches_a_key():
     assert not w.touches(c, "MT_Code_Name.Run_Start")
     assert w.touches(c, "PostProcessing.Run") and w.touches(c, "A.B.C") and w.touches(c, "A")
     assert not w.touches(None, "A")
+
+
+# ── forks: copies of data .init files (ADR 0039) ──────────────────────────────
+
+T2M = "/wbm/data_init/climate/merra2_t2m_d.init"
+T2M_TO = "/wbm/wbm_init/datasets/merra2_t2m_d__0a1b2c3d.init"
+#: The three shipped data inits that hold non-ASCII text (identical in both model inputs), as the fixtures.
+NON_ASCII = {"irrigation_irrEfficiency.init": "irrEfficiency", "crops_mirca_cropAreaFraction.init": "mirca_cropAreaFraction",
+             "crops_rice_percolationRate.init": "rice_percolationRate"}
+
+
+def fork(source=T2M, to=T2M_TO, **set_):
+    return w.Fork(source=source, to=to, set=set_)
+
+
+def test_forks_are_loaded_and_written_back_in_the_order_forks_set_unset():
+    body = {"code_version": "23.9.0",
+            "forks": [{"from": T2M, "to": T2M_TO, "set": {"Var_Scale": 1.1}},
+                      {"from": "/wbm/data/crops/x.init", "to": "/wbm/wbm_init/datasets/x__1.init"}],
+            "set": {"MT_airT.Primary": T2M_TO}, "unset": ["Comment"]}
+    changes = w.load_changes(body)
+    assert changes.forks == [fork(Var_Scale=1.1), w.Fork("/wbm/data/crops/x.init", "/wbm/wbm_init/datasets/x__1.init")]
+    assert changes.to_dict() == {**body, "forks": [body["forks"][0], body["forks"][1]]}
+    assert list(changes.to_dict()) == ["code_version", "forks", "set", "unset"]
+    assert w.load_changes({"code_version": "23.9.0", "forks": []}).to_dict() == {"code_version": "23.9.0"}
+
+
+@pytest.mark.parametrize("forks, message", [
+    ("x", "forks must be a list of objects"),
+    (["x"], "forks must be a list of objects"),
+    ([{"to": T2M_TO}], r"forks\[0\] needs from"),
+    ([{"from": T2M}], r"forks\[0\] needs to"),
+    ([{"from": T2M, "to": 3}], r"forks\[0\] needs to"),
+    ([{"from": T2M, "to": T2M_TO, "sett": {}}], r"forks\[0\] has unknown field.*'sett'"),
+    ([{"from": T2M, "to": T2M_TO, "set": []}], r"forks\[0\].set must be an object"),
+])
+def test_forks_of_the_wrong_shape_are_refused(forks, message):
+    with pytest.raises(OpenghmError, match=message):
+        w.load_changes({"code_version": "23.9.0", "forks": forks})
+
+
+def test_a_valid_fork_passes_the_checks():
+    _check(forks=[fork(Var_Scale=1.1, Var_Offset=-2, Units="mm/day"), fork("/wbm/data/crops/a.init", "/wbm/wbm_init/b.init")])
+
+
+@pytest.mark.parametrize("source", [
+    "/wbm/model/x.init", "/wbm/wbm_init/x.init", "wbm/data_init/x.init", "/wbm/data_init/x.csv",
+    "/wbm/data_init/../model/x.init", "/wbm/data_init//x.init", "/wbm/data_init/./x.init", "/wbm/data_init/",
+])
+def test_a_fork_original_outside_the_model_input_is_refused(source):
+    with pytest.raises(OpenghmError, match="forks.0.: from"):
+        _check(forks=[fork(source=source)])
+
+
+@pytest.mark.parametrize("to", [
+    "/wbm/data_init/x.init", "/wbm/wbm_init/datasets/x.csv", "/wbm/wbm_init/../model/x.init", "/wbm/wbm_init/a//x.init",
+    "/wbm/wbm_init/.init", "/wbm/wbm_init/-x.init", "/wbm/wbm_init/a b.init", "/wbm/wbm_init/café.init", "/wbm/wbm_init/x;y.init",
+])
+def test_a_fork_copy_outside_wbm_init_or_badly_named_is_refused(to):
+    with pytest.raises(OpenghmError, match="forks.0.: to"):
+        _check(forks=[fork(to=to)])
+
+
+def test_two_forks_cannot_make_the_same_copy():
+    with pytest.raises(OpenghmError, match=r"forks\[1\]: to .* another fork"):
+        _check(forks=[fork(Var_Scale=2), fork(Var_Scale=3)])
+
+
+@pytest.mark.parametrize("set_, message", [
+    ({"Var.Scale": 1}, "not a descriptor key"),
+    ({"Var Scale": 1}, "not a descriptor key"),
+    ({"Code_Name": "other"}, "Code_Name"),
+    ({"Var_Scale": True}, "boolean"),
+    ({"Var_Scale": None}, "null"),
+    ({"Var_Scale": float("nan")}, "not a number"),
+    ({"Var_Scale": [1]}, "not a list"),
+    ({"Var_Scale": {"a": 1}}, "not a dict"),
+    ({"Units": "m³"}, "non-ASCII"),
+])
+def test_a_fork_set_that_cannot_be_written_is_refused(set_, message):
+    with pytest.raises(OpenghmError, match=message) as e:
+        _check(forks=[w.Fork(T2M, T2M_TO, set_)])
+    assert "forks[0]" in str(e.value)
+
+
+def test_forks_are_checked_with_the_rest_of_the_changes_file():
+    with pytest.raises(OpenghmError, match="non-ASCII"):
+        _check(forks=[fork()], set={"Comment": "café"})
+    with pytest.raises(OpenghmError, match="forks.0"):
+        _check(version="22.1.1", snapshot="22.1.1", forks=[fork(source="/x.init")])
+
+
+# -- transliteration
+
+@pytest.mark.parametrize("text, ascii_", [
+    ("Döll", "Doll"), ("Vörösmarty", "Vorosmarty"), ("café naïve Ångström", "cafe naive Angstrom"),
+    ("2000 – 2010", "2000 - 2010"), ("a—b − ‑", "a-b - -"),
+    ("‘x’ “y”", "'x' \"y\""), ("wait…", "wait..."), ("20 °C", "20 degC"),
+    ("µm μm", "um um"), ("2 × 3 ± 1", "2 x 3 +/- 1"), ("Straße", "Strasse"),
+    ("æ Æ œ Œ", "ae AE oe OE"), ("ø Ø đ Đ ł Ł", "o O d D l L"),
+    ("é", "e"),                       # a letter and a combining accent already apart
+    (" x", " x"), ("ﬁsh", "fish"), ("m²", "m2"),
+    ("plain ascii", "plain ascii"),
+])
+def test_text_is_transliterated_to_ascii(text, ascii_):
+    assert w.to_ascii(text) == ascii_
+
+
+@pytest.mark.parametrize("ch", ["中", "½", "€", "\U0001f600", "Ж"])
+def test_a_character_with_no_ascii_spelling_is_refused_naming_it_and_its_line(ch):
+    with pytest.raises(OpenghmError, match="no ASCII spelling") as e:
+        w.to_ascii(f"fine\nline two {ch}", "the file")
+    assert f"U+{ord(ch):04X}" in str(e.value) and "line 2" in str(e.value) and "the file" in str(e.value)
+
+
+def test_nothing_is_ever_written_as_a_question_mark():
+    for ch in "中€Ж":
+        with pytest.raises(OpenghmError):
+            w.to_ascii(ch)
+
+
+def test_the_table_spells_non_ascii_characters_in_ascii():
+    for ch, spelled in w._ASCII_TABLE.items():
+        assert not ch.isascii() and spelled.isascii() and spelled
+
+
+# -- the copy
+
+def test_a_forks_copy_has_the_set_values_and_its_own_name_as_code_name():
+    text = read(FIXTURES / "wbm_init" / "data_init" / "climate_merra2_t2m_d.init")
+    out = w.fork_text(text, fork(Var_Scale=1.1, Var_Offset=-270, Units="degC"))
+    d = w.to_python(out)
+    assert (d["Var_Scale"], d["Var_Offset"], d["Units"]) == ("1.1", "-270", "degC")
+    assert d["Code_Name"] == "merra2_t2m_d__0a1b2c3d"
+    assert changed_lines(text, out) == [
+        "-Code_Name\t=> 'merra2_t2m_d',", "+Code_Name\t=> 'merra2_t2m_d__0a1b2c3d',",
+        "-Units\t\t=> 'C',", "-Var_Scale\t=> 1,", "-Var_Offset\t=> -273.15,",
+        "+Units\t\t=> 'degC',", "+Var_Scale\t=> 1.1,", "+Var_Offset\t=> -270,"]
+
+
+def test_a_copy_with_an_empty_set_changes_only_code_name():
+    text = read(FIXTURES / "wbm_init" / "data_init" / "climate_merra2_t2m_d.init")
+    out = w.fork_text(text, fork())
+    assert changed_lines(text, out) == ["-Code_Name\t=> 'merra2_t2m_d',", "+Code_Name\t=> 'merra2_t2m_d__0a1b2c3d',"]
+
+
+@pytest.mark.parametrize("empty", ["''", ",", '""'])
+def test_an_empty_value_the_original_has_is_filled_in(empty):
+    text = f"{{\nCode_Name => 'a',\nVar_Scale => {empty}\n, Var_Name => 'V',\n}}\n"
+    out = w.fork_text(text, w.Fork("/wbm/data_init/a.init", "/wbm/wbm_init/datasets/a__1.init", {"Var_Scale": 2.5}))
+    assert w.to_python(out) == {"Code_Name": "a__1", "Var_Scale": "2.5", "Var_Name": "V"}
+
+
+def test_a_key_the_original_lacks_is_added_and_a_line_ending_is_kept():
+    text = "{\r\nCode_Name => 'a',\r\nVar_Name => 'V'\r\n}\r\n"
+    out = w.fork_text(text, w.Fork("/wbm/data_init/a.init", "/wbm/wbm_init/datasets/a__1.init", {"Var_Offset": 3}))
+    assert w.to_python(out) == {"Code_Name": "a__1", "Var_Name": "V", "Var_Offset": "3"}
+    assert "\r\n" in out and "\n" not in out.replace("\r\n", "")
+
+
+@pytest.mark.parametrize("name, code_name", NON_ASCII.items())
+def test_the_shipped_non_ascii_data_inits_come_out_ascii(name, code_name):
+    text = read(FIXTURES / "wbm_init" / "data_init" / name)
+    assert not text.isascii()
+    out = w.fork_text(text, w.Fork(f"/wbm/data_init/x/{code_name}.init", f"/wbm/wbm_init/datasets/{code_name}__f.init", {}))
+    assert out.isascii()
+    d_before, d_after = w.to_python(text), w.to_python(out)
+    assert d_after.pop("Code_Name") == f"{code_name}__f" and d_before.pop("Code_Name") != d_after.get("Code_Name")
+    # only free text differs, and only by its non-ASCII characters
+    for key in d_after:
+        assert d_after[key] == w.to_ascii(d_before[key])
+    assert "Doll" in out or "Vorosmarty" in out
+
+
+def test_the_en_dash_of_the_mirca_citation_is_a_hyphen():
+    out = w.fork_text(read(FIXTURES / "wbm_init" / "data_init" / "crops_mirca_cropAreaFraction.init"),
+                      w.Fork("/wbm/data_init/crops/mirca_cropAreaFraction.init", "/wbm/wbm_init/datasets/m__1.init"))
+    assert "Siebert, S. & Doll, P. (2010): MIRCA2000 - Global monthly" in out
+
+
+@needs_perl
+@pytest.mark.parametrize("name", NON_ASCII)
+def test_a_fork_evaluates_in_perl_as_the_reader_says(name, tmp_path):
+    out = w.fork_text(read(FIXTURES / "wbm_init" / "data_init" / name),
+                      w.Fork("/wbm/data_init/x.init", "/wbm/wbm_init/datasets/x__1.init", {"Var_Scale": 1.1, "Units": "u"}))
+    assert_perl_agrees(out, tmp_path)
+
+
+@pytest.mark.parametrize("original, message", [
+    ("Code_Name => 'a'", "cannot read the init"),
+    ("{ Var_Name => 'V' }", "no Code_Name"),
+    ("{ Code_Name => { A => 1 } }", "no Code_Name"),
+    ("{ Code_Name => 'a', Note => '中' }", "no ASCII spelling"),
+])
+def test_a_file_that_is_not_a_descriptor_or_has_no_spelling_is_not_forked(original, message):
+    with pytest.raises(OpenghmError, match=message) as e:
+        w.fork_text(original, w.Fork("/wbm/data_init/a.init", "/wbm/wbm_init/datasets/a__1.init"))
+    assert "/wbm/data_init/a.init" in str(e.value)
+
+
+def test_a_source_path_is_looked_up_in_the_model_input_as_wbm_does(tmp_path):
+    root = str(tmp_path)
+    assert w.fork_source_path(root, "/wbm/data_init/climate/p.init") == str(tmp_path / "data_init" / "climate" / "p.init")
+    assert w.fork_source_path(root, "/wbm/data/data_init/climate/p.init") == str(tmp_path / "data_init" / "climate" / "p.init")
+    assert w.fork_source_path(root, "/wbm/data/crops/p.init") == str(tmp_path / "crops" / "p.init")

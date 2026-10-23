@@ -493,13 +493,14 @@ snapshot's init (ADR 0038). It names init key paths, names joined by dots, one p
 ```
 
 - `code_version` (required) must equal the snapshot's `uses.modelCode.version`. A snapshot with no
-  `uses.modelCode.version` refuses any changes file. `set` and `unset` are optional; any other
+  `uses.modelCode.version` refuses any changes file. `forks`, `set` and `unset` are optional; any other
   top-level field is an error.
 - `set` maps a key path to a string, a number, or an object, which is written as a block. A missing
   key, and any block on the way to it, is created. Setting a key that exists replaces its value (an
   object replaces the whole block). `null`, `true`/`false` and arrays are errors.
 - `unset` lists key paths to remove; a key that is not there is left alone.
 - The run applies `unset` first, then `set` in the order written.
+- `forks` is a list of copies of data `.init` files, made before `unset` and `set` (see **Forks** below).
 
 **The editor** (`openghm/wbm_init.py`) reads the init as WBM's `read_init` does (a Perl hash:
 comments, single and double quotes, barewords, `=> ,` as `''`, doubled and trailing commas) and edits
@@ -527,6 +528,43 @@ on the edited init, only when the changes touch their keys: a changed `MT_Code_N
 start on the first day of an output file; a changed `Run_Start` or `Run_End` must suit a multi-year
 `PostProcessing` aggregation; and `PostProcessing.Run` needs an init that has a `PostProcessing` block
 with a `Run` key.
+
+**Forks** (ADR 0039). A data `.init` belongs to the published model input and is shared, so an edit to
+one is a copy. Each fork is `{"from", "to", "set"}`:
+
+```json
+{
+  "code_version": "23.9.0",
+  "forks": [
+    { "from": "/wbm/data_init/climate/merra2_prectotcorr_d.init",
+      "to":   "/wbm/wbm_init/datasets/merra2_prectotcorr_d__3fa91c20.init",
+      "set":  { "Var_Scale": 1.1 } }
+  ],
+  "set": { "MT_Precip.Primary": "/wbm/wbm_init/datasets/merra2_prectotcorr_d__3fa91c20.init" }
+}
+```
+
+- `from` is an `.init` under `/wbm/data/` or `/wbm/data_init/`, read from the model input the run is
+  bound to (`/wbm/data/data_init/x` and `/wbm/data_init/x` are one file). `to` is an `.init` under
+  `/wbm/wbm_init/`, written into the run's own `wbm_init/` with the run init, so it is there when the
+  spool variant is computed and is uploaded by `snapshot publish`. `set` maps top-level descriptor keys
+  (`Var_Scale`, `Var_Offset`, `Units`, any plain name but `Code_Name`) to a string or a number.
+- The fork does not repoint the run init: the ordinary `set` of the same file does, as above. The
+  caller names `to` (the gateway uses `<original name>__<8 hex of a hash of the edit>.init`), and a
+  different content needs a different name: the spool variant hashes every `.init` the run init names.
+- The copy's `Code_Name` is `to`'s file name without `.init`, which WBM 23.9.0 requires; the whole
+  text is rewritten to ASCII, since 23.9.0 aborts on a non-ASCII byte: Unicode NFKD with the accents
+  dropped (`o` for `ö`), then a short table for what does not decompose (the dashes to `-`, curly quotes
+  to `'` and `"`, `…` to `...`, `°` to `deg`, `µ` to `u`, `×` to `x`, `±` to `+/-`, `ß`, `æ`, `œ`, `ø`,
+  `đ`, `ł`). A character with no spelling is refused, naming it and its line; nothing is written as `?`.
+  With an empty `set` that repairs a descriptor 23.9.0 refuses for its `Code_Name` or a non-ASCII byte.
+- A fork is refused, before anything is staged, for: a `from` that is not an `.init` under its roots, or
+  a `to` that is not one under `/wbm/wbm_init/` (paths normalised, no `..`), or whose file name has
+  anything but letters, digits, `.`, `_` and `-`; a `set` key that is not a plain name or is `Code_Name`,
+  a value that is not a string or a number, or a non-ASCII string; two forks with one `to`; a `from` that
+  is not in the model input, is not UTF-8 or has no `Code_Name` (a block file is not a descriptor); and
+  a `to` that is the run init or already a file of the snapshot's `wbm_init/`. A run that has forks
+  needs the model input in its cache, so a `--dry-run` of it needs the model input too.
 
 The applied file is recorded as `changes` in the run's `simulation.json` (absent when there was none).
 The seven per-key options this replaces (`--run-start`, `--run-end`, `--output-vars`, `--spinup-start`,

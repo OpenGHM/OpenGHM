@@ -35,6 +35,10 @@ optional changes file (``--changes``, see :mod:`openghm.wbm_init` and ADR 0038) 
 the chosen init's ``Output_dir``/``spool_dir`` to absolute container paths (v2's
 ``wbm_test.init`` uses a relative ``Output_dir`` that otherwise leaks output).
 
+The changes file's ``forks`` (ADR 0039) are copies of data ``.init`` files of the model input,
+written into that ``wbm_init`` with the run init, so they exist before the spool variant is
+computed from the staged init and travel with the run when it is published.
+
 An init whose ``PostProcessing`` block has ``Run`` true is staged with ``Run => 0``: WBM
 would start ``PostProcessing.pl`` detached, which a container does not survive. The run
 records ``post_processing`` in ``simulation.json`` instead, and the script is run in the
@@ -49,7 +53,7 @@ import posixpath
 import re
 import shlex
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import List, Optional, Tuple
 
@@ -382,6 +386,41 @@ def _normalise_init(text: str, simulation_id: str) -> str:
     return ed.text
 
 
+def _fork_files(
+    changes: Optional[Changes], snap: str, init_filename: str, persim_wbm_init: str, model_input_path: str,
+) -> List[GeneratedFile]:
+    """The files the changes file's ``forks`` make in the run's ``wbm_init``: each original read from
+    the model input, rewritten by :func:`openghm.wbm_init.fork_text`. Refuses an original that is not
+    there, and a ``to`` that is the run init or already a file of the snapshot's ``wbm_init/``."""
+    if changes is None or not changes.forks:
+        return []
+    if not os.path.isdir(model_input_path):
+        raise OpenghmError(
+            f"the changes file has forks, which are copied from the model input, and {model_input_path} "
+            "is not there (`openghm model-input fetch` puts it there)"
+        )
+    root = wbm_init.FORK_TO_ROOT
+    files = []
+    for i, fork in enumerate(changes.forks):
+        rel = fork.to[len(root):].split("/")
+        if fork.to == f"{root}{init_filename}" or os.path.exists(os.path.join(snap, "wbm_init", *rel)):
+            raise OpenghmError(
+                f"forks[{i}]: to {fork.to!r} is already a file of the snapshot's wbm_init/; "
+                "a published file is never overwritten, so the copy needs another name"
+            )
+        source = wbm_init.fork_source_path(model_input_path, fork.source)
+        if not os.path.isfile(source):
+            raise OpenghmError(f"forks[{i}]: from {fork.source!r} is not a file of the model input ({source})")
+        with open(source, "rb") as fh:
+            raw = fh.read()
+        try:
+            original = raw.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise OpenghmError(f"forks[{i}]: from {fork.source!r} is not UTF-8 text: {e}")
+        files.append(GeneratedFile(posixpath.join(persim_wbm_init, *rel), wbm_init.fork_text(original, fork)))
+    return files
+
+
 def build_persim_init(template: str, simulation_id: str, opts: SubmitOptions) -> str:
     """Apply the run's changes to the init, then normalize its output paths to absolute container paths.
 
@@ -562,6 +601,9 @@ class _Resolved:
     #: The run asks for post-processing: ``requested``, ``run_value`` (the init's ``Run``
     #: literal) and ``argv`` (the container exec of ``PostProcessing.pl``). ``None`` when it does not.
     post_processing: Optional[dict] = None
+    #: The copies of data ``.init`` files the changes file's ``forks`` make (ADR 0039), staged in the
+    #: run's ``wbm_init`` with the run init, before the spool variant is computed from them.
+    fork_files: List[GeneratedFile] = field(default_factory=list)
 
 
 def slurm_walltime(text: object) -> Optional[timedelta]:
@@ -713,6 +755,7 @@ def _resolve_run(
         f"/wbm/wbm_init/{init_filename}",
     ]
     exec_argv = _wbm_exec_argv(ctx, mounts, inner_cmd)
+    fork_files = _fork_files(opts.changes, snap, init_filename, persim_wbm_init, model_input_path)
     persim_init_content = build_persim_init(
         open(init_template_path, "r", encoding="utf-8").read(), sim_id, opts
     )
@@ -763,7 +806,7 @@ def _resolve_run(
         version=version, model_input_id=model_input_id,
         model_input_path=model_input_path, cores=cores, walltime=walltime,
         account=account, partition=partition, output_base=output_base,
-        spool_mode=opts.spool, spool_plan=spool_plan, post_processing=pp,
+        spool_mode=opts.spool, spool_plan=spool_plan, post_processing=pp, fork_files=fork_files,
     )
 
 
@@ -840,6 +883,7 @@ def build_submit(
     sbatch_path = posixpath.join(r.workdir, f"submit_{opts.simulation_id}.sbatch")
     generated = [
         init_file,
+        *r.fork_files,
         GeneratedFile(sbatch_path, sbatch_content),
         GeneratedFile(posixpath.join(r.workdir, "simulation.json"),
                       json.dumps(sidecar, indent=2) + "\n"),
@@ -885,6 +929,7 @@ def build_run(
 
     generated = [
         init_file,
+        *r.fork_files,
         GeneratedFile(posixpath.join(r.workdir, "simulation.json"),
                       json.dumps(sidecar, indent=2) + "\n"),
     ]
