@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/workspace/job-1" }));
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
-import { fakeDraft } from "@/lib/workspace/fixtures";
+import { fakeDraft, fakeModelParameters } from "@/lib/workspace/fixtures";
 
 // What the server holds after the flush: not what the page's props said.
 const SAVED = fakeDraft("DRAFT", {
@@ -654,5 +654,45 @@ describe("DraftSubmitCard: the Post-processing row of the confirmation", () => {
     card();
     await openDialog();
     expect(outputRow()).toBe("Off");
+  });
+});
+
+describe("DraftSubmitCard: the changed model parameters", () => {
+  const withChanges = (custom_params: Record<string, string> | null): Job => ({
+    ...SAVED,
+    parameters: { ...SAVED.parameters, custom_params },
+  });
+  const CHANGED = { "wbmParam.maxRffStorage": "500", Glaciers: "", "wbmParam.Infiltration": "HBV" };
+
+  it("lists each change with its name and a readable value once the tree is known", async () => {
+    flush.mockResolvedValue({ ok: true, job: withChanges(CHANGED), withheld: [] });
+    card({ modelParameters: { status: "ready", tree: fakeModelParameters() } });
+    await openDialog();
+    const row = within(dialog()).getByText("Model parameters").closest("div") as HTMLElement;
+    expect(within(row).getByText("3 changed")).toBeTruthy();
+    expect(within(row).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Runoff from Glaciated AreasGlaciers = '' · switched off",
+      "Infiltration methodwbmParam.Infiltration = HBV",
+      "Runoff storage limitwbmParam.maxRffStorage = 500 · 500 mm",
+    ]);
+  });
+
+  it("lists the keys alone while the tree is not there", async () => {
+    flush.mockResolvedValue({ ok: true, job: withChanges(CHANGED), withheld: [] });
+    card({ modelParameters: { status: "loading" } });
+    await openDialog();
+    const row = within(dialog()).getByText("Model parameters").closest("div") as HTMLElement;
+    expect(within(row).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Glaciers = ''",
+      "wbmParam.Infiltration = HBV",
+      "wbmParam.maxRffStorage = 500",
+    ]);
+  });
+
+  it.each([null, {}])("has no row when custom_params is %j", async (custom) => {
+    flush.mockResolvedValue({ ok: true, job: withChanges(custom), withheld: [] });
+    card({ modelParameters: { status: "ready", tree: fakeModelParameters() } });
+    await openDialog();
+    expect(within(dialog()).queryByText("Model parameters")).toBeNull();
   });
 });

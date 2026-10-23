@@ -7,6 +7,7 @@ import {
 import { ClampedName } from "@/components/common/clamped-name";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import type { ActionFailure, PostProcessingChoice } from "@/lib/jobs/types";
+import type { ChangedEntry } from "@/lib/workspace/model-parameters";
 
 /** The words a person reads when a submit does not go through. The backend's
  *  own `message` is kept where it is already plain and carries the detail
@@ -57,7 +58,8 @@ function Recommendation({ show, children }: { show: boolean; children: ReactNode
 
 /**
  * What a submit will run and spend, for the confirmation dialog: the snapshot,
- * the run period, the output variables, the output, cores and the estimated
+ * the run period, the output variables, the output, the changed model
+ * parameters (`changes`, a row only when there are any), cores and the estimated
  * run time, and whose allocation it is. `cores` is what SLURM will be asked for
  * (`effectiveCompute`); `coresFromSnapshot` says the draft left it unset, which
  * means the snapshot's recommendation. The estimated run time is the
@@ -71,6 +73,7 @@ export function SubmitSummary({
   end,
   variables,
   output = "standard",
+  changes = [],
   cores,
   coresFromSnapshot,
   estimatedSeconds,
@@ -83,6 +86,8 @@ export function SubmitSummary({
   variables: string[];
   /** What the run computes: the draft's choice, else the snapshot's own. */
   output?: PostProcessingChoice;
+  /** `describeChanges` of the draft's `custom_params`; empty, no row. */
+  changes?: readonly ChangedEntry[];
   cores: number | null;
   coresFromSnapshot: boolean;
   /** How long the run is estimated to take (`estimatedRunSeconds`); null when
@@ -107,6 +112,24 @@ export function SubmitSummary({
           {variables.length > 0 ? variables.join(", ") : "None chosen"}
         </SummaryRow>
         <SummaryRow label="Post-processing">{describeOutput(output)}</SummaryRow>
+        {changes.length > 0 && (
+          <SummaryRow label="Model parameters">
+            {changes.length} changed
+            <ul className="mt-1 space-y-1 font-normal">
+              {changes.map((change) => (
+                <li key={change.path} className="min-w-0 text-[13px]">
+                  {change.label && <span className="mr-1.5">{change.label}</span>}
+                  <code className="break-all font-mono text-xs text-muted-foreground">
+                    {change.path} = {change.value === "" ? "''" : change.value}
+                  </code>
+                  {change.shown !== change.value && (
+                    <span className="text-muted-foreground"> · {change.shown}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </SummaryRow>
+        )}
         <SummaryRow label="Cores">
           {cores ?? "Not known"}
           <Recommendation show={cores !== null && coresFromSnapshot}>

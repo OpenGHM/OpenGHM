@@ -27,6 +27,8 @@ import {
 import type { ActionResult, Job, PostProcessingChoice, SubmitError } from "@/lib/jobs/types";
 import type { DraftField, SubmitProblem } from "@/lib/workspace/draft-state";
 import { FIELD_LABELS, type DraftStep } from "@/lib/workspace/draft-wizard";
+import { describeChanges } from "@/lib/workspace/model-parameters";
+import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
 
 /** `checking` is the short stretch after a submit whose answer never came: the
@@ -78,6 +80,7 @@ export function DraftSubmitCard({
   lastSubmitError,
   recommended,
   snapshotOutput = "standard",
+  modelParameters,
   flush,
   suspend,
   submit,
@@ -97,6 +100,9 @@ export function DraftSubmitCard({
   recommended: Recommended | null;
   /** What the snapshot computes on its own (`snapshotOutput`), for a draft with no choice. */
   snapshotOutput?: PostProcessingChoice;
+  /** The snapshot's parameter tree, for the names of the changed parameters in
+   *  the confirmation (as in Review); without it a change is listed by its key. */
+  modelParameters?: ModelParametersState;
   flush: () => Promise<FlushResult>;
   suspend: () => void;
   submit: (jobId: string) => Promise<ActionResult<Job>>;
@@ -370,6 +376,10 @@ export function DraftSubmitCard({
               end={saved.parameters.temporal_range_end}
               variables={saved.parameters.variables}
               output={saved.parameters.post_processing ?? snapshotOutput}
+              changes={describeChanges(
+                saved.parameters.custom_params,
+                modelParameters?.status === "ready" ? modelParameters.tree : null
+              )}
               cores={compute.cores}
               coresFromSnapshot={compute.coresSource === "snapshot"}
               estimatedSeconds={estimatedRunSeconds(recommended, postProcessing)}

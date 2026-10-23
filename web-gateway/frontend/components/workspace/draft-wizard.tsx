@@ -611,6 +611,7 @@ function WizardBody({
         lastSubmitError={null}
         recommended={recommended}
         snapshotOutput={snapshotOutput(ctx.dataset)}
+        modelParameters={modelParameters}
         flush={newFlush}
         suspend={noop}
         submit={() => newSubmit(rerun ? { rerun: true } : undefined)}
@@ -629,6 +630,7 @@ function WizardBody({
         lastSubmitError={lastSubmitError}
         recommended={recommended}
         snapshotOutput={snapshotOutput(ctx.dataset)}
+        modelParameters={modelParameters}
         flush={flush}
         suspend={suspend}
         submit={(id) => storedSubmit(id, rerun ? { rerun: true } : undefined)}
