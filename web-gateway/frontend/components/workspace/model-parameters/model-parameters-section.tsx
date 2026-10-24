@@ -1000,6 +1000,7 @@ export function ModelParametersSection({
   return (
     <DraftCollapsible
       title="Model parameters"
+      help="parameters"
       summary={summary}
       notes={notes}
       fields={["custom"]}

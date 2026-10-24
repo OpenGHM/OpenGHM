@@ -20,7 +20,7 @@ import { RETENTION_DAYS } from "@/lib/workspace/format";
 export type HelpStep = "start" | DraftStep;
 
 /** The parts of Run settings that have help of their own. */
-export const HELP_SECTIONS = ["about", "period", "variables", "output", "compute"] as const;
+export const HELP_SECTIONS = ["about", "period", "variables", "output", "parameters", "compute"] as const;
 export type HelpSection = (typeof HELP_SECTIONS)[number];
 
 export type HelpBlock =
@@ -136,6 +136,27 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
         "Under it, a list shows what the snapshot's init sets for post-processing, item by item. It is read-only.",
         "A snapshot whose init has no post-processing settings cannot change this choice.",
         "No published snapshot holds the results of post-processing, so asking for it always means a new simulation."
+      ),
+    ],
+  },
+  parameters: {
+    id: "run.parameters",
+    title: "Model parameters",
+    blocks: [
+      text(
+        "The settings WBM reads from the snapshot's init, grouped as the model uses them. Each starts at the snapshot's value: change only what your simulation needs."
+      ),
+      list(
+        "Search finds a parameter by its name, its key in the init or its description. All, Editable and Changed narrow the list; Changed shows only what this snapshot draft changes.",
+        "Advanced parameters stay hidden until you turn on Show advanced. One you have changed is always shown.",
+        "A changed parameter is marked, shows the snapshot's value under it, and has a button that puts that value back. Reset all takes every change back, after asking.",
+        "Where a parameter is usually calibrated within a range, a bar shows the range and where your value lies, and a note says when it is outside."
+      ),
+      text(
+        "A module is a part of the model that is on or off. Its switch changes that where this snapshot allows it; a module that cannot be switched on here says why."
+      ),
+      text(
+        "Edit dataset gives the simulation its own copy of a dataset with a new scale, offset or units. The original in the model input is not changed. The scale is the whole factor the file's values are multiplied by, so for 10 % more, multiply the original by 1.1."
       ),
     ],
   },

@@ -210,6 +210,7 @@ describe("the help topics index", () => {
       "Run period",
       "Output variables",
       "Post-processing",
+      "Model parameters",
       "Compute",
     ]);
     rerender(<Sections step="start" />);
