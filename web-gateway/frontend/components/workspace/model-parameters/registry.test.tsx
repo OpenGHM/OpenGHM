@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { FIELD_CONTROLS, ParamFieldRow } from "@/components/workspace/model-parameters/registry";
 import { allFields, type CustomParams, type FieldType, type ParamField } from "@/lib/workspace/model-parameters";
-import { fakeModelParameters } from "@/lib/workspace/fixtures";
+import { fakeModelParameters, fakeParamField } from "@/lib/workspace/fixtures";
+
+// The Edit dataset panel reads the original dataset through a server action, which needs no network here.
+vi.mock("@/lib/repository/actions", () => ({ fetchDatasetInit: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -246,5 +249,55 @@ describe("what a row says around its control", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
     const message = screen.getByText("Enter a number.");
     expect(input.getAttribute("aria-describedby")).toContain(message.id);
+  });
+});
+
+describe("a dataset field the draft can copy", () => {
+  const precip = fakeParamField("MT_Precip.Primary", {
+    type: "dataset",
+    editable: false,
+    forkable: true,
+    current: "/wbm/data/climate/precip/merra2_prectotcorr_d.init",
+  });
+  const rowWith = (f: ParamField, extra: Partial<Parameters<typeof ParamFieldRow>[0]> = {}) =>
+    render(
+      <ParamFieldRow
+        field={f}
+        custom={null}
+        datasetId="snap-1"
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+        onForkChange={vi.fn()}
+        {...extra}
+      />
+    );
+
+  it("has Edit dataset when the tree says it can be copied and it reads a data init", () => {
+    rowWith(precip);
+    expect(screen.getByRole("button", { name: "Edit dataset merra2_prectotcorr_d.init" })).toBeTruthy();
+    // still read-only: its value is the snapshot's, the copy is what the draft edits
+    expect(screen.getByText("Read-only")).toBeTruthy();
+  });
+
+  it("has none when the tree does not say, when it holds a constant, or without the snapshot to read the original of", () => {
+    rowWith({ ...precip, forkable: false });
+    expect(screen.queryByRole("button", { name: /Edit dataset/ })).toBeNull();
+    cleanup();
+    rowWith({ ...precip, current: "0.5" });
+    expect(screen.queryByRole("button", { name: /Edit dataset/ })).toBeNull();
+    cleanup();
+    rowWith(precip, { datasetId: undefined });
+    expect(screen.queryByRole("button", { name: /Edit dataset/ })).toBeNull();
+    cleanup();
+    rowWith(precip, { onForkChange: undefined });
+    expect(screen.queryByRole("button", { name: /Edit dataset/ })).toBeNull();
+  });
+
+  it("is marked changed, with a Reset, when it has a copy", () => {
+    const onReset = vi.fn();
+    rowWith(precip, { fork: { path: "MT_Precip.Primary", original: precip.current!, set: { Var_Scale: "2" } }, onReset });
+    expect(screen.getByText("Changed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: `Reset ${precip.label}` }));
+    expect(onReset).toHaveBeenCalled();
   });
 });

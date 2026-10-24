@@ -73,7 +73,7 @@ import re
 import shlex
 from dataclasses import dataclass
 from datetime import date
-from typing import Mapping, Union
+from typing import Mapping, Sequence, Union
 
 from app.models.job import MAX_RUN_SECONDS, MAX_WALLTIME_SECONDS, JobParameters
 
@@ -355,6 +355,7 @@ def render_job_body(
     fetch_lock: str,
     work_dir: str,
     changes: Mapping[str, ChangeValue] | None = None,
+    forks: Sequence[Mapping[str, object]] | None = None,
     code_version: str | None = None,
     walltime: str | None = None,
 ) -> str:
@@ -365,7 +366,9 @@ def render_job_body(
     `$OG_WORK_DIR/changes.json` through a quoted heredoc just before `sim run`, and
     passes `--changes` to it (ADR 0038). The script is stored with the job and a
     continuation (ADR 0037) runs it as it is, so the script itself rewrites the file
-    each time. Without any, there is no file and no `--changes`.
+    each time. Without any, there is no file and no `--changes`. `forks` are the dataset
+    copies the run makes (`app.wbm_init.forks.plan`, ADR 0039), written into the same file; the
+    `changes` then point the run init at them.
 
     `walltime` is the value the job asks SLURM for (`--time`, as
     `slurm.resolve_compute` resolves it, in SLURM's own syntax): the toolkit's
@@ -402,7 +405,7 @@ def render_job_body(
             f"The work directory must be an absolute path ending in /{sim_id} (got {work_dir!r})"
         )
 
-    changes_file = render_changes_file(changes, code_version) if changes else None
+    changes_file = render_changes_file(changes, code_version, forks) if (changes or forks) else None
 
     run = [
         'step run "$OPENGHM" sim run --config "$CONFIG"',
@@ -463,8 +466,13 @@ POST_PROCESSING_KEY = "PostProcessing.Run"
 _POST_PROCESSING_RUN = {"standard": 0, "climatology": 1}
 
 
-def render_changes_file(changes: Mapping[str, ChangeValue], code_version: str | None) -> str:
-    """The changes file's JSON (`{"code_version", "set"}`, ADR 0038): sorted keys,
+def render_changes_file(
+    changes: Mapping[str, ChangeValue],
+    code_version: str | None,
+    forks: Sequence[Mapping[str, object]] | None = None,
+) -> str:
+    """The changes file's JSON (`{"code_version", "set"}` and, with dataset copies, `"forks"`,
+    ADR 0038 and 0039): sorted keys,
     two-space indent, ASCII only (`ensure_ascii`), so no byte of it can be a quote of
     the heredoc that carries it and WBM never sees a non-ASCII byte. Every key must be
     an init key path; the four a submit sets are checked as they were when each was a
@@ -480,8 +488,11 @@ def render_changes_file(changes: Mapping[str, ChangeValue], code_version: str | 
         if not isinstance(key, str) or not _KEY_PATH_RE.match(key):
             raise SubmitInputError(f"{key!r} is not an init key path.")
         checked[key] = _check_change(key, value)
+    document: dict[str, object] = {"code_version": code_version, "set": checked}
+    if forks:
+        document["forks"] = [_check_fork(fork) for fork in forks]
     text = json.dumps(
-        {"code_version": code_version, "set": checked},
+        document,
         sort_keys=True,
         ensure_ascii=True,
         indent=2,
@@ -493,6 +504,20 @@ def render_changes_file(changes: Mapping[str, ChangeValue], code_version: str | 
     if any(line == _CHANGES_DELIMITER for line in text.splitlines()):
         raise SubmitInputError("The changes file cannot be written into the job script.")
     return text
+
+
+def _check_fork(fork: Mapping[str, object]) -> dict[str, object]:
+    """One `forks` entry as the toolkit takes it: `from` and `to` container paths, `set` an object
+    of descriptor keys to a string or a finite number. The toolkit checks the rest."""
+    source, target, values = fork.get("from"), fork.get("to"), fork.get("set")
+    if not isinstance(source, str) or not isinstance(target, str) or not isinstance(values, Mapping):
+        raise SubmitInputError("A dataset copy needs a source, a target and the values to set.")
+    checked: dict[str, ChangeValue] = {}
+    for key, value in values.items():
+        if not isinstance(key, str) or not re.match(r"^[A-Za-z_]\w*$", key):
+            raise SubmitInputError(f"{key!r} is not a descriptor key.")
+        checked[key] = _check_change(key, value)  # type: ignore[arg-type]
+    return {"from": source, "to": target, "set": checked}
 
 
 def _check_change(key: str, value: ChangeValue) -> ChangeValue:

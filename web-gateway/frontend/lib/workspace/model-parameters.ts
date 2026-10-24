@@ -16,6 +16,9 @@
  * `show_if`).
  */
 
+import type { DatasetFork } from "@/lib/jobs/types";
+import { canonicalForks, forkAt, forkPaths, forkSummary, withFork, withoutFork } from "@/lib/workspace/dataset-forks";
+
 export type FieldType =
   | "number"
   | "int"
@@ -49,6 +52,10 @@ export interface DatasetCandidate {
   unit: string;
   /** Why WBM cannot read it for this field (shown, and not chosen); null when it can. */
   disabled: string | null;
+  /** What a copy of it repairs, when WBM 23.9.0 refuses the file itself (a `Code_Name` that is not
+   *  its file name, a non-ASCII byte): it is chosen together with a copy that sets nothing (ADR
+   *  0039). Null or absent when the file is read as it is. */
+  repair?: string | null;
 }
 
 export interface ParamField {
@@ -67,6 +74,9 @@ export interface ParamField {
   edit_as?: "number" | null;
   /** The tree says a module that is on must set it. */
   required?: boolean;
+  /** The field takes a data `.init` and the draft can edit the dataset it reads as its own copy
+   *  (a fork). Whether it reads one now is for its value to say. */
+  forkable?: boolean;
   /** The datasets of the model input in this field's unit that it is given one from, in a
    *  module the snapshot has off and the draft can switch on. Null or absent otherwise: a
    *  field the tree gives no unit has none, and takes a constant where `edit_as` says so. */
@@ -101,6 +111,8 @@ export interface ParamModule {
   switch_on?: boolean;
   /** Why not, as a sentence, when it is off and `switch_on` is false. */
   switch_on_reason?: string | null;
+  /** A module that is itself a dataset can have its dataset copied (`ParamField.forkable`). */
+  forkable?: boolean;
   /** A module that is itself a dataset (`Impervious`) is switched on by choosing one of these
    *  (datasets in its unit), or by a constant where `edit_as` is `"number"`. */
   candidates?: DatasetCandidate[] | null;
@@ -291,6 +303,25 @@ export function setFieldValue(
   return orNull(next);
 }
 
+/** Choose a dataset for a field of a module being switched on, and the dataset forks that go with
+ *  it: a dataset that only a copy can use (`candidate.repair`) is chosen with a copy that sets
+ *  nothing, and a copy of any other dataset than the one now chosen goes. */
+export function chooseDataset(
+  custom: CustomParams | null,
+  forks: readonly DatasetFork[] | null | undefined,
+  field: ParamField,
+  value: string
+): { custom: CustomParams | null; forks: DatasetFork[] | null } {
+  const next = setFieldValue(custom, field, value);
+  // A copy of the dataset now chosen stays (with what it sets); any other goes.
+  const same = forkAt(forks, field.path)?.original === value;
+  let kept = same ? (forks ?? null) : withoutFork(forks, field.path);
+  if (field.candidates?.find((c) => c.value === value)?.repair && forkAt(kept, field.path) === null) {
+    kept = withFork(kept, { path: field.path, original: value, set: {} });
+  }
+  return { custom: next, forks: canonicalForks(kept) };
+}
+
 /** Put a key back to the snapshot's value. */
 export function resetPath(custom: CustomParams | null, path: string): CustomParams | null {
   if (!has(custom, path)) return custom;
@@ -329,17 +360,35 @@ export function resetModule(custom: CustomParams | null, mod: ParamModule): Cust
   return orNull(next);
 }
 
-/** The paths of `custom` that are changes to something below `node` (itself included). */
-export function changedBelow(node: ParamNode, custom: CustomParams | null | undefined): string[] {
-  return pathsBelow(node).filter((path) => has(custom, path));
+/** The paths of `custom` (and the fields of `forks`) that are changes to something below `node`
+ *  (itself included). */
+export function changedBelow(
+  node: ParamNode,
+  custom: CustomParams | null | undefined,
+  forks?: readonly DatasetFork[] | null
+): string[] {
+  const copied = new Set(forkPaths(forks));
+  return pathsBelow(node).filter((path) => has(custom, path) || copied.has(path));
+}
+
+/** Every init key path the draft changes: its custom parameters and the fields it forks. */
+export function changedPaths(parameters: {
+  custom_params: CustomParams | null;
+  forks?: readonly DatasetFork[] | null;
+}): Record<string, string> {
+  return {
+    ...Object.fromEntries(forkPaths(parameters.forks).map((path) => [path, ""])),
+    ...parameters.custom_params,
+  };
 }
 
 // ─── Showing what changed ────────────────────────────────────────────────────
 
 export interface ChangedEntry {
   /** `switched_on` is the line for a module the draft switches on: it has no key of its own
-   *  (a block module is on by its fields), so it has no value. */
-  kind: "change" | "switched_on";
+   *  (a block module is on by its fields), so it has no value. `fork` is a field whose dataset the
+   *  run copies: `value` is the original and `shown` says what the copy sets. */
+  kind: "change" | "switched_on" | "fork";
   path: string;
   /** The tree's name for it; null when the tree is not loaded or lacks the key. */
   label: string | null;
@@ -352,10 +401,23 @@ export interface ChangedEntry {
 /** What the draft changes, one entry per key, in key order. With the tree, a
  *  key has its label and a readable value (a dataset by its name), and a module
  *  the draft switches on has a line of its own before its keys. */
-export function describeChanges(custom: CustomParams | null | undefined, tree: ModelParameters | null): ChangedEntry[] {
-  if (!custom) return [];
+export function describeChanges(
+  custom: CustomParams | null | undefined,
+  tree: ModelParameters | null,
+  forks?: readonly DatasetFork[] | null
+): ChangedEntry[] {
+  if (!custom && !(forks && forks.length > 0)) return [];
+  custom = custom ?? {};
   const index = tree ? indexByPath(tree) : null;
-  const entries: ChangedEntry[] = Object.keys(custom).map((path) => {
+  const copied = new Map((forks ?? []).map((f) => [f.path, f]));
+  const keys = [...new Set([...Object.keys(custom), ...copied.keys()])];
+  const entries: ChangedEntry[] = keys.map((path) => {
+    const fork = copied.get(path);
+    if (fork) {
+      const node = index?.get(path);
+      const label = node ? (node.kind === "module" ? node.name : node.label) : null;
+      return { kind: "fork", path, label, value: fork.original, shown: forkSummary(fork) };
+    }
     const value = custom[path];
     const node = index?.get(path);
     if (!node) return { kind: "change", path, label: null, value, shown: value };
@@ -367,7 +429,7 @@ export function describeChanges(custom: CustomParams | null | undefined, tree: M
   });
   if (tree) {
     for (const mod of allModules(tree.groups)) {
-      if (isSwitchedOn(mod, custom) && !has(custom, mod.path)) {
+      if (isSwitchedOn(mod, custom) && !has(custom, mod.path) && !copied.has(mod.path)) {
         entries.push({ kind: "switched_on", path: mod.path, label: mod.name, value: "", shown: "switched on" });
       }
     }

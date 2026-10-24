@@ -54,6 +54,7 @@ import { useLeaveGuard, type LeaveTarget } from "@/lib/workspace/leave-guard";
 import { describeNotSaved } from "@/lib/workspace/save-new-draft";
 import { effectiveModelInputId, useCatalogueModelInput } from "@/lib/workspace/use-catalogue-model-input";
 import { checkProblems, dateMessages } from "@/lib/workspace/draft-checks";
+import { changedPaths } from "@/lib/workspace/model-parameters";
 import { useModelParameters } from "@/lib/workspace/use-model-parameters";
 import { type FlushResult, type SaveState, useDraftSaver } from "@/lib/workspace/use-draft-saver";
 import { useDraftChecks } from "@/lib/workspace/use-draft-checks";
@@ -395,9 +396,9 @@ function WizardBody({
   const submitBlockers = useMemo(
     () => [
       ...problems,
-      ...(checks.status === "ready" ? checkProblems(checks.errors, local.parameters.custom_params) : []),
+      ...(checks.status === "ready" ? checkProblems(checks.errors, changedPaths(local.parameters)) : []),
     ],
-    [problems, checks, local.parameters.custom_params]
+    [problems, checks, local.parameters]
   );
   const problemSteps = useMemo(
     () => DRAFT_STEPS.filter((s) => problems.some((p) => p.step === s)),

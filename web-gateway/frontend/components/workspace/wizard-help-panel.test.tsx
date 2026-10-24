@@ -9,6 +9,9 @@ import type { DraftContext } from "@/lib/workspace/draft-state";
 import { fakeDataset } from "@/lib/workspace/fixtures";
 import type { HelpStep } from "@/lib/workspace/wizard-help";
 
+// The Edit dataset panel reads the original dataset through a server action, which needs no network here.
+vi.mock("@/lib/repository/actions", () => ({ fetchDatasetInit: vi.fn() }));
+
 afterEach(() => {
   cleanup();
 });

@@ -572,7 +572,7 @@ def _candidates_json(node: Node, choices: Choices) -> list[dict] | None:
     return [
         {
             "value": c.path, "name": c.name, "code": c.code, "time_series": c.time_series,
-            "unit": c.unit, "disabled": field_reason(c, node.unit_contains),
+            "unit": c.unit, "disabled": field_reason(c, node.unit_contains), "repair": c.repair,
         }
         for c in found
     ] or None
@@ -602,6 +602,18 @@ def render(resolved: Resolved, values: dict, choices: Choices | None = None) -> 
         off = [m for m in (*node.modules, *([node.path] if node.kind == "module" else [])) if module_state(m, values) == "off"]
         return bool(off) and all(m in can_switch for m in off)
 
+    def forkable(node: Node) -> bool:
+        """Whether the draft can edit this node's dataset as its own copy (a fork, ADR 0039): it takes a
+        data `.init`, its modules are on or switched on by the same save, and no block above it is a
+        file. Whether it holds one now is for the value to say."""
+        if node.type != "dataset" or "init" not in node.accepts:
+            return False
+        modules = (*node.modules, *([node.path] if node.kind == "module" else []))
+        return (
+            all(module_state(m, values) == "on" or m in can_switch for m in modules)
+            and not block_is_file(node.path, values)
+        )
+
     def one(node: Node) -> dict:
         if node.kind == "group":
             return {
@@ -618,6 +630,7 @@ def render(resolved: Resolved, values: dict, choices: Choices | None = None) -> 
                 "switch_on": decision.offered if decision else False,
                 "switch_on_reason": decision.reason if decision else None,
                 "edit_as": "number" if node.type == "dataset" and "number" in node.accepts else None,
+                "forkable": forkable(node),
                 # a module whose own key is the dataset (`openWaterEvap`) is switched on by choosing one
                 "candidates": _candidates_json(node, choices) if node.type == "dataset" and picks(node) else None,
                 "children": [one(c) for c in node.children],
@@ -630,6 +643,7 @@ def render(resolved: Resolved, values: dict, choices: Choices | None = None) -> 
             "editable": candidates is not None
             or editable_now(resolved, node, values, switchable=can_switch),
             "edit_as": node.edit_as,
+            "forkable": forkable(node),
             "required": node.required,
             "candidates": candidates,
             "current": current_text(node, values),

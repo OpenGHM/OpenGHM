@@ -249,7 +249,8 @@ export function DraftReviewStep({
   const spatial = parameters.spatial_domain;
   const changes = describeChanges(
     parameters.custom_params,
-    modelParameters?.status === "ready" ? modelParameters.tree : null
+    modelParameters?.status === "ready" ? modelParameters.tree : null,
+    parameters.forks
   );
   const found = ctx.snapshotState === "found" ? ctx.dataset : null;
   const title = basisTitle(ctx, datasetTitle);
@@ -380,7 +381,7 @@ export function DraftReviewStep({
                   {changes.map((change) => (
                     <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
                       {change.label && <span className="mr-1.5">{change.label}</span>}
-                      {change.kind === "switched_on" ? (
+                      {change.kind !== "change" ? (
                         <>
                           <code className="font-mono text-xs break-all text-muted-foreground">{change.path}</code>
                           <span className="text-muted-foreground"> · {change.shown}</span>

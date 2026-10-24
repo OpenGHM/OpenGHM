@@ -495,6 +495,96 @@ describe("buildDraftPatch: custom parameters the server refused", () => {
   });
 });
 
+describe("dataset forks in the draft", () => {
+  const PRECIP = "/wbm/data/climate/precip/merra2_prectotcorr_d.init";
+  const AIR_T = "/wbm/data/climate/airTemp/merra2_t2m_d.init";
+  const copy = { path: "MT_Precip.Primary", original: PRECIP, set: { Var_Scale: "95040" } };
+  const other = { path: "MT_airT.Primary", original: AIR_T, set: {} };
+
+  it("reads no forks, an empty list and null as one draft, and the same forks in any order as one", () => {
+    const plain = canonical(fromJob(draft()));
+    expect("forks" in plain.parameters).toBe(false);
+    for (const forks of [null, []]) {
+      expect(canonicalKey(edited(draft(), { params: { forks } }), { dataset, snapshotState: "found" })).toBe(
+        canonicalKey(fromJob(draft()), { dataset, snapshotState: "found" })
+      );
+    }
+    const ab = canonical(edited(draft(), { params: { forks: [copy, other] } }));
+    const ba = canonical(edited(draft(), { params: { forks: [other, copy] } }));
+    expect(JSON.stringify(ab)).toBe(JSON.stringify(ba));
+    expect(ab.parameters.forks).toEqual([copy, other]);
+    // the saved draft comes back with `forks: null`: not a difference
+    expect(isDirty(fromJob(draft({ parameters: { ...draft().parameters, forks: null } })), draft(), FOUND)).toBe(false);
+  });
+
+  it("is a change of the model parameters field when a copy is added, changed or removed", () => {
+    const saved = draft();
+    expect(unsavedFields(edited(saved, { params: { forks: [copy] } }), saved, FOUND)).toEqual(["custom"]);
+    const withCopy = draft({ parameters: { ...draft().parameters, forks: [copy] } });
+    expect(unsavedFields(fromJob(withCopy), withCopy, FOUND)).toEqual([]);
+    expect(unsavedFields(edited(withCopy, { params: { forks: [{ ...copy, set: { Var_Scale: "2" } }] } }), withCopy, FOUND)).toEqual(["custom"]);
+    expect(unsavedFields(edited(withCopy, { params: { forks: null } }), withCopy, FOUND)).toEqual(["custom"]);
+  });
+
+  it("sends the forks in the parameters, and a removal as parameters without them", () => {
+    const saved = draft();
+    const out = buildDraftPatch(edited(saved, { params: { forks: [other, copy] } }), saved, FOUND);
+    expect(out.patch!.parameters!.forks).toEqual([copy, other]);
+    const withCopy = draft({ parameters: { ...draft().parameters, forks: [copy] } });
+    const removed = buildDraftPatch(edited(withCopy, { params: { forks: null } }), withCopy, FOUND).patch!;
+    expect("forks" in removed.parameters!).toBe(false);
+  });
+
+  describe("a copy the server refused", () => {
+    const job = draft();
+    const local = edited(job, { params: { forks: [{ ...copy, set: { Var_Scale: ".5" } }] } });
+    const sent = buildDraftPatch(local, job, FOUND).patch!;
+    const errors = { "MT_Precip.Primary": "Var_Scale must be a number like 1.1 or 2e-3." };
+    const refusals = refuseCustom({}, sent, { message: "These model parameters cannot be used.", errors });
+
+    it("is withheld, with its message at its field, while it is the copy that was refused", () => {
+      expect(refusals.custom!.errors).toEqual(errors);
+      expect(customErrorsFor(refusals, local)).toEqual(errors);
+      const out = buildDraftPatch(local, job, FOUND, refusals);
+      expect(out.withheld).toEqual(["custom"]);
+      expect(out.patch).toBeNull(); // the saved draft had no copy: nothing else to send
+    });
+
+    it("keeps the rest of the parameters, and the saved copy of the field, in the patch", () => {
+      const withCopy = draft({ parameters: { ...draft().parameters, forks: [copy] } });
+      const edit = edited(withCopy, { params: { temporal_range_end: "2002-12-31", forks: [{ ...copy, set: { Var_Scale: "x" } }] } });
+      const refused = refuseCustom({}, { parameters: edit.parameters }, { message: "No.", errors });
+      const out = buildDraftPatch(edit, withCopy, FOUND, refused);
+      expect(out.patch!.parameters).toMatchObject({ temporal_range_end: "2002-12-31", forks: [copy] });
+      expect(out.withheld).toEqual(["custom"]);
+    });
+
+    it("is sent again once the copy changes", () => {
+      const fixed = edited(job, { params: { forks: [{ ...copy, set: { Var_Scale: "7" } }] } });
+      expect(customErrorsFor(refusals, fixed)).toEqual({});
+      const out = buildDraftPatch(fixed, job, FOUND, refusals);
+      expect(out.withheld).toEqual([]);
+      expect(out.patch!.parameters!.forks).toEqual([{ ...copy, set: { Var_Scale: "7" } }]);
+    });
+
+    it("tells apart a field's value and its copy, so a refusal of one is not lifted by the other", () => {
+      const both = edited(job, {
+        params: { custom_params: { "Glaciers.glArea": "/wbm/data_init/x.init" }, forks: [{ path: "Glaciers.glArea", original: "/wbm/data_init/x.init", set: {} }] },
+      });
+      const refused = refuseCustom({}, { parameters: both.parameters }, { message: "No.", errors: { "Glaciers.glArea": "x" } });
+      expect(customErrorsFor(refused, both)).toEqual({ "Glaciers.glArea": "x" });
+      const changedCopy = edited(job, {
+        params: { custom_params: { "Glaciers.glArea": "/wbm/data_init/x.init" }, forks: [{ path: "Glaciers.glArea", original: "/wbm/data_init/x.init", set: { Units: "frac" } }] },
+      });
+      expect(customErrorsFor(refused, changedCopy)).toEqual({});
+    });
+  });
+
+  it("places an error of the parameters' forks on the model parameters field", () => {
+    expect(fieldsForPaths(["parameters.forks"])).toEqual(["custom"]);
+  });
+});
+
 describe("fieldsForPaths", () => {
   it("places a validation error's path on the field", () => {
     expect(fieldsForPaths(["slurm_config.cores"])).toEqual(["cores"]);

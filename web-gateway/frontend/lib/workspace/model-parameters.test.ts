@@ -3,6 +3,8 @@ import {
   allFields,
   allModules,
   changedBelow,
+  changedPaths,
+  chooseDataset,
   customParamErrors,
   defaultDiffers,
   describeChanges,
@@ -24,7 +26,13 @@ import {
   type ParamField,
   type ParamModule,
 } from "@/lib/workspace/model-parameters";
-import { fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
+import {
+  FORK_PRECIP_INIT,
+  FORK_REPAIRED_INIT,
+  fakeForkTree,
+  fakeModelParameters,
+  fakeSwitchOnTree,
+} from "@/lib/workspace/fixtures";
 
 const tree = fakeModelParameters();
 const field = (path: string) => allFields(tree.groups).find((f) => f.path === path) as ParamField;
@@ -261,5 +269,91 @@ describe("switching a module on", () => {
     const melt = fieldOf("Glaciers.glMelt");
     expect(displayValue(melt, MELT)).toBe("Glacier discharge, monthly");
     expect(displayValue(melt, "/wbm/data_init/other.init")).toBe("/wbm/data_init/other.init");
+  });
+});
+
+// ─── Dataset forks (ADR 0039) ────────────────────────────────────────────────
+
+describe("describeChanges with forks", () => {
+  const forkTree = fakeForkTree();
+  const precip = { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } };
+
+  it("lists a copy of a field's dataset with its label, the original and what it sets", () => {
+    expect(describeChanges(null, forkTree, [precip])).toEqual([
+      {
+        kind: "fork",
+        path: "MT_Precip.Primary",
+        label: "Primary dataset",
+        value: FORK_PRECIP_INIT,
+        shown: "copy of merra2_prectotcorr_d.init, Var_Scale 95040",
+      },
+    ]);
+  });
+
+  it("lists it by its key alone without the tree, beside the custom parameters in key order", () => {
+    const entries = describeChanges({ "MT_Precip.Scale": "1.2" }, null, [precip]);
+    expect(entries.map((e) => [e.kind, e.path, e.label])).toEqual([
+      ["fork", "MT_Precip.Primary", null],
+      ["change", "MT_Precip.Scale", null],
+    ]);
+  });
+
+  it("lists a repaired dataset chosen for a module once, as the copy, and the module as switched on", () => {
+    const custom = { "Glaciers.glArea": FORK_REPAIRED_INIT, "Glaciers.glMelt": "/wbm/data_init/glaciers/discharge_m.init" };
+    const copy = { path: "Glaciers.glArea", original: FORK_REPAIRED_INIT, set: {} };
+    const entries = describeChanges(custom, forkTree, [copy]);
+    expect(entries.filter((e) => e.path === "Glaciers.glArea")).toEqual([
+      expect.objectContaining({ kind: "fork", shown: "copy of irrEfficiency.init (repaired)" }),
+    ]);
+    expect(entries.some((e) => e.kind === "switched_on" && e.path === "Glaciers")).toBe(true);
+  });
+
+  it("has nothing for an empty list", () => {
+    expect(describeChanges(null, forkTree, [])).toEqual([]);
+    expect(describeChanges(null, forkTree, null)).toEqual([]);
+  });
+});
+
+describe("what a draft changes, with forks", () => {
+  const forkTree = fakeForkTree();
+  const precip = { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } };
+
+  it("counts the field of a fork below a group, and lists every changed path once", () => {
+    const [climate] = forkTree.groups;
+    expect(changedBelow(climate, null)).toEqual([]);
+    expect(changedBelow(climate, null, [precip])).toEqual(["MT_Precip.Primary"]);
+    expect(changedBelow(climate, { "MT_Precip.Primary": "x" }, [precip])).toEqual(["MT_Precip.Primary"]);
+    expect(Object.keys(changedPaths({ custom_params: { a: "1" }, forks: [precip] })).sort()).toEqual(["MT_Precip.Primary", "a"]);
+    expect(changedPaths({ custom_params: null })).toEqual({});
+  });
+});
+
+describe("chooseDataset", () => {
+  const forkTree = fakeForkTree();
+  const area = allFields(forkTree.groups).find((f) => f.path === "Glaciers.glArea") as ParamField;
+  const ok = "/wbm/data_init/glaciers/area_1km.init";
+
+  it("chooses a dataset WBM reads as it is, with no copy", () => {
+    expect(chooseDataset(null, null, area, ok)).toEqual({ custom: { "Glaciers.glArea": ok }, forks: null });
+  });
+
+  it("chooses a repaired dataset together with a copy that sets nothing", () => {
+    expect(chooseDataset(null, null, area, FORK_REPAIRED_INIT)).toEqual({
+      custom: { "Glaciers.glArea": FORK_REPAIRED_INIT },
+      forks: [{ path: "Glaciers.glArea", original: FORK_REPAIRED_INIT, set: {} }],
+    });
+  });
+
+  it("drops the copy when another dataset is chosen, or none, and keeps one of the dataset still chosen", () => {
+    const copy = [{ path: "Glaciers.glArea", original: FORK_REPAIRED_INIT, set: {} }];
+    const custom = { "Glaciers.glArea": FORK_REPAIRED_INIT };
+    expect(chooseDataset(custom, copy, area, ok)).toEqual({ custom: { "Glaciers.glArea": ok }, forks: null });
+    expect(chooseDataset(custom, copy, area, "")).toEqual({ custom: null, forks: null });
+    // another field's copy is not touched
+    const other = [...copy, { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } }];
+    expect(chooseDataset(custom, other, area, ok).forks).toEqual([other[1]]);
+    // a copy of the dataset that stays chosen keeps what it sets
+    const edited = [{ path: "Glaciers.glArea", original: ok, set: { Var_Scale: "2" } }];
+    expect(chooseDataset({ "Glaciers.glArea": ok }, edited, area, ok).forks).toEqual(edited);
   });
 });

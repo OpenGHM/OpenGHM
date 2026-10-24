@@ -232,12 +232,26 @@ export interface SpatialDomain {
   west: number;
 }
 
+/** A dataset descriptor (a data `.init`) the draft edits as the run's own copy (ADR 0039): the
+ *  field that reads it, the original, and the values the copy sets. `set` holds only
+ *  `Var_Scale`, `Var_Offset` and `Units`, as text; empty, the copy only repairs the original. */
+export interface DatasetFork {
+  /** The init key path of the field: the key of `custom_params`. */
+  path: string;
+  /** The data init the field reads, as a run init writes it: `/wbm/data/climate/x.init`. */
+  original: string;
+  set: Record<string, string>;
+}
+
 export interface JobParameters {
   temporal_range_start: string;
   temporal_range_end: string;
   spatial_domain: SpatialDomain | null;
   variables: string[];
   custom_params: Record<string, string> | null;
+  /** Datasets edited as the run's own copy, at most one per field. Absent or null: none. A draft
+   *  with none never sends the key. */
+  forks?: DatasetFork[] | null;
   /** Whether WBM's post-processing runs after the simulation: `climatology` runs
    *  it (the checkbox is checked), `standard` does not (daily, monthly and yearly
    *  output is written either way). `null` or absent is the snapshot's own; a draft nobody

@@ -289,9 +289,9 @@ export function RunDetailsCard({
             <InfoRow label="Post-processing">{describeOutput(parameters.post_processing)}</InfoRow>
           )}
           {/* Only what the draft changed: the snapshot's own init is not listed. */}
-          {customParams && Object.keys(customParams).length > 0 && (
+          {((customParams && Object.keys(customParams).length > 0) || (parameters.forks?.length ?? 0) > 0) && (
             <InfoRow label="Model parameters">
-              <RunModelParameters datasetId={job.dataset_id} customParams={customParams} />
+              <RunModelParameters datasetId={job.dataset_id} customParams={customParams} forks={parameters.forks} />
             </InfoRow>
           )}
           {job.sim_id && (

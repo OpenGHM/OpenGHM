@@ -86,7 +86,7 @@ export function SubmitSummary({
   variables: string[];
   /** What the run computes: the draft's choice, else the snapshot's own. */
   output?: PostProcessingChoice;
-  /** `describeChanges` of the draft's `custom_params`; empty, no row. */
+  /** `describeChanges` of the draft's `custom_params` and dataset copies; empty, no row. */
   changes?: readonly ChangedEntry[];
   cores: number | null;
   coresFromSnapshot: boolean;
@@ -119,8 +119,9 @@ export function SubmitSummary({
               {changes.map((change) => (
                 <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
                   {change.label && <span className="mr-1.5">{change.label}</span>}
-                  {/* A module switched on has no value of its own: its fields carry it. */}
-                  {change.kind === "switched_on" ? (
+                  {/* A module switched on has no value of its own: its fields carry it. A dataset the run copies
+                      says what the copy sets. */}
+                  {change.kind !== "change" ? (
                     <>
                       <code className="break-all font-mono text-xs text-muted-foreground">{change.path}</code>
                       <span className="text-muted-foreground"> · {change.shown}</span>

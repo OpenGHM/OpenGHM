@@ -5,8 +5,11 @@ import type { Dataset, PostProcessingSettings } from "@/lib/repository/types";
 
 import { DraftRunStep } from "@/components/workspace/draft-run-step";
 import type { DraftContext } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeModelParameters } from "@/lib/workspace/fixtures";
+import { FORK_PRECIP_INIT, fakeDataset, fakeForkTree, fakeModelParameters } from "@/lib/workspace/fixtures";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
+
+// The Edit dataset panel reads the original dataset through a server action, which needs no network here.
+vi.mock("@/lib/repository/actions", () => ({ fetchDatasetInit: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -649,6 +652,23 @@ describe("the draft run step: model parameters", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset Soil moisture drying coefficient" }));
     expect(second.onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: null });
+  });
+
+  it("writes a dataset's copy into forks with the rest of the parameters, and a reset takes it out", () => {
+    const forkTree: ModelParametersState = { status: "ready", tree: fakeForkTree() };
+    const first = step({ modelParameters: forkTree });
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Climate forcing/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit dataset merra2_prectotcorr_d.init" }));
+    fireEvent.change(screen.getByLabelText("Var_Scale"), { target: { value: "95040" } });
+    const copy = { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } };
+    expect(first.onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: null, forks: [copy] });
+    first.unmount();
+
+    const second = step({ modelParameters: forkTree, parameters: { ...PARAMETERS, forks: [copy] } });
+    fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Primary dataset" }));
+    expect(second.onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: null, forks: null });
   });
 
   it("switches a module off with an empty value", () => {

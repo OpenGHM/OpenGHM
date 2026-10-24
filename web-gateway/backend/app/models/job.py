@@ -136,6 +136,20 @@ class SpatialDomain(BaseModel):
     west: float
 
 
+class DatasetFork(BaseModel):
+    """A dataset descriptor (a data `.init`) a draft edits as its own copy (ADR 0039): the field it
+    serves, the original, and the values it sets. The gateway keeps the edit and never the file; a
+    submit names the copy (`app.wbm_init.forks.copy_path`) and the run's toolkit makes it."""
+
+    #: The init key path of the field (or module) that reads the dataset: `MT_Precip.Primary`.
+    path: str
+    #: The data init the field reads, as a run init writes it: `/wbm/data_init/climate/x.init`.
+    original: str
+    #: `Var_Scale`, `Var_Offset` and `Units` to set, as text. Empty: the copy only repairs the
+    #: original (its `Code_Name` and a non-ASCII byte).
+    set: dict[str, str] = Field(default_factory=dict)
+
+
 class JobParameters(BaseModel):
     """User-configured run parameters."""
 
@@ -144,6 +158,8 @@ class JobParameters(BaseModel):
     spatial_domain: SpatialDomain | None = None
     variables: list[str] = Field(default_factory=list, description="Output variables")
     custom_params: dict[str, str] | None = None
+    #: Datasets the draft edits as its own copy, at most one per field (ADR 0039); `None` is none.
+    forks: list[DatasetFork] | None = None
     #: What to ask of WBM's post-processing: `"standard"` daily, monthly and yearly
     #: output only, `"climatology"` also the climatologies; `None` is the snapshot's
     #: own (the init is left as published). A draft stored before this field has none.

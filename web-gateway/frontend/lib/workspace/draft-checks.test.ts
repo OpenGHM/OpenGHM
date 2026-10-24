@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CheckFinding } from "@/lib/jobs/types";
 import { checkField, checkProblems, dateMessages } from "./draft-checks";
+import { changedPaths } from "./model-parameters";
 
 const finding = (paths: string[], message = "m"): CheckFinding => ({
   rule: "r",
@@ -24,6 +25,11 @@ describe("checkField", () => {
   it("is the model parameters for a spin-up date or a key the draft changed", () => {
     expect(checkField(["MT_Precip.Primary", "Spinup.Start"], null)).toBe("custom");
     expect(checkField(["Routing.method"], { "Routing.method": "Muskingum" })).toBe("custom");
+  });
+
+  it("is the model parameters for a field whose dataset the draft copies", () => {
+    expect(checkField(["MT_Precip.Primary"], changedPaths({ custom_params: null, forks: [{ path: "MT_Precip.Primary", original: "/wbm/data/x.init", set: {} }] }))).toBe("custom");
+    expect(checkField(["MT_Precip.Primary"], changedPaths({ custom_params: null }))).toBeUndefined();
   });
 
   it("is none for a rule about what only the snapshot's init says", () => {

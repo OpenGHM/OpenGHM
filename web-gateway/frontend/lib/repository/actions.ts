@@ -3,6 +3,7 @@
 import { getApiClient } from "@/lib/api-client";
 import { describeFailure } from "@/lib/action-failure";
 import type { ActionResult } from "@/lib/jobs/types";
+import type { DatasetInit } from "@/lib/workspace/dataset-forks";
 import type { ModelParameters } from "@/lib/workspace/model-parameters";
 import {
   CATALOGUE_FACET_KEYS,
@@ -135,6 +136,25 @@ export async function fetchModelParameters(id: string): Promise<ActionResult<Mod
     const client = await getApiClient({ allowAnonymous: true, timeoutMs: 20_000 });
     const response = await client.get<ModelParameters>(
       `/api/v1/repository/datasets/${encodeURIComponent(id)}/model-parameters`
+    );
+    return { ok: true, data: response.data };
+  } catch (error: unknown) {
+    return describeFailure(error, [404]);
+  }
+}
+
+/**
+ * The values of one data `.init` of a snapshot's model input
+ * (`GET .../datasets/{id}/dataset-init?path=`), for the draft wizard's Edit dataset panel to
+ * show beside the values a copy sets. Failures come back as data: `not_found` is a file the
+ * model input does not have, a 503 `model_input_unavailable` a model input that could not be read.
+ */
+export async function fetchDatasetInit(id: string, path: string): Promise<ActionResult<DatasetInit>> {
+  try {
+    const client = await getApiClient({ allowAnonymous: true, timeoutMs: 20_000 });
+    const response = await client.get<DatasetInit>(
+      `/api/v1/repository/datasets/${encodeURIComponent(id)}/dataset-init`,
+      { params: { path } }
     );
     return { ok: true, data: response.data };
   } catch (error: unknown) {

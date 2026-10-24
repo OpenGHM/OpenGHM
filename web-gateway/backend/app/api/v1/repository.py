@@ -59,7 +59,7 @@ from app.services.catalogue import (
     newest_registered_first,
     parse_box,
 )
-from app.wbm_init import cross_rules
+from app.wbm_init import cross_rules, model_input
 from app.wbm_init import tree as parameter_tree
 
 router = APIRouter(prefix="/repository", tags=["repository"])
@@ -485,6 +485,45 @@ async def get_dataset_model_parameters(dataset_id: str) -> dict:
         "code_version": loaded.code_version,
         "groups": parameter_tree.render(loaded.resolved, loaded.values, loaded.choices),
     }
+
+
+#: The descriptor keys the Edit dataset panel shows beside the draft's own values.
+_DESCRIPTOR_KEYS = ("Code_Name", "Units", "Var_Scale", "Var_Offset", "Time_Series", "Start_Date", "End_Date")
+
+
+@router.get("/datasets/{dataset_id}/dataset-init")
+async def get_dataset_init(
+    dataset_id: str,
+    path: str = Query(description="A data init the run reads, as a run init writes it: /wbm/data_init/..."),
+) -> dict:
+    """The values of one data `.init` of the snapshot's model input, for the draft's Edit dataset
+    panel to show beside the values a copy sets (docs/architecture/model-parameters.md, data `.init`
+    forks): `Code_Name`, `Units`, `Var_Scale`, `Var_Offset`, `Time_Series`, `Start_Date` and `End_Date`
+    as text (empty when the file does not have the key). Open, like ``model-parameters``: it holds
+    nothing the published model input does not. 404 when the id is not a snapshot or the file is not
+    in its model input; 422 ``invalid_path`` for a path that is not a data init; 503
+    ``model_input_unavailable`` when the model input cannot be read."""
+    doc = await get_db()["datasets"].find_one({"_id": dataset_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    if not path.startswith(("/wbm/data/", "/wbm/data_init/")) or not path.endswith(".init"):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_path", "message": "The path must be a data .init under /wbm/data/ or /wbm/data_init/."},
+        )
+    source = model_input.source_of(dataset_id, doc["document"])
+    try:
+        init = await model_input.read_container_init(source, path)
+    except model_input.NotFound:
+        raise HTTPException(status_code=404, detail=f"{path} is not in the snapshot's model input")
+    except model_input.BadInit as exc:
+        raise HTTPException(status_code=422, detail={"code": "invalid_path", "message": str(exc)})
+    except model_input.Unavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "model_input_unavailable", "message": "The model input could not be read right now."},
+        )
+    return {"path": path, "name": init.location.path.rsplit("/", 1)[-1], **{k: init.get(k) for k in _DESCRIPTOR_KEYS}}
 
 
 @router.post("/datasets/{dataset_id}/checks")

@@ -35,6 +35,7 @@ import {
   type DraftStep,
 } from "@/lib/workspace/draft-wizard";
 import type { Dataset } from "@/lib/repository/types";
+import { canonicalForks, forkAt } from "@/lib/workspace/dataset-forks";
 
 export type { DraftField } from "@/lib/workspace/draft-wizard";
 
@@ -148,21 +149,29 @@ function canonicalCustom(custom: Record<string, string> | null): Record<string, 
   return keys.length === 0 ? null : Object.fromEntries(keys.map((k) => [k, custom[k]]));
 }
 
+/** The parameters in the form they are compared and sent in, with a fixed key order. */
+function canonicalParameters(p: JobParameters, order: readonly string[]): JobParameters {
+  const forks = canonicalForks(p.forks);
+  return {
+    temporal_range_start: p.temporal_range_start,
+    temporal_range_end: p.temporal_range_end,
+    spatial_domain: canonicalDomain(p.spatial_domain),
+    variables: orderVariables(p.variables, order),
+    custom_params: canonicalCustom(p.custom_params),
+    // Only a copy is a key: a draft that edits no dataset sends nothing, and `null`, an empty
+    // list and absent are the same draft.
+    ...(forks ? { forks } : {}),
+    // Only a choice is a key: a draft nobody chose for sends nothing, and
+    // `null` and absent are the same draft.
+    ...(p.post_processing ? { post_processing: p.post_processing } : {}),
+  };
+}
+
 export function canonical(local: DraftLocal, order: readonly string[] = []): CanonicalDraft {
-  const p = local.parameters;
   return {
     name: blankToNull(local.name),
     description: blankToNull(local.description),
-    parameters: {
-      temporal_range_start: p.temporal_range_start,
-      temporal_range_end: p.temporal_range_end,
-      spatial_domain: canonicalDomain(p.spatial_domain),
-      variables: orderVariables(p.variables, order),
-      custom_params: canonicalCustom(p.custom_params),
-      // Only a choice is a key: a draft nobody chose for sends nothing, and
-      // `null` and absent are the same draft.
-      ...(p.post_processing ? { post_processing: p.post_processing } : {}),
-    },
+    parameters: canonicalParameters(local.parameters, order),
     slurm: { cores: local.slurm.cores },
     modelInputId: local.modelInputId,
   };
@@ -193,7 +202,9 @@ export function unsavedFields(local: DraftLocal, saved: Job, ctx: DraftContext):
     end: want.parameters.temporal_range_end !== have.parameters.temporal_range_end,
     variables: fingerprint(want.parameters.variables) !== fingerprint(have.parameters.variables),
     spatial: fingerprint(want.parameters.spatial_domain) !== fingerprint(have.parameters.spatial_domain),
-    custom: fingerprint(want.parameters.custom_params) !== fingerprint(have.parameters.custom_params),
+    custom:
+      fingerprint(want.parameters.custom_params) !== fingerprint(have.parameters.custom_params) ||
+      fingerprint(want.parameters.forks ?? null) !== fingerprint(have.parameters.forks ?? null),
     postProcessing: (want.parameters.post_processing ?? null) !== (have.parameters.post_processing ?? null),
     cores: want.slurm.cores !== have.slurm.cores,
     name: want.name !== have.name,
@@ -282,15 +293,20 @@ export function buildDraftPatch(
   }
   // Custom parameters the server refused stay out of the patch while their value
   // is the one it refused; the saved value (or none) goes in their place.
-  const refusedKeys = refusedCustomKeys(refusals, want.parameters.custom_params);
+  // A copy of a dataset is part of the same refusal, by the path of its field.
+  const refusedKeys = refusedCustomKeys(refusals, want.parameters);
   if (refusedKeys.length > 0) {
     const custom = { ...want.parameters.custom_params };
+    let forks = want.parameters.forks ?? [];
     for (const key of refusedKeys) {
       const saved = have.parameters.custom_params;
       if (saved && key in saved) custom[key] = saved[key];
       else delete custom[key];
+      const savedFork = forkAt(have.parameters.forks, key);
+      forks = forks.filter((f) => f.path !== key);
+      if (savedFork) forks = [...forks, savedFork];
     }
-    parameters = { ...parameters, custom_params: canonicalCustom(custom) };
+    parameters = canonicalParameters({ ...parameters, custom_params: canonicalCustom(custom), forks }, order);
     withheld.add("custom");
     errors.custom = refusals.custom!.message;
   }
@@ -357,6 +373,7 @@ const PARAMETER_FIELDS: Record<string, DraftField> = {
   spatial_domain: "spatial",
   variables: "variables",
   custom_params: "custom",
+  forks: "custom",
   post_processing: "postProcessing",
 };
 
@@ -383,20 +400,31 @@ export function fieldsForPaths(paths: readonly string[]): DraftField[] {
   return DRAFT_FIELDS.filter((field) => found.has(field));
 }
 
-/** The keys of `custom` that the server refused with the value now on screen. */
-function refusedCustomKeys(refusals: ServerRefusals, custom: Record<string, string> | null): string[] {
+/** What the draft sets for each init key path, as one text per path: the value in
+ *  `custom_params` and the copy of the dataset in `forks`. A refusal is remembered with it, so a
+ *  key stays withheld for as long as both are what the server refused. */
+function sentOf(parameters: JobParameters): Record<string, string> {
+  const out: Record<string, string> = { ...parameters.custom_params };
+  for (const fork of parameters.forks ?? []) {
+    out[fork.path] = `${out[fork.path] ?? ""}\u0000${JSON.stringify(canonicalForks([fork]))}`;
+  }
+  return out;
+}
+
+/** The keys of `custom_params` and the paths of `forks` that the server refused with the value now on screen. */
+function refusedCustomKeys(refusals: ServerRefusals, parameters: JobParameters): string[] {
   const refused = refusals.custom;
-  if (!refused || !custom) return [];
-  return Object.keys(refused.errors).filter((key) => key in custom && custom[key] === refused.sent[key]);
+  const sent = sentOf(parameters);
+  if (!refused) return [];
+  return Object.keys(refused.errors).filter((key) => key in sent && sent[key] === refused.sent[key]);
 }
 
 /** The server's message for each custom parameter that is still the value it
  *  refused, by init key path, for the field to show. */
 export function customErrorsFor(refusals: ServerRefusals, local: DraftLocal): Record<string, string> {
-  const custom = local.parameters.custom_params;
   const refused = refusals.custom;
   if (!refused) return {};
-  return Object.fromEntries(refusedCustomKeys(refusals, custom).map((key) => [key, refused.errors[key]]));
+  return Object.fromEntries(refusedCustomKeys(refusals, local.parameters).map((key) => [key, refused.errors[key]]));
 }
 
 /** Remember the keys the server refused as `custom_params` (a 422
@@ -409,7 +437,7 @@ export function refuseCustom(
   patch: DraftUpdateRequest,
   failure: { message: string; errors: Record<string, string> | null }
 ): ServerRefusals {
-  const sent = patch.parameters?.custom_params ?? {};
+  const sent = patch.parameters ? sentOf(patch.parameters) : {};
   const errors = Object.fromEntries(Object.entries(failure.errors ?? {}).filter(([path]) => path in sent));
   if (Object.keys(errors).length === 0) {
     return refuseGroups(refusals, patch, { message: failure.message, paths: ["parameters.custom_params"] });

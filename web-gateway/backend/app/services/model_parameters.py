@@ -78,24 +78,23 @@ async def load(snapshot: dict, snapshot_id: str) -> Loaded:
     return Loaded(tree.resolve(version), values)
 
 
-def _unreadable_by(version: str, init: model_input.InitFile) -> str | None:
-    """Why WBM `version` cannot read the data init, or None: it is no descriptor, or on 23.9.0 its
-    `Code_Name` differs from its file name or it holds a non-ASCII byte
-    (docs/reference/wbm-init.md section 8)."""
+def _unreadable_by(version: str, init: model_input.InitFile) -> tuple[str | None, str | None]:
+    """`(reason, repair)` for the data init under WBM `version`. `reason` is why it cannot be used at
+    all: it is no descriptor (no `Code_Name`). `repair` is what a copy of it fixes, when that is all that
+    is wrong: on 23.9.0 a `Code_Name` that differs from its file name, or a non-ASCII byte, which WBM
+    refuses (docs/reference/wbm-init.md section 8) and a fork rewrites (ADR 0039)."""
     if not init.get("Code_Name"):
-        return "It has no Code_Name, so it is not a dataset."
+        return "It has no Code_Name, so it is not a dataset.", None
+    faults = []
     if version == "23.9.0":
         if init.get("Code_Name") != init.name:
-            return (
-                f"Its Code_Name ({init.get('Code_Name')}) differs from its file name, which WBM 23.9.0 "
-                "refuses. It cannot be used until the file is copied and corrected, which is not available yet."
-            )
+            faults.append(f"its Code_Name ({init.get('Code_Name')}) differs from its file name")
         if not init.is_ascii:
-            return (
-                "The file holds a character that is not ASCII, which WBM 23.9.0 refuses. It cannot "
-                "be used until the file is copied and corrected, which is not available yet."
-            )
-    return None
+            faults.append("it holds a character that is not ASCII")
+    if faults:
+        text = " and ".join(faults)
+        return None, f"{text[0].upper()}{text[1:]}, which WBM 23.9.0 refuses. A copy made for the run repairs it."
+    return None, None
 
 
 async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choices_mod.Choices | None:
@@ -116,6 +115,7 @@ async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choice
         code, unit = str(entry.get("code") or ""), str(entry.get("unit") or "")
         name = str(entry.get("name") or code or relative.rsplit("/", 1)[-1]).strip()
         series = str(entry.get("timeSeries") or "")
+        repair = None
         try:
             init = await model_input.read_init(location)
         except model_input.NotFound:
@@ -123,11 +123,11 @@ async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choice
         except model_input.BadInit as exc:
             reason = f"Its init file cannot be read ({exc})."
         else:
-            reason = _unreadable_by(version, init)
+            reason, repair = _unreadable_by(version, init)
             code = init.get("Code_Name") or code
             series = init.get("Time_Series") or series
             unit = init.get("Units") or unit
-        return choices_mod.Candidate(path, code, name, series, unit, reason)
+        return choices_mod.Candidate(path, code, name, series, unit, reason, repair)
 
     try:
         entries = await model_input.datasets(source.model_input_id)

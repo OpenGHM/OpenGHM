@@ -39,6 +39,7 @@ from app.models.job import (
     CANCELLABLE_STATUSES,
     MAX_RUN_SECONDS,
     TERMINAL_STATUSES,
+    DatasetFork,
     JobListResponse,
     JobLogResponse,
     JobDB,
@@ -70,7 +71,8 @@ from app.services import (
     sbatch_refusal,
     slurm,
 )
-from app.wbm_init import cross_rules
+from app.wbm_init import cross_rules, model_input
+from app.wbm_init import forks as wbm_forks
 from app.wbm_init import tree as wbm_tree
 from app.wbm_init import validate as wbm_validate
 
@@ -594,7 +596,8 @@ async def update_simulation(
                 doc["dataset_id"], envelope["document"], changes["parameters"]["post_processing"]
             )
         custom_params = changes["parameters"].get("custom_params")
-        if envelope is not None and custom_params:
+        forks = changes["parameters"].get("forks")
+        if envelope is not None and (custom_params or forks):
             # What equals the snapshot's own value is not a change and is not kept.
             # The variables it is checked against are the ones being saved with it, else
             # the stored draft's.
@@ -603,9 +606,15 @@ async def update_simulation(
                 if "variables" in changes["parameters"]
                 else (doc.get("parameters") or {}).get("variables")
             )
-            changes["parameters"]["custom_params"], _ = await _checked_custom_params(
-                doc["dataset_id"], envelope["document"], custom_params, variables or ()
+            kept, _ = await _checked_custom_params(
+                doc["dataset_id"],
+                envelope["document"],
+                custom_params or {},
+                variables or (),
+                [DatasetFork(**f) for f in forks or ()],
             )
+            if custom_params:
+                changes["parameters"]["custom_params"] = kept
 
     if "slurm_config" in changes:
         # Only the fields the client sent change; `null` goes back to the
@@ -670,6 +679,7 @@ async def _checked_custom_params(
     snapshot: dict,
     custom_params: dict[str, str],
     variables: Sequence[str] = (),
+    forks: Sequence[DatasetFork] = (),
 ) -> tuple[dict[str, str], model_parameters.Loaded]:
     """A draft's `custom_params` without the entries that equal the snapshot's own value,
     after checking the rest against the parameter tree resolved for the snapshot's WBM
@@ -679,7 +689,8 @@ async def _checked_custom_params(
     no WBM version the tree knows. `variables` is the draft's output list: a module is not
     switched off while it still holds an output that needs it. A module the snapshot has off
     is switched on with datasets of the draft's model input, which are read here only when
-    `custom_params` names such a module."""
+    `custom_params` names such a module. The draft's dataset `forks` (ADR 0039) are checked with
+    them, their messages at the field's path in the same `errors`."""
     try:
         loaded = await model_parameters.load(snapshot, dataset_id)
     except model_parameters.Unavailable as exc:
@@ -694,7 +705,12 @@ async def _checked_custom_params(
     if wbm_tree.needs_choices(kept, loaded.resolved, loaded.values):
         # a module the snapshot has off: only the draft's model input says what it can be given
         loaded = await model_parameters.with_choices(snapshot, dataset_id, loaded)
-    errors = wbm_validate.validate(kept, loaded.resolved, loaded.values, variables, loaded.choices)
+    errors = wbm_validate.validate(kept, loaded.resolved, loaded.values, variables, loaded.choices, forks)
+    for path, message in wbm_forks.validate(forks, kept, loaded.resolved, loaded.values).items():
+        errors.setdefault(path, message)
+    if forks and not errors:
+        source = model_input.source_of(dataset_id, snapshot)
+        errors = await wbm_forks.check_originals(source, forks)
     if errors:
         raise _error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1009,11 +1025,19 @@ async def submit_simulation(
         # and the tree do not change under a draft, but nothing else vouches for a
         # stored draft. Typed for the changes file.
         custom_changes: dict[str, job_script.ChangeValue] = {}
-        if job.parameters.custom_params:
+        fork_entries: list[dict] = []
+        if job.parameters.custom_params or job.parameters.forks:
             kept, loaded = await _checked_custom_params(
-                job.dataset_id, snapshot, job.parameters.custom_params, job.parameters.variables
+                job.dataset_id,
+                snapshot,
+                job.parameters.custom_params or {},
+                job.parameters.variables,
+                job.parameters.forks or (),
             )
             custom_changes = wbm_validate.typed_changes(kept, loaded.resolved, loaded.values)
+            # A fork does not repoint the run init by itself: the field's key is set to the copy.
+            fork_entries, repointed = wbm_forks.plan(job.parameters.forks, loaded.resolved, loaded.values)
+            custom_changes.update(repointed)
 
         await _refuse_unavailable_post_processing(
             job.dataset_id, snapshot, job.parameters.post_processing
@@ -1071,6 +1095,7 @@ async def submit_simulation(
                 fetch_lock=settings.ANVIL_FETCH_LOCK,
                 work_dir=work_dir,
                 changes=changes,
+                forks=fork_entries,
                 code_version=code_version,
                 walltime=walltime,
             )

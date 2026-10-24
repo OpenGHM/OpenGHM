@@ -23,10 +23,10 @@ NODE_KEYS = {
     "group": {"kind", "key", "label", "doc", "tier", "children"},
     "module": {
         "kind", "key", "name", "doc", "tier", "path", "state", "switch_off", "switch_on",
-        "switch_on_reason", "edit_as", "candidates", "children",
+        "switch_on_reason", "edit_as", "forkable", "candidates", "children",
     },
     "field": {
-        "kind", "key", "label", "doc", "tier", "path", "type", "editable", "edit_as", "required",
+        "kind", "key", "label", "doc", "tier", "path", "type", "editable", "edit_as", "forkable", "required",
         "candidates", "current", "default", "unit", "options", "min", "max", "calibration", "show_if",
     },
 }

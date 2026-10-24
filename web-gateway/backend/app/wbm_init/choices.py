@@ -33,6 +33,10 @@ class Candidate:
     unit: str
     #: Why the snapshot's WBM version cannot read this file, or None.
     reason: str | None = None
+    #: What a copy repairs (the file's `Code_Name` is not its file name, or it holds a non-ASCII byte,
+    #: which WBM 23.9.0 refuses, ADR 0039), or None. A candidate with a `repair` is usable only as a
+    #: copy: the draft chooses it together with a fork that has no values to set.
+    repair: str | None = None
 
 
 @dataclass(frozen=True)

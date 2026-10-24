@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/workspace/job-1" }));
 import { DraftSubmitCard } from "@/components/workspace/draft-submit-card";
 import type { SubmitProblem } from "@/lib/workspace/draft-state";
 import type { FlushResult } from "@/lib/workspace/use-draft-saver";
-import { fakeDraft, fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
+import { FORK_PRECIP_INIT, fakeDraft, fakeForkTree, fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
 
 // What the server holds after the flush: not what the page's props said.
 const SAVED = fakeDraft("DRAFT", {
@@ -690,6 +690,25 @@ describe("DraftSubmitCard: the changed model parameters", () => {
       "Runoff from Glaciated AreasGlaciers · switched on",
       "Glacier area fractionGlaciers.glArea = /wbm/data_init/glaciers/area_1km.init · Glacier area fraction, 1 km",
       "Glacier melt dischargeGlaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init · Glacier discharge, monthly",
+    ]);
+  });
+
+  it("lists a dataset the run copies as a copy of the original with what it sets", async () => {
+    const job: Job = {
+      ...SAVED,
+      parameters: {
+        ...SAVED.parameters,
+        custom_params: null,
+        forks: [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } }],
+      },
+    };
+    flush.mockResolvedValue({ ok: true, job, withheld: [] });
+    card({ modelParameters: { status: "ready", tree: fakeForkTree() } });
+    await openDialog();
+    const row = within(dialog()).getByText("Model parameters").closest("div") as HTMLElement;
+    expect(within(row).getByText("1 changed")).toBeTruthy();
+    expect(within(row).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Primary datasetMT_Precip.Primary · copy of merra2_prectotcorr_d.init, Var_Scale 95040",
     ]);
   });
 

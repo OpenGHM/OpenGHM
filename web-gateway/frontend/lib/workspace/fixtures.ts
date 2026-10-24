@@ -883,6 +883,86 @@ export function fakeCandidate(path: string, overrides: Partial<DatasetCandidate>
   };
 }
 
+/** The precipitation dataset of the fork tests: a field that reads a data `.init`, which the draft
+ *  can edit as its own copy. */
+export const FORK_PRECIP_INIT = "/wbm/data/climate/precip/merra2_prectotcorr_d.init";
+/** A dataset of the model input that WBM 23.9.0 refuses for its `Code_Name`, which a copy repairs. */
+export const FORK_REPAIRED_INIT = "/wbm/data_init/irrigation/irrEfficiency.init";
+
+/**
+ * A v2-like tree (WBM 23.9.0) for the tests of dataset forks (ADR 0039): a precipitation dataset
+ * field that reads a data `.init` and can be copied, a number field that cannot, and Glaciers
+ * switched on with datasets, one of which needs a copy to be used (`repair`).
+ */
+export function fakeForkTree(): ModelParameters {
+  const area = fakeCandidate("/wbm/data_init/glaciers/area_1km.init", { name: "Glacier area fraction, 1 km" });
+  const repaired = fakeCandidate(FORK_REPAIRED_INIT, {
+    name: "Irrigation efficiency",
+    repair: "Its Code_Name (fao_irrEfficiency) differs from its file name, which WBM 23.9.0 refuses. A copy made for the run repairs it.",
+  });
+  return {
+    code_version: "23.9.0",
+    groups: [
+      {
+        kind: "group",
+        key: "climate",
+        label: "Climate forcing",
+        doc: null,
+        tier: "basic",
+        children: [
+          fakeParamField("MT_Precip.Primary", {
+            key: "primary",
+            label: "Primary dataset",
+            type: "dataset",
+            editable: false,
+            forkable: true,
+            current: FORK_PRECIP_INIT,
+          }),
+          fakeParamField("MT_Precip.Scale", {
+            key: "scale",
+            label: "Precipitation scale factor",
+            current: "1",
+            default: 1,
+          }),
+        ],
+      },
+      {
+        kind: "group",
+        key: "modules",
+        label: "Modules",
+        doc: null,
+        tier: "basic",
+        children: [
+          {
+            kind: "module",
+            key: "glaciated_area_runoff",
+            name: "Runoff from Glaciated Areas",
+            doc: null,
+            tier: "basic",
+            path: "Glaciers",
+            state: "off",
+            switch_off: false,
+            switch_on: true,
+            switch_on_reason: null,
+            candidates: null,
+            children: [
+              fakeParamField("Glaciers.glMelt", {
+                key: "melt", label: "Glacier melt discharge", type: "dataset", required: true,
+                candidates: [fakeCandidate("/wbm/data_init/glaciers/discharge_m.init", { name: "Glacier discharge, monthly", unit: "m3/sec" })],
+                forkable: true, unit: "m3/s",
+              }),
+              fakeParamField("Glaciers.glArea", {
+                key: "area", label: "Glacier area fraction", type: "dataset", required: true,
+                candidates: [area, repaired], forkable: true, unit: "fraction",
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /**
  * The resolved tree of a v2-like snapshot (WBM 23.9.0) that has its modules off, cut down to
  * four of them: Glaciers, which can be switched on (each field is offered the dataset of its own

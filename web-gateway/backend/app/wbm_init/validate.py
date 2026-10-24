@@ -21,6 +21,7 @@ import re
 from datetime import date
 from typing import Mapping, Sequence, Union
 
+from app.models.job import DatasetFork
 from app.wbm_init import tree
 from app.wbm_init.choices import Choices, field_reason, unit_matches
 
@@ -76,13 +77,17 @@ def validate(
     values: dict,
     variables: Sequence[str] = (),
     choices: Choices | None = None,
+    forks: Sequence[DatasetFork] | None = None,
 ) -> dict[str, str]:
     """`{path: message}` for every entry the tree refuses; empty when all are fine.
     `variables` is the draft's output variable list: a module cannot be switched off while
     it holds an output the module unlocks. `choices` are the datasets of the draft's model
     input, which a module the snapshot has off is switched on with (None when they could not
     be read: nothing is then accepted for such a module). A module switched on is also refused
-    when it does not set everything it requires; that message is at the module's path."""
+    when it does not set everything it requires; that message is at the module's path. A dataset
+    chosen that only a copy can use (`Candidate.repair`) is refused unless `forks` has the copy of it
+    at that path (the forks themselves are checked by `app.wbm_init.forks.validate`)."""
+    copies = {f.path: f.original for f in forks or ()}
     off_in_save = frozenset(
         p
         for p, v in custom_params.items()
@@ -91,7 +96,7 @@ def validate(
     decisions = tree.switch_on_decisions(resolved, values, choices)
     errors: dict[str, str] = {}
     for path, value in custom_params.items():
-        message = _check(path, value, resolved, values, off_in_save, decisions, choices)
+        message = _check(path, value, resolved, values, off_in_save, decisions, choices, copies)
         if message is None and path in off_in_save:
             message = _outputs_need(resolved.fields[path], variables)
         if message:
@@ -138,6 +143,7 @@ def _check(
     off_in_save: frozenset,
     decisions: dict[str, tree.SwitchOn],
     choices: Choices | None,
+    copies: Mapping[str, str],
 ) -> str | None:
     node = resolved.fields.get(path)
     if node is None:
@@ -163,7 +169,7 @@ def _check(
                 return refusal
             if node.type != "dataset":
                 return "Switch this module on by setting its parameters: it has no value of its own."
-            return _check_dataset(node, value, choices)
+            return _check_dataset(node, value, choices, copies)
         if value != "":
             return "A module can only be switched off here: leave the value empty."
         return None
@@ -177,7 +183,7 @@ def _check(
         if refusal:
             return refusal
     if off and pickable:
-        return _check_dataset(node, value, choices)
+        return _check_dataset(node, value, choices, copies)
     for module in node.modules:
         if module in off_in_save:
             return "Its module is being switched off."
@@ -194,7 +200,9 @@ def _cannot_switch_on(decision: tree.SwitchOn | None, lead: str = "This module i
     return f"{lead} and cannot be switched on here." + (f" {decision.reason}" if decision and decision.reason else "")
 
 
-def _check_dataset(node: tree.Node, value: str, choices: Choices | None) -> str | None:
+def _check_dataset(
+    node: tree.Node, value: str, choices: Choices | None, copies: Mapping[str, str]
+) -> str | None:
     """A dataset given to a module the save switches on: a constant number where the field takes one,
     else a data `.init` of the model input in the field's unit that WBM can read and the field's own
     rule allows. A field the tree gives no unit has no datasets to choose from."""
@@ -218,7 +226,11 @@ def _check_dataset(node: tree.Node, value: str, choices: Choices | None) -> str 
     if not unit_matches(node.unit, candidate):
         return f"{candidate.name} is in {candidate.unit or 'no unit'}, and this field takes {node.unit}."
     reason = field_reason(candidate, node.unit_contains)
-    return f"{candidate.name} cannot be used here. {reason}" if reason else None
+    if reason:
+        return f"{candidate.name} cannot be used here. {reason}"
+    if candidate.repair and copies.get(node.path) != value:
+        return f"{candidate.name} can only be used as a copy. {candidate.repair}"
+    return None
 
 
 #: The glacier module and the suffix of the primary-source output that tracks its water.

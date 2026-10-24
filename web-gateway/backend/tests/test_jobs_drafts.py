@@ -350,6 +350,7 @@ def test_derive_answers_201_with_the_new_draft_and_audits_it(client, db):
         "spatial_domain": None,
         "variables": ["runoff", "discharge"],
         "custom_params": None,
+        "forks": None,
         "post_processing": None,
     }
     assert body["slurm_config"] == {"cores": None}

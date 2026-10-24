@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from app.models.job import JobParameters
+from app.models.job import DatasetFork, JobParameters
 from app.services import job_script, model_parameters
 from app.wbm_init import choices as ch
 from app.wbm_init import cross_rules, tree, validate
@@ -104,9 +104,13 @@ def test_the_v2_model_inputs_datasets_are_candidates_and_23_9_0_refuses_the_ones
     )
     assert found[VOLUME].unit == "m3" and found[VOLUME].reason is None
     assert found[AREA].unit == "fraction" and found[AREA].time_series == "yearly_clim" and found[AREA].reason is None
-    # what WBM 23.9.0 dies on: `Code_Name` that is not the file name, a non-ASCII byte
-    assert "Code_Name (root_depth) differs from its file name" in found[ROOTING].reason
-    assert "not ASCII" in found["/wbm/data_init/crops/mirca_cropAreaFraction.init"].reason
+    # what WBM 23.9.0 dies on, a `Code_Name` that is not the file name or a non-ASCII byte, a copy repairs
+    # (ADR 0039): the candidate is usable, as a copy, and says what the copy repairs
+    assert found[ROOTING].reason is None
+    assert "Code_Name (root_depth) differs from its file name" in found[ROOTING].repair
+    mirca = found["/wbm/data_init/crops/mirca_cropAreaFraction.init"]
+    assert mirca.reason is None and "not ASCII" in mirca.repair
+    assert found[MELT].repair is None
     # an init the model input does not list is no candidate
     assert AREA_RENAMED not in found
 
@@ -248,7 +252,7 @@ def test_the_v2_tree_marks_glaciers_able_to_switch_on_with_candidates_for_its_th
     for path in ("Glaciers.glMelt", "Glaciers.glArea", "Glaciers.glVolume"):
         field = by_path[path]
         assert field["editable"] is True and field["candidates"], path
-        assert set(field["candidates"][0]) == {"value", "name", "code", "time_series", "unit", "disabled"}
+        assert set(field["candidates"][0]) == {"value", "name", "code", "time_series", "unit", "disabled", "repair"}
     assert by_path["Glaciers.glMelt"]["required"] and by_path["Glaciers.glArea"]["required"]
     assert not by_path["Glaciers.glVolume"]["required"]
     # a field is offered the datasets of its unit and no others: the discharge (m3/s), the volume (m3 per
@@ -267,8 +271,12 @@ def test_a_dataset_of_the_right_unit_that_wbm_cannot_read_is_listed_disabled(api
     by_path = {n["path"]: n for n in walk(served(api, snapshots, "v2")["groups"]) if "path" in n}
     area = {c["value"]: c for c in by_path["Glaciers.glArea"]["candidates"]}
     assert area[AREA]["disabled"] is None
-    assert "not ASCII" in area["/wbm/data_init/crops/mirca_cropAreaFraction.init"]["disabled"]
-    assert "Code_Name (fao_irrEfficiency) differs" in area["/wbm/data_init/irrigation/irrEfficiency.init"]["disabled"]
+    # a file WBM 23.9.0 refuses for its `Code_Name` or a non-ASCII byte is not disabled: it is usable as a copy
+    mirca = area["/wbm/data_init/crops/mirca_cropAreaFraction.init"]
+    assert mirca["disabled"] is None and "not ASCII" in mirca["repair"]
+    irr = area["/wbm/data_init/irrigation/irrEfficiency.init"]
+    assert irr["disabled"] is None and "Code_Name (fao_irrEfficiency) differs" in irr["repair"]
+    assert area[AREA]["repair"] is None
 
 
 def test_the_units_rule_of_glarea_is_the_trees_and_a_dataset_that_breaks_it_is_disabled():
@@ -355,13 +363,21 @@ def test_a_dataset_outside_the_model_input_is_refused_at_its_field(v2):
     assert errors == {"Glaciers.glMelt": "This is not a dataset of the snapshot's model input."}
 
 
-def test_a_dataset_that_wbm_23_9_0_refuses_is_refused_with_the_reason(v2):
+def test_a_dataset_that_wbm_23_9_0_refuses_is_refused_unless_the_draft_copies_it(v2):
     mirca = "/wbm/data_init/crops/mirca_cropAreaFraction.init"  # fraction, but a non-ASCII byte
     errors = check(v2, {**GLACIERS_ON, "Glaciers.glArea": mirca})
     assert set(errors) == {"Glaciers.glArea"}
-    assert errors["Glaciers.glArea"].startswith("MIRCA2000 crop area as fraction of cell area cannot be used here. The file holds a character that is not ASCII")
+    assert errors["Glaciers.glArea"].startswith(
+        "MIRCA2000 crop area as fraction of cell area can only be used as a copy. It holds a character that is not ASCII"
+    )
     irr = "/wbm/data_init/irrigation/irrEfficiency.init"
     assert "Its Code_Name (fao_irrEfficiency) differs from its file name" in check(v2, {**GLACIERS_ON, "Glaciers.glArea": irr})["Glaciers.glArea"]
+    # with the copy (an empty fork at the field, of that dataset) it is chosen as any other
+    copy = [DatasetFork(path="Glaciers.glArea", original=irr)]
+    assert validate.validate({**GLACIERS_ON, "Glaciers.glArea": irr}, v2.resolved, v2.values, (), v2.choices, copy) == {}
+    # a copy of another dataset does not cover it
+    other = [DatasetFork(path="Glaciers.glArea", original=AREA)]
+    assert "only be used as a copy" in validate.validate({**GLACIERS_ON, "Glaciers.glArea": irr}, v2.resolved, v2.values, (), v2.choices, other)["Glaciers.glArea"]
 
 
 def test_a_dataset_in_another_unit_is_refused_at_its_field(v2):
@@ -391,7 +407,7 @@ def test_a_module_that_is_a_dataset_is_switched_on_by_a_dataset_of_its_unit_or_a
     assert check(v2, {"Impervious": fallow}) == {}
     assert check(v2, {"Impervious": AREA}) == {}
     assert check(v2, {"Impervious": "0.2"}) == {}  # a constant, which a number field takes
-    assert "not ASCII" in check(v2, {"Impervious": mirca})["Impervious"]
+    assert "only be used as a copy" in check(v2, {"Impervious": mirca})["Impervious"]
     assert check(v2, {"Impervious": MELT})["Impervious"].endswith("is in m3/sec, and this field takes fraction.")
     assert check(v2, {"Impervious": "/wbm/data_init/nowhere.init"}) == {"Impervious": "This is not a dataset of the snapshot's model input."}
     assert check(v2, {"Impervious": ""}) == {"Impervious": "This module is already off."}

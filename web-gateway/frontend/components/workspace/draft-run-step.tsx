@@ -360,10 +360,14 @@ export function DraftRunStep({
         {modelParameters && (
           <ModelParametersSection
             state={modelParameters}
+            datasetId={datasetId}
             custom={parameters.custom_params}
+            forks={parameters.forks ?? null}
             errors={customErrors}
             error={serverErrors.custom ?? null}
-            onChange={(custom_params) => set({ custom_params })}
+            onChange={(custom_params, forks) =>
+              set(forks === undefined ? { custom_params } : { custom_params, forks })
+            }
             onRetry={onRetryModelParameters}
           />
         )}

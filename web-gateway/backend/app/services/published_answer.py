@@ -73,7 +73,7 @@ _UNSUPPORTED_REASONS = {
     ),
     "parameters.custom_params": (
         "custom_params",
-        "Custom parameters change the model, so they need a new simulation.",
+        "Custom parameters and edited datasets change the model, so they need a new simulation.",
     ),
 }
 
@@ -181,7 +181,7 @@ def _reasons(
     fields = job_script.unsupported_fields(parameters, model_input_id, snapshot)
     # Custom parameters run (the changes file carries them) but change the model,
     # so the published output does not answer a draft that has any.
-    if parameters.custom_params:
+    if parameters.custom_params or parameters.forks:
         fields.append("parameters.custom_params")
     reasons = [
         PublishedAnswerReason(code=code, message=message)

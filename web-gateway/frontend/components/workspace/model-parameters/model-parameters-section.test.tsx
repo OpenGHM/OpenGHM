@@ -4,7 +4,18 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { ModelParametersSection } from "@/components/workspace/model-parameters/model-parameters-section";
 import type { CustomParams, ModelParameters, ParamGroup } from "@/lib/workspace/model-parameters";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
-import { fakeModelParameters, fakeParamField, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
+import type { DatasetFork } from "@/lib/workspace/dataset-forks";
+import {
+  FORK_PRECIP_INIT,
+  FORK_REPAIRED_INIT,
+  fakeForkTree,
+  fakeModelParameters,
+  fakeParamField,
+  fakeSwitchOnTree,
+} from "@/lib/workspace/fixtures";
+
+// The Edit dataset panel reads the original dataset through a server action, which needs no network here.
+vi.mock("@/lib/repository/actions", () => ({ fetchDatasetInit: vi.fn() }));
 
 afterEach(cleanup);
 
@@ -536,5 +547,146 @@ describe("the Model parameters section: switching a module on", () => {
     });
     expect(within(card("Glaciers")).getByText(/does not set Glacier area fraction/)).toBeTruthy();
     expect(within(card("Glaciers")).getByText("This is not a dataset of the snapshot's model input.")).toBeTruthy();
+  });
+});
+
+describe("the Model parameters section: dataset forks", () => {
+  const FORKS: ModelParametersState = { status: "ready", tree: fakeForkTree() };
+  const AREA = "/wbm/data_init/glaciers/area_1km.init";
+  const MELT = "/wbm/data_init/glaciers/discharge_m.init";
+  const card = (path: string) => document.querySelector(`[data-param-path="${path}"]`) as HTMLElement;
+
+  /** The section with `custom_params` and the forks as state; `calls` has every change as the run
+   *  step gets it: the custom parameters, and the forks only when they changed too. */
+  function forkSection({
+    initial = null,
+    forks = null,
+    errors,
+  }: { initial?: CustomParams | null; forks?: DatasetFork[] | null; errors?: Record<string, string> } = {}) {
+    const calls: [CustomParams | null, DatasetFork[] | null | undefined][] = [];
+    function Harness() {
+      const [custom, setCustom] = useState<CustomParams | null>(initial);
+      const [held, setForks] = useState<DatasetFork[] | null>(forks);
+      return (
+        <ModelParametersSection
+          state={FORKS}
+          datasetId="snap-1"
+          custom={custom}
+          forks={held}
+          errors={errors}
+          onChange={(next, nextForks) => {
+            calls.push(nextForks === undefined ? [next, undefined] : [next, nextForks]);
+            setCustom(next);
+            if (nextForks !== undefined) setForks(nextForks);
+          }}
+        />
+      );
+    }
+    const view = render(<Harness />);
+    // a message from the backend holds the section open
+    if (!errors) open();
+    openGroup(/^Climate forcing/);
+    return { calls, ...view };
+  }
+
+  it("offers Edit dataset on a field that reads a data init and the tree says can be copied, and on no other", () => {
+    forkSection();
+    expect(within(card("MT_Precip.Primary")).getByRole("button", { name: "Edit dataset merra2_prectotcorr_d.init" })).toBeTruthy();
+    expect(within(card("MT_Precip.Scale")).queryByRole("button", { name: /Edit dataset/ })).toBeNull();
+  });
+
+  it("copies the dataset with a value set: the forks change, the custom parameters do not", () => {
+    const { calls } = forkSection();
+    fireEvent.click(screen.getByRole("button", { name: /Edit dataset/ }));
+    fireEvent.change(screen.getByLabelText("Var_Scale"), { target: { value: "95040" } });
+    expect(calls.at(-1)).toEqual([
+      null,
+      [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } }],
+    ]);
+    // the field says it changed, the heading counts it, and the card has a Reset
+    expect(card("MT_Precip.Primary").getAttribute("data-changed")).toBe("true");
+    expect(screen.getByText("WBM 23.9.0 · 1 parameter changed")).toBeTruthy();
+  });
+
+  it("resets a copied field: the copy goes", () => {
+    const fork = { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } };
+    const { calls } = forkSection({ forks: [fork] });
+    fireEvent.click(within(card("MT_Precip.Primary")).getByRole("button", { name: "Reset Primary dataset" }));
+    expect(calls.at(-1)).toEqual([null, null]);
+    expect(card("MT_Precip.Primary").getAttribute("data-changed")).toBeNull();
+    expect(screen.getByText("WBM 23.9.0 · No parameters changed")).toBeTruthy();
+  });
+
+  it("counts a field once when it has both a value and a copy, and says a group holds the change", () => {
+    forkSection({
+      initial: { "MT_Precip.Scale": "1.2" },
+      forks: [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Units: "mm/day" } }],
+    });
+    expect(screen.getByText("WBM 23.9.0 · 2 parameters changed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Climate forcing/ }).textContent).toContain("2 changed");
+  });
+
+  describe("a module being switched on", () => {
+    const reach = () => {
+      openGroup(/^Modules/);
+      fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Switch on Runoff from Glaciated Areas" }));
+    };
+    const choose = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+    it("chooses a dataset WBM reads without a copy, and a repaired one with a copy that sets nothing", () => {
+      const { calls } = forkSection();
+      reach();
+      choose("Glacier area fraction", AREA);
+      expect(calls.at(-1)).toEqual([{ "Glaciers.glArea": AREA }, undefined]);
+      choose("Glacier area fraction", FORK_REPAIRED_INIT);
+      expect(calls.at(-1)).toEqual([
+        { "Glaciers.glArea": FORK_REPAIRED_INIT },
+        [{ path: "Glaciers.glArea", original: FORK_REPAIRED_INIT, set: {} }],
+      ]);
+      // the repaired dataset is offered as a choice, not disabled, and the card says what the copy repairs
+      const option = within(screen.getByLabelText("Glacier area fraction")).getByRole("option", { name: /Irrigation efficiency/ });
+      expect((option as HTMLOptionElement).disabled).toBe(false);
+      expect(screen.getByRole("group", { name: "Edit dataset irrEfficiency.init" }).textContent).toContain(
+        "differs from its file name"
+      );
+      // choosing another dataset takes the copy away with the repaired one
+      choose("Glacier area fraction", AREA);
+      expect(calls.at(-1)).toEqual([{ "Glaciers.glArea": AREA }, null]);
+    });
+
+    it("resets the module: what was chosen and its copies are gone", () => {
+      const { calls } = forkSection();
+      reach();
+      choose("Glacier melt discharge", MELT);
+      choose("Glacier area fraction", FORK_REPAIRED_INIT);
+      fireEvent.click(within(card("Glaciers")).getByRole("button", { name: "Reset Runoff from Glaciated Areas" }));
+      expect(calls.at(-1)).toEqual([null, null]);
+      expect(screen.getByText("WBM 23.9.0 · No parameters changed")).toBeTruthy();
+    });
+  });
+
+  it("shows a message of the backend at the field of a copy, with the panel open", () => {
+    forkSection({
+      forks: [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "x" } }],
+      errors: { "MT_Precip.Primary": "Var_Scale must be a number like 1.1 or 2e-3." },
+    });
+    expect(within(card("MT_Precip.Primary")).getByText("Var_Scale must be a number like 1.1 or 2e-3.", { selector: "p.text-destructive" })).toBeTruthy();
+  });
+
+  it("lists a copy the tree has no field for, and removes it", () => {
+    const calls: [CustomParams | null, DatasetFork[] | null | undefined][] = [];
+    render(
+      <ModelParametersSection
+        state={{ status: "unavailable" }}
+        datasetId="snap-1"
+        custom={null}
+        forks={[{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } }]}
+        onChange={(next, forks) => calls.push([next, forks])}
+      />
+    );
+    open();
+    expect(screen.getByText("MT_Precip.Primary: copy of merra2_prectotcorr_d.init, Var_Scale 2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove MT_Precip.Primary" }));
+    expect(calls.at(-1)).toEqual([null, null]);
   });
 });

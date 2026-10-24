@@ -12,7 +12,7 @@ import { RunDetailsCard } from "@/components/workspace/run-details-card";
 import { LiveJobProvider } from "@/components/workspace/live-job-provider";
 import type { Job, JobLive } from "@/lib/jobs/types";
 import { fetchModelParameters } from "@/lib/repository/actions";
-import { fakeModelParameters, fakeSwitchOnTree, previewDraftJob } from "@/lib/workspace/fixtures";
+import { FORK_PRECIP_INIT, fakeForkTree, fakeModelParameters, fakeSwitchOnTree, previewDraftJob } from "@/lib/workspace/fixtures";
 import { allModules } from "@/lib/workspace/model-parameters";
 import { forgetModelParameters } from "@/lib/workspace/use-model-parameters";
 
@@ -309,6 +309,28 @@ describe("the run details card: the model parameters the run changed", () => {
     expect(row).toContain("switched on");
     expect(row).toContain("Glacier discharge, monthly");
     expect(row).toContain("Glaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init");
+  });
+
+  it("lists a dataset the run copied, with the original and what the copy set, and asks for the tree for it", async () => {
+    fetchTree.mockResolvedValue({ ok: true, data: fakeForkTree() });
+    const job = previewDraftJob("completed");
+    details(
+      {
+        ...job,
+        parameters: {
+          ...job.parameters,
+          custom_params: null,
+          forks: [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } }],
+        },
+      },
+      null
+    );
+    expect(await screen.findByText("Primary dataset")).toBeTruthy();
+    const row = value("Model parameters");
+    expect(row).toContain("1 changed");
+    expect(row).toContain("MT_Precip.Primary");
+    expect(row).toContain("copy of merra2_prectotcorr_d.init, Var_Scale 95040");
+    expect(fetchTree).toHaveBeenCalledWith(job.dataset_id);
   });
 
   it("lists the init key and the raw value at once, before the tree has come", () => {

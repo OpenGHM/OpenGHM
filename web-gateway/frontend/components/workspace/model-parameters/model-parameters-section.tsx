@@ -9,14 +9,24 @@ import { DraftCollapsible } from "@/components/workspace/draft-section";
 import { ParamFieldRow } from "@/components/workspace/model-parameters/registry";
 import { cn } from "@/lib/utils";
 import {
+  canonicalForks,
+  forkAt,
+  forkPaths,
+  forkSummary,
+  withFork,
+  withoutFork,
+  withoutForks,
+  type DatasetFork,
+} from "@/lib/workspace/dataset-forks";
+import {
   changedBelow,
+  chooseDataset,
   indexByPath,
   isSwitchedOn,
   moduleIsOn,
   pathsBelow,
   resetModule,
   resetPath,
-  setFieldValue,
   switchOffModule,
   switchOnModule,
   type CustomParams,
@@ -30,9 +40,15 @@ import type { ModelParametersState } from "@/lib/workspace/use-model-parameters"
 /** What every node of the tree is drawn with. */
 interface Ctx {
   custom: CustomParams | null;
+  /** The datasets the draft edits as its own copy, by field. */
+  forks: readonly DatasetFork[] | null;
+  /** The snapshot, for the Edit dataset panel to read the originals of. */
+  datasetId: string;
   /** The backend's message by init key path. */
   errors: Record<string, string>;
-  update: (next: CustomParams | null) => void;
+  /** Set the new `custom_params`, and the new forks when they change too (one call: two would
+   *  each be written over the other). */
+  update: (next: CustomParams | null, forks?: DatasetFork[] | null) => void;
   /** The modules the person switched on and has chosen nothing for yet: a block module is
    *  on in the draft by what it sets, so these are on only while the section is. */
   opened: ReadonlySet<string>;
@@ -119,7 +135,7 @@ function Nodes({ nodes, ctx, inline = false }: { nodes: readonly ParamNode[]; ct
   }
   const advanced = nodes.filter((n) => n.tier === "advanced");
   const basic = nodes.filter((n) => n.tier !== "advanced");
-  const changed = advanced.reduce((n, node) => n + changedBelow(node, ctx.custom).length, 0);
+  const changed = advanced.reduce((n, node) => n + changedBelow(node, ctx.custom, ctx.forks).length, 0);
   return (
     <>
       {basic.map((node) => (
@@ -145,22 +161,41 @@ function Nodes({ nodes, ctx, inline = false }: { nodes: readonly ParamNode[]; ct
 /** `inline`: this node is already inside an Advanced disclosure. */
 function NodeView({ node, ctx, inline = false }: { node: ParamNode; ctx: Ctx; inline?: boolean }) {
   if (node.kind === "field") {
-    return (
-      <ParamFieldRow
-        field={node}
-        custom={ctx.custom}
-        error={ctx.errors[node.path]}
-        onChange={(value) => ctx.update(setFieldValue(ctx.custom, node, value))}
-        onReset={() => ctx.update(resetPath(ctx.custom, node.path))}
-      />
-    );
+    return <FieldView field={node} ctx={ctx} />;
   }
   if (node.kind === "module") return <ModuleCard mod={node} ctx={ctx} inline={inline} />;
   return <GroupView group={node} ctx={ctx} inline={inline} />;
 }
 
+/** A field, wired to the draft: a value goes to `custom_params` (and, for a dataset chosen from the
+ *  model input, to the copy it needs), and its copy to `forks`. */
+function FieldView({ field, ctx }: { field: ParamField; ctx: Ctx }) {
+  return (
+    <ParamFieldRow
+      field={field}
+      custom={ctx.custom}
+      fork={forkAt(ctx.forks, field.path)}
+      datasetId={ctx.datasetId}
+      error={ctx.errors[field.path]}
+      onChange={(value) => {
+        const next = chooseDataset(ctx.custom, ctx.forks, field, value);
+        if (JSON.stringify(next.forks) === JSON.stringify(canonicalForks(ctx.forks))) ctx.update(next.custom);
+        else ctx.update(next.custom, next.forks);
+      }}
+      onReset={() => {
+        const had = forkAt(ctx.forks, field.path) !== null;
+        if (had) ctx.update(resetPath(ctx.custom, field.path), withoutFork(ctx.forks, field.path));
+        else ctx.update(resetPath(ctx.custom, field.path));
+      }}
+      onForkChange={(fork) =>
+        ctx.update(ctx.custom, fork === null ? withoutFork(ctx.forks, field.path) : withFork(ctx.forks, fork))
+      }
+    />
+  );
+}
+
 function GroupView({ group, ctx, inline }: { group: ParamGroup; ctx: Ctx; inline: boolean }) {
-  const changed = changedBelow(group, ctx.custom).length;
+  const changed = changedBelow(group, ctx.custom, ctx.forks).length;
   return (
     <Disclosure
       title={group.label}
@@ -189,6 +224,7 @@ function ownDatasetField(mod: ParamModule): ParamField | null {
     type: "dataset",
     editable: true,
     required: true,
+    forkable: mod.forkable === true,
     edit_as: mod.edit_as ?? null,
     candidates,
     current: null,
@@ -215,7 +251,7 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
   const switchedOff = mod.state === "on" && !on;
   const switchedOn = isSwitchedOn(mod, ctx.custom, ctx.opened);
   const error = ctx.errors[mod.path];
-  const changed = changedBelow(mod, ctx.custom).length;
+  const changed = changedBelow(mod, ctx.custom, ctx.forks).length;
   const status = on ? (switchedOn ? "Switched on" : "On") : switchedOff ? "Switched off" : "Off in this snapshot";
   const own = switchedOn ? ownDatasetField(mod) : null;
   const button = (label: string, run: () => void) => (
@@ -235,10 +271,10 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
     : switchedOn
       ? button("Reset", () => {
           ctx.setOpened(mod.path, false);
-          ctx.update(resetModule(ctx.custom, mod));
+          updateBelow(ctx, resetModule(ctx.custom, mod), mod);
         })
       : on && mod.switch_off
-        ? button("Switch off", () => ctx.update(switchOffModule(ctx.custom, mod)))
+        ? button("Switch off", () => updateBelow(ctx, switchOffModule(ctx.custom, mod), mod))
         : mod.state === "off" && mod.switch_on
           ? button("Switch on", () => {
               ctx.setOpened(mod.path, true);
@@ -280,14 +316,7 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
       {mod.doc && <p className="text-[13px] leading-normal text-muted-foreground">{mod.doc}</p>}
       {cannot && <p className="text-[13px] leading-normal text-muted-foreground">Can&apos;t be switched on here. {mod.switch_on_reason}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
-      {own && (
-        <ParamFieldRow
-          field={own}
-          custom={ctx.custom}
-          onChange={(value) => ctx.update(setFieldValue(ctx.custom, own, value))}
-          onReset={() => ctx.update(resetPath(ctx.custom, own.path))}
-        />
-      )}
+      {own && <FieldView field={own} ctx={ctx} />}
       {on && mod.children.length > 0 && (
         <Disclosure
           title="Settings"
@@ -301,6 +330,14 @@ function ModuleCard({ mod, ctx, inline }: { mod: ParamModule; ctx: Ctx; inline: 
       )}
     </div>
   );
+}
+
+/** Set `custom` for a module's reset or switch-off, and drop the copies of the datasets below it
+ *  (a module that is off, or back to the snapshot's, reads no dataset of the draft's). */
+function updateBelow(ctx: Ctx, custom: CustomParams | null, mod: ParamModule) {
+  const below = pathsBelow(mod);
+  if (forkPaths(ctx.forks).some((path) => below.includes(path))) ctx.update(custom, withoutForks(ctx.forks, below));
+  else ctx.update(custom);
 }
 
 /** Changes the tree has no field for (or no tree to say): shown as they are,
@@ -319,26 +356,35 @@ function ExtraEntries({
     <div className="space-y-1.5 rounded-[14px] bg-muted/70 px-3.5 py-3">
       <p className="text-[13px] font-semibold text-foreground">{title}</p>
       <ul className="space-y-1.5">
-        {keys.map((key) => (
-          <li key={key} className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <code className="block font-mono text-xs break-all text-foreground">
-                {key} = {ctx.custom?.[key] === "" ? "(switched off)" : ctx.custom?.[key]}
-              </code>
-              {ctx.errors[key] && <p className="text-xs text-destructive">{ctx.errors[key]}</p>}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label={`Remove ${key}`}
-              className="min-h-10 shrink-0 sm:min-h-8"
-              onClick={() => ctx.update(resetPath(ctx.custom, key))}
-            >
-              Remove
-            </Button>
-          </li>
-        ))}
+        {keys.map((key) => {
+          const fork = forkAt(ctx.forks, key);
+          return (
+            <li key={key} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <code className="block font-mono text-xs break-all text-foreground">
+                  {fork && ctx.custom?.[key] === undefined
+                    ? `${key}: ${forkSummary(fork)}`
+                    : `${key} = ${ctx.custom?.[key] === "" ? "(switched off)" : ctx.custom?.[key]}`}
+                </code>
+                {ctx.errors[key] && <p className="text-xs text-destructive">{ctx.errors[key]}</p>}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Remove ${key}`}
+                className="min-h-10 shrink-0 sm:min-h-8"
+                onClick={() =>
+                  fork
+                    ? ctx.update(resetPath(ctx.custom, key), withoutFork(ctx.forks, key))
+                    : ctx.update(resetPath(ctx.custom, key))
+                }
+              >
+                Remove
+              </Button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -366,20 +412,28 @@ function ExtraEntries({
  */
 export function ModelParametersSection({
   state,
+  datasetId = "",
   custom,
+  forks = null,
   errors = {},
   error = null,
   onChange,
   onRetry,
 }: {
   state: ModelParametersState;
+  /** The snapshot, which the Edit dataset panel reads the original datasets of. */
+  datasetId?: string;
   custom: CustomParams | null;
+  /** The datasets the draft edits as the run's own copy (ADR 0039), by field. */
+  forks?: readonly DatasetFork[] | null;
   errors?: Record<string, string>;
   error?: string | null;
-  onChange: (custom: CustomParams | null) => void;
+  /** The new `custom_params`; a second argument only when the forks change with them (a
+   *  dataset's copy is made, kept or dropped), else `undefined` and the forks stay. */
+  onChange: (custom: CustomParams | null, forks?: DatasetFork[] | null) => void;
   onRetry?: () => void;
 }) {
-  const changed = custom ? Object.keys(custom).length : 0;
+  const changed = new Set([...Object.keys(custom ?? {}), ...forkPaths(forks)]).size;
   const [opened, setOpenedSet] = useState<ReadonlySet<string>>(new Set());
   const setOpened = (path: string, on: boolean) =>
     setOpenedSet((prev) => {
@@ -388,12 +442,14 @@ export function ModelParametersSection({
       else next.delete(path);
       return next;
     });
-  const ctx: Ctx = { custom, errors, update: onChange, opened, setOpened };
+  const ctx: Ctx = { custom, forks, datasetId, errors, update: onChange, opened, setOpened };
   const known = state.status === "ready" ? indexByPath(state.tree) : null;
-  const extraKeys = Object.keys(custom ?? {}).filter((key) => !known?.has(key));
+  const extraKeys = [...new Set([...Object.keys(custom ?? {}), ...forkPaths(forks)])].filter((key) => !known?.has(key));
   // A message for a key the tree lacks is shown with that key, and one for a
   // key that is not even in the draft has nowhere to be: it is listed.
-  const strayErrors = Object.entries(errors).filter(([path]) => !(custom && path in custom) && !known?.has(path));
+  const strayErrors = Object.entries(errors).filter(
+    ([path]) => !(custom && path in custom) && !forkAt(forks, path) && !known?.has(path)
+  );
   const changedText = changed === 0 ? "No parameters changed" : `${count(changed, "parameter")} changed`;
 
   let summary: ReactNode;

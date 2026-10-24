@@ -4,17 +4,19 @@ How a draft sets WBM's model parameters: a schema that says which parameters exi
 what the wizard shows for them and what is allowed, and the path of a value from the
 form to the init WBM reads.
 
-**Status: built**, except section 6, which is target apart from two subsections. Built
-(sections 1 to 5 and, of 6, "Switching a module on" with the dataset choices it uses, and the
-checks before a submit): the tree file and the generated output lists, its
+**Status: built**, except section 6, which is target apart from three subsections. Built
+(sections 1 to 5 and, of 6, "Switching a module on" with the dataset choices it uses, "Data `.init`
+forks", and the checks before a submit): the tree file and the generated output lists, its
 resolution for a WBM version with the snapshot's current values, the endpoint, the validation of
 `custom_params` on save and on submit, their merge into the changes file, the wizard's Model
-parameters section, switching a module on with datasets of the model input, and the checks of the
-tree's `cross_rules` before a submit. Target (section 6 otherwise): choosing another dataset for a
-field of a module that is already on, data `.init` forks and the model-input side of the
-availability rule; apart from the init-based availability filter that its own subsection
-marks as built, nothing in them exists, so a draft cannot ask for any of it. The reasoning is
-[ADR 0038](../decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md); what WBM
+parameters section, switching a module on with datasets of the model input, editing a dataset as the
+run's own copy (a fork), and the checks of the tree's `cross_rules` before a submit. Target (section 6
+otherwise): choosing another dataset for a field of a module that is already on, forks of files named
+inside other files, and the model-input side of the availability rule; apart from the init-based
+availability filter that its own subsection marks as built, nothing in them exists, so a draft cannot
+ask for any of it. The reasoning is
+[ADR 0038](../decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md) and, for forks,
+[ADR 0039](../decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md); what WBM
 does with each value is [wbm-init.md](../reference/wbm-init.md); the draft and how it is
 submitted are in [gateway.md](gateway.md#5-the-two-paths-that-leave-the-cluster) ("Jobs").
 
@@ -128,8 +130,9 @@ wizard field ──▶ draft: parameters.custom_params  { init key path: value }
                  submit                   validate again, check the cross rules (section 6), convert to JSON types
                     │
                     ▼
-                 changes file  { code_version, set: {...}, unset: [...] }
-                    │            = the period, the variables, the post-processing choice, the custom parameters
+                 changes file  { code_version, set: {...}, unset: [...], forks: [...] }
+                    │            = the period, the variables, the post-processing choice, the custom parameters,
+                    │              and the dataset copies the draft makes (section 6, "Data `.init` forks")
                     ▼
                  openghm sim run --changes   the toolkit's editor writes the staged init
 ```
@@ -167,6 +170,9 @@ wizard field ──▶ draft: parameters.custom_params  { init key path: value }
   and every other value as text; a module is switched off with an
   empty value because that is how WBM reads a flag key. A setting the init holds under an
   alias is written to the alias.
+- **Dataset forks** (`parameters.forks`, section 6) are checked with the same save and submit, one message
+  per field path in the same `invalid_custom_params` answer (`web-gateway/backend/app/wbm_init/forks.py`).
+  A submit writes each as an entry of the changes file's `forks` and sets the field's key to the copy.
 - **The same changes file** is stored with the run (`simulation.json`) and re-run unchanged
   when a job continues ([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md)).
 
@@ -210,20 +216,22 @@ The component is chosen by `type` in one registry:
 | a module with `editable: switch_off` | a card with a Switch off button, and Reset once it is off | the module the init has on; a module the snapshot has off shows no fields until it is switched on |
 | a module the snapshot has off | a card with Switch on when the backend says it can be, else the reason; Reset takes it back off | section 6, "Switching a module on" |
 | a `dataset` with `candidates` | a select of the model input's datasets in the field's unit, and a constant box beside it where the field takes a number | only in a module being switched on; one WBM cannot read is listed and disabled, its reason under the field |
+| a `dataset` that is `forkable` and reads a data `.init` | the current value, read-only, with an **Edit dataset** button | opens the three values a copy may set, each with the original's value beside it; section 6, "Data `.init` forks" |
 | any other `dataset`, `file`, `column`, `list`, `block`, `flag` | the current value, read-only | choosing another dataset for a module that is on is later work (section 6) |
 
 A field the tree allows but that cannot be set now (its module is off, or a file sets the block
-it is in) arrives with `editable: false` and is shown read-only. The backend's message for a key
+it is in) arrives with `editable: false` and is shown read-only. `forkable` is separate from
+`editable`: the dataset a forkable field reads is not edited in place, the draft edits a copy of it. The backend's message for a key
 is shown at its field; a message for a key the tree has no field for is listed with the key.
 
 ---
 
 ## 6. Later work, and what it has built so far
 
-Target, in the order the wizard will need it, except two subsections that are built whole:
-"Switching a module on" (with the candidates it needs) and the checks before a submit. The part of
-the availability rule that the init can answer is built too, as its subsection marks. None of it was
-in the mission that built sections 3 to 5.
+Target, in the order the wizard will need it, except three subsections that are built whole:
+"Switching a module on" (with the candidates it needs), "Data `.init` forks" (its last bullet says what is
+still target) and the checks before a submit. The part of the availability rule that the init can answer is
+built too, as its subsection marks. None of it was in the mission that built sections 3 to 5.
 
 ### Dataset choices
 
@@ -232,9 +240,10 @@ input's `datasets[]`, read once and kept (`web-gateway/backend/app/services/mode
 `web-gateway/backend/app/wbm_init/choices.py`), and an entry is usable when its init is in the model input and WBM can
 read it. A field is offered the entries whose unit is the field's (`unit_matches`: spelling-insensitive,
 m3/sec is m3/s) and no others; the tree says nothing else about what data fits a field, so a field
-with no `unit` is offered none. An init that is not there, is not a dataset (no `Code_Name`), or on 23.9.0 has a `Code_Name`
-that is not its file name or a non-ASCII byte, is listed with that reason and cannot be chosen: it
-needs a fork. The files an init points to are not looked for here; the `dataset_file_coverage` check
+with no `unit` is offered none. An init that is not there or is not a dataset (no `Code_Name`) is listed with that reason and
+cannot be chosen. One that on 23.9.0 has a `Code_Name` that is not its file name, or a non-ASCII byte, is
+offered as **repaired by a copy** (`repair` on the candidate, `disabled` null): choosing it makes a fork
+that sets nothing, and a save refuses the choice without it (`Data .init forks`, below). The files an init points to are not looked for here; the `dataset_file_coverage` check
 before a submit does. The rest of this subsection is the target for a field of a module that is on.
 
 A `dataset` field with `accepts: [init]` points to a data `.init` (the dataset descriptor
@@ -264,31 +273,45 @@ IDs and the `DEFAULT` keyword are never offered: no model input has the files th
 
 ### Data `.init` forks
 
-A data `.init` is shared (`merra2_prectotcorr_d.init` is used by three run inits of the
-Wyoming snapshot), and a published model input is read-only, so editing one is
-copy-on-write into the draft:
+Built (mission `2026-10-24-data-init-forks`, [ADR 0039](../decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md)).
+A data `.init` is shared (`merra2_prectotcorr_d.init` is used by three run inits of the Wyoming snapshot),
+and a published model input is read-only, so a draft edits one as its own copy. The gateway keeps the edit
+and never the file; the run's toolkit makes the copy.
 
-- **Trigger and place.** The first edit of any field copies the file into the draft's own
-  `wbm_init/`, bound read-write at `/wbm/wbm_init`: a data `.init` as
-  `/wbm/wbm_init/datasets/<basename>__<run>_r<n>.init`, a block file in a `blocks` subfolder and a
-  table in a `tables` subfolder. The folder names are the gateway's convention; WBM does not read them.
-- **A new name every time.** The spool cache variant hashes every `.init` a run init names,
-  so a fork is never edited in place: a changed fork gets a new file name.
-- **`Code_Name`** is rewritten to the new basename. WBM 23.9.0 requires it to equal the file
-  name; 22.1.1 does not check it. A referenced file whose `Code_Name` already differs from its
-  name, or that holds a non-ASCII byte, is repaired by forking it, whatever else is edited.
-- **ASCII.** A fork is written ASCII-only. How non-ASCII text is rewritten (transliterated or
-  replaced) is undecided.
-- **Repoint and propagate.** Every reference to the original in the run init is replaced by
-  the fork, and a file that names the original is forked and repointed too: editing
-  `Merra_irrigationGross_Freq_dc.init` forks the reservoir block file that names it, and
-  editing any of the 13 data inits of the `Irrigation.CropParFile` table forks that CSV.
-- **Revert** drops the fork and points back to the original. A fork is published with its
-  snapshot, because publishing uploads the run's `wbm_init/` with its subfolders.
-- **Not staged.** The toolkit does not yet stage files under `/wbm/wbm_init` that a draft
-  brings (forks, copied tables, uploads); that is part of this work.
+- **What the draft holds.** `parameters.forks`: per fork, `{path, original, set}`: the init key of the field
+  that reads the dataset (or of a module that is itself one), the data `.init` it reads, and the values to
+  set. At most one per field. Only `Var_Scale`, `Var_Offset` and `Units` can be set (as text; `Code_Name` and
+  ASCII are fixed by the toolkit, and the dates, `File_Path` and the rest are not the draft's to change). An
+  empty `set` is a repair.
+- **The copy's name.** `<original basename>__<8 hex>.init` under `/wbm/wbm_init/datasets/`, the 8 hex being
+  the start of a hash of the original's path and the values set (numbers as numbers, so `1.1` and `1.10` are
+  one edit). The same edit has the same name, another value another: the spool cache variant hashes every
+  `.init` a run init names, so a fork is never edited in place. The folder name is the gateway's convention.
+- **Validation** (save and submit, `forks.validate`, then `forks.check_originals`). The field takes a data
+  `.init`, its modules are on (or the same save switches them on with the dataset), no block above it is a
+  file, and `original` is the dataset the field reads in this draft: its value in the init, or the one the
+  draft chooses for a module it switches on. A field that holds a constant number is not forked. Values:
+  `Var_Scale` and `Var_Offset` in WBM's number form (and `Var_Scale` not 0, which WBM reads as 1), `Units` one
+  line of ASCII, an empty value is refused (leave it out). The original must be in the model input and have a
+  `Code_Name`; a model input that cannot be read refuses nothing, the toolkit checks again.
+- **Submit.** The changes file gets `forks: [{from, to, set}]`, one entry per distinct copy, and the field's key
+  (the alias the init uses) in `set` is the copy's path: a fork does not repoint the run init by itself.
+- **Repair.** A switch-on candidate disabled only for its `Code_Name` or a non-ASCII byte is chosen with an
+  empty fork (the wizard makes it); a save refuses the choice without one.
+- **The checks before a submit** read the copy as the run will: the field still names the original, so the
+  dates and files coverage reads are the original's (a copy cannot change them), and the unit rules read the
+  copy's `Units`.
+- **What the wizard shows.** A `forkable` field that reads a data `.init` has **Edit dataset**: `Var_Scale`,
+  `Var_Offset` and `Units`, each with the original's value beside it (`GET .../dataset-init?path=`), a Reset
+  that drops the fork. The Review step, the submit confirmation and the job page say "copy of
+  `<original file>`, Var_Scale 95040".
+- **Not built.** A fork of a file named inside another file (the `Irrigation.CropParFile` CSV, a reservoir
+  block file): editing `Merra_irrigationGross_Freq_dc.init` would fork the reservoir block file that names it,
+  and editing any of the 13 data inits of the CSV would fork the CSV; the gateway refuses to fork what the run
+  init does not name directly. Editing the dates, `File_Path` or other keys of a descriptor, and tables and
+  block files brought by a draft. Choosing another dataset for a field of a module that is on.
 
-The data-init editor would show a descriptor in four groups: source (`File_Path`,
+The fuller data-init editor (target, not built: the wizard edits three values today) would show a descriptor in four groups: source (`File_Path`,
 `Var_Name`, `Bands`, `Projection`, `Processing`), time (`Time_Series`, `Start_Date`,
 `End_Date`), units and conversion (`Units`, `Orig_Units`, `Var_Scale`, `Var_Offset`, `Round`)
 and description (`Code_Name`, locked, and the descriptive keys), with these checks:
@@ -334,8 +357,8 @@ published snapshots (v2, Wyoming, Global), Impervious (the fraction datasets, or
 - **What is served.** `GET .../model-parameters` gives such a module `switch_on` (true or false),
   `switch_on_reason` (the sentence the card shows when it is false) and, for a module that is itself
   a dataset, `candidates`. Every field has `required`, and a `dataset` field of an offered module has
-  `candidates`: `{value (the container path), name, code, time_series, unit, disabled}`,
-  `disabled` being the reason or null, listed only for a field with a `unit` (a module that is itself
+  `candidates`: `{value (the container path), name, code, time_series, unit, disabled, repair}`,
+  `disabled` being the reason or null and `repair` what a copy repairs or null, listed only for a field with a `unit` (a module that is itself
   a dataset also has `edit_as`, `"number"` where it takes a constant). The tree's attribute
   `unit_contains` (`Glaciers.glArea`, on 23.9.0: `frac`) is the field's own rule: a dataset whose
   Units lack it is disabled for that field (a field in fractions is offered datasets whose Units
@@ -357,7 +380,7 @@ published snapshots (v2, Wyoming, Global), Impervious (the fraction datasets, or
   listed, as for a module the snapshot has on. The wizard's variable list is the snapshot's own
   `outputVariables`, so a variable the snapshot does not describe is not offered, whatever module
   is on: choosing one the module unlocks, and publishing a run that has one, is later work.
-- **Not done.** Choosing another dataset for a field of a module that is on, data `.init` forks, and
+- **Not done.** Choosing another dataset for a field of a module that is on, and
   judging that two datasets of one module share a resolution (WBM 23.9.0 stops when the `glMelt` and
   `glArea` cell sizes differ; [wbm-init.md](../reference/wbm-init.md#open-not-established) says what the published data does).
 

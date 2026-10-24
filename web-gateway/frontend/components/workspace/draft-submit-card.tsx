@@ -378,7 +378,8 @@ export function DraftSubmitCard({
               output={saved.parameters.post_processing ?? snapshotOutput}
               changes={describeChanges(
                 saved.parameters.custom_params,
-                modelParameters?.status === "ready" ? modelParameters.tree : null
+                modelParameters?.status === "ready" ? modelParameters.tree : null,
+                saved.parameters.forks
               )}
               cores={compute.cores}
               coresFromSnapshot={compute.coresSource === "snapshot"}

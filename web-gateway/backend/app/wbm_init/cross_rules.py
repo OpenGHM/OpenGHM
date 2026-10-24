@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import calendar
 import copy
+import dataclasses
 import logging
 import re
 from dataclasses import dataclass, field
@@ -35,7 +36,7 @@ from typing import Awaitable, Callable, Iterable, Mapping, NamedTuple
 
 from app.models.job import JobParameters
 from app.services import job_script, model_parameters
-from app.wbm_init import model_input, reader, tree, validate
+from app.wbm_init import forks, model_input, reader, tree, validate
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,10 @@ class Run:
     outputs: tuple[str, ...]
     #: The init key paths the draft changed.
     changed: frozenset[str]
+    #: The draft's dataset forks (ADR 0039) as `{field path: the values its copy sets}`. The run's
+    #: field still reads the original here: dates and files cannot change in a copy, so coverage
+    #: reads them from the original, and `Ctx.dataset` gives the copy's `Units`.
+    forks: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
 
 
 def _fmt_number(value: float) -> str:
@@ -132,7 +137,7 @@ def effective_run(
     changes: dict[str, object] = {}
     kept = validate.drop_unchanged(parameters.custom_params or {}, loaded.resolved, loaded.values)
     refused = validate.validate(
-        kept, loaded.resolved, loaded.values, parameters.variables, loaded.choices
+        kept, loaded.resolved, loaded.values, parameters.variables, loaded.choices, parameters.forks
     )
     changes.update(
         validate.typed_changes(
@@ -150,7 +155,13 @@ def effective_run(
         changes[job_script.POST_PROCESSING_KEY] = 1 if parameters.post_processing == "climatology" else 0
     values = apply_changes(loaded.values, changes)
     outputs = output_names(values.get(job_script.OUTPUT_VARS_KEY) or "")
-    return Run(loaded.code_version, loaded.resolved, values, outputs, frozenset(changes))
+    # A fork the tree cannot carry is the submit's own refusal to say, as for a custom parameter.
+    forked = {
+        f.path: {k: v for k, v in f.set.items() if k in forks.EDITABLE_KEYS}
+        for f in parameters.forks or ()
+        if f.path in loaded.resolved.fields
+    }
+    return Run(loaded.code_version, loaded.resolved, values, outputs, frozenset((*changes, *forked)), forked)
 
 
 # ---------------------------------------------------------------------------
@@ -210,9 +221,15 @@ class Ctx:
         return tree.module_state(module, self.run.values) == "on"
 
     def dataset(self, path: str) -> model_input.InitFile | None:
-        """The data init the field at `path` names, when the run reads it and it could be read."""
+        """The data init the field at `path` names, when the run reads it and it could be read. When
+        the draft forks it, the values its copy sets (`Units`) are the init's own, since the run reads
+        the copy."""
         kind = _classify(self.text(path))
-        return self.inits.get(kind[1]) if kind and kind[0] == "init" else None
+        init = self.inits.get(kind[1]) if kind and kind[0] == "init" else None
+        copy_values = self.run.forks.get(path)
+        if init is not None and copy_values:
+            return dataclasses.replace(init, values={**init.values, **copy_values})
+        return init
 
     def label(self, path: str) -> str:
         node = self.run.resolved.fields.get(path)

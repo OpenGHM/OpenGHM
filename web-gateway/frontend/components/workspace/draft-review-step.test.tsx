@@ -4,7 +4,15 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { DraftReviewStep } from "@/components/workspace/draft-review-step";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
 import { fromJob, type DraftLocal } from "@/lib/workspace/draft-state";
-import { fakeDataset, fakeDraft, fakeModelParameters, fakeSwitchOnTree } from "@/lib/workspace/fixtures";
+import {
+  FORK_PRECIP_INIT,
+  FORK_REPAIRED_INIT,
+  fakeDataset,
+  fakeDraft,
+  fakeForkTree,
+  fakeModelParameters,
+  fakeSwitchOnTree,
+} from "@/lib/workspace/fixtures";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 
 afterEach(cleanup);
@@ -240,6 +248,45 @@ describe("DraftReviewStep: the summary", () => {
         "Runoff from Glaciated AreasGlaciers · switched on",
         "Glacier area fractionGlaciers.glArea = /wbm/data_init/glaciers/area_1km.init · Glacier area fraction, 1 km",
         "Glacier melt dischargeGlaciers.glMelt = /wbm/data_init/glaciers/discharge_m.init · Glacier discharge, monthly",
+      ]);
+    });
+
+    it("lists a dataset the run copies as a copy of the original with what it sets, and a repair", () => {
+      review({
+        modelParameters: { status: "ready", tree: fakeForkTree() },
+        local: {
+          ...LOCAL,
+          parameters: {
+            ...LOCAL.parameters,
+            custom_params: { "MT_Precip.Scale": "1.2" },
+            forks: [
+              { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040", Units: "mm/day" } },
+              { path: "Glaciers.glArea", original: FORK_REPAIRED_INIT, set: {} },
+            ],
+          },
+        },
+      });
+      const list = row("Model parameters");
+      expect(within(list).getByText("3 changed")).toBeTruthy();
+      expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+        "Glacier area fractionGlaciers.glArea · copy of irrEfficiency.init (repaired)",
+        "Primary datasetMT_Precip.Primary · copy of merra2_prectotcorr_d.init, Var_Scale 95040, Units mm/day",
+        "Precipitation scale factorMT_Precip.Scale = 1.2",
+      ]);
+    });
+
+    it("lists a copy even when no custom parameter is changed", () => {
+      review({
+        local: {
+          ...LOCAL,
+          parameters: {
+            ...LOCAL.parameters,
+            forks: [{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } }],
+          },
+        },
+      });
+      expect(within(row("Model parameters")).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+        "MT_Precip.Primary · copy of merra2_prectotcorr_d.init, Var_Scale 2",
       ]);
     });
 

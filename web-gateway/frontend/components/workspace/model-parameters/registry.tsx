@@ -3,7 +3,9 @@
 import { useId, type ComponentType } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatasetForkPanel, isDataInit } from "@/components/workspace/model-parameters/dataset-fork-panel";
 import { cn } from "@/lib/utils";
+import type { DatasetFork } from "@/lib/workspace/dataset-forks";
 import {
   defaultDiffers,
   displayValue,
@@ -263,31 +265,46 @@ function Range({ lo, hi, unit }: { lo: number | null; hi: number | null; unit: s
  *
  * `custom` is the draft's `custom_params`; the row reads its own key from it
  * and reports a new value (`onChange`) or a reset (`onReset`).
+ *
+ * A field the tree says is `forkable` that reads a data `.init` also has the Edit dataset panel
+ * (`DatasetForkPanel`), which sets the values of the run's own copy of that descriptor: `fork` is
+ * the draft's copy for this field and `onForkChange` reports a new one (null for none). The
+ * panel needs `datasetId`, to show the original's values beside them.
  */
 export function ParamFieldRow({
   field,
   custom,
+  fork = null,
+  datasetId,
   error,
   onChange,
   onReset,
+  onForkChange,
 }: {
   field: ParamField;
   custom: CustomParams | null;
+  fork?: DatasetFork | null;
+  datasetId?: string;
   /** The backend's message for this path. */
   error?: string | null;
   onChange: (value: string) => void;
   onReset: () => void;
+  onForkChange?: (fork: DatasetFork | null) => void;
 }) {
   const id = useId();
   const editable = isEditableField(field);
-  const changed = isChanged(field.path, custom);
+  const valueChanged = isChanged(field.path, custom);
+  const changed = valueChanged || fork !== null;
   const constant = isConstantForDataset(field);
   const pickable = editable && hasCandidates(field);
   const unusable = (field.candidates ?? []).filter((c) => c.disabled !== null);
   const own = effectiveValue(field, custom) ?? "";
   // A dataset's value is a path, which a number box cannot hold: the box is empty until
   // the draft sets a constant.
-  const value = constant && !isChanged(field.path, custom) && !Number.isFinite(Number(own)) ? "" : own;
+  const value = constant && !valueChanged && !Number.isFinite(Number(own)) ? "" : own;
+  const forkable = field.forkable === true && datasetId !== undefined && onForkChange !== undefined && isDataInit(own);
+  // A dataset only a copy can use (WBM 23.9.0 refuses the file itself) is chosen with its copy.
+  const repair = field.candidates?.find((c) => c.value === own)?.repair ?? null;
   const hasRange = field.min !== null || field.max !== null;
   const ids = {
     facts: `${id}-facts`,
@@ -381,6 +398,17 @@ export function ParamFieldRow({
         <p id={ids.doc} className="text-[13px] leading-normal text-muted-foreground">
           {field.doc}
         </p>
+      )}
+      {forkable && (
+        <DatasetForkPanel
+          datasetId={datasetId}
+          path={field.path}
+          original={own}
+          fork={fork}
+          repair={repair}
+          error={error}
+          onChange={onForkChange}
+        />
       )}
       {pickable && unusable.length > 0 && (
         <details className={MUTED}>

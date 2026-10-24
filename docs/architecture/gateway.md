@@ -373,6 +373,14 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
   `metadata.json` and the data inits it lists (public reads, kept per process); when they cannot be
   read, what the module would be given is refused with that reason and nothing else is.
 
+`parameters.forks` is `[{path, original, set}]` or `null`: a dataset the draft edits as the run's own copy
+([ADR 0039](../decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md), model-parameters.md section 6).
+`path` is the field's init key, `original` the data `.init` it reads, `set` any of `Var_Scale`, `Var_Offset` and
+`Units` as text (empty: the copy only repairs the original). The PATCH and the submit check it with
+`custom_params` (`web-gateway/backend/app/wbm_init/forks.py`): the same `422 invalid_custom_params`, the
+message at the field's path in `errors`, and a read of the original in the model input (a model input
+that cannot be read refuses nothing). A save that sends only `forks` is checked too.
+
 `GET /api/v1/repository/datasets/{id}/model-parameters` serves the tree the wizard renders.
 - **Request.** No query. It is open like `GET /repository/datasets/{id}`: it holds nothing the
   snapshot's public init does not.
@@ -380,10 +388,12 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
   as nested nodes. A `group` has `children`. A `module` has `path` (its init key), `state`
   (`on` or `off`, from the snapshot's init), `switch_off` (the tree allows switching it off and
   it is on), `switch_on` and `switch_on_reason` (the snapshot has it off and everything it requires
-  can be given from the model input; the reason when not), `candidates` (a module that is itself a
+  can be given from the model input; the reason when not), `forkable`, `candidates` (a module that is itself a
   dataset: the model input's datasets it can be given) and `children`. A `field` has `path`, `type`,
-  `editable`, `edit_as`, `required`, `candidates` (the model input's datasets in the field's unit, with each one's
-  `disabled` reason, on a dataset field of a module that can be switched on; else `null`), `current` (the
+  `editable`, `edit_as`, `forkable` (it takes a data `.init`, its modules are on or can be switched on, no file
+  sets its block: the draft can edit the dataset it reads as a copy), `required`, `candidates` (the model input's
+  datasets in the field's unit, with each one's `disabled` reason and `repair`, what a copy fixes in a file WBM
+  23.9.0 refuses, on a dataset field of a module that can be switched on; else `null`), `current` (the
   init's value as text, `null` when the key is absent), `default` (resolved for the version), `unit`,
   `options` (`{value, label}`), `min`, `max`, `calibration`, `show_if` and `doc`. Every node has
   `tier` (`basic` or `advanced`). `editable` is true only for a field that can be set now: a
@@ -396,6 +406,13 @@ version, with the snapshot's init for the current values (`web-gateway/backend/a
 - **Errors.** `404` for an id the catalogue does not hold; `503` with
   `detail = {code, message}` for `init_unavailable` (the init cannot be read; a failed read is
   not tried again for 60 s) and for `model_code_version_missing`.
+
+`GET /api/v1/repository/datasets/{id}/dataset-init?path=/wbm/data/...x.init` serves the values of one data
+`.init` of the snapshot's model input for the wizard's Edit dataset panel: `{path, name, Code_Name, Units,
+Var_Scale, Var_Offset, Time_Series, Start_Date, End_Date}` as text, empty for a key the file lacks. It is open
+like `model-parameters`. `422 invalid_path` for a path that is not a data `.init` under `/wbm/data/` or
+`/wbm/data_init/`, `404` for an id or a file the catalogue and model input do not have, `503
+model_input_unavailable` when the model input cannot be read.
 
 Run settings renders that tree as a **Model parameters** section, closed until asked for, and
 the Review step lists the keys the draft changes
@@ -823,6 +840,12 @@ options (`job_script.render_changes_file`):
   (the integer `0` for `standard`, `1` for `climatology`). It adds one entry for each key of the
   draft's `custom_params`. A draft that differs nowhere writes no file and passes no
   `--changes`: it runs the published init.
+- **Dataset copies** (`"forks": [{"from", "to", "set"}]`, [ADR 0039](../decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md)):
+  one entry per distinct copy of a data `.init` the draft edits. `to` is `/wbm/wbm_init/datasets/<original
+  basename>__<8 hex>.init`, named by the gateway (`forks.copy_path`), `set` the values as JSON numbers
+  (`Var_Scale`, `Var_Offset`) or text (`Units`). The field's key is in `set` with the copy's path: a fork
+  does not repoint the run init by itself. `render_changes_file` takes the list as an argument and writes the
+  key only when there is one, so a draft without copies has the file it had.
 - **Custom parameters** are checked again at submit, against the tree, in the same way and
   with the same `422 invalid_custom_params` as the PATCH: a stored draft is not trusted. What
   now equals the snapshot's value is dropped again. They are then typed by their field
@@ -911,12 +934,12 @@ The job records `sim_id`, `slurm_job_id`, `toolkit` (home and commit),
 ([ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)).
 `POST /repository/datasets/{id}/published-answer` takes a draft's parameters and
 model input and says whether the snapshot's published output answers it: no
-model input, spatial domain or custom parameters of its own, the period inside
+model input, spatial domain, custom parameters or dataset copies of its own, the period inside
 `simulation.temporalCoverage` (a later start included), and every variable
 among `simulation.outputVariables`, and no climatology the snapshot's own init did not
 ask for (a draft that asks for `standard` is answered by a climatology snapshot, whose daily, monthly and
 yearly files are a subset of what it published). Otherwise it gives one reason code per
-difference: `model_input_override`, `spatial_domain`, `custom_params`,
+difference: `model_input_override`, `spatial_domain`, `custom_params` (also for a draft that copies a dataset),
 `period_before_published_start`, `period_after_published_end`, `variables_not_published`,
 `climatology_not_published` (the published simulation has no climatology; asking for it needs
 a new simulation) and `published_output_missing`. When it is answered it lists the public files that hold the
@@ -953,10 +976,10 @@ blocks a submit.
   domain: 422 `unsupported_fields`, with `fields` naming `model_input_id` and
   `parameters.spatial_domain`. The toolkit has no option for these yet (open item 9). Custom
   parameters are not in the list: they run.
-- Custom parameters the tree refuses: 422 `invalid_custom_params`, with `errors`, one message per
-  key (above). The submit checks a module's switch-off against the stored draft's output variables. When the snapshot's init cannot be read they cannot be checked, so the
-  answer is 503 `init_unavailable` and nothing is queued; a draft with no custom parameters
-  does not read the init for this.
+- Custom parameters the tree refuses, and dataset copies (`parameters.forks`) it cannot carry: 422
+  `invalid_custom_params`, with `errors`, one message per key or field path (above). The submit checks a module's switch-off against the stored draft's output variables. When the snapshot's init cannot be read they cannot be checked, so the
+  answer is 503 `init_unavailable` and nothing is queued; a draft with no custom parameters and no
+  dataset copies does not read the init for this.
 - A draft with changes against a snapshot that names no WBM version
   (`uses.modelCode.version`): 422 `model_code_version_missing`. The changes file
   needs it (above).
