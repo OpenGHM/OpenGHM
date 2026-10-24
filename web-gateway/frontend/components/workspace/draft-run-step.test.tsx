@@ -675,7 +675,7 @@ describe("the draft run step: model parameters", () => {
     const { onParametersChange } = step({ modelParameters: PARAMETER_TREE });
     fireEvent.click(screen.getByRole("button", { name: "Edit model parameters" }));
     fireEvent.click(screen.getByRole("button", { name: /^WBM parameters/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Switch off Runoff from Glaciated Areas" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Runoff from Glaciated Areas" }));
     expect(onParametersChange).toHaveBeenCalledWith({ ...PARAMETERS, custom_params: { Glaciers: "" } });
   });
 

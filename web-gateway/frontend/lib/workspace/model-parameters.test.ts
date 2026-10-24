@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allFields,
   allModules,
+  calibrationBar,
   changedBelow,
   changedPaths,
   chooseDataset,
@@ -355,5 +356,43 @@ describe("chooseDataset", () => {
     // a copy of the dataset that stays chosen keeps what it sets
     const edited = [{ path: "Glaciers.glArea", original: ok, set: { Var_Scale: "2" } }];
     expect(chooseDataset({ "Glaciers.glArea": ok }, edited, area, ok).forks).toEqual(edited);
+  });
+});
+
+describe("calibrationBar", () => {
+  const none = { min: null, max: null };
+
+  it("pads the band by a quarter on each side and puts the values on that track", () => {
+    const bar = calibrationBar([10, 30], none, "20", "20");
+    // track 5..35: the band is 5/30 to 25/30
+    expect(bar.band.left).toBeCloseTo(16.67, 1);
+    expect(bar.band.width).toBeCloseTo(66.67, 1);
+    expect(bar.snapshot).toBeCloseTo(50, 5);
+    expect(bar.current).toBeCloseTo(50, 5);
+    expect(bar.outside).toBe(false);
+  });
+
+  it("widens the track to the bounds and the values, and says when the value is outside the band", () => {
+    const bar = calibrationBar([10, 30], { min: 0, max: null }, "20", "40");
+    expect(bar.outside).toBe(true);
+    expect(bar.current).toBe(100);
+    expect(bar.band.left).toBeGreaterThan(0);
+    expect(calibrationBar([10, 30], none, "20", "30").outside).toBe(false);
+    expect(calibrationBar([10, 30], none, "20", "9.9").outside).toBe(true);
+  });
+
+  it("does not let a far bound or value squash the band", () => {
+    const bar = calibrationBar([10, 30], { min: 0, max: 1e9 }, "20", "1e12");
+    expect(bar.current).toBe(100);
+    expect(bar.band.width).toBeGreaterThan(20);
+  });
+
+  it("has no mark for a value that is no number, and copes with a band of one point", () => {
+    const bar = calibrationBar([5, 5], none, null, "");
+    expect(bar.snapshot).toBeNull();
+    expect(bar.current).toBeNull();
+    expect(bar.outside).toBe(false);
+    expect(Number.isFinite(bar.band.left + bar.band.width)).toBe(true);
+    expect(calibrationBar([1, 20], none, "/wbm/x.init", "abc").snapshot).toBeNull();
   });
 });

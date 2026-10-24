@@ -126,3 +126,39 @@ export function forkSummary(fork: DatasetFork): string {
   const what = describeSet(fork.set);
   return `copy of ${fileName(fork.original)}${what ? `, ${what}` : " (repaired)"}`;
 }
+
+/** A number as a person types it: digits with an optional point and exponent, signed or not. */
+const PLAIN_NUMBER = /^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$/;
+
+/** A number as text without the float noise of a product (`86400 × 1.1` is `95040.00000000001`). */
+const clean = (number: number): string => String(Number(number.toPrecision(12)));
+
+/** The original's number, or null when it is empty or not a finite one. */
+function originalNumber(original: string): number | null {
+  const text = original.trim();
+  if (!PLAIN_NUMBER.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** The `Var_Scale` a multiplier makes: the original's `Var_Scale` times `factor`, as text. `Var_Scale`
+ *  is the whole factor WBM applies (`value × Var_Scale + Var_Offset`), so a change of x% of the data
+ *  is the original times 1 + x/100: `86400` times `1.1` is `95040`. Null when either is not a finite
+ *  number. */
+export function scaleFromFactor(original: string, factor: string): string | null {
+  const base = originalNumber(original);
+  const text = factor.trim();
+  if (base === null || !PLAIN_NUMBER.test(text)) return null;
+  const product = base * Number(text);
+  return Number.isFinite(product) ? clean(product) : null;
+}
+
+/** The multiplier a `Var_Scale` is of the original's, as text (`95040` over `86400` is `1.1`), or
+ *  `""` when either is not a finite number or the original is 0. */
+export function factorFromScale(original: string, scale: string): string {
+  const base = originalNumber(original);
+  const text = scale.trim();
+  if (base === null || base === 0 || !WBM_NUMBER.test(text)) return "";
+  const ratio = Number(text) / base;
+  return Number.isFinite(ratio) ? clean(ratio) : "";
+}

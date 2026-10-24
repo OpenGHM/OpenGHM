@@ -455,3 +455,58 @@ export function customParamErrors(failure: {
 export function isInitUnavailable(failure: { status?: number; code?: string }): boolean {
   return failure.code === INIT_UNAVAILABLE || failure.status === 503;
 }
+
+// ─── The calibration bar ─────────────────────────────────────────────────────
+
+/** Where the parts of a calibration bar sit, as percentages of its width. */
+export interface CalibrationBar {
+  /** The calibration band: where it starts and how wide it is. */
+  band: { left: number; width: number };
+  /** The snapshot's value, null when it is no number. */
+  snapshot: number | null;
+  /** The value the draft has, null when it is no number. */
+  current: number | null;
+  /** Whether that value is outside the band (a hint, not an error). */
+  outside: boolean;
+}
+
+/** A number box's text as a number: null for an empty box or what is no finite number. */
+function finiteOrNull(text: string | null): number | null {
+  if (text === null || text.trim() === "") return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+/**
+ * The geometry of the bar under a number field that has a calibration range: a track whose ends are
+ * the band padded by a quarter of its width on each side, pushed out to hold the field's own bounds
+ * and both values, but never by more than one and a half band widths, so a bound far away (or none)
+ * does not squash the band. A value beyond the track is drawn at its end.
+ */
+export function calibrationBar(
+  calibration: readonly [number, number],
+  bounds: { min: number | null; max: number | null },
+  snapshot: string | null,
+  current: string | null
+): CalibrationBar {
+  const [lo, hi] = calibration;
+  const span = hi - lo > 0 ? hi - lo : Math.max(Math.abs(lo) * 0.25, 1);
+  const snap = finiteOrNull(snapshot);
+  const now = finiteOrNull(current);
+  const reach = (n: number | null): number | null =>
+    n === null ? null : Math.min(Math.max(n, lo - span * 1.5), hi + span * 1.5);
+  const ends = [lo - span * 0.25, hi + span * 0.25, reach(bounds.min), reach(bounds.max), reach(snap), reach(now)].filter(
+    (n): n is number => n !== null
+  );
+  const start = Math.min(...ends);
+  const width = Math.max(...ends) - start;
+  const at = (n: number | null): number | null =>
+    n === null ? null : Math.min(Math.max(((n - start) / width) * 100, 0), 100);
+  const left = at(lo) as number;
+  return {
+    band: { left, width: (at(hi) as number) - left },
+    snapshot: at(snap),
+    current: at(now),
+    outside: now !== null && (now < lo || now > hi),
+  };
+}

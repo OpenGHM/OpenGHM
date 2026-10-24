@@ -186,15 +186,25 @@ answer, are in [gateway.md](gateway.md#4-where-state-lives) (drafts) and
 Built (`web-gateway/frontend/components/workspace/model-parameters/`,
 `web-gateway/frontend/lib/workspace/model-parameters.ts`, `web-gateway/frontend/lib/workspace/use-model-parameters.ts`). The Run settings
 step has a **Model parameters** section, collapsed by default and held open while the backend
-has a message in it. It renders the groups of the tree as nested sections, and a group that
-already holds a change starts open. A field with `tier: advanced` sits in an "Advanced"
-disclosure inside its group (one level only: nothing below an advanced group has another);
-`locked` and `inert` fields, and the keys a draft field owns, are not in the response at all. A
-field of a module is shown while the module is on.
+has a message in it. `locked` and `inert` fields, and the keys a draft field owns, are not in the
+response at all. A field of a module is shown while the module is on.
 
-Each field shows its label and init key, its current value in the snapshot's init, WBM's default
-for the version when it differs, the unit, the range, and a reset that takes the key out of
-`custom_params`. The wizard fetches the tree once per snapshot as it opens and keeps it for the
+At the top of the open section are a search over labels, init keys and help text (a matching
+group shows everything in it), a filter of All, Editable or Changed, a **Show advanced** switch, and,
+once the draft changes something, **Reset all** (after a confirmation). Each top-level group is a
+card that says how many parameters it shows and how many the draft changed; a card that holds a
+change starts open, and a search or a filter opens every card with a match. Groups below the top
+level are headings inside their card, not further disclosures. A node is advanced when its `tier`
+or an ancestor's is; advanced nodes are hidden until Show advanced is on, except where they hold a
+change, a fork or a message, or match the search (`web-gateway/frontend/lib/workspace/param-filter.ts`).
+Modules that are off, cannot be switched on and hold nothing are gathered at the end of their
+level, one line each with the reason.
+
+Each field shows its label and init key, the tree's help text, its control (the unit inside a
+number box), the snapshot's value when the draft changed it, WBM's default for the version when it
+differs, the allowed range, and a reset that takes the key out of `custom_params`. A number with a
+`calibration` range also draws the range as a bar with the snapshot's value and the draft's, and
+says when the value is outside it. The wizard fetches the tree once per snapshot as it opens and keeps it for the
 page's life. Where the tree cannot be had (an init that cannot be read, or an error) the section
 says so and offers Try again; the rest of the wizard is untouched, and the draft's changes are
 still listed with a Remove. The Review step lists the changed keys, by the tree's label and a
@@ -213,10 +223,10 @@ The component is chosen by `type` in one registry:
 | `bool01` | a switch | writes 0 or 1 |
 | `string` | a text input | ASCII only, one line, and the version's `pattern` where the tree has one |
 | `date` | a date input | |
-| a module with `editable: switch_off` | a card with a Switch off button, and Reset once it is off | the module the init has on; a module the snapshot has off shows no fields until it is switched on |
-| a module the snapshot has off | a card with Switch on when the backend says it can be, else the reason; Reset takes it back off | section 6, "Switching a module on" |
+| a module with `editable: switch_off` | a card with an on/off switch; switching it back on is the reset | the module the init has on; a module the snapshot has off shows no fields until it is switched on |
+| a module the snapshot has off | a card with an on/off switch when the backend says it can be, else a line with the reason; switching it back off is the reset | section 6, "Switching a module on" |
 | a `dataset` with `candidates` | a select of the model input's datasets in the field's unit, and a constant box beside it where the field takes a number | only in a module being switched on; one WBM cannot read is listed and disabled, its reason under the field |
-| a `dataset` that is `forkable` and reads a data `.init` | the current value, read-only, with an **Edit dataset** button | opens the three values a copy may set, each with the original's value beside it; section 6, "Data `.init` forks" |
+| a `dataset` that is `forkable` and reads a data `.init` | the current value, read-only, with an **Edit dataset** button | opens the three values a copy may set, each with the original's value beside it, and a box that sets `Var_Scale` as the original's times a factor; section 6, "Data `.init` forks" |
 | any other `dataset`, `file`, `column`, `list`, `block`, `flag` | the current value, read-only | choosing another dataset for a module that is on is later work (section 6) |
 
 A field the tree allows but that cannot be set now (its module is off, or a file sets the block

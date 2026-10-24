@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalForks,
   describeSet,
+  factorFromScale,
   fileName,
   forkAt,
   forkPaths,
   forkSummary,
   forkValueProblem,
+  scaleFromFactor,
   withFork,
   withoutFork,
   withoutForks,
@@ -72,5 +74,31 @@ describe("what a fork is called", () => {
     expect(describeSet({ Units: "mm/day", Var_Scale: "1.1" })).toBe("Var_Scale 1.1, Units mm/day");
     expect(forkSummary(fork("MT_Precip.Primary", { Var_Scale: "1.1" }))).toBe("copy of merra2_prectotcorr_d.init, Var_Scale 1.1");
     expect(forkSummary(fork("MT_Precip.Primary"))).toBe("copy of merra2_prectotcorr_d.init (repaired)");
+  });
+});
+
+describe("a multiplier of the original's Var_Scale", () => {
+  it("makes the whole factor, without float noise", () => {
+    expect(scaleFromFactor("86400", "1.1")).toBe("95040");
+    expect(scaleFromFactor("86400", "0.9")).toBe("77760");
+    expect(scaleFromFactor("1", "2e-3")).toBe("0.002");
+    expect(scaleFromFactor(" 86400 ", " 1.5 ")).toBe("129600");
+    expect(scaleFromFactor("0.1", "3")).toBe("0.3");
+  });
+
+  it("has none when either is not a finite number", () => {
+    for (const [original, factor] of [["", "1.1"], ["abc", "1.1"], ["86400", ""], ["86400", "-"], ["86400", "1e"], ["86400", "Infinity"], ["1e308", "1e10"]]) {
+      expect(scaleFromFactor(original, factor), `${original} x ${factor}`).toBeNull();
+    }
+  });
+
+  it("reads a Var_Scale back as the multiplier it is", () => {
+    expect(factorFromScale("86400", "95040")).toBe("1.1");
+    expect(factorFromScale("86400", "86400")).toBe("1");
+    expect(factorFromScale("86400", "2")).toBe("0.0000231481481481");
+    expect(factorFromScale("86400", "")).toBe("");
+    expect(factorFromScale("86400", ".5")).toBe("");
+    expect(factorFromScale("0", "2")).toBe("");
+    expect(factorFromScale("", "2")).toBe("");
   });
 });

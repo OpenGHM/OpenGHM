@@ -76,6 +76,20 @@ describe("the Edit dataset panel", () => {
     // only the three values can be edited: nothing for the dates or the file
     expect(within(group).queryByLabelText(/Start_Date|File_Path|Code_Name/)).toBeNull();
     expect(group.textContent).toContain("The original in the model input is not changed");
+    // the title names the copy, and each key has its plain name under it
+    expect(within(group).getByText("merra2_prectotcorr_d.init", { selector: "code" })).toBeTruthy();
+    expect(group.textContent).toContain("Your copy of merra2_prectotcorr_d.init");
+    for (const human of ["Scale factor", "Offset"]) expect(within(group).getByText(human)).toBeTruthy();
+  });
+
+  it("is a button with an icon until it is asked for, which can be placed in the row's grid", () => {
+    const { container } = panel({ closedClassName: "sm:col-start-2", openClassName: "sm:col-span-full" });
+    const button = screen.getByRole("button", { name: "Edit dataset merra2_prectotcorr_d.init" });
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.textContent).toBe("Edit dataset");
+    expect(container.firstElementChild!.className).toContain("sm:col-start-2");
+    fireEvent.click(button);
+    expect(screen.getByRole("group").className).toContain("sm:col-span-full");
   });
 
   it("reports a copy with what was typed, and none once every box is empty again", () => {
@@ -155,5 +169,92 @@ describe("the Edit dataset panel", () => {
     fetchMock.mockResolvedValue({ ok: false, reason: "not_found" });
     panel({ fork: { path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "2" } } });
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("The model input does not have this dataset."));
+  });
+});
+
+describe("the multiplier of Var_Scale", () => {
+  const multiplier = () => screen.getByLabelText("Multiply the original Var_Scale by") as HTMLInputElement;
+  const open = async () => {
+    const view = panel();
+    fireEvent.click(screen.getByRole("button", { name: /Edit dataset/ }));
+    // it is offered once the original's Var_Scale is known
+    await waitFor(() => expect(multiplier()).toBeTruthy());
+    return view;
+  };
+  const withScale = (scale: string, onChange = vi.fn()) =>
+    render(
+      <DatasetForkPanel
+        datasetId="snap-1"
+        path="MT_Precip.Primary"
+        original={FORK_PRECIP_INIT}
+        fork={{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: scale } }}
+        onChange={onChange}
+      />
+    );
+
+  it("is not there before the original's Var_Scale is known, nor when it is no number", async () => {
+    fetchMock.mockResolvedValue({ ok: false, reason: "not_found" });
+    panel();
+    fireEvent.click(screen.getByRole("button", { name: /Edit dataset/ }));
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    expect(screen.queryByLabelText("Multiply the original Var_Scale by")).toBeNull();
+    cleanup();
+    fetchMock.mockResolvedValue(ok({ ...INIT, Var_Scale: "" }));
+    forgetDatasetInits();
+    panel();
+    fireEvent.click(screen.getByRole("button", { name: /Edit dataset/ }));
+    await waitFor(() => expect(within(screen.getByRole("group")).getAllByText("not set").length).toBeGreaterThan(0));
+    expect(screen.queryByLabelText("Multiply the original Var_Scale by")).toBeNull();
+  });
+
+  it("sets Var_Scale to the original times what is typed, without float noise: 86400 x 1.1 is 95040", async () => {
+    const { onChange } = await open();
+    fireEvent.change(multiplier(), { target: { value: "1.1" } });
+    expect(onChange).toHaveBeenLastCalledWith({ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: "95040" } });
+  });
+
+  it("shows the result beside the box", async () => {
+    const view = withScale("95040");
+    await waitFor(() => expect(multiplier().value).toBe("1.1"));
+    expect(view.getByText("= 95040")).toBeTruthy();
+  });
+
+  it("removes Var_Scale when it is cleared, as clearing the box does", async () => {
+    const onChange = vi.fn();
+    withScale("95040", onChange);
+    await waitFor(() => expect(multiplier().value).toBe("1.1"));
+    fireEvent.change(multiplier(), { target: { value: "" } });
+    expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("starts from the Var_Scale the draft has, as a multiple of the original", async () => {
+    withScale("77760");
+    await waitFor(() => expect(multiplier().value).toBe("0.9"));
+  });
+
+  it("is empty when the copy has no Var_Scale, and follows a Var_Scale typed directly", async () => {
+    const { rerender } = await open();
+    expect(multiplier().value).toBe("");
+    const withIt = (scale: string) => (
+      <DatasetForkPanel
+        datasetId="snap-1"
+        path="MT_Precip.Primary"
+        original={FORK_PRECIP_INIT}
+        fork={{ path: "MT_Precip.Primary", original: FORK_PRECIP_INIT, set: { Var_Scale: scale } }}
+        onChange={vi.fn()}
+      />
+    );
+    rerender(withIt("172800"));
+    expect(multiplier().value).toBe("2");
+    rerender(withIt("43200"));
+    expect(multiplier().value).toBe("0.5");
+  });
+
+  it("keeps what is typed while it is not yet a number, and flags it, leaving Var_Scale alone", async () => {
+    const { onChange } = await open();
+    fireEvent.change(multiplier(), { target: { value: "1e" } });
+    expect(multiplier().value).toBe("1e");
+    expect(multiplier().getAttribute("aria-invalid")).toBe("true");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

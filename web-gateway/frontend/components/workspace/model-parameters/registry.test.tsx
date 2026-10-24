@@ -39,7 +39,18 @@ describe("a number field", () => {
     expect(input.step).toBe("any");
     expect(input.min).toBe("0");
     expect(input.max).toBe("");
-    expect(screen.getByText("mm", { selector: "span" })).toBeTruthy();
+    // the unit is a suffix inside the box
+    const unit = screen.getByText("mm", { selector: "span" });
+    expect(unit.parentElement).toBe(input.parentElement);
+    expect(unit.className).toContain("pointer-events-none");
+    expect(input.style.paddingRight).not.toBe("");
+  });
+
+  it("has no suffix without a unit", () => {
+    const { container } = row(field("wbmParam.alpha"));
+    const input = screen.getByLabelText("Soil moisture drying coefficient");
+    expect(input.parentElement!.querySelectorAll("span")).toHaveLength(0);
+    expect(container.querySelector("[data-param-path]")).toBeTruthy();
   });
 
   it("reports what is typed, as text", () => {
@@ -143,8 +154,8 @@ describe("a dataset field that WBM also accepts as a constant number (edit_as nu
     expect(input.value).toBe("");
     expect(screen.queryByText("Read-only")).toBeNull();
     // the snapshot's value is shown as the path text
-    expect(screen.getByText(/In this snapshot: \/wbm\/data_init\/groundwater\/beta\.init/)).toBeTruthy();
-    expect(screen.getByText(/replaces the dataset with that constant for every grid cell/)).toBeTruthy();
+    expect(screen.getByText(/Snapshot: \/wbm\/data_init\/groundwater\/beta\.init/)).toBeTruthy();
+    expect(screen.getByText(/A number replaces the dataset with a constant everywhere/)).toBeTruthy();
     expect(screen.getByText("1/day", { selector: "span" })).toBeTruthy();
   });
 
@@ -183,8 +194,30 @@ describe("a field the wizard does not change", () => {
     row(field("wbmParam.RhRt2"));
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("spinbutton")).toBeNull();
-    expect(screen.getByText("Read-only")).toBeTruthy();
+    // a lock with the words for a screen reader, not a pill
+    const lock = screen.getByText("Read-only");
+    expect(lock.className).toContain("sr-only");
+    expect(lock.parentElement!.getAttribute("title")).toBe("Read-only in the wizard");
+    expect(lock.parentElement!.querySelector("svg")).toBeTruthy();
     expect(screen.getAllByText("0.56").length).toBeGreaterThan(0);
+  });
+
+  it("shows a path as its file name over its directory, the whole path as the tooltip", () => {
+    row(fakeParamField("MT_Precip.Primary", { type: "dataset", editable: false, current: "/wbm/data/climate/precip/merra2_prectotcorr_d.init" }));
+    const name = screen.getByText("merra2_prectotcorr_d.init", { selector: "code" });
+    expect(name.className).toContain("truncate");
+    const box = name.parentElement!;
+    expect(box.getAttribute("title")).toBe("/wbm/data/climate/precip/merra2_prectotcorr_d.init");
+    expect(within(box).getByText("/wbm/data/climate/precip/")).toBeTruthy();
+  });
+
+  it("shows a value that is no path as it is, and a missing one as Not set", () => {
+    row({ ...field("wbmParam.RhRt2"), current: "a/b" });
+    const plain = screen.getByText("a/b", { selector: "code" });
+    expect(plain.parentElement!.getAttribute("title")).toBeNull();
+    cleanup();
+    row({ ...field("wbmParam.RhRt2"), current: null });
+    expect(screen.getByText("Not set", { selector: "code" }).className).toContain("text-muted-foreground");
   });
 
   it("shows every other non-scalar type the same way, and a missing value as Not set", () => {
@@ -210,20 +243,56 @@ describe("what a row says around its control", () => {
     expect(screen.getByText(/larger alpha makes AET/)).toBeTruthy();
   });
 
+  it("keeps the snapshot's value in what the control is described by", () => {
+    row(field("wbmParam.alpha"));
+    const described = screen.getByLabelText("Soil moisture drying coefficient").getAttribute("aria-describedby")!;
+    const text = described
+      .split(" ")
+      .map((part) => document.getElementById(part)?.textContent ?? "")
+      .join(" ");
+    expect(text).toContain("In this snapshot: 5");
+    expect(text).toContain("Usually calibrated within 1–20");
+    expect(text).toContain("larger alpha makes AET");
+  });
+
+  it("says what the snapshot had once the draft changes the value", () => {
+    row(field("wbmParam.alpha"), { "wbmParam.alpha": "7" });
+    expect(screen.getByText(/Snapshot: 5/)).toBeTruthy();
+    expect(screen.queryByText(/In this snapshot/)).toBeNull();
+    expect(screen.queryByText(/WBM default/)).toBeNull();
+  });
+
+  it("clamps a long help text to two lines, with More and Less, and the whole text in the page", () => {
+    const doc = "A long explanation of what this does. ".repeat(6).trim();
+    row({ ...field("wbmParam.alpha"), doc });
+    const text = screen.getByText(doc);
+    expect(text.className).toContain("line-clamp-2");
+    const more = screen.getByRole("button", { name: "More" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(text.className).not.toContain("line-clamp-2");
+    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("has no More for a short help text", () => {
+    row(field("wbmParam.alpha"));
+    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
+  });
+
   it("gives the default only when it differs, the calibration range, and the bounds", () => {
     row(field("wbmParam.alpha"));
     expect(screen.getByText(/Usually calibrated within 1–20/)).toBeTruthy();
     expect(screen.queryByText(/WBM's default/)).toBeNull();
     cleanup();
     row({ ...field("wbmParam.alpha"), current: "6", min: 0, max: 30, unit: "-" });
-    expect(screen.getByText(/WBM's default: 5 -/)).toBeTruthy();
-    expect(screen.getByText(/Allowed: 0–30 -/)).toBeTruthy();
+    expect(screen.getByText(/WBM default: 5 -/)).toBeTruthy();
+    expect(screen.getByText(/Allowed 0–30 -/)).toBeTruthy();
   });
 
   it("states a default when the snapshot's init lacks the key", () => {
     row(field("wbmParam.HBV_Beta"));
     expect(screen.getByText(/In this snapshot: Not set/)).toBeTruthy();
-    expect(screen.getByText(/WBM's default: 60/)).toBeTruthy();
+    expect(screen.getByText(/WBM default: 60/)).toBeTruthy();
   });
 
   it("says when it applies", () => {
@@ -238,7 +307,10 @@ describe("what a row says around its control", () => {
     cleanup();
     const changed = row(field("wbmParam.alpha"), { "wbmParam.alpha": "7" });
     expect(screen.getByText("Changed")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset Soil moisture drying coefficient" }));
+    const reset = screen.getByRole("button", { name: "Reset Soil moisture drying coefficient" });
+    expect(reset.getAttribute("title")).toBe("Back to the snapshot's value");
+    expect(reset.querySelector("svg")).toBeTruthy();
+    fireEvent.click(reset);
     expect(changed.onReset).toHaveBeenCalledTimes(1);
     expect(onReset).not.toHaveBeenCalled();
   });
@@ -249,6 +321,95 @@ describe("what a row says around its control", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
     const message = screen.getByText("Enter a number.");
     expect(input.getAttribute("aria-describedby")).toContain(message.id);
+  });
+});
+
+describe("the markers and the search mark", () => {
+  it("tags an advanced field, and only when asked", () => {
+    render(<ParamFieldRow field={field("wbmParam.maxRffStorage")} custom={null} advanced onChange={vi.fn()} onReset={vi.fn()} />);
+    expect(screen.getByText("Advanced")).toBeTruthy();
+    cleanup();
+    row(field("wbmParam.maxRffStorage"));
+    expect(screen.queryByText("Advanced")).toBeNull();
+  });
+
+  it("marks where the search text occurs in the label, whatever the case, and keeps the label's name", () => {
+    const { container } = render(
+      <ParamFieldRow field={field("wbmParam.alpha")} custom={null} highlight="DRYING" onChange={vi.fn()} onReset={vi.fn()} />
+    );
+    const marks = container.querySelectorAll("mark");
+    expect(marks).toHaveLength(1);
+    expect(marks[0].textContent).toBe("drying");
+    expect(screen.getByLabelText("Soil moisture drying coefficient")).toBeTruthy();
+  });
+
+  it("marks every occurrence, and reads the text as text, not a pattern", () => {
+    const { container } = render(
+      <ParamFieldRow field={{ ...field("wbmParam.alpha"), label: "Soil (a) soil" }} custom={null} highlight="soil" onChange={vi.fn()} onReset={vi.fn()} />
+    );
+    expect(Array.from(container.querySelectorAll("mark")).map((m) => m.textContent)).toEqual(["Soil", "soil"]);
+    cleanup();
+    const odd = render(
+      <ParamFieldRow field={{ ...field("wbmParam.alpha"), label: "Soil (a) soil" }} custom={null} highlight="(a" onChange={vi.fn()} onReset={vi.fn()} />
+    );
+    expect(odd.container.querySelectorAll("mark")[0].textContent).toBe("(a");
+    cleanup();
+    const none = render(
+      <ParamFieldRow field={field("wbmParam.alpha")} custom={null} highlight="" onChange={vi.fn()} onReset={vi.fn()} />
+    );
+    expect(none.container.querySelector("mark")).toBeNull();
+  });
+
+  it("marks a read-only label too", () => {
+    const { container } = render(
+      <ParamFieldRow field={field("wbmParam.RhRt2")} custom={null} highlight="release" onChange={vi.fn()} onReset={vi.fn()} />
+    );
+    expect(container.querySelector("mark")?.textContent).toBe("release");
+  });
+});
+
+describe("a number with a calibration range", () => {
+  const marks = (container: HTMLElement) => ({
+    snapshot: container.querySelector('[data-mark="snapshot"]'),
+    current: container.querySelector('[data-mark="current"]'),
+  });
+
+  it("draws a bar with the snapshot's tick, hidden from a screen reader, whose words are in the text", () => {
+    const { container } = row(field("wbmParam.alpha"));
+    const bar = container.querySelector('[aria-hidden="true"].rounded-full.bg-muted')!;
+    expect(bar).toBeTruthy();
+    expect(marks(container).snapshot).toBeTruthy();
+    expect(marks(container).current).toBeNull();
+    expect(screen.getByText(/Usually calibrated within 1–20/)).toBeTruthy();
+    expect(screen.queryByText("Outside the usual calibration range")).toBeNull();
+  });
+
+  it("adds the draft's value as a dot when it differs, primary while it is within the range", () => {
+    const { container } = row(field("wbmParam.alpha"), { "wbmParam.alpha": "12" });
+    const dot = marks(container).current!;
+    expect(dot.className).toContain("bg-primary");
+    expect(dot.className).not.toContain("bg-warning");
+    expect(screen.queryByText("Outside the usual calibration range")).toBeNull();
+  });
+
+  it("turns the dot amber and says so when the value is outside the range", () => {
+    const { container } = row(field("wbmParam.alpha"), { "wbmParam.alpha": "40" });
+    expect(marks(container).current!.className).toContain("bg-warning");
+    expect(screen.getByText("Outside the usual calibration range")).toBeTruthy();
+  });
+
+  it("says it when the snapshot's own value is outside", () => {
+    const { container } = row({ ...field("wbmParam.alpha"), current: "50" });
+    expect(marks(container).current!.className).toContain("bg-warning");
+    expect(screen.getByText("Outside the usual calibration range")).toBeTruthy();
+  });
+
+  it("has no bar without a range, for an int without one, or for a field that is not a number", () => {
+    const { container } = row(field("wbmParam.maxRffStorage"));
+    expect(container.querySelector("[data-mark]")).toBeNull();
+    cleanup();
+    const select = row({ ...field("wbmParam.Infiltration"), calibration: [1, 2] });
+    expect(select.container.querySelector("[data-mark]")).toBeNull();
   });
 });
 
@@ -277,6 +438,7 @@ describe("a dataset field the draft can copy", () => {
     expect(screen.getByRole("button", { name: "Edit dataset merra2_prectotcorr_d.init" })).toBeTruthy();
     // still read-only: its value is the snapshot's, the copy is what the draft edits
     expect(screen.getByText("Read-only")).toBeTruthy();
+    expect(screen.getByText("merra2_prectotcorr_d.init", { selector: "code" })).toBeTruthy();
   });
 
   it("has none when the tree does not say, when it holds a constant, or without the snapshot to read the original of", () => {
