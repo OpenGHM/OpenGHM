@@ -122,12 +122,11 @@ maps to ids for browsing.
 files — the Wyoming snapshot on Anvil has three — so the snapshot has to say which
 one this simulation runs. The parent directory is not recorded because
 [`layout/<version>.json`](snapshot-spec.md#layoutversionjson) already makes it
-required. The spec ([snapshot-spec.md](snapshot-spec.md)) needs to define it
-precisely — that definition is missing today:
+required.
 
-| Field | Definition to add | Resolves to |
+| Field | Definition | Resolves to |
 |---|---|---|
-| `simulation.init` | path **relative to `wbm_init/`**, required — a snapshot with several init files has no default | `<snapshot>/wbm_init/<init>` → mounted at `/wbm/wbm_init/<init>` |
+| `simulation.init` | path **relative to `wbm_init/`**, required (a pattern in the spec: it ends in `.init` and does not start with `/`); a snapshot with several init files has no default | `<snapshot>/wbm_init/<init>` → mounted at `/wbm/wbm_init/<init>` |
 
 `uses.modelInput.id` is a link, not a selector: it names a published model input,
 and the run binds that input's root at `/wbm/data` and its `data_init/` at
@@ -156,8 +155,8 @@ mismatch. The container carries the runtime and no code, so
 `uses.container.version` says nothing about the WBM version.
 
 Defining `init` as relative to `wbm_init/` rather than as a bare filename costs
-nothing now — every real value is a plain filename — and leaves room for
-`sub/x.init` later without a second field.
+nothing — every published value is a plain filename — and leaves room for
+`sub/x.init` without a second field.
 
 ### Where `simulation` comes from
 
@@ -416,7 +415,10 @@ bump, same as a new forcing role.
 `days-hours:minutes:seconds`, where the hours field is not capped at 24
 (observed on Anvil: `"4:30:00"`, `"111:30:00"`, `"15:00"`). The spec should
 validate against this grammar directly rather than borrowing a duration
-`format` that doesn't match it.
+`format` that doesn't match it. A walltime over one SLURM job's 96-hour limit
+runs as several jobs, each continuing from WBM's last saved state
+([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md));
+the Global snapshot's `111:30:00` is such a run.
 
 ### Notes
 
@@ -447,8 +449,7 @@ The repository UI's dataset shape ([`web-gateway/backend/app/models/repository.p
 used to be its own document — DCMI Box bounds, schema.org `variableMeasured`,
 title/creators/tag in the naming HydroShare's own catalogue uses — assembled by
 hand before this spec existed and never brought into line with it
-([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md),
-[open item 14](open-items.md)). Mission `2026-09-18-gateway-on-the-spec`
+([ADR 0017](../decisions/0017-the-spec-is-the-source-of-truth.md)). Mission `2026-09-18-gateway-on-the-spec`
 (private, `ops/missions/`) replaced it, on one rule the maintainer gave in
 place of reconciling each field:
 **the schema is always the source of truth. The gateway is rebuilt around it,
@@ -511,12 +512,14 @@ soil capacity. `schemas/model-input-spec/metadata/1.0.0.json` is its schema,
 shaped the same way as the snapshot's: `about` is the identical shared block
 ([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)),
 `coverage` and `datasets` are derived from the input's own `data_init/`
-records, and `networks` describes the river-network files it carries.
+records (`coverage.temporalCoverage` is optional: a model input whose datasets are all
+climatological has no calendar period to report), and `networks` describes the
+river-network files it carries.
 
 ```json
 {
   "$schema": "https://schemas.openghm.org/model-input-spec/metadata/1.0.0.json",
-  "id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "id": "52585562109e15bd7b06fad0e6deb17d1f4fa72a38474828adac5e74c169bc5d",
   "slug": "wbm_ancillary_data_v2.0.0",
 
   "about": { "…": "the shared block — see above" },
@@ -525,7 +528,8 @@ records, and `networks` describes the river-network files it carries.
     "spatialCoverage": {
       "northlimit": 57.1667, "southlimit": 21.75, "eastlimit": -60.5833, "westlimit": -127.8333,
       "units": "Decimal degrees", "projection": "EPSG:4326"
-    }
+    },
+    "temporalCoverage": { "start": "1980-01-01", "end": "2019-12-31" }
   },
 
   "networks": [

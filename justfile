@@ -197,7 +197,7 @@ logs-all:
 # (rule 4 — one source of truth). One recipe covers every spec that has a
 # generated view — today snapshot-spec and model-input-spec — rather than a
 # second recipe someone forgets to run. Idempotent: run it twice, get the
-# same files. CI runs this and fails on a diff.
+# same files. CI will run this and fail on a diff, once CI exists.
 codegen:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -289,7 +289,8 @@ schema-docs-gen:
 build-frontend:
     docker build --platform linux/amd64 -t {{namespace}}/frontend -f web-gateway/frontend/Dockerfile web-gateway/frontend/
 
-# Build the backend Docker image (repo-root context for repository data)
+# Build the backend Docker image (repo-root context: the Dockerfile COPYs
+# web-gateway/backend/ by its repository path)
 build-backend:
     docker build --platform linux/amd64 -t {{namespace}}/backend -f web-gateway/backend/Dockerfile .
 

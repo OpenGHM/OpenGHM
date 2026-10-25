@@ -208,7 +208,7 @@
 
         <div class="t-row">
           <code>├── model/  utilities/</code>
-          <span class="note">bundled — ~1 MB, study-specific, sha256 recorded</span>
+          <span class="note">bundled — a few MB, study-specific, pinned by tree hash</span>
         </div>
 
         <div class="t-row">
@@ -230,7 +230,7 @@
 
         <div class="t-row link">
           <code>│     ├── $schema      snapshot-spec 1.0.0</code>
-          <span class="note">→ spec repository · semver</span>
+          <span class="note">→ snapshot spec · semver</span>
         </div>
 
         <div class="t-row link">
@@ -248,7 +248,17 @@
           <span class="note">↑ tree hash of the bundled code above</span>
         </div>
 
+        <div class="t-row">
+          <code>├── SHA256SUMS</code>
+          <span class="note">integrity manifest — everything except wbm_output/</span>
+        </div>
+
         <div class="spacer"></div>
+
+        <div class="t-row excl">
+          <code>├── WBM_run_state/</code>
+          <span class="note">optional — the published run's resume state; a fetch skips it</span>
+        </div>
 
         <div class="t-row excl">
           <code>└── wbm_output/</code>
@@ -276,19 +286,19 @@
     <figure>
       <div class="panel">
         <svg viewBox="190 0 820 800" role="img" aria-labelledby="dgm-title" aria-describedby="dgm-desc">
-  <title id="dgm-title">Snapshot assembly and run graph</title>
+<title id="dgm-title">Snapshot assembly and run graph</title>
   <desc id="dgm-desc">
-    A spec repository sits at the top. Below it a read-only snapshot folder holds metadata.json
-    above two sibling boxes: the published wbm_output and the bundled code and configuration.
-    metadata.json makes two dashed pin edges — one up to the spec repository, one right to a
-    group of external stores holding the image registry and the model input store. Beside the
+    The snapshot spec, the schemas/ directory, sits at the top. Below it a read-only snapshot folder holds metadata.json
+    above two sibling boxes: the published wbm_output, with its optional WBM_run_state, and the bundled code and
+    configuration, whose code is pinned by tree hash. metadata.json makes two dashed pin edges — one up to the
+    spec, one right to a group of external stores holding the container image and the model input. Beside the
     snapshot, outside it, a shared spool cache: S3 spools/ keyed by model input id, filling a
     scratch cache keyed by network and variant. The bundled content flows down into a WBM run on
     a solid edge; the external stores feed the run from the right; the spool cache links its days
     into the run read-only, and a run that exits 0 hands the days it built back to the cache.
     Input data is not bundled: it is a published model input the run pulls by id. The run writes
     down into a writable per-simulation scratch directory containing wbm_output, WBM_run_state
-    and its own spool. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
+    and its own spool. The snapshot's own wbm_output has no outgoing edge: no run consumes it, and the toolkit's output commands read it in place.
   </desc>
 
   <!-- SVG <style> is not scoped, so every class is g- prefixed: this markup is
@@ -316,13 +326,13 @@
     </marker>
   </defs>
 
-  <!-- ── spec repository ─────────────────────────────────────────────────── -->
+  <!-- ── snapshot spec ─────────────────────────────────────────────────── -->
   <rect x="300" y="14" width="210" height="60" rx="4" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="405" y="40" text-anchor="middle" font-size="15">Spec repository</text>
-  <text class="g-m g-acc"      x="405" y="61" text-anchor="middle" font-size="11.5">snapshot-spec &#183; semver</text>
+  <text class="g-b g-bd g-acc" x="405" y="40" text-anchor="middle" font-size="15">Snapshot spec</text>
+  <text class="g-m g-acc"      x="405" y="61" text-anchor="middle" font-size="11.5">schemas/ &#183; semver</text>
 
   <!-- ── snapshot boundary (read-only) ───────────────────────────────────── -->
-  <rect x="215" y="120" width="381" height="268" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <rect x="215" y="120" width="381" height="280" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
   <text class="g-m g-fnt g-cap" x="223" y="110" font-size="12">SNAPSHOT &#8212; READ-ONLY</text>
 
   <rect x="280" y="140" width="250" height="54" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
@@ -330,21 +340,26 @@
   <text class="g-b g-mut"      x="405" y="184" text-anchor="middle" font-size="11.5">identity + pins</text>
 
   <!-- s1 · reference output -->
-  <rect x="233" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <rect x="233" y="222" width="166" height="138" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-m g-ink g-bd" x="316" y="246" text-anchor="middle" font-size="12.5">wbm_output/</text>
   <text class="g-b g-ink"      x="316" y="266" text-anchor="middle" font-size="11.5">published results</text>
   <text class="g-b g-mut"      x="316" y="286" text-anchor="middle" font-size="11">&#8776;470 GB &#183; Global</text>
-  <text class="g-b g-mut"      x="316" y="312" text-anchor="middle" font-size="11">excluded from SHA256SUMS</text>
-  <text class="g-b g-mut"      x="316" y="330" text-anchor="middle" font-size="11">never mounted</text>
+  <text class="g-b g-mut"      x="316" y="310" text-anchor="middle" font-size="11">excluded from SHA256SUMS</text>
+  <text class="g-b g-mut"      x="316" y="326" text-anchor="middle" font-size="11">never mounted by a run</text>
+  <text class="g-b g-mut"      x="316" y="342" text-anchor="middle" font-size="11">read in place (ADR 0033)</text>
+
+  <!-- optional run state, carried like the output -->
+  <text class="g-b g-mut" x="233" y="386" font-size="10.5">+ WBM_run_state/ &#8776;9 GB, optional, not fetched</text>
 
   <!-- s2 · bundled input content -->
-  <rect x="412" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <rect x="412" y="222" width="166" height="138" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-b g-ink g-bd" x="495" y="244" text-anchor="middle" font-size="13">bundled content</text>
   <text class="g-m g-ink"      x="495" y="264" text-anchor="middle" font-size="11.5">model/  utilities/</text>
   <text class="g-m g-ink"      x="495" y="282" text-anchor="middle" font-size="11.5">wbm_init/</text>
   <text class="g-m g-ink"      x="495" y="300" text-anchor="middle" font-size="11.5">gdal_test_files/</text>
-  <text class="g-b g-mut"      x="495" y="324" text-anchor="middle" font-size="11">495 MB &#183; Global</text>
-  <text class="g-b g-mut"      x="495" y="342" text-anchor="middle" font-size="11">covered by SHA256SUMS</text>
+  <text class="g-b g-mut"      x="495" y="320" text-anchor="middle" font-size="11">&#8776;510 MB &#183; Global</text>
+  <text class="g-b g-mut"      x="495" y="336" text-anchor="middle" font-size="11">covered by SHA256SUMS</text>
+  <text class="g-b g-mut"      x="495" y="352" text-anchor="middle" font-size="11">code pinned by tree hash</text>
 
   <!-- ── spool cache (outside the snapshot, shared by runs) ──────────────── -->
   <rect x="612" y="200" width="178" height="188" rx="4" fill="none" stroke="#5C6B69" stroke-width="1.3" stroke-dasharray="6 5"/>
@@ -373,8 +388,8 @@
   <text class="g-m g-acc g-cap" x="808" y="416" font-size="11.5">EXTERNAL &#8212; PINNED</text>
 
   <rect x="812" y="448" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="900" y="472" text-anchor="middle" font-size="13">Image registry</text>
-  <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 &#183; by digest</text>
+  <text class="g-b g-bd g-acc" x="900" y="472" text-anchor="middle" font-size="13">Container image</text>
+  <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 mirror &#183; digest</text>
 
   <rect x="812" y="526" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
   <text class="g-b g-bd g-acc" x="900" y="550" text-anchor="middle" font-size="13">Model input</text>
@@ -414,9 +429,9 @@
   <text class="g-m g-acc" x="751" y="507" text-anchor="middle" font-size="12">run time</text>
 
   <!-- ── bundled -> run ─────────────────────────────────────────────────── -->
-  <line x1="495" y1="354" x2="495" y2="464" stroke="#131C1B" stroke-width="2.2" marker-end="url(#g-ai)"/>
-  <text class="g-m g-ink" x="505" y="400" font-size="12.5">mounted</text>
-  <text class="g-m g-ink" x="505" y="416" font-size="12.5">read-only</text>
+  <line x1="495" y1="360" x2="495" y2="464" stroke="#131C1B" stroke-width="2.2" marker-end="url(#g-ai)"/>
+  <text class="g-m g-ink" x="505" y="424" font-size="12.5">mounted</text>
+  <text class="g-m g-ink" x="505" y="440" font-size="12.5">read-only</text>
 
   <!-- ── spool cache <-> run: linked read-only in, harvested back after exit 0 ── -->
   <line x1="655" y1="388" x2="655" y2="464" stroke="#5C6B69" stroke-width="2" marker-end="url(#g-af)"/>
@@ -429,7 +444,6 @@
   <!-- ── run -> scratch (lands in the gap between children: it writes all) ─ -->
   <line x1="584" y1="554" x2="584" y2="646" stroke="#131C1B" stroke-width="2.6" marker-end="url(#g-ai)"/>
   <text class="g-m g-ink g-bd" x="596" y="605" font-size="12.5">writes</text>
-
         </svg>
       </div>
       <div class="dgm-legend">
@@ -447,7 +461,8 @@
         the snapshot itself holds is roughly 470&nbsp;GB of results.
         <code>wbm_output/</code> appears on both sides for different reasons: inside the snapshot
         it is the <strong>record of what was published</strong>, carried as-is with no identifier
-        of its own and never mounted; in scratch it is what this run produced. Nothing connects
+        of its own and never mounted by a run, though the toolkit's output commands can read it in
+        place over HTTPS (ADR&nbsp;0033); in scratch it is what this run produced. Nothing connects
         them automatically. The run's own <code>spool/</code> links the days the cache holds,
         read-only, and WBM builds the rest there; after a run that exits 0 those new days move
         into the cache, never overwriting a file already in it.
@@ -456,28 +471,35 @@
   </section>
 
   <section>
-    <h2>What you deploy</h2>
+    <h2>What runs where</h2>
     <p>
-      Almost nothing new. The <code>openghm</code> namespace on <strong>Anvil's Composable
-      Subsystem</strong> already runs the backend, frontend, MongoDB, and ingress-nginx with
-      cert-manager. You add <strong>two</strong> workloads to it &mdash; a
-      container registry (<strong>zot</strong>) and a static host for the schema files &mdash; and
-      reuse the certificate issuer that is already there. zot stores its blobs directly in Anvil
-      S3, so there is no new in-cluster storage to size or manage.
+      The deployment is small. <strong>Anvil's Composable Subsystem</strong> runs ingress-nginx
+      with cert-manager and two namespaces. <code>openghm-dev</code> holds the gateway &mdash;
+      frontend, backend and MongoDB &mdash; at dev.openghm.org. <code>openghm</code> is prod:
+      <strong>zot</strong>, the SIF registry, an nginx proxy that serves the schema files out of S3,
+      and a landing page, with the gateway's manifests present at no replicas. zot stores its blobs
+      directly in Anvil S3 and the proxy reads from it, so neither has state of its own; MongoDB is
+      the one workload with a volume. There is no CI service and the repositories have no remote: a
+      maintainer's workstation applies the manifests and pushes the images, and everything that
+      writes to S3 runs on Anvil, with <code>s3cmd</code>.
     </p>
     <figure>
       <div class="panel">
-        <svg viewBox="0 0 830 660" role="img" aria-labelledby="dep-title" aria-describedby="dep-desc">
-  <title id="dep-title">What runs where — deployment topology</title>
+        <svg viewBox="0 0 940 816" role="img" aria-labelledby="dep-title" aria-describedby="dep-desc">
+<title id="dep-title">What runs where — deployment topology</title>
   <desc id="dep-desc">
-    Three tiers, all within Anvil except the git host. At the top, Purdue GitHub Enterprise holds one repository with the
-    application, the toolkit, the schemas and CI, and publishes downward into two places: the openghm namespace on
-    Anvil's Composable Subsystem, and the Anvil S3 bucket. The Composable Subsystem box lists two
-    new workloads — zot, an OCI registry for SIFs that stores its blobs directly in Anvil S3, and
-    a static JSON Schema host — plus one already running: ingress-nginx with cert-manager for TLS.
-    At the bottom, Anvil's HPC side consumes: a login node pulls from zot over the public internet
-    and stages onto GPFS, and SLURM compute nodes run the container and read raw data from Anvil
-    S3 over the internal network.
+    Three tiers. At the top, the maintainer's workstation: just recipes, kubectl, docker and ssh, with the
+    repositories held locally and no CI. It deploys manifests and images into Anvil's Composable Subsystem with
+    kubectl and docker push, and reaches Anvil's HPC side over ssh and scp to install the toolkit and run the
+    publish scripts. The Composable Subsystem box holds ingress-nginx with cert-manager, and two namespaces.
+    The openghm namespace is prod: zot, the OCI registry for SIFs, at registry.openghm.org; an nginx proxy that
+    serves the schemas out of S3 at schemas.openghm.org; and a landing page at openghm.org; the gateway's
+    manifests are there with no replicas. The openghm-dev namespace runs the gateway at dev.openghm.org: a Next.js
+    frontend, a FastAPI backend with no Ingress, and MongoDB as a StatefulSet with a volume. Anvil S3, the openghm
+    bucket with public read, sits to the right. zot stores its blobs in it, the schemas proxy reads from it, and the
+    gateway backend reads it over public HTTPS. At the bottom, Anvil's HPC side has a login node, SLURM compute
+    and scratch. The backend reaches the login node over SSH and SFTP. Jobs on compute read the bucket over public
+    HTTPS, and the publish scripts and the publish job write to it with s3cmd.
   </desc>
 
   <style>
@@ -498,84 +520,138 @@
     </marker>
   </defs>
 
-  <!-- ── tier 1 · publish ────────────────────────────────────────────────── -->
-  <rect x="250" y="16" width="500" height="76" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
-  <text class="dg-b dg-bd dg-ink" x="500" y="45" text-anchor="middle" font-size="15">GitHub Enterprise — the source of truth</text>
-  <text class="dg-m dg-mut"      x="500" y="68" text-anchor="middle" font-size="11.5">one repo &#183; app &#183; toolkit &#183; schemas &#183; Actions (CI)</text>
+  <!-- ── tier 1 · who deploys and publishes ──────────────────────────────── -->
+  <rect x="36" y="16" width="440" height="88" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
+  <text class="dg-b dg-bd dg-ink" x="256" y="43" text-anchor="middle" font-size="15">Maintainer's workstation</text>
+  <text class="dg-m dg-mut"      x="256" y="66" text-anchor="middle" font-size="11.5">just &#183; kubectl &#183; docker &#183; ssh</text>
+  <text class="dg-b dg-mut"      x="256" y="86" text-anchor="middle" font-size="10.5">deploys by hand &#183; there is no CI</text>
 
   <!-- ── tier 2 · serve ──────────────────────────────────────────────────── -->
-  <rect x="20" y="150" width="450" height="216" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
-  <text class="dg-m dg-fnt dg-cap" x="28" y="140" font-size="11.5">ANVIL COMPOSABLE SUBSYSTEM</text>
+  <text class="dg-m dg-fnt dg-cap" x="44" y="184" font-size="11.5">ANVIL COMPOSABLE SUBSYSTEM</text>
+  <rect x="36" y="194" width="440" height="426" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
 
-  <rect x="38" y="178" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
-  <text class="dg-m dg-bd dg-acc" x="52"  y="200" font-size="13">zot</text>
-  <text class="dg-m dg-bd dg-acc dg-cap" x="438" y="199" text-anchor="end" font-size="10">NEW</text>
-  <text class="dg-b dg-acc"      x="52"  y="218" font-size="10.5">OCI registry for SIFs &#183; registry.openghm.org</text>
+  <rect x="52" y="208" width="408" height="42" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="64" y="227" font-size="12.5">ingress-nginx + cert-manager</text>
+  <text class="dg-b dg-mut"      x="64" y="243" font-size="10.5">TLS and routing for every hostname below</text>
 
-  <rect x="38" y="240" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
-  <text class="dg-m dg-bd dg-acc" x="52"  y="262" font-size="13">schemas</text>
-  <text class="dg-m dg-bd dg-acc dg-cap" x="438" y="261" text-anchor="end" font-size="10">NEW</text>
-  <text class="dg-b dg-acc"      x="52"  y="280" font-size="10.5">schema host &#183; proxies S3 &#183; schemas.openghm.org</text>
+  <!-- prod namespace: published content, a single instance (ADR 0019) -->
+  <rect x="52" y="262" width="408" height="208" rx="3" fill="none" stroke="#8A9997" stroke-width="1"/>
+  <text class="dg-m dg-fnt dg-cap" x="64" y="279" font-size="10.5">NAMESPACE openghm &#8212; PROD</text>
 
-  <rect x="38" y="302" width="414" height="46" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="dg-m dg-bd dg-ink" x="52" y="323" font-size="12.5">ingress-nginx + cert-manager</text>
-  <text class="dg-b dg-mut"      x="52" y="340" font-size="10.5">already running &#8212; TLS for both hostnames</text>
+  <rect x="64" y="292" width="384" height="44" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="dg-m dg-bd dg-acc" x="76" y="311" font-size="13">zot</text>
+  <text class="dg-b dg-acc"      x="76" y="327" font-size="10.5">OCI registry for SIFs &#183; registry.openghm.org &#183; pushed from Anvil</text>
 
-  <rect x="500" y="150" width="222" height="86" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
-  <text class="dg-b dg-bd dg-ink" x="611" y="177" text-anchor="middle" font-size="13">Anvil S3</text>
-  <text class="dg-m dg-mut"      x="611" y="197" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
-  <text class="dg-b dg-mut"      x="611" y="216" text-anchor="middle" font-size="10.5">images, snapshots, code + zot storage</text>
+  <rect x="64" y="344" width="384" height="44" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="dg-m dg-bd dg-acc" x="76" y="363" font-size="13">schemas</text>
+  <text class="dg-b dg-acc"      x="76" y="379" font-size="10.5">nginx proxy of S3 schemas/ &#183; schemas.openghm.org</text>
 
-  <!-- ── tier 3 · consume ────────────────────────────────────────────────── -->
-  <rect x="250" y="520" width="500" height="120" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
-  <text class="dg-m dg-ink dg-cap" x="258" y="510" font-size="11.5">ANVIL HPC &#8212; WHERE RUNS HAPPEN</text>
+  <rect x="64" y="396" width="384" height="44" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="76" y="415" font-size="12.5">landing</text>
+  <text class="dg-b dg-mut"      x="76" y="431" font-size="10.5">nginx, one static page &#183; openghm.org &#183; a placeholder for the gateway</text>
 
-  <rect x="266" y="548" width="210" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="dg-m dg-bd dg-ink" x="371" y="573" text-anchor="middle" font-size="12">login node</text>
-  <text class="dg-b dg-mut"      x="371" y="592" text-anchor="middle" font-size="10.5">pull + stage &#183; outbound HTTPS</text>
+  <text class="dg-b dg-fnt" x="64" y="458" font-size="10.5">the gateway's manifests are here too, at 0 replicas until activation</text>
 
-  <rect x="520" y="548" width="214" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="dg-m dg-bd dg-ink" x="627" y="573" text-anchor="middle" font-size="12">SLURM compute</text>
-  <text class="dg-b dg-mut"      x="627" y="592" text-anchor="middle" font-size="10.5">runs the container &#183; via Anvil S3</text>
+  <!-- dev namespace: the gateway -->
+  <rect x="52" y="482" width="408" height="102" rx="3" fill="none" stroke="#8A9997" stroke-width="1"/>
+  <text class="dg-m dg-fnt dg-cap" x="64" y="499" font-size="10.5">NAMESPACE openghm-dev &#8212; dev.openghm.org</text>
 
-  <text class="dg-b dg-mut" x="266" y="631" font-size="10.5">Anvil S3 holds the published copy; GPFS is staging for runs.</text>
+  <rect x="64"  y="508" width="122" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="125" y="531" text-anchor="middle" font-size="12">frontend</text>
+  <text class="dg-b dg-mut"      x="125" y="549" text-anchor="middle" font-size="10.5">Next.js</text>
 
-  <!-- ── publish edges ───────────────────────────────────────────────────── -->
+  <rect x="194" y="508" width="122" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="255" y="531" text-anchor="middle" font-size="12">backend</text>
+  <text class="dg-b dg-mut"      x="255" y="549" text-anchor="middle" font-size="10.5">FastAPI</text>
+  <text class="dg-b dg-mut"      x="255" y="563" text-anchor="middle" font-size="10.5">no Ingress</text>
+
+  <rect x="324" y="508" width="124" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="386" y="531" text-anchor="middle" font-size="12">MongoDB</text>
+  <text class="dg-b dg-mut"      x="386" y="549" text-anchor="middle" font-size="10.5">StatefulSet</text>
+  <text class="dg-b dg-mut"      x="386" y="563" text-anchor="middle" font-size="10.5">+ a volume</text>
+
+  <!-- Anvil S3 -->
+  <rect x="580" y="260" width="340" height="332" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="dg-b dg-bd dg-ink" x="750" y="288" text-anchor="middle" font-size="13">Anvil S3</text>
+  <text class="dg-m dg-mut"      x="750" y="308" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
+  <text class="dg-m dg-ink" x="598" y="346" font-size="10.5">snapshots/  model-inputs/  spools/</text>
+  <text class="dg-m dg-ink" x="598" y="366" font-size="10.5">wbm-code/  containers/  schemas/</text>
+  <text class="dg-m dg-ink" x="598" y="386" font-size="10.5">registry/</text>
+  <text class="dg-b dg-mut" x="670" y="386" font-size="10.5">zot's blobs, opaque</text>
+  <line x1="598" y1="414" x2="902" y2="414" stroke="#8A9997" stroke-width="0.8"/>
+  <text class="dg-m dg-fnt dg-cap" x="598" y="440" font-size="10">WRITTEN BY</text>
+  <text class="dg-b dg-mut" x="598" y="460" font-size="10.5">s3cmd, run on Anvil &#183; zot, under registry/</text>
+  <text class="dg-m dg-fnt dg-cap" x="598" y="498" font-size="10">READ BY</text>
+  <text class="dg-b dg-mut" x="598" y="518" font-size="10.5">anyone, over HTTPS, with no credentials:</text>
+  <text class="dg-b dg-mut" x="598" y="534" font-size="10.5">the gateway, SLURM jobs, the schemas proxy</text>
+
+  <!-- ── tier 3 · where runs happen ──────────────────────────────────────── -->
+  <text class="dg-m dg-ink dg-cap" x="44" y="682" font-size="11.5">ANVIL HPC</text>
+  <rect x="36" y="690" width="884" height="110" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+
+  <rect x="60" y="716" width="220" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="170" y="739" text-anchor="middle" font-size="12">login node</text>
+  <text class="dg-b dg-mut"      x="170" y="757" text-anchor="middle" font-size="10.5">ssh target &#183; publish scripts</text>
+  <text class="dg-b dg-mut"      x="170" y="772" text-anchor="middle" font-size="10.5">oras &#183; s3cmd</text>
+
+  <rect x="330" y="716" width="360" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="510" y="739" text-anchor="middle" font-size="12">SLURM compute</text>
+  <text class="dg-b dg-mut"      x="510" y="757" text-anchor="middle" font-size="10.5">gateway jobs: toolkit fetch &#8594; run, publish</text>
+  <text class="dg-b dg-mut"      x="510" y="772" text-anchor="middle" font-size="10.5">WBM runs in the pinned image</text>
+
+  <rect x="730" y="716" width="174" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="dg-m dg-bd dg-ink" x="817" y="739" text-anchor="middle" font-size="12">scratch (GPFS)</text>
+  <text class="dg-b dg-mut"      x="817" y="757" text-anchor="middle" font-size="10.5">caches &#183; run output</text>
+  <text class="dg-b dg-mut"      x="817" y="772" text-anchor="middle" font-size="10.5">job directories</text>
+
+  <!-- ── workstation edges ───────────────────────────────────────────────── -->
   <g fill="none" stroke="#131C1B" stroke-width="1.8">
-    <line x1="300" y1="92" x2="300" y2="146" marker-end="url(#d-ai)"/>
-    <line x1="611" y1="92" x2="611" y2="146" marker-end="url(#d-ai)"/>
+    <line x1="262" y1="104" x2="262" y2="190" marker-end="url(#d-ai)"/>
+    <polyline points="36,60 10,60 10,751 56,751" marker-end="url(#d-ai)"/>
   </g>
-  <text class="dg-m dg-ink" x="310" y="116" font-size="11.5">installs the chart,</text>
-  <text class="dg-m dg-ink" x="310" y="131" font-size="11.5">pushes the image</text>
-  <text class="dg-m dg-ink" x="620" y="116" font-size="11.5">copies the files</text>
-  <text class="dg-m dg-ink" x="620" y="131" font-size="11.5">(MinIO client)</text>
+  <text class="dg-m dg-ink" x="272" y="130" font-size="11.5">kubectl apply</text>
+  <text class="dg-m dg-ink" x="272" y="145" font-size="11.5">docker push &#8594; Anvil's registry</text>
+  <text class="dg-m dg-ink" x="20" y="642" font-size="11.5">ssh, scp</text>
+  <text class="dg-b dg-mut" x="20" y="658" font-size="10.5">toolkit install, publish scripts</text>
 
-  <!-- ── zot's storage backend (new — zot writes its blobs into Anvil S3) ─── -->
-  <polyline points="452,203 480,203 480,150 500,150" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
-  <text class="dg-m dg-acc" x="456" y="145" font-size="11">stores blobs</text>
-  <polyline points="452,265 510,265 510,240" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
-  <text class="dg-m dg-acc" x="516" y="258" font-size="11">reads from</text>
+  <!-- ── Composable Subsystem into S3 ────────────────────────────────────── -->
+  <g fill="none" stroke="#10695C" stroke-width="1.8">
+    <line x1="448" y1="314" x2="576" y2="314" marker-end="url(#d-ai)"/>
+    <line x1="448" y1="366" x2="576" y2="366" marker-end="url(#d-ai)"/>
+  </g>
+  <text class="dg-m dg-acc" x="486" y="307" font-size="11">stores blobs</text>
+  <text class="dg-m dg-acc" x="486" y="359" font-size="11">reads from</text>
+  <line x1="460" y1="546" x2="576" y2="546" stroke="#131C1B" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="dg-m dg-ink" x="486" y="539" font-size="11.5">reads</text>
+  <text class="dg-b dg-mut" x="486" y="563" font-size="10.5">public HTTPS</text>
 
-  <!-- ── consume edges ───────────────────────────────────────────────────── -->
+  <!-- ── gateway backend to Anvil ────────────────────────────────────────── -->
+  <line x1="255" y1="572" x2="255" y2="712" stroke="#131C1B" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="dg-m dg-ink" x="265" y="652" font-size="11.5">SSH + SFTP</text>
+  <text class="dg-b dg-mut" x="265" y="668" font-size="10.5">sbatch, logs, run-output ZIP</text>
+
+  <!-- ── S3 and Anvil HPC ────────────────────────────────────────────────── -->
   <g fill="none" stroke="#131C1B" stroke-width="1.8">
-    <polyline points="38,212 14,212 14,472 371,472 371,544" marker-end="url(#d-ai)"/>
-    <line x1="611" y1="236" x2="611" y2="544" marker-end="url(#d-ai)"/>
-    <line x1="480" y1="580" x2="516" y2="580" marker-end="url(#d-ai)"/>
+    <line x1="610" y1="596" x2="610" y2="712" marker-end="url(#d-ai)"/>
+    <line x1="660" y1="712" x2="660" y2="596" marker-end="url(#d-ai)"/>
+    <line x1="280" y1="751" x2="326" y2="751" marker-end="url(#d-ai)"/>
   </g>
-  <text class="dg-m dg-ink" x="22" y="436" font-size="11.5">installs a revision</text>
-  <text class="dg-m dg-ink" x="22" y="451" font-size="11.5">&#8212; once per image</text>
-  <text class="dg-m dg-ink" x="622" y="382" font-size="11.5">reads per run</text>
-  <text class="dg-b dg-mut" x="622" y="399" font-size="10.5">SIF mirror + snapshot/raw data</text>
-  <text class="dg-m dg-mut" x="498" y="570" text-anchor="middle" font-size="10.5">stage</text>
+  <line x1="694" y1="751" x2="726" y2="751" stroke="#131C1B" stroke-width="1.8" marker-start="url(#d-ai)" marker-end="url(#d-ai)"/>
+  <text class="dg-m dg-ink" x="602" y="652" text-anchor="end" font-size="11.5">reads per run</text>
+  <text class="dg-b dg-mut" x="602" y="668" text-anchor="end" font-size="10.5">public HTTPS</text>
+  <text class="dg-m dg-ink" x="670" y="652" font-size="11.5">publishes</text>
+  <text class="dg-b dg-mut" x="670" y="668" font-size="10.5">s3cmd put, sync</text>
+  <text class="dg-m dg-mut" x="303" y="743" text-anchor="middle" font-size="10.5">sbatch</text>
         </svg>
       </div>
       <figcaption>
-        Three tiers, all within Anvil except GitHub: GitHub publishes; Anvil's Composable
-        Subsystem and Anvil S3 serve; Anvil's HPC side consumes.
-        The accented boxes are the only new workloads. Registry pulls happen on a login node;
-        SLURM compute nodes read from the Anvil S3 mirror instead, because it needs no
-        credentials and no <code>oras://</code> support, and everything a compute node needs is
-        already on GPFS or in Anvil S3.
+        A maintainer's workstation deploys to the Composable Subsystem with kubectl and docker push,
+        and reaches Anvil's HPC side over ssh, to install the toolkit and run the publish scripts.
+        Anvil S3 is read over plain HTTPS by the gateway and by every run, and written by
+        <code>s3cmd</code> on Anvil and by zot under <code>registry/</code>. A run's job reads the
+        S3 mirror of the image rather than zot, because the mirror needs no credentials and no
+        <code>oras://</code> support; zot is for <code>oras://</code> pulls. The accented boxes are
+        the workloads that serve published content.
       </figcaption>
     </figure>
     <div class="cards">
@@ -583,28 +659,27 @@
         <div class="kicker">registry</div>
         <h3>zot + ORAS</h3>
         <p>
-          Single-binary OCI registry, Helm chart, blobs stored directly in Anvil S3.
-          <code>apptainer push oras://</code> stores the SIF as one blob, so a pull returns the
-          bytes that were verified. Search <em>zot registry helm chart</em>.
+          Single-binary OCI registry, a plain Kubernetes manifest, blobs stored directly in Anvil S3.
+          <code>oras push</code> stores the SIF as one blob, so a pull returns the bytes that were
+          verified.
         </p>
       </div>
       <div class="card">
-        <div class="kicker">schema registry</div>
-        <h3>JSON Schema on a static host</h3>
+        <div class="kicker">schemas</div>
+        <h3>JSON Schema on a proxy</h3>
         <p>
-          Versioned files in git, published at immutable URLs, validated with
-          <code>check-jsonschema</code> and code-generated with
-          <code>datamodel-code-generator</code>. Apicurio Registry is the heavier option if the
-          schema ever needs an API or a UI.
+          Versioned files in <code>schemas/</code>, copied to Anvil S3 and served by an nginx proxy
+          at schemas.openghm.org. The backend models and frontend types are generated from them by
+          <code>just codegen</code>.
         </p>
       </div>
       <div class="card">
         <div class="kicker">stores</div>
         <h3>Anvil S3</h3>
         <p>
-          Snapshots and raw data sit in the existing Anvil <code>openghm</code> bucket under
-          immutable prefixes. No DOI minting for now &mdash; each version is just a serial
-          number, published once and never overwritten.
+          Snapshots, model inputs, spools, code and images sit in the Anvil <code>openghm</code>
+          bucket, one prefix each. No DOI minting for now &mdash; a snapshot or model input gets a
+          minted id at publish, and that id is never reused.
         </p>
       </div>
     </div>
@@ -615,10 +690,11 @@
     <div class="cards">
       <div class="card">
         <div class="kicker">contract · semver</div>
-        <h3>Spec repository</h3>
+        <h3>Snapshot spec</h3>
         <p>
-          JSON Schema in git, published at versioned URLs. Covers both the folder layout and the
-          metadata fields as one contract, so there is no compatibility matrix between them.
+          JSON Schema and a path list in <code>schemas/</code>, published at versioned URLs. Covers
+          both the folder layout and the metadata fields as one contract, so there is no
+          compatibility matrix between them.
         </p>
       </div>
       <div class="card">
@@ -631,12 +707,11 @@
         </p>
       </div>
       <div class="card">
-        <div class="kicker">dataset · serial</div>
-        <h3>Shared data store</h3>
+        <div class="kicker">dataset · minted id</div>
+        <h3>Model input store</h3>
         <p>
-          Anvil S3 under immutable prefixes, described with HydroShare's CompositeResource
-          vocabulary (borrowed, not deployed). Shared by many snapshots, so it is referenced
-          rather than copied into each one.
+          Anvil S3 under <code>model-inputs/&lt;id&gt;/</code>, one prefix per published model input.
+          Shared by many snapshots, so it is referenced rather than copied into each one.
         </p>
       </div>
     </div>
@@ -653,7 +728,7 @@
           <tr>
             <td>Model code + utilities</td>
             <td class="in">inside</td>
-            <td>~1 MB, so deduplication saves nothing. Its <code>_Inline</code> directory holds
+            <td>A few MB (4.5&nbsp;MB for Global's <code>model/</code>), so deduplication saves nothing. Its <code>_Inline</code> directory holds
                 perl-5.30 objects tied to the container, so it is not cleanly shareable — and the
                 runtime already mounts it from the snapshot.</td>
           </tr>
@@ -665,13 +740,14 @@
           <tr>
             <td>Container image</td>
             <td class="out">outside</td>
-            <td>~350 MB and shared across snapshots. Bundled physically only at publication, so a
-                deposited archive survives the registry.</td>
+            <td>About 330&nbsp;MB and shared across snapshots. Kept in zot and in the S3 mirror, and
+                pinned by digest; a snapshot stores no copy.</td>
           </tr>
           <tr>
             <td>Raw input data</td>
             <td class="out">outside</td>
-            <td>TB-scale and shared across snapshots. Copying it per snapshot is not viable.</td>
+            <td>49&nbsp;GB for Global's model input, shared across snapshots. Copying it per snapshot is
+                not viable.</td>
           </tr>
           <tr>
             <td>spool cache</td>

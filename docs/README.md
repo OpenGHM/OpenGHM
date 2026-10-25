@@ -56,9 +56,9 @@ run.
 | [authentication.md](architecture/authentication.md) | built | roles and permissions, the three ways to become a request identity, sessions, CILogon's scaffolding |
 | [repository-layout.md](architecture/repository-layout.md) | built | the top-level directories, what generates what, naming |
 | [local-development.md](architecture/local-development.md) | built | what runs on a laptop, what only in the cluster, and the traps in between |
-| [artifact-versioning.md](architecture/artifact-versioning.md) | **target** | the snapshot as a unit, the five versioned axes, storage shape, what runs where |
-| [simulation-reuse.md](architecture/simulation-reuse.md) | **target** | which runs need no compute (published output, saved run state) and a spool shared between runs |
-| [model-parameters.md](architecture/model-parameters.md) | **built** (section 6 target, except "Switching a module on" and the checks before a submit) | how a draft sets WBM's model parameters: the parameter tree, its resolution per WBM version, how a value reaches the init, what the wizard renders, switching a module on with datasets of the model input, the checks before a submit; the later work (another dataset for a module that is on, forks) is target |
+| [artifact-versioning.md](architecture/artifact-versioning.md) | **target**, mostly built | the snapshot as a unit, the five versioned axes, storage shape, what runs where; its status line says what is not built |
+| [simulation-reuse.md](architecture/simulation-reuse.md) | **built**, except Continue | which runs need no compute (a draft the snapshot's output answers) and a spool shared between runs; a run that continues from the snapshot's saved state is target |
+| [model-parameters.md](architecture/model-parameters.md) | **built** (section 6 target, except "Dataset choices" for a module being switched on, "Data `.init` forks", "Switching a module on" and the checks before a submit) | how a draft sets WBM's model parameters: the parameter tree, its resolution per WBM version, how a value reaches the init, what the wizard renders, switching a module on with datasets of the model input, editing a data `.init` as the run's own copy, the checks before a submit; the later work (another dataset for a module that is on, forks of files named inside other files, the model-input side of availability) is target |
 
 Diagram sources are SVG in [`architecture/diagrams/`](architecture/diagrams/),
 rendered to PNG alongside them:
@@ -81,13 +81,14 @@ repository.
 | [snapshot-spec.md](reference/snapshot-spec.md) | where the spec lives, what a version consists of, version rules |
 | [metadata-format.md](reference/metadata-format.md) | `metadata.json`, the container lock record, `containers/manifest.json` |
 | [wbm-init.md](reference/wbm-init.md) | how WBM 22.1.1 and 23.9.0 treat init values, as read in the code and measured on Anvil: the evidence behind the parameter tree |
-| [open-items.md](reference/open-items.md) | what is still undecided |
+| [open-items.md](reference/open-items.md) | what is still undecided, and what has to land before the repository is published |
 
-Four more live in the private `openghm-ops` repository, because they describe
+Five more live in the private `openghm-ops` repository, because they describe
 this deployment rather than the product: `anvil-environment.md` (Anvil HPC, S3,
 the Composable Subsystem), `environments.md` (which endpoint each environment
 uses, and who holds credentials), `secrets.md` (where each secret lives, how to
-add a deployer) and `external-services.md` (CILogon, reCAPTCHA, Resend).
+add a deployer), `external-services.md` (CILogon, reCAPTCHA, Resend) and
+`email.md` (who sends and receives mail for the domain).
 
 ## Decisions
 
@@ -103,33 +104,33 @@ and 0012 were folded into 0010.
 | # | Decision | Status |
 |---|---|---|
 | [0001](decisions/0001-unified-repository.md) | One repository holds the application, the toolkit and the spec | accepted — superseded in part by 0016 |
-| [0002](decisions/0002-five-versioned-axes.md) | Five artifacts are versioned independently, pinned from `metadata.json` | accepted |
+| [0002](decisions/0002-five-versioned-axes.md) | Five artifacts are versioned independently, pinned from `metadata.json` | accepted — superseded in part by 0014 and 0015 |
 | [0003](decisions/0003-zot-as-sif-registry.md) | zot is the SIF registry, with a plain-S3 mirror alongside | accepted |
 | [0004](decisions/0004-store-images-not-rebuild.md) | Container images are stored, never rebuilt to reproduce | accepted |
-| [0005](decisions/0005-namespace-decides-the-key.md) | Open namespaces are content-addressed; curated ones are name + version | accepted |
+| [0005](decisions/0005-namespace-decides-the-key.md) | Open namespaces are content-addressed; curated ones are name + version | accepted — superseded in part by 0014 and 0015 |
 | [0006](decisions/0006-spec-is-two-files.md) | The snapshot spec is a JSON Schema plus a separate path list | accepted |
 | [0007](decisions/0007-schemas-on-s3-behind-a-proxy.md) | Schemas are stored in S3 and served by a stateless nginx proxy | accepted |
 | [0008](decisions/0008-exclude-inline-from-code-hash.md) | `_Inline` is excluded from the code tree hash | accepted |
 | [0009](decisions/0009-output-is-carried-not-reproducible.md) | Published output is carried in the snapshot, not a reproduction target | accepted |
-| [0010](decisions/0010-repository-layout.md) | Top-level directories grouped by what a thing *is*, and what `images/` holds | accepted |
+| [0010](decisions/0010-repository-layout.md) | Top-level directories grouped by what a thing *is* | accepted — `deploy/` amended by 0016 |
 | [0013](decisions/0013-sops-for-secrets.md) | Kubernetes secrets are SOPS-encrypted in the repository, keyed by SSH keys | accepted |
-| [0014](decisions/0014-identity-is-a-minted-id.md) | A published artifact's id is minted, not derived from its content | accepted |
-| [0015](decisions/0015-model-input-is-a-published-artifact.md) | Model input is published on its own; snapshots link to it | accepted |
-| [0016](decisions/0016-split-public-and-ops-repositories.md) | The product is public; this instance's deployment is a separate private repository | accepted |
+| [0014](decisions/0014-identity-is-a-minted-id.md) | A published artifact's id is minted, not derived from its content | accepted — supersedes 0002 and 0005 in part; axis 5's pin changed by 0032 |
+| [0015](decisions/0015-model-input-is-a-published-artifact.md) | Model input is published on its own; snapshots link to it | accepted — supersedes 0002 and 0005 in part |
+| [0016](decisions/0016-split-public-and-ops-repositories.md) | The product is public; this instance's deployment is a separate private repository | accepted — supersedes 0001 in part, amends 0010 |
 | [0017](decisions/0017-the-spec-is-the-source-of-truth.md) | The snapshot spec is the source of truth; the gateway stores its shape | accepted |
-| [0018](decisions/0018-shared-definitions-and-no-renderings.md) | Specs share definitions from `schemas/common/`, and ship no generated renderings | accepted — amends 0006 |
+| [0018](decisions/0018-shared-definitions-and-no-renderings.md) | Specs share definitions from `schemas/common/`, and ship no generated renderings | accepted — amends 0006; amended by 0021 |
 | [0019](decisions/0019-publishing-infrastructure-is-a-single-instance.md) | Publishing infrastructure is a single instance, in prod | accepted |
 | [0020](decisions/0020-a-live-schema-viewer-is-not-a-generated-rendering.md) | A live schema viewer is not a generated rendering | superseded by 0021 |
-| [0021](decisions/0021-generate-schema-docs-with-json-schema-for-humans.md) | Schema docs are generated with json-schema-for-humans | accepted |
+| [0021](decisions/0021-generate-schema-docs-with-json-schema-for-humans.md) | Generate schema docs with json-schema-for-humans | accepted — supersedes 0020, amends 0018 |
 | [0022](decisions/0022-file-modes-are-object-metadata.md) | A published file's mode is recorded on its own object | accepted |
-| [0023](decisions/0023-simulation-output-stays-on-scratch.md) | A simulation's output stays on Anvil scratch until it is published | accepted |
+| [0023](decisions/0023-simulation-output-stays-on-scratch.md) | A simulation's output stays on Anvil scratch until it is published | accepted — its last sentence overtaken by 0040 |
 | [0024](decisions/0024-who-may-run-a-simulation.md) | Only a user an administrator has permitted runs a simulation | accepted |
 | [0025](decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md) | A gateway job is a slurmly batch job whose body runs the pinned toolkit | accepted |
 | [0026](decisions/0026-how-a-job-verdict-is-reached.md) | How a job's verdict is reached, and how long its files live | accepted |
 | [0027](decisions/0027-live-updates-are-polled.md) | A job's live state is polled and shared, and its logs are read by byte offset | accepted |
 | [0028](decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md) | A new simulation is stored when the user saves it, and a stored draft saves its own edits | accepted |
 | [0029](decisions/0029-a-run-computes-only-what-is-not-published.md) | A run computes only what is not already published | accepted |
-| [0030](decisions/0030-what-a-person-creates-is-a-snapshot-draft.md) | What a person creates is a snapshot draft; "simulation" means one WBM execution | accepted |
+| [0030](decisions/0030-what-a-person-creates-is-a-snapshot-draft.md) | What a person creates is a snapshot draft, not a simulation | accepted — read with 0001 to 0029 |
 | [0031](decisions/0031-a-snapshot-draft-is-published-by-a-job.md) | A snapshot draft is published by a job on Anvil, under an id the gateway minted first | accepted |
 | [0032](decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md) | WBM code is published under `wbm-code/` and pinned by its tree hash | accepted |
 | [0033](decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md) | WBM output is read on Anvil by the toolkit, and the gateway asks for subsets | accepted |

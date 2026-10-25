@@ -216,6 +216,9 @@ The Review step, the submit confirmation (`submit-summary.tsx`) and Run details 
 one component (`web-gateway/frontend/components/workspace/model-parameters/change-list.tsx`) from `describeChanges`;
 each keeps its own count line and frame.
 
+The wizard's help panel has a Model parameters topic for this section
+(`web-gateway/frontend/lib/workspace/wizard-help.ts`, [gateway.md](gateway.md)).
+
 The component is chosen by `type` in one registry:
 
 | `type` | Component | Notes |
@@ -274,7 +277,7 @@ target for a field of a module that is on.
 A `dataset` field with `accepts: [init]` points to a data `.init` (the dataset descriptor
 [wbm-init.md](../reference/wbm-init.md#8-dataset-descriptors-data-init-files) describes).
 Choosing another one means offering the entries of the draft's model input: the datasets of
-its `metadata.json` (`datasets[]`: `code`, `init`, `timeSeries`, `coverage`) and its
+its `metadata.json` (`datasets[]`: `code`, `init`, `timeSeries`, `temporalCoverage`) and its
 networks (`networks[].file`). An entry is offered only when its init, and every file the init
 points to, exists in that model input. `Code_Name` is not unique within a model input, so a
 dataset is keyed by the path of its init.

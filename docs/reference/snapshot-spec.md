@@ -19,6 +19,7 @@ file.
 schemas/
   common/
     about/1.0.0.json        # citation block shared by both specs below (ADR 0018)
+    spatial-coverage/1.0.0.json   # DCMI Box block shared by both specs
   snapshot-spec/
     metadata/1.0.0.json     # metadata.json's schema, $id = its published URL, about by $ref
     layout/1.0.0.json       # required/optional snapshot paths
@@ -55,6 +56,7 @@ application, the toolkit and the spec together
 ```
 OpenGHM/
   schemas/                    # the spec — one source, three consumers below
+  schema-docs/                # the spec's browsable docs, generated from schemas/ (ADR 0021)
   web-gateway/                # backend + frontend; generated models and types
   packages/openghm/           # the openghm library + CLI, built as a wheel
   images/                     # image recipes and lock records
@@ -81,7 +83,7 @@ therefore exists in three places with distinct roles:
 | `s3://openghm/schemas/` | the published copy `$id` resolves to | no |
 | inside the `openghm` wheel | offline validation | pinned per wheel release |
 
-Published URLs, once serving exists (not yet — see below):
+Published URLs, served by `schemas.openghm.org`:
 
 ```
 https://schemas.openghm.org/snapshot-spec/metadata/1.0.0.json
@@ -133,6 +135,10 @@ consumer may run, not part of a snapshot's identity
 snapshots published at `snapshots/<id>/` each ship one (mission
 `2026-09-23-publish-the-staged-snapshots`, private) — see
 [snapshot-layout.md](snapshot-layout.md#generate-sha256sums).
+
+A model input has the same two files under `model-input-spec`. Its layout list
+requires `metadata.json` and `data_init/` and allows `SHA256SUMS` and a `network` folder
+([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)).
 
 ## Version rules
 

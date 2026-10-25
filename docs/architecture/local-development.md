@@ -10,14 +10,35 @@ falls where it does.
 | Tier | Components | On a laptop | Why |
 |---|---|---|---|
 | **Shared, remote only** | Anvil S3, zot, the schema host | never | Large and nearly static. All three are **anonymous-read**, so a laptop needs no credentials to use them. |
-| **Local dependencies** | MongoDB | `deploy/local/` compose | Small, and a developer mutates their data — isolation matters more than sharing. |
+| **Local dependencies** | MongoDB | `deploy/local/` compose, port 27418 | Small, and a developer mutates their data — isolation matters more than sharing. |
 | **Started, unused** | Redis | `deploy/local/` compose | Nothing reads `REDIS_URL`, and neither cluster runs one. A leftover — [gateway.md](gateway.md#6-what-is-absent-and-not-by-oversight). |
-| **Source** | frontend, backend, `openghm` | run directly, hot reload | Changes constantly. |
+| **Source** | frontend, backend, `openghm` | the frontend on the host (`npm run dev`, port 3100); the backend in the compose stack with its source bind-mounted and `uvicorn --reload` (port 8100); `openghm` installed from `packages/openghm` | Changes constantly. |
 
-The gateway already works this way. `backend/app/core/config.py` says it: the
+The gateway already works this way. `web-gateway/backend/app/core/config.py` says it: the
 backend never talks to S3 directly, jobs upload from Anvil compute nodes with
 their own credentials, and datasets are served as plain public HTTPS links. The
 backend only builds link strings.
+
+## Running it
+
+| Recipe | Does |
+|---|---|
+| `just install dev` | Copies `web-gateway/backend/.env.example` to `.env` and `web-gateway/frontend/.env.local.example` to `.env.local` where they are absent, and runs `npm install`. Both env files are gitignored. |
+| `just run dev` | Builds the backend image on the first run, starts MongoDB, Redis and the backend, waits for `GET /health`, then runs the frontend on the host. The backend installs `requirements.txt` when its container starts, so `just rebuild` is only for a changed Dockerfile. |
+| `just down`, `just down-volumes`, `just ps`, `just logs`, `just logs-all`, `just rebuild` | Compose helpers; `down-volumes` deletes the data volumes. |
+| `just db-reset` | Wipes the MongoDB volume and restarts it, so the seed runs again. |
+| `just migrate-roles`, `migrate-sessions`, `migrate-seed-users`, `migrate-catalogue-envelope` | One-off, idempotent scripts from `deploy/local/mongo/` for a volume that predates a change. |
+| `just codegen`, `just schema-docs-gen` | Regenerate the backend models, frontend types and schema docs ([repository-layout.md](repository-layout.md#generated-files)). |
+
+The example env files set `ENVIRONMENT=development` and `ALLOW_MOCK_AUTH=true`, so
+the local backend honours `X-Mock-Role` ([authentication.md](authentication.md#2-three-ways-to-become-a-request-identity));
+the frontend sends it only under `next dev` and only when a session carries no
+backend token. The sign-in page's "Dev quick login" buttons exist only under `next dev`
+(see the seed, below). With no `RESEND_API_KEY` the backend logs each email's body
+instead of sending it. With no `RECAPTCHA_SECRET_KEY` registration skips the captcha,
+with no `CILOGON_CLIENT_ID` and `CILOGON_CLIENT_SECRET` the sign-in page has no CILogon
+button, and with no `INTERNAL_SERVICE_SECRET` the sign-in throttle has no per-IP counter.
+Running the test suites is in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ## The property that falls out
 
@@ -30,8 +51,8 @@ immutable*: a laptop should not be able to write to a published prefix at all.
 
 ## What `deploy/local/` deliberately omits
 
-The compose stack brings up MongoDB and Redis. It does **not** bring up an S3
-implementation or a registry. Opening the file and not finding them is the
+The compose stack brings up MongoDB, Redis and the backend. It does **not** bring up
+an S3 implementation or a registry. Opening the file and not finding them is the
 signal that those are remote — see
 `ops/docs/reference/environments.md` (private) for the full
 matrix of which endpoint each environment uses.
@@ -41,7 +62,11 @@ matrix of which endpoint each environment uses.
 Developing the *publish* paths needs somewhere writable — uploading a test
 snapshot, updating a manifest, publishing a schema version. Reading is solved;
 writing is not decided. The options are under
-the Next list in `ops/missions/README.md` (private).
+the Next list in `ops/missions/README.md` (private). The one writable route that
+exists is the real one: a snapshot draft's publish job
+([gateway.md](gateway.md#publishing-a-second-job-under-an-id-minted-first)) runs on
+Anvil as the gateway's account with the credentials file `ANVIL_S3CFG` names there,
+so a publish submitted from the local stack writes to the shared bucket.
 
 ## Two things about the compose stack that nothing warns you about
 
@@ -71,7 +96,10 @@ docker compose -f deploy/local/docker-compose.yml exec -T mongodb \
 ```
 
 Seeding only happens on an empty volume, so verifying it means a throwaway
-project (`-p something-else`) rather than wiping your own database.
+project (`-p something-else`) rather than wiping your own database. The seed creates
+`users` and `jobs`; the backend creates its
+other collections and every other index at startup
+([gateway.md §4](gateway.md#4-where-state-lives)).
 
 **The seed holds two accounts**, the sign-in page's "Dev quick login" buttons:
 `admin@openghm.dev` and `user@openghm.dev`, ids `dev-admin-001` and
@@ -97,11 +125,13 @@ directories as the dev cluster, so keep local test runs short.
 
 ## Why `just -n` over every recipe, and not a grep
 
-Ten recipes call `docker compose`, and **six of them name no path at all** —
-`down`, `down-volumes`, `rebuild`, `ps`, `logs`, `logs-all`. When the compose
-file moved, all six broke while containing nothing a grep for the old path
-could match. The same shape appears wherever a recipe's correctness depends on
-the working directory rather than on a string it contains.
+Twelve recipes call `docker compose`, all through the `compose` variable at the
+top of the justfile, which holds the compose file's path and adds the Anvil
+overlay when the key exists. **Six of them name no path at all** — `down`,
+`down-volumes`, `rebuild`, `ps`, `logs`, `logs-all`. When the compose file moved,
+all six broke while containing nothing a grep for the old path could match. The
+same shape appears wherever a recipe's correctness depends on the working
+directory or a variable rather than on a string it contains.
 
 So after any move, render every recipe and read the result:
 

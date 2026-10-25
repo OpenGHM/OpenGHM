@@ -5,17 +5,20 @@ hydrologic datasets, model outputs, and climate forcing data), the `openghm`
 **toolkit**, the WBM **container images**, and the snapshot **spec** that ties
 them together.
 
-Live at **https://dev.openghm.org**.
+Live at **https://dev.openghm.org** — the Data Repository; the Workspace is
+switched off there (`WORKSPACE_ENABLED=false`).
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
-| Backend | FastAPI (Python), Uvicorn |
-| Auth | NextAuth v5 |
+| Backend | FastAPI (Python 3.12 in its image), Uvicorn |
+| Auth | NextAuth v5 (email and password, CILogon) |
+| Toolkit | the `openghm` Python library and CLI (Click), a wheel that runs on Anvil |
+| Compute | SLURM batch jobs on Anvil HPC, WBM in Apptainer images |
 | Database | MongoDB 7 |
-| Cache | Redis 7 |
+| Cache | Redis 7, started by the local compose stack; no code reads it yet |
 | Object Storage | Anvil S3 (RCAC) — served as plain public HTTPS links, backend has no S3 credentials |
 | Deployment | Kubernetes on Anvil Cloud (Purdue RCAC) |
 
@@ -29,8 +32,10 @@ OpenGHM/
 ├── packages/openghm/       # openghm library + CLI (pip-installable wheel)
 ├── images/                 # one directory per WBM container image, plus verification/
 ├── schemas/                # snapshot spec — one source, generated into backend/frontend/wheel
+├── schema-docs/            # the spec's browsable docs, generated from schemas/ and checked in
 ├── docs/                   # architecture, decisions, reference  ← start here
-├── deploy/local/           # docker-compose.yml and the mongo seed
+├── deploy/local/           # docker-compose.yml, the Anvil submit override and the mongo seed
+├── ops/                    # the private openghm-ops clone — gitignored, may be absent
 └── justfile                # task runner
 ```
 
@@ -64,12 +69,16 @@ Code reads that name instead.
 - [just](https://github.com/casey/just) — task runner (`brew install just`)
 - [Docker](https://www.docker.com/) with Docker Compose
 - Node.js 20+ and npm
+- Python 3 for the toolkit, the tests and the docs checker (the toolkit needs
+  3.9+, matching Anvil; the backend image runs 3.12)
 
 ## Local Development
 
 ### First Run
 
 ```bash
+git clone https://github.com/OpenGHM/OpenGHM.git
+cd OpenGHM
 just install dev   # copies .env files, installs frontend dependencies
 just run dev       # infra + backend in Docker, frontend locally
 ```
@@ -114,6 +123,9 @@ just down-volumes
 | `just logs` | Tail backend logs |
 | `just logs-all` | Tail logs for all services |
 | `just build-all` | Build frontend + backend Docker images (`linux/amd64`) |
+| `just db-reset` | Wipe the MongoDB volume and re-run the seed (`deploy/local/mongo/init-mongo.js`) |
+| `just codegen` | Regenerate the backend model and frontend types from `schemas/`; rerun in the same commit as every spec change |
+| `just schema-docs-gen` | Regenerate `schema-docs/generated/` from `schemas/` |
 
 ## Deploying
 
@@ -142,6 +154,7 @@ Key backend environment variables (see `web-gateway/backend/app/core/config.py`)
 | `REDIS_URL` | `redis://localhost:6479/0` | Redis connection string |
 | `S3_PUBLIC_BASE_URL` | `https://s3.anvil.rcac.purdue.edu` | Base URL for building public dataset/output links (no credentials — backend doesn't call the S3 API) |
 | `CORS_ORIGINS` | `["http://localhost:3100"]` | Allowed CORS origins |
+| `WORKSPACE_ENABLED` | `true` | Whether the Workspace (snapshot drafts and their runs) is on; the frontend reads the same name |
 
 Key frontend environment variables (`.env.local`):
 
@@ -149,3 +162,12 @@ Key frontend environment variables (`.env.local`):
 |---|---|
 | `BACKEND_URL` | FastAPI base URL (server-side only, default: `http://localhost:8100`) |
 | `AUTH_SECRET` | NextAuth secret key |
+| `NEXTAUTH_URL` | The frontend's own public URL |
+| `INTERNAL_SERVICE_SECRET` | Shared with the backend for the sign-in handoff; must match exactly |
+| `RECAPTCHA_SITE_KEY` | reCAPTCHA site key, read per request; unset means no captcha |
+| `CILOGON_CLIENT_ID`, `CILOGON_CLIENT_SECRET` | CILogon sign-in; unset means it is not offered |
+
+Every variable, with comments, is in `web-gateway/backend/.env.example` and
+`web-gateway/frontend/.env.local.example`. A real submit to Anvil also needs
+the `ANVIL_*` settings and `deploy/local/docker-compose.anvil.yml`
+([local-development.md](docs/architecture/local-development.md)).

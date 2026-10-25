@@ -2,17 +2,17 @@
      role="img" aria-labelledby="dgm-title" aria-describedby="dgm-desc">
   <title id="dgm-title">Snapshot assembly and run graph</title>
   <desc id="dgm-desc">
-    A spec repository sits at the top. Below it a read-only snapshot folder holds metadata.json
-    above two sibling boxes: the published wbm_output and the bundled code and configuration.
-    metadata.json makes two dashed pin edges — one up to the spec repository, one right to a
-    group of external stores holding the image registry and the model input store. Beside the
+    The snapshot spec, the schemas/ directory, sits at the top. Below it a read-only snapshot folder holds metadata.json
+    above two sibling boxes: the published wbm_output, with its optional WBM_run_state, and the bundled code and
+    configuration, whose code is pinned by tree hash. metadata.json makes two dashed pin edges — one up to the
+    spec, one right to a group of external stores holding the container image and the model input. Beside the
     snapshot, outside it, a shared spool cache: S3 spools/ keyed by model input id, filling a
     scratch cache keyed by network and variant. The bundled content flows down into a WBM run on
     a solid edge; the external stores feed the run from the right; the spool cache links its days
     into the run read-only, and a run that exits 0 hands the days it built back to the cache.
     Input data is not bundled: it is a published model input the run pulls by id. The run writes
     down into a writable per-simulation scratch directory containing wbm_output, WBM_run_state
-    and its own spool. The snapshot's own wbm_output has no outgoing edge: it is carried, not consumed.
+    and its own spool. The snapshot's own wbm_output has no outgoing edge: no run consumes it, and the toolkit's output commands read it in place.
   </desc>
 
   <!-- SVG <style> is not scoped, so every class is g- prefixed: this markup is
@@ -40,13 +40,13 @@
     </marker>
   </defs>
 
-  <!-- ── spec repository ─────────────────────────────────────────────────── -->
+  <!-- ── snapshot spec ─────────────────────────────────────────────────── -->
   <rect x="300" y="14" width="210" height="60" rx="4" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="405" y="40" text-anchor="middle" font-size="15">Spec repository</text>
-  <text class="g-m g-acc"      x="405" y="61" text-anchor="middle" font-size="11.5">snapshot-spec &#183; semver</text>
+  <text class="g-b g-bd g-acc" x="405" y="40" text-anchor="middle" font-size="15">Snapshot spec</text>
+  <text class="g-m g-acc"      x="405" y="61" text-anchor="middle" font-size="11.5">schemas/ &#183; semver</text>
 
   <!-- ── snapshot boundary (read-only) ───────────────────────────────────── -->
-  <rect x="215" y="120" width="381" height="268" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <rect x="215" y="120" width="381" height="280" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
   <text class="g-m g-fnt g-cap" x="223" y="110" font-size="12">SNAPSHOT &#8212; READ-ONLY</text>
 
   <rect x="280" y="140" width="250" height="54" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
@@ -54,21 +54,26 @@
   <text class="g-b g-mut"      x="405" y="184" text-anchor="middle" font-size="11.5">identity + pins</text>
 
   <!-- s1 · reference output -->
-  <rect x="233" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <rect x="233" y="222" width="166" height="138" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-m g-ink g-bd" x="316" y="246" text-anchor="middle" font-size="12.5">wbm_output/</text>
   <text class="g-b g-ink"      x="316" y="266" text-anchor="middle" font-size="11.5">published results</text>
   <text class="g-b g-mut"      x="316" y="286" text-anchor="middle" font-size="11">&#8776;470 GB &#183; Global</text>
-  <text class="g-b g-mut"      x="316" y="312" text-anchor="middle" font-size="11">excluded from SHA256SUMS</text>
-  <text class="g-b g-mut"      x="316" y="330" text-anchor="middle" font-size="11">never mounted</text>
+  <text class="g-b g-mut"      x="316" y="310" text-anchor="middle" font-size="11">excluded from SHA256SUMS</text>
+  <text class="g-b g-mut"      x="316" y="326" text-anchor="middle" font-size="11">never mounted by a run</text>
+  <text class="g-b g-mut"      x="316" y="342" text-anchor="middle" font-size="11">read in place (ADR 0033)</text>
+
+  <!-- optional run state, carried like the output -->
+  <text class="g-b g-mut" x="233" y="386" font-size="10.5">+ WBM_run_state/ &#8776;9 GB, optional, not fetched</text>
 
   <!-- s2 · bundled input content -->
-  <rect x="412" y="222" width="166" height="132" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <rect x="412" y="222" width="166" height="138" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
   <text class="g-b g-ink g-bd" x="495" y="244" text-anchor="middle" font-size="13">bundled content</text>
   <text class="g-m g-ink"      x="495" y="264" text-anchor="middle" font-size="11.5">model/  utilities/</text>
   <text class="g-m g-ink"      x="495" y="282" text-anchor="middle" font-size="11.5">wbm_init/</text>
   <text class="g-m g-ink"      x="495" y="300" text-anchor="middle" font-size="11.5">gdal_test_files/</text>
-  <text class="g-b g-mut"      x="495" y="324" text-anchor="middle" font-size="11">495 MB &#183; Global</text>
-  <text class="g-b g-mut"      x="495" y="342" text-anchor="middle" font-size="11">covered by SHA256SUMS</text>
+  <text class="g-b g-mut"      x="495" y="320" text-anchor="middle" font-size="11">&#8776;510 MB &#183; Global</text>
+  <text class="g-b g-mut"      x="495" y="336" text-anchor="middle" font-size="11">covered by SHA256SUMS</text>
+  <text class="g-b g-mut"      x="495" y="352" text-anchor="middle" font-size="11">code pinned by tree hash</text>
 
   <!-- ── spool cache (outside the snapshot, shared by runs) ──────────────── -->
   <rect x="612" y="200" width="178" height="188" rx="4" fill="none" stroke="#5C6B69" stroke-width="1.3" stroke-dasharray="6 5"/>
@@ -97,8 +102,8 @@
   <text class="g-m g-acc g-cap" x="808" y="416" font-size="11.5">EXTERNAL &#8212; PINNED</text>
 
   <rect x="812" y="448" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
-  <text class="g-b g-bd g-acc" x="900" y="472" text-anchor="middle" font-size="13">Image registry</text>
-  <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 &#183; by digest</text>
+  <text class="g-b g-bd g-acc" x="900" y="472" text-anchor="middle" font-size="13">Container image</text>
+  <text class="g-m g-acc"      x="900" y="492" text-anchor="middle" font-size="10.5">zot + S3 mirror &#183; digest</text>
 
   <rect x="812" y="526" width="176" height="62" rx="3" fill="none" stroke="#10695C" stroke-width="1.5"/>
   <text class="g-b g-bd g-acc" x="900" y="550" text-anchor="middle" font-size="13">Model input</text>
@@ -138,9 +143,9 @@
   <text class="g-m g-acc" x="751" y="507" text-anchor="middle" font-size="12">run time</text>
 
   <!-- ── bundled -> run ─────────────────────────────────────────────────── -->
-  <line x1="495" y1="354" x2="495" y2="464" stroke="#131C1B" stroke-width="2.2" marker-end="url(#g-ai)"/>
-  <text class="g-m g-ink" x="505" y="400" font-size="12.5">mounted</text>
-  <text class="g-m g-ink" x="505" y="416" font-size="12.5">read-only</text>
+  <line x1="495" y1="360" x2="495" y2="464" stroke="#131C1B" stroke-width="2.2" marker-end="url(#g-ai)"/>
+  <text class="g-m g-ink" x="505" y="424" font-size="12.5">mounted</text>
+  <text class="g-m g-ink" x="505" y="440" font-size="12.5">read-only</text>
 
   <!-- ── spool cache <-> run: linked read-only in, harvested back after exit 0 ── -->
   <line x1="655" y1="388" x2="655" y2="464" stroke="#5C6B69" stroke-width="2" marker-end="url(#g-af)"/>

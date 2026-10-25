@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 796" width="940" height="796"
+     role="img" aria-labelledby="gw-title" aria-describedby="gw-desc">
+  <title id="gw-title">The gateway — runtime topology</title>
+  <desc id="gw-desc">
+    A browser reaches the gateway's Next.js server through the ingress, and only that. The Next.js server calls
+    FastAPI server-side with the backend's JWT; the browser never calls FastAPI, which has no Ingress. FastAPI reads
+    and writes MongoDB, and calls two outside services itself: Google reCAPTCHA, to verify a registration token, and
+    Resend, to send email. The browser loads the reCAPTCHA widget from Google. The Next.js server runs the OIDC
+    sign-in with CILogon. FastAPI reaches Anvil over one SSH connection with SFTP on it: on the login node it runs
+    sbatch, squeue, sacct and scancel and the toolkit's output and state commands, and it reads logs and a run's
+    output from scratch and writes publish metadata there. A SLURM run job runs the pinned toolkit: it reads the
+    snapshot, model input and image from Anvil S3 over public HTTPS and writes its output to scratch. A publish job
+    reads that output from scratch and writes the new snapshot to Anvil S3 with s3cmd. FastAPI also reads Anvil S3
+    over public HTTPS, and the browser downloads from Anvil S3 by following links.
+  </desc>
+
+  <style>
+    .g-b   { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    .g-m   { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+    .g-ink { fill: #131C1B; }
+    .g-mut { fill: #5C6B69; }
+    .g-fnt { fill: #8A9997; }
+    .g-acc { fill: #10695C; }
+    .g-wrn { fill: #A8532A; }
+    .g-bd  { font-weight: 700; }
+    .g-cap { letter-spacing: 0.07em; }
+  </style>
+
+  <defs>
+    <marker id="w-ai" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#131C1B"/>
+    </marker>
+    <marker id="w-aa" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#10695C"/>
+    </marker>
+  </defs>
+
+  <!-- ── outside services (accent) ───────────────────────────────────────── -->
+  <rect x="230" y="20" width="160" height="64" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="g-b g-bd g-acc" x="310" y="46" text-anchor="middle" font-size="13">Google reCAPTCHA</text>
+  <text class="g-m g-acc"      x="310" y="66" text-anchor="middle" font-size="10.5">widget &#183; siteverify</text>
+
+  <rect x="640" y="20" width="160" height="64" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="g-b g-bd g-acc" x="720" y="46" text-anchor="middle" font-size="13">Resend</text>
+  <text class="g-m g-acc"      x="720" y="66" text-anchor="middle" font-size="10.5">transactional email</text>
+
+  <rect x="230" y="320" width="160" height="64" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="g-b g-bd g-acc" x="310" y="346" text-anchor="middle" font-size="13">CILogon</text>
+  <text class="g-m g-acc"      x="310" y="366" text-anchor="middle" font-size="10.5">identity provider</text>
+
+  <g transform="translate(0,-50)">
+  <!-- ── browser ─────────────────────────────────────────────────────────── -->
+  <rect x="20" y="200" width="130" height="90" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="85" y="230" text-anchor="middle" font-size="13">Browser</text>
+  <text class="g-b g-mut"      x="85" y="249" text-anchor="middle" font-size="10.5">pages &#183; downloads</text>
+  <text class="g-b g-mut"      x="85" y="265" text-anchor="middle" font-size="10.5">OpenStreetMap tiles</text>
+
+  <!-- ── the gateway's namespace ─────────────────────────────────────────── -->
+  <text class="g-m g-fnt g-cap" x="218" y="168" font-size="11.5">GATEWAY NAMESPACE</text>
+  <rect x="210" y="176" width="700" height="140" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
+
+  <rect x="230" y="200" width="160" height="90" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="310" y="228" text-anchor="middle" font-size="13">Next.js server</text>
+  <text class="g-b g-mut"      x="310" y="247" text-anchor="middle" font-size="10.5">NextAuth sessions</text>
+  <text class="g-b g-mut"      x="310" y="263" text-anchor="middle" font-size="10.5">the only thing Ingress routes</text>
+
+  <rect x="470" y="200" width="160" height="90" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="550" y="228" text-anchor="middle" font-size="13">FastAPI</text>
+  <text class="g-b g-mut"      x="550" y="247" text-anchor="middle" font-size="10.5">no Ingress &#183; ClusterIP only</text>
+  <text class="g-b g-mut"      x="550" y="263" text-anchor="middle" font-size="10.5">auth &#183; jobs &#183; catalogue</text>
+
+  <rect x="710" y="200" width="180" height="90" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="800" y="228" text-anchor="middle" font-size="13">MongoDB</text>
+  <text class="g-b g-mut"      x="800" y="247" text-anchor="middle" font-size="10.5">users &#183; jobs &#183; catalogue</text>
+  <text class="g-b g-mut"      x="800" y="263" text-anchor="middle" font-size="10.5">audit &#183; GridFS files</text>
+
+  <!-- ── edges: the request path ─────────────────────────────────────────── -->
+  <g fill="none" stroke="#131C1B" stroke-width="1.8">
+    <line x1="150" y1="245" x2="226" y2="245" marker-end="url(#w-ai)"/>
+    <line x1="390" y1="245" x2="466" y2="245" marker-end="url(#w-ai)"/>
+    <line x1="630" y1="245" x2="706" y2="245" marker-end="url(#w-ai)"/>
+  </g>
+  <text class="g-m g-ink" x="182" y="236" text-anchor="middle" font-size="11">HTTPS</text>
+  <text class="g-b g-mut" x="182" y="262" text-anchor="middle" font-size="10.5">Ingress</text>
+  <text class="g-m g-ink" x="428" y="236" text-anchor="middle" font-size="11">axios</text>
+  <text class="g-b g-mut" x="428" y="262" text-anchor="middle" font-size="10.5">+ JWT</text>
+  <text class="g-m g-ink" x="668" y="236" text-anchor="middle" font-size="11">motor</text>
+
+  <!-- ── edges: outside services ─────────────────────────────────────────── -->
+  <g fill="none" stroke="#10695C" stroke-width="1.8">
+    <polyline points="85,200 85,102 226,102" marker-end="url(#w-aa)"/>
+    <polyline points="500,200 500,102 394,102" marker-end="url(#w-aa)"/>
+    <polyline points="580,200 580,102 636,102" marker-end="url(#w-aa)"/>
+    <line x1="310" y1="290" x2="310" y2="366" marker-end="url(#w-aa)"/>
+  </g>
+  <text class="g-m g-acc" x="98"  y="94" font-size="11">widget</text>
+  <text class="g-m g-acc" x="402" y="94" font-size="11">siteverify</text>
+  <text class="g-m g-acc" x="586" y="94" font-size="11">emails</text>
+  <text class="g-m g-acc" x="322" y="332" font-size="11">OIDC sign-in</text>
+  <text class="g-b g-mut" x="322" y="348" font-size="10.5">the browser is</text>
+  <text class="g-b g-mut" x="322" y="362" font-size="10.5">redirected there</text>
+
+  <!-- ── Anvil S3 ────────────────────────────────────────────────────────── -->
+  <rect x="20" y="520" width="280" height="306" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="160" y="548" text-anchor="middle" font-size="13">Anvil S3</text>
+  <text class="g-m g-mut"      x="160" y="568" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
+  <text class="g-m g-ink" x="38" y="602" font-size="10.5">snapshots/  model-inputs/</text>
+  <text class="g-m g-ink" x="38" y="620" font-size="10.5">spools/  wbm-code/  containers/</text>
+  <line x1="38" y1="640" x2="282" y2="640" stroke="#8A9997" stroke-width="0.8"/>
+  <text class="g-b g-mut" x="38" y="662" font-size="10.5">the backend holds no S3 credentials:</text>
+  <text class="g-b g-mut" x="38" y="678" font-size="10.5">it reads anonymously and hands out links</text>
+
+  <!-- ── Anvil HPC ───────────────────────────────────────────────────────── -->
+  <text class="g-m g-ink g-cap" x="388" y="532" font-size="11.5">ANVIL HPC</text>
+  <rect x="380" y="540" width="540" height="286" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+
+  <rect x="396" y="566" width="254" height="66" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="523" y="590" text-anchor="middle" font-size="12">login node</text>
+  <text class="g-b g-mut"      x="523" y="608" text-anchor="middle" font-size="10.5">SSH + SFTP endpoint</text>
+  <text class="g-b g-mut"      x="523" y="622" text-anchor="middle" font-size="10.5">service account</text>
+
+  <rect x="396" y="668" width="254" height="146" rx="3" fill="none" stroke="#8A9997" stroke-width="1.2" stroke-dasharray="6 5"/>
+  <text class="g-m g-bd g-ink" x="408" y="686" font-size="11.5">SLURM compute</text>
+
+  <rect x="408" y="696" width="230" height="50" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="420" y="713" font-size="11">run job</text>
+  <text class="g-b g-mut"      x="420" y="728" font-size="10">toolkit: snapshot fetch, sim run</text>
+  <text class="g-b g-mut"      x="420" y="740" font-size="10">pinned commit (ADR 0025)</text>
+
+  <rect x="408" y="756" width="230" height="50" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="420" y="773" font-size="11">publish job</text>
+  <text class="g-b g-mut"      x="420" y="788" font-size="10">toolkit: snapshot publish</text>
+  <text class="g-b g-mut"      x="420" y="800" font-size="10">under an id minted first (ADR 0031)</text>
+
+  <rect x="730" y="566" width="174" height="248" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="817" y="590" text-anchor="middle" font-size="12">scratch (GPFS)</text>
+  <text class="g-b g-mut"      x="817" y="612" text-anchor="middle" font-size="10.5">a run's output stays here</text>
+  <text class="g-b g-mut"      x="817" y="628" text-anchor="middle" font-size="10.5">until published (ADR 0023)</text>
+  <text class="g-b g-mut"      x="817" y="656" text-anchor="middle" font-size="10.5">job directories, logs</text>
+  <text class="g-b g-mut"      x="817" y="684" text-anchor="middle" font-size="10.5">caches of snapshots,</text>
+  <text class="g-b g-mut"      x="817" y="700" text-anchor="middle" font-size="10.5">model inputs, spools</text>
+
+  <!-- ── edges: FastAPI to Anvil ─────────────────────────────────────────── -->
+  <line x1="560" y1="290" x2="560" y2="562" stroke="#131C1B" stroke-width="1.8" marker-end="url(#w-ai)"/>
+  <text class="g-m g-ink" x="572" y="380" font-size="11.5">SSH + SFTP</text>
+  <text class="g-b g-mut" x="572" y="397" font-size="10.5">one connection, kept open (slurmly)</text>
+  <text class="g-b g-mut" x="572" y="413" font-size="10.5">SSH: sbatch, squeue, sacct, scancel,</text>
+  <text class="g-b g-mut" x="572" y="427" font-size="10.5">openghm output and state</text>
+  <text class="g-b g-mut" x="572" y="443" font-size="10.5">SFTP: logs, a run's output as a ZIP,</text>
+  <text class="g-b g-mut" x="572" y="457" font-size="10.5">the metadata a publish job reads</text>
+
+  <!-- ── edges: Anvil S3 ─────────────────────────────────────────────────── -->
+  <polyline points="490,290 490,490 160,490 160,516" fill="none" stroke="#131C1B" stroke-width="1.8" marker-end="url(#w-ai)"/>
+  <text class="g-m g-ink" x="170" y="466" font-size="11.5">reads, public HTTPS</text>
+  <text class="g-b g-mut" x="170" y="482" font-size="10.5">init, published output, tree files</text>
+  <polyline points="60,290 60,516" fill="none" stroke="#131C1B" stroke-width="1.8" marker-end="url(#w-ai)"/>
+  <text class="g-m g-ink" x="70" y="372" font-size="11.5">downloads</text>
+  <text class="g-b g-mut" x="70" y="388" font-size="10.5">by following links,</text>
+  <text class="g-b g-mut" x="70" y="402" font-size="10.5">not through the API</text>
+
+  <!-- ── edges: inside Anvil ─────────────────────────────────────────────── -->
+  <g fill="none" stroke="#131C1B" stroke-width="1.8">
+    <line x1="523" y1="632" x2="523" y2="664" marker-end="url(#w-ai)"/>
+    <line x1="300" y1="721" x2="404" y2="721" marker-end="url(#w-ai)"/>
+    <line x1="404" y1="781" x2="304" y2="781" marker-end="url(#w-ai)"/>
+    <line x1="638" y1="721" x2="726" y2="721" marker-end="url(#w-ai)"/>
+    <line x1="726" y1="781" x2="642" y2="781" marker-end="url(#w-ai)"/>
+  </g>
+  <line x1="650" y1="599" x2="726" y2="599" stroke="#131C1B" stroke-width="1.8" marker-start="url(#w-ai)" marker-end="url(#w-ai)"/>
+  <text class="g-m g-mut" x="533" y="652" font-size="10.5">sbatch</text>
+  <text class="g-m g-ink" x="352" y="712" text-anchor="middle" font-size="11">reads</text>
+  <text class="g-b g-mut" x="352" y="740" text-anchor="middle" font-size="10.5">HTTPS</text>
+  <text class="g-m g-ink" x="352" y="772" text-anchor="middle" font-size="11">writes</text>
+  <text class="g-b g-mut" x="352" y="800" text-anchor="middle" font-size="10.5">s3cmd</text>
+  <text class="g-m g-ink" x="688" y="712" text-anchor="middle" font-size="11">writes</text>
+  <text class="g-m g-ink" x="688" y="772" text-anchor="middle" font-size="11">reads</text>
+  <text class="g-m g-ink" x="688" y="590" text-anchor="middle" font-size="11">SFTP</text>
+</g>
+</svg>

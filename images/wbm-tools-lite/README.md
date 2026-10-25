@@ -102,7 +102,7 @@ and `spatial` needs `-f <cache.key>` (the v2 deployment lacks `DataID_DB.csv` an
 
 - `test/incontainer_smoke.sh` — module load, `perl -c`, usage, baked Inline cache.
 - Local `networkTools` preclip (`test/preclip_test.init` + `test/data/05min_flwdir.tif`)
-  → **120×96**, NoData 247 (matches `docs/wbm_utilities_scripts.md` §5.2).
+  → **120×96**, NoData 247 (matches `docs/wbm_utilities_scripts.md` §5.2 in the archived `toolkits` checkout, not in this repository).
 - `test/test_lite.slurm` — full golden tests on a compute node: preclip 120×96,
   spatial 51 polygons × 10 layers, temporal 3 yearly files.
 

@@ -3,7 +3,7 @@
 Lightweight Singularity/Apptainer containers that replace the heavy original
 WBM images, plus the harness that verifies them. One directory per image;
 `verification/` is the single exception and is not an image
-(see [ADR 0010](../devdocs/decisions/0010-repository-layout.md)).
+(see [ADR 0010](../docs/decisions/0010-repository-layout.md)).
 
 Full background, version pins and bit-identity method: `wbm_lite_container.md`
 in the `toolkits` checkout, which is this directory's archive — it is not in

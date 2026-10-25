@@ -4,10 +4,11 @@ How a simulation avoids computing what is already published or already
 computed: the snapshot's own output, its saved run state, and the spool of
 warped inputs.
 
-**Status: target**, except where a section says it is built. A draft the
-snapshot answers is no longer queued (section 3, built 2026-10-05); every other
-submitted draft runs WBM from an empty run state into an empty spool, start to
-finish (section 1). The reasoning is
+**Status: built** for two of the three kinds of run: a draft the snapshot answers
+is not queued (section 3, "Published"), and every other submitted draft shares a
+spool with the runs before it (section 4). **Target**: a run that continues from
+the snapshot's saved state (section 3, "Continue"), which today starts from an
+empty run state, spinup included. The reasoning is
 [ADR 0029](../decisions/0029-a-run-computes-only-what-is-not-published.md)
 (accepted 2026-10-05); the gateway as it runs is [gateway.md](gateway.md).
 
@@ -21,7 +22,9 @@ A gateway job runs `openghm snapshot fetch` and then `openghm sim run
 (`packages/openghm/src/openghm/fetch.py`, `EXCLUDED_DIRS`), and `sim run` gives
 every run an empty `WBM_run_state/`. So WBM computes every day of the spinup
 and the run; it warps only the inputs the shared spool cache does not already
-hold (§4).
+hold (§4). A run that SLURM stopped at its time limit is the one case that starts
+from saved state, its own ([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md),
+[gateway.md](gateway.md)); that continuation is not the snapshot's.
 
 What a draft can change today is narrower than WBM's init. The wizard bounds the run
 period to the snapshot's `simulation.temporalCoverage`, the output variables are chosen
@@ -30,13 +33,15 @@ refused (`unsupported_fields`, open item 9). Custom model parameters are not ref
 they run, through the changes file ([gateway.md](gateway.md), "Jobs"). So **a run the
 gateway submits asks for output the snapshot already carries**, with two exceptions.
 A draft can ask for WBM's climatology, which no published snapshot holds (the
-post-processing choice, [gateway.md](gateway.md)), and a draft with custom parameters
+post-processing choice, [gateway.md](gateway.md); the gateway keeps it switched off
+by default, `CLIMATOLOGY_ENABLED`), and a draft with custom parameters or a dataset
+copy (a fork, [ADR 0039](../decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md))
 changes the model, so the published output does not answer it. Apart from those, a draft
 asks for a period inside the published one and variables among the published
 ones. Such a draft is now answered from that output instead of run (section 3),
 unless the person asks for a rerun. A draft that asks for climatology is not
 answered by a snapshot whose own init did not (`climatology_not_published`), and a draft
-with custom parameters is not answered at all (`custom_params`), so each runs.
+with custom parameters or a fork is not answered at all (`custom_params`), so each runs.
 
 The cost of that, measured on Anvil (toolkit README, "WBM threads" and the
 spool measurement after it): a published Global run is 20 simulated years
@@ -60,7 +65,11 @@ the snapshot layout.
   computes only the added days (tutorial step 5c). A `Spinup` block with
   `State_ID => '<other ID>'` starts a new run from another run's saved state, so
   it has no spinup of its own (step 5d). `-rm` deletes the state and the output
-  and starts over.
+  and starts over. A run that SLURM stopped resumes the same way, from its own
+  state, which is how a run longer than one job is carried on
+  ([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md));
+  WBM ends such a resume early when `Run_End` falls inside the spinup's dates
+  ([open item 26](../reference/open-items.md)).
 - **Spool.** A day's input is read from
   `spool/<network file name>/<dataset ID>/<date>.dat` when that file exists, and
   otherwise warped from the source and written there (`read_dateLayer`). The
@@ -79,7 +88,7 @@ from fields it already holds.
 |---|---|---|
 | **Published** | same model input, domain and parameters as the snapshot; period inside the published one; variables among the published ones; no climatology unless the snapshot's init asked for it | nothing; the draft is answered by the snapshot's `wbm_output/` |
 | **Continue** | as Published, but the period ends after the published end | WBM from the snapshot's end-of-run state, for the added years only |
-| **Compute** | anything else: custom model parameters (a draft's `custom_params`, which run today), and another model input or domain (once open item 9 allows them) | WBM from an empty state, spinup included, as today |
+| **Compute** | anything else: custom model parameters or a dataset copy (a draft's `custom_params` and `forks`, which run today), and another model input or domain (once open item 9 allows them) | WBM from an empty state, spinup included, as today |
 
 ### Published
 
@@ -93,7 +102,7 @@ does not say which yet.
 
 ### Continue
 
-The run starts on the day after the published end, from the published
+Not built. The run starts on the day after the published end, from the published
 end-of-run state, and writes only the added years. The result is shown as the
 published years plus the added ones.
 

@@ -1,8 +1,8 @@
 # Authentication and authorization — architecture
 
 **Status: built.** Every mechanism below exists in the code today. CILogon has
-run against the real provider locally, for connect and sign-in; nothing has run
-it on `dev` yet (§3). Registration values and setup steps are in
+run against the real provider locally, for connect and sign-in; `dev` is
+configured with a client of its own and `prod` with none (§3). Registration values and setup steps are in
 `ops/docs/reference/external-services.md` (private); this
 page is the shape.
 
@@ -24,17 +24,22 @@ permissions are their own enum in `web-gateway/backend/app/core/roles.py`:
 
 ```
 guest  repository:view
-user   + job:submit, job:view:own, job:cancel:own
+user   + job:submit, job:view:own, job:cancel:own, job:edit:own, job:delete:own
 staff  + job:view:any, job:cancel:any, user:view:any
 admin  + user:manage, repository:manage, system:view, system:manage, content:manage
 ```
 
 `ROLE_PERMISSIONS` is the whole policy, in one file, as frozensets. "Who can
 view any job" and "who can manage users" stay independent axes instead of an
-org-chart rank baked into every call site. `repository:manage` is defined and
-no endpoint uses it — the catalogue is seed data
-([gateway.md §4](gateway.md#4-where-state-lives)). `content:manage` gates every
-write to the Community page (`/admin/community`).
+org-chart rank baked into every call site. Staff can see and cancel any job but
+not edit or delete one: a snapshot draft is private work, and `job:view:any` does
+not imply a right to change it. `repository:manage` gates the two routes that
+register a catalogue document by hand (`POST /repository/datasets` and
+`/model-inputs`) and lets an admin publish another person's draft
+([gateway.md](gateway.md#publishing-a-second-job-under-an-id-minted-first)).
+`system:view` gates the System page and the Anvil scratch read, `system:manage`
+clearing the spool cache. `content:manage` gates every write to the Community
+page and the home page's feed (`/admin/community`, `/admin/home`).
 
 **Running a simulation needs more than a role**
 ([ADR 0024](../decisions/0024-who-may-run-a-simulation.md)). Every simulation spends
@@ -52,7 +57,7 @@ not trust the token. They read the user's document at call time, through
     on the user's page; the stored field keeps its name).
     Only an admin sets that flag, on `PATCH /users/{id}`, and the change is
     audited as `user_admin_updated`.
-  - no more than `JOB_MAX_ACTIVE_PER_USER` active jobs. Admin and staff are
+  - no more than `JOB_MAX_ACTIVE_PER_USER` (2) active jobs. Admin and staff are
     exempt.
 - **A mock identity** (`security.py`'s `MOCK_USERS`) never submits, in any
   environment, even if a user document carries its id. It has no document
@@ -66,7 +71,7 @@ not trust the token. They read the user's document at call time, through
   as a missing one. Staff and admin see and cancel through `job:view:any` and
   `job:cancel:any`.
 
-The frontend's `proxy.ts` also gates `/dashboard` and `/admin`, but that is a
+The frontend's `web-gateway/frontend/proxy.ts` also gates `/dashboard` and `/admin`, but that is a
 redirect for the user's benefit. Nothing is authorized there. It keeps the query
 in `callbackUrl`, and treats a session whose refresh failed (`session.error`) as
 signed out. The one exception is a server action from a page that is already
@@ -88,7 +93,9 @@ draft page shows the same card when the backend answers 401 to its first read.
    locally. Works in every environment. A payload that no longer parses (a role
    renamed since the token was minted, say) is a 401, not a 500.
 2. **`X-Mock-Role: admin|staff|user|guest`** — password-free login, honoured
-   **only** when `ENVIRONMENT=development` **and** `ALLOW_MOCK_AUTH=true`.
+   **only** when `ENVIRONMENT=development` **and** `ALLOW_MOCK_AUTH=true`. The
+   frontend (`getBackendAuth()` in `web-gateway/frontend/lib/api-client.ts`) sends it
+   only under `next dev`, for a session that carries no backend token.
 3. Otherwise 401.
 
 The two flags are separate on purpose. `ENVIRONMENT=development` also selects
@@ -119,7 +126,7 @@ The forms check the same length first, for a quicker answer.
 
 **Failed password sign-ins are throttled in Mongo.** `POST /auth/login` records
 each wrong password, and each attempt for an address with no password account, in
-`login_failures` (`app/core/login_throttle.py`; a TTL index on `expires_at` reaps
+`login_failures` (`web-gateway/backend/app/core/login_throttle.py`; a TTL index on `expires_at` reaps
 them). Within 15 minutes, 10 failures for one email, or 50 for one client IP, make
 the next attempt a 429 before the password is looked at, so a correct one does not
 get through; blocked attempts are not counted and are audited as `login_throttled`
@@ -140,7 +147,7 @@ model that carries one uses `LowercaseEmail`
 (`web-gateway/backend/app/models/user.py`), because `users.email` is the unique
 key and is looked up by equality: `Ada@Purdue.edu` and `ada@purdue.edu` would
 otherwise be two accounts. `main.py` lowercases the addresses stored before that
-at every startup (`app/core/account_startup.py`). Two accounts that would collide
+at every startup (`web-gateway/backend/app/core/account_startup.py`). Two accounts that would collide
 once lowercased are left exactly as they are, and a warning names both ids.
 
 Sign-in goes through NextAuth's credentials provider, server-side. A refusal
@@ -162,6 +169,15 @@ through `register`. Every email is built from one layout,
 `web-gateway/backend/app/services/email_templates.py`, with an HTML and a
 plain-text part.
 
+**Link lifetimes.** A password-reset link lasts 1 hour; a verification link and a
+confirm-link link last 24. `POST /auth/resend-verification` (the profile's
+verification notice) mails a new verification link at most once a minute (429
+with the seconds to wait) and answers 400 for an address already verified. A
+signed-in user changes their password with `POST /auth/change-password`, which
+needs the current one (401 when wrong, 400 for an account with no password) and
+signs out every *other* device while the calling one gets fresh tokens; a reset
+signs out all of them.
+
 ### CILogon
 
 CILogon, an OIDC broker in front of many identity providers (Purdue, ORCID,
@@ -169,7 +185,8 @@ Google), works the way "Sign in with Google" does on an ordinary site
 ([ADR 0035](../decisions/0035-cilogon-is-ordinary-sso.md)): an identity is
 connected to one account, and a connected identity signs in to it. It has run
 against the real provider locally, for sign-in and for connecting from the
-profile. Nothing has run it on `dev`.
+profile. `dev` sets a client id and `prod` leaves it empty, so CILogon is
+offered on `dev` only.
 
 Two halves, both in the gateway:
 
@@ -195,7 +212,7 @@ which is why it is empty by default rather than having a guessable placeholder.
 **An account holds at most one identity.** `sso_provider`, `sso_external_id`
 (CILogon's `sub`, never sent to a browser) and `sso_email` are fields of the
 `users` document, and a unique index on `sso_external_id`, partial over strings
-(`app/core/account_startup.py`; `deploy/local/mongo/init-mongo.js` seeds the same
+(`web-gateway/backend/app/core/account_startup.py`; `deploy/local/mongo/init-mongo.js` seeds the same
 one), keeps an identity on one account. `sso_email` is the address CILogon gave
 on the identity's last sign-in. It may differ from the account's `email`, and the
 profile shows it so the owner can tell which identity is connected.
@@ -206,7 +223,7 @@ profile shows it so the owner can tell which identity is connected.
 
 1. **The identity is connected to an account**: sign in to that account. The
    session's id, name and email are the account's, taken from the backend's
-   answer in the `signIn` callback of `lib/auth.ts`; the CILogon profile never
+   answer in the `signIn` callback of `web-gateway/frontend/lib/auth.ts`; the CILogon profile never
    supplies them. `sso_email` is refreshed to what CILogon gave this time.
 2. **The identity is unknown and CILogon gave an email that an account holds**
    (compared lowercase): connect the identity to that account and sign in,
@@ -356,3 +373,34 @@ in the private ops repository)**, which carries
 existing single-field refresh tokens into the collection. Skip it and everyone
 signed in at deploy time is silently signed out. A fresh environment does not
 need it — there is nothing to carry.
+
+## 5. Accounts and who manages them
+
+A `users` document holds the account: `email` (unique, lowercase), `name`,
+`organization`, `role`, `is_active`, `email_verified`, `can_run_simulations`, the
+password hash and the CILogon fields (§3).
+
+- **Self-service.** `GET /users/me` returns the profile with how the account
+  signs in; `PATCH /users/me` changes only `name` and `organization`, because its
+  model has no `role`. The profile page (`/dashboard/profile`) adds the sign-in
+  methods card, the signed-in devices (§4), the verification notice with its
+  resend button, and Connect and Disconnect CILogon (§3).
+- **Directory.** `GET /users` (`role`, `is_active`, and `q`, a case-insensitive
+  substring of email or name; at most 100 a page) and `GET /users/{id}` (adding
+  the live session count, the account's jobs by status and its last sign-in) need
+  `user:view:any`: staff and admin.
+- **Changes.** `PATCH /users/{id}` needs `user:manage`: `role`, `is_active`,
+  `can_run_simulations`, or `email_verified: true` (never false). It never
+  targets the caller's own account, for any field (400), and it refuses to take
+  the last active admin out of the role or deactivate them (400). Deactivating
+  revokes every session at once; each change is audited as `user_admin_updated`.
+  A deactivated account cannot sign in or refresh (401), and the routes that
+  read the user's document (a snapshot draft's creation, a submit, a publish)
+  refuse it as `account_inactive`; a read with an access token that has not
+  expired yet still works, since reads trust the token (60 minutes at most).
+- **The admin console.** `/admin` opens for staff and admin; any other role sees
+  a page that says so. Staff get Overview, Users, Simulations and the Audit log,
+  read-only: a user's role and status controls and their device list are the
+  admin's. Admin also gets System (`system:view`), and Home and Community
+  (`content:manage`). The frontend hides what a role cannot use, and the backend
+  decides again on every call ([gateway.md §7](gateway.md#7-audit-log)).

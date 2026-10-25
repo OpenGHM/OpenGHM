@@ -17,20 +17,42 @@ reCAPTCHA, email — are in
 
 | | |
 |---|---|
-| `web-gateway/frontend/` | Next.js 16 (App Router), React 19 |
-| `web-gateway/backend/` | FastAPI, Python 3.11+, async throughout |
+| `web-gateway/frontend/` | Next.js 16 (App Router), React 19; the image runs Node 20, `output: "standalone"` |
+| `web-gateway/backend/` | FastAPI, async throughout; the image is `python:3.12-slim` |
 
 They deploy together, from one commit, into one namespace
 ([repository-layout.md](repository-layout.md)). There is no third service.
 
 ## 2. The request path
 
-```
-browser  ──▶  Next.js server  ──▶  FastAPI  ──▶  MongoDB
-                    │                  │
-                    │                  └──▶  Anvil (SSH) ──▶ SLURM
-                    └──▶  CILogon / Google reCAPTCHA
-```
+![The gateway at run time](diagrams/img/gateway_topology.png)
+
+*The browser reaches only the Next.js server; FastAPI has no Ingress. Everything
+outside the namespace is reached by FastAPI, except CILogon (the Next.js server)
+and the links the browser follows itself. Source:
+[`diagrams/gateway_topology.svg`](diagrams/gateway_topology.svg).*
+
+What each arrow is:
+
+- **MongoDB** is the only state the gateway owns (§4); the backend reaches it with
+  motor, and nothing else in the cluster does.
+- **Anvil, over one SSH connection** opened lazily by the backend
+  (`web-gateway/backend/app/services/slurm.py`, one `slurmly` client, at most
+  `ANVIL_MAX_CONCURRENT_COMMANDS` commands at a time): `sbatch`, `squeue`, `sacct`,
+  `scancel`, the toolkit commands for output and the scratch cache, and **SFTP** for
+  log tails, output subsets and run-output ZIPs (§5). Jobs that run there upload to S3
+  with their own credentials; the backend never does.
+- **Anvil S3 over public HTTPS** is read anonymously by the backend in small pieces
+  (§5), and by the browser through the links the backend builds.
+- **CILogon** is reached by the frontend only: NextAuth does the OIDC handshake and
+  hands the backend a verified identity; the backend never contacts CILogon
+  ([authentication.md](authentication.md#cilogon)).
+- **reCAPTCHA**: the register page loads Google's widget in the browser; the backend
+  verifies the token (`web-gateway/backend/app/services/recaptcha.py`) and lets a
+  registration through when Google cannot be reached.
+- **Resend** sends verification, password-reset and account-linking email from the
+  backend (`web-gateway/backend/app/services/email.py`); with no key it logs instead.
+- **Redis** is not in the path: nothing reads `REDIS_URL` (§6).
 
 **The browser never calls FastAPI.** It is enforced by deployment, not
 convention: FastAPI has no Ingress. The Ingress routes `/` to the frontend
@@ -41,7 +63,14 @@ it has nowhere to go.
 
 Authenticated pages fetch on the server through
 `web-gateway/frontend/lib/api-client.ts`, which attaches the backend JWT from
-the NextAuth session.
+the NextAuth session; only the open reads (the Data Repository, the Community page, the home feed) pass `allowAnonymous`,
+and with no session any other call fails as a 401 before it leaves the server.
+What a server action cannot carry goes through a Route Handler that streams the
+backend's answer on, under `web-gateway/frontend/app/api/`: `jobs/[id]/logs/` and
+`jobs/[id]/files/` (the run's logs and output ZIP), `repository/…` (a published
+tree's files and ZIP, the WBM output subset), `community/files/[id]` (public CMS
+media, no session sent) and the admin's upload to the media library.
+`auth/[...nextauth]` is NextAuth itself.
 
 Five pages cannot do that, because they run before there is a session:
 `register`, `verify-email`, `forgot-password`, `reset-password` and
@@ -94,8 +123,29 @@ client component. While it is `"false"`:
   exist still work, so the admin console's job list keeps working.
 
 Every page also carries the development notice
-(`components/layout/development-notice.tsx`), a strip above the header. It
-stays until the first release.
+(`web-gateway/frontend/components/layout/development-notice.tsx`), a strip above the header. It
+stays until the first release. The header's Resources item (Models, Toolkit) is a
+Coming soon chip with no link in every deployment: it has no pages yet.
+
+**The pages.** Everything is server-rendered at request time (the root layout is
+`force-dynamic`); the sign-in rules are above and in
+[authentication.md](authentication.md).
+
+| Address | Is | Signed in? |
+|---|---|---|
+| `/` | home: the hero, the "Latest Snapshots & News" feed (§4) and the project's introduction sections | no |
+| `/repository`, `/repository/[id]`, `/repository/[id]/files`, and the same under `/repository/model-inputs/[id]` | the Data Repository: catalogue, a snapshot's or model input's page, its file browser (§4, §5) | no |
+| `/community`, `/community/workshops/[slug]`, `/community/tutorials/[slug]`, `/news`, `/news/[slug]`, `/about` | the Community page and its detail pages, news, About (§4) | no |
+| `/auth/signin`, `register`, `verify-email`, `forgot-password`, `reset-password`, `confirm-link`, `complete-profile` | sign-in and the account flows ([authentication.md](authentication.md)); the sign-in page's dev quick-login buttons exist only under `next dev` | no |
+| `/workspace` | My snapshot drafts: the list, with status tabs, search, sort and paging | yes, in place |
+| `/workspace/new`, `/workspace/new/[datasetId]` | the draft wizard: choose a snapshot, then Run settings and Review & submit (§4) | yes, in place |
+| `/workspace/[id]` | a stored draft in the wizard while it is a `DRAFT`, else the job page (§5) | yes, in place |
+| `/workspace/data` | Snapshots & Inputs: what the caller published, from `GET /repository/mine`, narrowed in the browser by `?kind=snapshot\|model-input` | yes, in place |
+| `/dashboard/profile` | the account page: details, sign-in methods, signed-in devices, verification notice | redirected |
+| `/admin/...` | the admin console: Overview, Users, Simulations, Audit log, System, Home, Community | redirected; staff or admin ([authentication.md §5](authentication.md#5-accounts-and-who-manages-them)) |
+| `/workspace-unavailable` | what every `/workspace` address shows while `WORKSPACE_ENABLED` is `"false"` | no |
+| `/dev/workspace/[state]` | the job page drawn from fixtures for each status and failure cause, with nothing polled or sent; a 404 in a production build | yes |
+
 
 ## 3. The stack, as built
 
@@ -105,23 +155,26 @@ expects are deliberately absent, and §6 says which.
 | Layer | What is actually there |
 |---|---|
 | Frontend | Next.js 16.3.8, React 19.2.3, App Router |
-| UI | Tailwind CSS 4, shadcn/ui on radix-ui, `sonner` toasts, `next-themes` |
-| Client state | Zustand |
+| UI | Tailwind CSS 4, shadcn/ui on radix-ui, Geist fonts through Next's font loader, `sonner` toasts (restyled as the site's own card), no theme switch, `@dnd-kit` for reordering in the CMS |
+| Client state | React state and hooks; no store library |
 | Rich text | Tiptap 3 (`@tiptap/react`, StarterKit, Image, Placeholder), in the admin CMS only; the public pages render its JSON with their own components ([ADR 0034](../decisions/0034-community-content-lives-in-the-gateway-database.md)) |
 | Maps and charts | Leaflet + react-leaflet for bounding boxes. **No chart library** — `web-gateway/frontend/components/charts/` holds two hand-written components that render on the server with zero client JS |
 | Frontend auth | NextAuth v5 (Auth.js) |
 | Frontend → backend | axios, server-side only |
-| Backend | FastAPI 0.115, uvicorn, pydantic 2 / pydantic-settings |
-| Database driver | motor (async pymongo) |
+| Backend | FastAPI 0.115, uvicorn, pydantic 2 / pydantic-settings; PyYAML reads the WBM parameter tree (`web-gateway/backend/app/wbm_init/param_tree.yaml`) |
+| Database driver | motor (async pymongo), GridFS for the Community uploads |
+| HTTP client | httpx — the anonymous S3 reads and the reCAPTCHA check; no S3 client |
 | Tokens | `python-jose` for JWTs, `bcrypt` for passwords |
-| Email | `resend` — verification, password reset and sign-in linking, one layout in `app/services/email_templates.py` |
+| Email | `resend` — verification, password reset and sign-in linking, one layout in `web-gateway/backend/app/services/email_templates.py` |
 | HPC | `slurmly`, pinned to a git commit; not on PyPI |
 
 ## 4. Where state lives
 
-One MongoDB database, `openghm`. Twelve collections and one GridFS bucket, and
-every index on them is created at startup in `web-gateway/backend/main.py` —
-that file is the schema, in the sense that nothing else declares one.
+One MongoDB database, `openghm`. Fourteen collections and one GridFS bucket, and
+every index on them but GridFS's own is created at startup in
+`web-gateway/backend/main.py` (the unique one on `users.sso_external_id` through
+`web-gateway/backend/app/core/account_startup.py`) — that file is the schema, in the sense that nothing
+else declares one.
 
 | Collection | Holds |
 |---|---|
@@ -129,6 +182,7 @@ that file is the schema, in the sense that nothing else declares one.
 | `jobs` | one document per **snapshot draft** — editing or submitted, including the SLURM ids once it runs |
 | `refresh_tokens` | one document per signed-in device, TTL-reaped |
 | `pending_sso_signups` | half-finished SSO steps: sign-ups for a provider that gave no email (30 minutes) and connect intents from the profile (10 minutes), TTL-reaped |
+| `login_failures` | one document per failed password sign-in, by email and by client IP, TTL-reaped after 15 minutes: the sign-in throttle ([authentication.md](authentication.md#email-and-password)) |
 | `audit_events` | append-only, `auth`, `job`, `system` and `content` categories |
 | `datasets` | the browsable catalogue of published snapshots |
 | `model_inputs` | the same, for published model inputs ([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)) |
@@ -163,20 +217,16 @@ signed-in user, newest `registered_at` first, and it feeds the Workspace's
 Snapshots & Inputs section. Each item carries its envelope's `visibility`
 (`"public"` or `"private"`) and `registeredAt` beside the catalogue fields.
 Freezing and visibility are separate: a snapshot is immutable once published
-whichever it is. Nothing filters on `visibility` and nothing can change it
-yet; every envelope is `"public"`. Every write path — the
-`POST` routes and `resync_published.py` — still writes `owner_user_id: null`
-(`resync_published.py` keeps an existing one), so nothing sets an owner
-except by hand until the publish path exists.
+whichever it is. Only the home feed filters on `visibility` (it leaves out
+`"private"`), and nothing can set it yet; every envelope is `"public"`. Who owns an
+envelope depends on how it got there: the gateway's own publish (§5) writes the
+draft's owner, while the two manual `POST` routes and the maintainers' resync of the
+three published snapshots (a script in the private ops repository) write
+`owner_user_id: null`, which only a hand edit changes.
 
-`POST /api/v1/repository/datasets` is the write path; Mongo's unique `_id`
+`POST /api/v1/repository/datasets` is the manual write path; Mongo's unique `_id`
 rejects a repeat of the same snapshot with `409` rather than silently
-overwriting it, which would break rule 1. Before the write path existed at
-all, a seed function reset the collection to three hard-coded documents on
-every startup, carrying real researchers' names and emails as demo data —
-not appropriate for a public instance — and was the collection's *only*
-writer, so removing it rather than scrubbing it left nothing behind until
-this write path replaced it.
+overwriting it, which would break rule 1.
 
 A `jobs` document is a **snapshot draft** ([ADR 0030](../decisions/0030-what-a-person-creates-is-a-snapshot-draft.md)):
 mutable while its `status` is `DRAFT` (shown as "Editing"), read-only from the
@@ -187,8 +237,8 @@ that is not a guest (`require_active_user`): `POST /api/v1/jobs/derive/{dataset_
 pre-fills it from a published snapshot's parameters, and
 `POST /api/v1/jobs/{id}/duplicate` copies the settings of one of the caller's
 own snapshot drafts, whatever its status (`422 snapshot_not_found` when its snapshot
-has left the repository). Neither starts one from nothing, which would need a
-model-input catalogue the gateway does not have yet. `GET /api/v1/jobs/derive/{dataset_id}`
+has left the repository). Neither starts one from a model input alone: a draft always begins at a published
+snapshot, and the wizard has no model-input start. `GET /api/v1/jobs/derive/{dataset_id}`
 previews the draft the POST would create: it answers with the same fields,
 built by the same code, with an empty `id`, and stores nothing and writes no
 audit event. The new-snapshot-draft screen shows it until the user saves, so the
@@ -203,6 +253,16 @@ simulation · 2000–2001", with the run id beside it in the list. The wizard sa
 "Untitled (<first 8 of the id>)" while the draft is unnamed, and asks for the name
 at the top of Run settings.
 
+**The wizard saves only when asked**
+([ADR 0028](../decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md)).
+`/workspace/new/<snapshot id>` is the wizard over a draft that is not stored: it is
+filled from `GET /jobs/derive/{id}` and creates nothing until the person presses
+**Save as draft** or submits, which derives the draft, sends the edits as one
+`PATCH` and opens the stored draft. A stored draft's **Save draft** button, or
+Ctrl/Cmd+S, writes its edits; nothing saves by itself. While the wizard differs from
+what is stored, a reload, a link out of it and Back or Forward ask first
+(`web-gateway/frontend/lib/workspace/leave-guard.ts`).
+
 `PATCH /api/v1/jobs/{id}` writes only while `status` is `DRAFT`: the update's
 own filter carries the status, so once it has moved past `DRAFT`, or a submit
 lands between the read and the write, the answer is `409 not_a_draft` and a
@@ -213,7 +273,14 @@ fields sent. A start date is checked (below) only when it differs from the
 stored one. An edit writes no audit event.
 
 `DELETE` removes a draft, or a finished job together with its files on Anvil
-(§5); an active job gets `409 job_active`. A snapshot draft and a snapshot are
+(§5); an active job gets `409 job_active`. `GET /api/v1/jobs` lists the caller's
+snapshot drafts, newest change first: `page` and `page_size` (at most 100),
+`status` (a status, or `ACTIVE` for the four live ones), `sort` (`updated`, the
+default, or `created`) and `user_id`. The list is the caller's own even for staff and admin;
+`user_id` naming another owner, or `*` for everyone (what the admin console's
+Simulations page sends), needs `job:view:any` and is a `403` without it.
+`GET /api/v1/jobs/stats` counts them by status, with the same scope, for the list's
+tabs and the console's cards. Another person's draft by id is a `404`. A snapshot draft and a snapshot are
 deliberately not the same document: the spec's `runtime.execution` requires `startedAt`, `finishedAt`
 and `slurmJobId`, none of which a draft can honestly carry, and a
 finished snapshot draft is not itself in `datasets` until someone publishes it —
@@ -562,6 +629,16 @@ to the definition is in the picker without a second edit
 session: the same two item shapes, with `kind`, for what the caller owns, plus
 each item's `visibility` and `registeredAt`. No paging, no facets.
 
+**A snapshot's page** (`/repository/[id]`) lays out the description, the spatial
+coverage map, the output variables, the active processes, related links, a
+citation card, the Download section (§5), the facts of the record and an execution
+card (the pinned code, container and model input, and the run's SLURM record), and
+it carries schema.org `Dataset` JSON-LD. The hero's "Run this snapshot" opens the
+unsaved wizard at Run settings (`/workspace/new/<id>?step=run`); with the Workspace
+off it is a Coming soon chip. A model input's page lists its networks and datasets
+instead. `/snapshots/<id>`, the form a published snapshot's `about.url` takes,
+redirects (temporarily) to `/repository/<id>`.
+
 ### The Community page
 
 Everything on `/community` and its detail pages except the labels is written by
@@ -582,14 +659,15 @@ images and PDFs and `attachment` for the rest).
 **Admin**, under `/api/v1/admin/community`, all needing `content:manage`, which
 only the `admin` role holds: `GET`, `POST`, `GET|PUT|DELETE /{id}` for
 `workshops`, `tutorials`, `publications` and `news`; `POST /tutorials/reorder`;
-`GET|PUT /settings`; `POST` (multipart field `file`), `GET` and `DELETE /{id}`
-on `/files`. A slug already in use is `409 slug_taken`.
+`GET|PUT /settings`; and on `/files`, `POST` (multipart field `file`), `GET` (the
+media library's list) and `DELETE /{id}`. A slug already in use is `409 slug_taken`.
 The lists act on several rows at once: `POST /{workshops|tutorials|publications|news}/bulk`
 with `{"action": "delete" | "publish" | "draft", "ids": [...]}` and
 `POST /files/bulk-delete` with `{"ids": [...]}`, 1 to 200 unique ids each.
 They answer `{"done": [...], "missing": [...]}`: an id with no item is
 reported, not an error, and the rest are still done. `publish` and `draft`
-change only `state`, `updated_at` and `updated_by`.
+change only `state`, `updated_at` and `updated_by` (the console calls the states Visible
+and Hidden).
 Every write is an audit event in the `content` category, `community.<kind>.create`,
 `.update` or `.delete`, `community.tutorial.reorder`, `community.settings.update`,
 `community.file.upload` and `community.file.delete`, with the item's id as its
@@ -607,8 +685,8 @@ The cards on `/` are a feed over three sources, set up by admins in
   (by when they were announced, `created_at`, tag Community Event) and datasets
   whose envelope `visibility` is not `private` (by `registered_at`; title and
   summary are `document.about.name` and `.description`, the link is
-  `/repository/<id>`). A news post's tag is one of `announcement`, `platform`,
-  `dataset`, `event`, `other`. A post with a body has a page `/news/<slug>`;
+  `/repository/<id>`, and the card draws the snapshot's coverage map). A news post's tag is one of `announcement`, `dataset`,
+  `event`, `other`. A post with a body has a page `/news/<slug>`;
   without, its card links to `link_url`; without that, it is not a link.
 - **Settings**, one document in `site_settings`: `title`, `eyebrow`, `count`
   (1 to 12, default 3), `sources` `{news, workshops, datasets}` and `pins`
@@ -666,7 +744,7 @@ anonymously with plain `httpx`, and only in small pieces:
   delimiter, `tree_browse.output_folders`), both kept since a published
   object never changes.
 
-The bucket sends no CORS headers (checked 2026-10-07: a preflight is `403`),
+The bucket sends no CORS headers (a preflight is `403`),
 so the browser cannot list or read it from script; it can only follow a link.
 
 Two read routes return those strings for a published artifact:
@@ -711,7 +789,7 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   lastModified, url, previewable}], nextCursor }`. `nextCursor` is the
   bucket's continuation token, passed through rather than followed, and the
   page offers **Load more** while it is set. No published folder holds more
-  than 366 entries yet (checked 2026-10-07), so paging has run only against
+  than 366 entries yet, so paging has run only against
   a token taken mid-folder. `previewable` is false for a name with a binary
   extension (`.nc`, `.tif`, `.dat` and the like). A published tree is
   immutable, so a non-empty page is kept in the process by prefix and
@@ -757,7 +835,7 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   shows a failed download.
 
 The frontend passes both routes through
-(`app/api/repository/{datasets,model-inputs}/[id]/files/{folder,archive}`).
+(`web-gateway/frontend/app/api/repository/{datasets,model-inputs}/[id]/files/{folder,archive}`).
 Every row of the files page's table and of the output dialog's browser starts
 with a checkbox (the header's ticks the rows loaded so far), and a bar over the
 table totals what is ticked: files at their listed size, a ticked folder by its
@@ -797,8 +875,10 @@ There is no worker and no broker.
 `web-gateway/backend/app/services/slurm.py` holds one lazily created
 `slurmly.SlurmSSHClient` behind an asyncio lock. It runs `sbatch`, `squeue`,
 `sacct`, `scancel` and the SFTP log tail over that one SSH connection, as
-`x-openghm`, with the key from `ANVIL_SSH_KEY_CONTENT`
-(`ops/docs/reference/secrets.md`, private).
+`x-openghm` (`ANVIL_SSH_USERNAME`), with the key from `ANVIL_SSH_KEY_CONTENT`, or
+the file `ANVIL_SSH_KEY_PATH` names (the local stack mounts one,
+[local-development.md](local-development.md)); where the deployed key lives is
+`ops/docs/reference/secrets.md` (private).
 
 **What a job runs** ([ADR 0025](../decisions/0025-a-gateway-job-runs-the-pinned-toolkit.md)).
 slurmly writes the `#SBATCH` lines and its module preamble.
@@ -881,7 +961,7 @@ options (`job_script.render_changes_file`):
 
 Before the fetch the body turns SLURM's requeue off for its own job: Anvil
 requeues a batch job after a node failure (`JobRequeue=1`, `MaxBatchRequeue=5`,
-read on 2026-10-07), and the requeued run would write the same `sim_id` into the
+read from Anvil's SLURM configuration), and the requeued run would write the same `sim_id` into the
 same work directory, over the first attempt's half-written output, while the
 gateway saw one job. slurmly has no `--no-requeue` field, so the body runs
 `scontrol update JobId=$SLURM_JOB_ID Requeue=0` (a failure of it is a warning,
@@ -923,7 +1003,7 @@ SLURM is asked for `--cpus-per-task` and `--time`:
 - the account (`ANVIL_ACCOUNT`) and partition come from settings.
 
 Memory on the `shared` partition comes with the cores, at most 1896 MB per core
-(`MaxMemPerCPU`, read from Anvil on 2026-10-02), and WBM takes at most 8 threads
+(`MaxMemPerCPU`, read from Anvil), and WBM takes at most 8 threads
 (the toolkit passes one per core, so a simulation holding more cores than that leaves the
 rest idle): the snapshot's recommended core count is there for the memory. A simulation given
 fewer cores than that may be killed for running out of memory. The wizard shows a one-line warning for that
@@ -1048,13 +1128,14 @@ nothing deleted, when one cannot be. Who may submit at all is
 Status is pulled, never pushed
 ([ADR 0027](../decisions/0027-live-updates-are-polled.md)). A background
 asyncio task started in the lifespan handler runs a sweep every
-`JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL` seconds (10) while a job is active, and
-every `JOB_BACKGROUND_SYNC_INTERVAL` (60) when none is: one batched
-`get_jobs` for every non-terminal job, then the end-time backfill (below),
-then the orphan `scancel` retries, then the daily purge check. A lookup that
+`JOB_BACKGROUND_SYNC_ACTIVE_INTERVAL` seconds (10) while a job or a publish has a SLURM id and no
+verdict, or an orphaned name is still being cancelled, and every
+`JOB_BACKGROUND_SYNC_INTERVAL` (60) otherwise. Each step is its own `try`, in this order: one batched
+`get_jobs` for every non-terminal job (`sync_active_jobs`); the end-time backfill (below); the
+interrupted submits given back (below); the publish verdicts (`sync_publishes`); interrupted publishes
+(`reconcile_interrupted_publishes`); the orphan `scancel` retries; and the daily purge check. A lookup that
 fails skips the tick, and a job it did not report is only counted absent after a
-`sacct` of the gateway's own shows it gone (`confirm_absent`). The status route settles one job the same way (`update_job_status()`). Between the end-time backfill and the orphan retries the tick gives back
-interrupted submits (below).
+`sacct` of the gateway's own shows it gone (`confirm_absent`). The status route settles one job the same way (`update_job_status()`).
 
 **Watching a job.** `web-gateway/backend/app/services/job_live.py` shares SLURM's answers
 in process for `JOB_LIVE_TTL_SECONDS` (5): the sweep and every viewer's
@@ -1085,7 +1166,7 @@ more `N/M files` counter lines is folded on screen into its last line, with a
 "… N progress lines hidden" mark and a Show button (`foldProgress`); Copy and
 Download still give every line. The only other things
 the box adds are its own separator, note and Retry lines, and colour: lines
-that look like errors are red and warnings amber (`log-severity.ts`, a word
+that look like errors are red and warnings amber (`web-gateway/frontend/lib/workspace/log-severity.ts`, a word
 list, colour only), plus a failed job's reason as the failure card quotes it.
 A job that ran before the toolkit went quiet shows its module notices and
 counter lines as they were written. The three streams are polled one after another,
@@ -1103,7 +1184,7 @@ sentence: the backend's own `message` for a `{code, message}` or plain-string
 
 **The wizard's help panel.** Each screen of the draft wizard (Start from, Run settings, Review &
 submit) has a help panel written for a hydrologist: the step's overview, and on Run settings one block
-per section (name and description, run period, output variables, output, compute). From `xl` (1280 px)
+per section (name and description, run period, output variables, post-processing, model parameters, compute). From `xl` (1280 px)
 the wizard is a two-column grid in the page's column (1360 px at most): the steps take what is left and
 the panel is a 20 rem `sticky` aside 20 px from the top of the viewport, scrolling by itself when it is
 taller than the viewport. Below `xl` a "Help" button beside the step's heading opens the same content in the sheet used
@@ -1122,7 +1203,7 @@ snapshot draft's own name with its status, and once the job has ended the button
 "Duplicate" (a completed job only), "New from this model snapshot" and "Delete
 snapshot draft", which on a phone are one "More actions" menu; in the same navy band as
 the Data Repository's and the wizard's), one status summary
-(`job-status-summary.tsx`) that changes with the live status, the publish card,
+(`web-gateway/frontend/components/workspace/job-status-summary.tsx`) that changes with the live status, the publish card,
 and the Logs. The summary is the only place with a state's main
 action: Cancel simulation while it is queued or running, "Try again with these settings"
 after a failure or a cancel. That button and "Duplicate" are the one copy action
@@ -1130,20 +1211,22 @@ after a failure or a cancel. That button and "Duplicate" are the one copy action
 summary does not. A completed job's results (scratch path, file counts, when
 Anvil may delete them, and "Browse and download files", the run's file browser) sit in the summary, a failed job's cause and log excerpt.
 The facts of the simulation are one "Run details" card
-(`run-details-card.tsx`), styled as the Data Repository's "Snapshot info": the snapshot it is based on
+(`web-gateway/frontend/components/workspace/run-details-card.tsx`), styled as the Data Repository's "Snapshot info": the snapshot it is based on
 (a link), the run period, the output variables and output, the cores and
 walltime the job asked for (the cores its own, else the base snapshot's, and the
 walltime the base snapshot's `recommendedCompute` gives, all worked out as the
 submit does it, `effectiveCompute`, marked as recommended, with the
 post-processing time in the walltime when the job asked for climatology; while
 SLURM has the job, the limit it enforces), the
+model parameters the run changed and the datasets it copied
+([model-parameters.md](model-parameters.md)), the
 Slurm job, the run id, and the times (submitted, started with how long it
 waited, ended with how long it ran, in the viewer's zone, the full date on
 hover). The job document stores no resolved cores or walltime, so the page
 reads the snapshot for them; with no snapshot it shows a dash. Each fact is on
 the page once: the card has the work directory only where the summary has no
 results path. From `xl` (1280 px) the page is a grid like the wizard's
-(`aside-layout.tsx`, in the page's column, 1360 px at most): the card is a
+(`web-gateway/frontend/components/workspace/aside-layout.tsx`, in the page's column, 1360 px at most): the card is a
 20 rem aside beside the status summary, the publish card and the Logs, which
 scrolls with the page; below `xl` it follows the status summary in the page.
 
@@ -1175,10 +1258,7 @@ directory too; the stdout and stderr log routes take `?job=<number>`, while WBM'
 log is one file that every job appends to. Responses carry `previous_jobs` (without
 paths), `job_number`, `max_jobs` and `continuation`. The
 simulation page shows "Job N" and the earlier jobs (never how many it may use), and the log viewer
-has a job picker. Verified on Anvil on 2026-10-18 with the v2 tutorial: a job cut
-at its 8-minute limit (SLURM 21479856) was continued (21479888) and the run's
-daily output was identical to the published files; a 2-minute job that saved no
-state ended `timeout` (`no_new_state`).
+has a job picker.
 
 A simulation may take at most two weeks (`MAX_RUN_SECONDS`, the gateway's own
 limit, decided 2026-10-19), which `MAX_JOBS_PER_SIMULATION` enforces as
@@ -1337,7 +1417,7 @@ draft's owner or an admin may call it.
   A document the generated model refuses is a 422 `invalid_about`. Nothing
   is stored then, and no id is spent.
 - **Submit.** It writes the document over SFTP and sbatches a publish job:
-  `publish-<id>`, 1 task, 2 cores, `PUBLISH_WALLTIME`. The job runs `openghm
+  `publish-<first 12 characters of the id>`, 1 task, 2 cores, `PUBLISH_WALLTIME`. The job runs `openghm
   snapshot publish <work_dir> --metadata … --id <id> --s3cfg
   <ANVIL_S3CFG>`, the run's toolkit at `ANVIL_OPENGHM_HOME`. An `EXIT` trap
   writes `publish-outcome.json`, holding the exit code and the stderr tail,
@@ -1368,7 +1448,8 @@ SLURM job has ended is classified from its outcome file:
 - **`DELETE`** of a draft while it publishes is 409 `publish_in_progress`.
   Deleting a published draft leaves the snapshot, which is its own artifact.
 
-The job page (`publish-card.tsx`, `publish-sheet.tsx`) shows:
+The job page (`web-gateway/frontend/components/workspace/publish-card.tsx` and
+`publish-sheet.tsx`) shows:
 
 - **the form**, warning that the snapshot is public and cannot be changed. It
   starts from the words of the failed attempt, else the draft's own `about`.
@@ -1385,15 +1466,6 @@ The job page (`publish-card.tsx`, `publish-sheet.tsx`) shows:
   names no action and does not repeat the headline.
 
 The list marks a published draft *Published*.
-
-Verified live on 2026-10-07 from draft `8b8e9490…`:
-
-- **A publish** ran SLURM 21154131. `fetch` and `validate` passed on the
-  result, and `runtime.execution` matched `sacct`.
-- **A missing `~/.s3cfg`** gave `publish_setup`, with no retry offered.
-- **A publish job cancelled on Anvil** gave `publish_job_failed`. "Try
-  again" then published under the same id, on attempt 3.
-- **Cleanup.** The test snapshots were deleted afterwards.
 
 ### Reading output — the toolkit cuts, the gateway forwards
 
@@ -1476,7 +1548,7 @@ through, `/api/repository/datasets/{id}/output` and `…/output/subset` (only `v
   folder kept in state rather than the URL, so a look never leaves the page; the files
   page, for a preview, opens in a new tab), and the whole output folder as an `aws s3 sync
   --no-sign-request --endpoint-url <S3_PUBLIC_BASE_URL> s3://<bucket>/snapshots/<id>/wbm_output/<run>/`
-  command (checked 2026-10-14 with aws-cli against Anvil S3). There is no toolkit
+  command. There is no toolkit
   command that fetches the output; `snapshot fetch` leaves it out.
 
 A run's output on scratch has no UI for the subset, maps or series yet; its files have a browser and a ZIP
@@ -1484,7 +1556,7 @@ A run's output on scratch has no UI for the subset, maps or series yet; its file
 
 Every command of the `openghm` toolkit the UI shows (the fetches on the Download
 sections, the subset's "Same file from a script") carries a **Coming soon** chip
-(`components/ui/coming-soon-chip.tsx`), as does the home page's Toolkit feature: the
+(`web-gateway/frontend/components/ui/coming-soon-chip.tsx`), as does the home page's Toolkit feature: the
 command can be read and copied, but the toolkit is not on PyPI yet
 ([its README](../../packages/openghm/README.md#install)). The chips come off when it is
 published.
@@ -1569,13 +1641,15 @@ the admin simulation list and audit log show people rather than ids with one
 query. Every event carries a category,
 because the streams
 have nothing in common: `auth` is low-volume and security-relevant (sign-in
-success and failure, registration, password reset, role and status changes, SSO
-account creation and linking), `job` is operational (a snapshot draft created as
-`simulation_derived` or `simulation_duplicated` (the event ids keep the old word), submission, cancellation, SLURM
-transitions, deletion), `system` is an admin changing shared infrastructure
+success and failure, a throttled sign-in, registration, password reset and change,
+role and status changes, SSO account creation and linking), `job` is operational (a
+snapshot draft created as `simulation_derived` or `simulation_duplicated` (the event
+ids keep the old word), `job_submitted`, `job_cancelled`, `job_status_changed` for
+SLURM transitions, `job_continued`, `job_publish_submitted`, `job_published` and
+`job_publish_failed`, `job_deleted`), `system` is an admin changing shared infrastructure
 (`spool_cache_cleared`, with the counts; a dry run writes nothing), `content` is
-an admin writing the Community page (`community.workshop.create`, the other
-`community.*` actions, listed in §4).
+an admin writing the Community page or the home feed (`community.workshop.create`, the
+other `community.*` actions and `home.*`, listed in §4).
 
 Job-status events are written **only at genuine transitions**. The sweep runs
 on every background tick and every status-page load, so the audit call lives
@@ -1601,3 +1675,28 @@ are harmless. Errors are `{"code", "message"}`: 503 `anvil_not_configured`
 (no toolkit home or no SSH credentials), 503 `anvil_unreachable`, and 502
 `spool_status_failed` / `spool_clear_failed` (the toolkit exited non-zero, with
 its stderr tail, or printed something that is not its JSON).
+
+### The admin console
+
+`/admin` is a sidebar over these pages
+([authentication.md §5](authentication.md#5-accounts-and-who-manages-them) says who
+gets in). Each reads one group of backend routes, and the backend decides again on
+every call.
+
+| Page | Shows | Routes (permission) |
+|---|---|---|
+| Overview | site counts, jobs and registrations per day, the status breakdown, the latest people and events | `GET /jobs/stats?user_id=*` and the three `GET /admin/metrics/…` routes (`job:view:any`, `user:view:any`), `GET /users`, `GET /admin/audit-log` |
+| Users, one user | the directory with search and role and status filters; an account's facts, its role, status and run-permission controls, devices, recent jobs and activity | `GET /users`, `GET\|PATCH /users/{id}` and `/users/{id}/sessions` (`user:view:any`; the writes and the device list `user:manage`) |
+| Simulations | every user's snapshot drafts, with status and owner filters | `GET /jobs?user_id=*` (`job:view:any`) |
+| Audit log | events by category, actor and day range | `GET /admin/audit-log`, `GET /admin/user-labels` (`user:view:any`) |
+| System | dependency health, which integrations are configured, runtime settings, Anvil scratch (below) | `GET /admin/system`, `GET /admin/anvil/scratch` (`system:view`), `POST /admin/anvil/spool-cache/clear` (`system:manage`) |
+| Home, Community | the CMS ([the home feed](#the-home-pages-latest-snapshots-news), [the Community page](#the-community-page)) | `/admin/home`, `/admin/community` (`content:manage`) |
+
+`GET /admin/metrics/jobs` and `/registrations` take `days` (1 to 365, default 30),
+`granularity` (`day` or `week`) and `tz`, an IANA zone for the bucket boundaries;
+`/metrics/job-status` counts drafts by status, over `days` or all time, with every
+status present at zero. `GET /admin/system` answers environment, version, uptime, a
+MongoDB ping (2 s) and the state of the SLURM client without connecting to Anvil,
+whether CILogon's handoff secret, Resend and reCAPTCHA are set and whether mock auth
+is on, and a few runtime settings; it never repeats an exception's text. `GET
+/health` is the unauthenticated probe: `{status, environment}`.

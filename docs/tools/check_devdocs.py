@@ -57,7 +57,6 @@ FUTURE = {
     "packages/openghm/src/openghm/spec.py": "2026-09-18-complete-the-spec-tree",
     "packages/openghm/tests/test_spec.py": "2026-09-18-complete-the-spec-tree",
     "deploy/services": "0004 — third-party config, an empty placeholder until then",
-    ".github": "0003",
     "container/v2/lock/2.0.0-r3.lock.json": "0005",
 }
 # paths a mission has already removed — value is the mission that removed it.
@@ -97,11 +96,12 @@ REMOVED = {
 # internals, Lmod module names (`python/3.9.5`), the archived pre-merge
 # checkout, and gitignore/dockerignore globs
 NOT_A_REPO_PATH = re.compile(
-    r"^(s3|oras|docker|library|shub|https?|mongodb|redis|file)://"
+    r"^(s3|oras|docker|library|shub|https?|http\(s\)|mongodb|redis|file)://"
     r"|^[~/]"
+    r"|^@"                 # an npm scoped package, `@tiptap/react`
     r"|^\^"                # a token that starts with an anchor is a regex
     r"|^toolkits/"
-    r"|^(snapshots|containers|model-inputs|raw-data|old|wbm-code|wbmAncillaryData|spool|wbm_output"
+    r"|^(snapshots|containers|model-inputs|raw-data|raw_data|old|wbm-code|wbmAncillaryData|spool|wbm_output"
     r"|data_init|gdal_test_files|WBM_run_state|meta_data|masks|python"
     r"|model|utilities|crops|soil|data|registry|apps|base|overlays|gateway|linux"
     r"|metadata|layout|examples|docs|snapshot-spec|wbm_init|tests|test|node_modules"

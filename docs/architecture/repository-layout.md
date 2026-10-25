@@ -1,8 +1,8 @@
 # Repository layout
 
-**Status: built.** These directories exist, with the two marked exceptions —
-`deploy/services/` and `.github/` are empty placeholders and say which mission
-fills them.
+**Status: built.** These directories exist, with two marked exceptions:
+`deploy/services/` has not been created, and `.github/` holds only
+`CODEOWNERS` (no workflows). Each says which mission fills it.
 
 Eight top-level directories, each answering "what is this?" in one word.
 `.claude/` is agent configuration and is not one of them.
@@ -21,13 +21,13 @@ OpenGHM/
 ├── schemas/         the snapshot spec — one source, generated outward
 ├── schema-docs/     the spec docs — generated from schemas/, checked in
 ├── deploy/          everything that reaches a laptop
-│   ├── services/    third-party config — arrives with mission 0004
-│   └── local/       compose stack, mongo init, .env.example
+│   ├── services/    third-party config — not created; arrives with mission 0004
+│   └── local/       compose stack, mongo init and migrations, .env.example
 ├── docs/            this knowledge base
-├── .github/         workflows and shared actions — arrives with mission 0003
+├── .github/         CODEOWNERS; workflows and shared actions arrive with mission 0003
 ├── .claude/         shared agent settings (local grants are gitignored)
 ├── ops/             the private openghm-ops clone — gitignored, may be absent
-└── AGENTS.md  CLAUDE.md  justfile  README.md
+└── AGENTS.md  CLAUDE.md  justfile  README.md  CONTRIBUTING.md  SECURITY.md  LICENSE
 ```
 
 `ops/` is a separate repository ([ADR 0016](../decisions/0016-split-public-and-ops-repositories.md)):
@@ -79,8 +79,8 @@ of the spec tree either: `schemas/`'s own layout is a contract
 nothing that isn't a schema belongs inside it, generated or not. Neither
 existing directory fit, so it gets its own.
 
-**`deploy/services/` is for things we operate but do not build — and stays
-empty.** zot and the schema-host nginx have no source in this repository, so
+**`deploy/services/` is for things we operate but do not build — and is not
+created.** zot and the schema-host nginx have no source in this repository, so
 placing them next to `web-gateway/` would read as though they were products of
 ours. The plan when this was written was a Helm values file and an
 `nginx.conf` here; what actually shipped for both
@@ -88,36 +88,41 @@ ours. The plan when this was written was a Helm values file and an
 manifests in the private `ops/` repository's `ops/k8s/overlays/prod/` — `schemas.yml`
 and `zot.yml` — the same place every other cluster manifest already lives, so
 a second, public-repo deployment tree for just these two never had anything
-to hold. `deploy/services/` remains the placeholder for a *build artifact*
+to hold. `deploy/services/` remains the name reserved for a *build artifact*
 this repository is supposed to produce and doesn't own the deployment of
 (a Helm chart, say) — nothing here has needed that shape yet.
 
 **`deploy/local/` is defined as much by what it lacks.** It brings up MongoDB,
-a Redis nothing reads ([gateway.md](gateway.md#6-what-is-absent-and-not-by-oversight)),
-and nothing else. Open the compose file and the absence of S3 and of the
+the backend (its source bind-mounted for hot reload), and a Redis nothing reads
+([gateway.md](gateway.md#6-what-is-absent-and-not-by-oversight)), and nothing
+else; `docker-compose.anvil.yml` is the optional overlay that lets the local
+backend submit to Anvil. Open the compose file and the absence of S3 and of the
 registry is the signal that those are remote
 (see [local-development.md](local-development.md)).
 
 ## Generated files
 
-Four artifacts are produced from `schemas/*-spec/metadata/<ver>.json` and are
-never hand-edited. The first three now exist (`ops/missions/2026-09-18-gateway-on-the-spec/`,
-private, built them); this is the shape:
+Each spec's `metadata/<ver>.json` (`snapshot-spec` and `model-input-spec`) feeds
+three generated outputs, never hand-edited, and one symlink:
 
 ```
-schemas/snapshot-spec/metadata/<ver>.json
-   ├─ datamodel-codegen ──▶ web-gateway/backend/app/models/…
-   ├─ json2ts ────────────▶ web-gateway/frontend/lib/repository/…
-   ├─ copy ───────────────▶ packages/openghm/src/openghm/schemas/
-   └─ json-schema-for-humans ─▶ schema-docs/generated/snapshot-spec/<ver>/metadata.html
+schemas/snapshot-spec/metadata/<ver>.json     (and model-input-spec)
+   ├─ datamodel-codegen ──▶ web-gateway/backend/app/models/generated/{snapshot,model_input}.py
+   ├─ json2ts ────────────▶ web-gateway/frontend/lib/repository/{generated,generated-model-input}.ts
+   ├─ symlink ────────────▶ packages/openghm/src/openghm/schemas -> ../../../../schemas
+   └─ json-schema-for-humans ─▶ schema-docs/generated/<spec>/<ver>/metadata.html
 ```
 
-The fourth, `schema-docs/generated/`, **is built**: `just schema-docs-gen`
+`just codegen` writes the first two, rerun in the commit of every spec change
+([AGENTS.md](../../AGENTS.md) rule 4). The wheel carries `schemas/` through the
+symlink, and a build hook (`packages/openghm/hatch_build.py`) refuses a build in
+which it dangles. The third output, `schema-docs/generated/`, is built by
+`just schema-docs-gen`, which
 runs [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans)
 over every version each spec's `index.json` lists and commits the result,
-the same convention `web-gateway/backend/app/models/generated/` will use once
-it exists — a `GENERATED -- do not edit by hand` marker on every output file,
-idempotent, meant to be checked by CI once CI exists.
+the same convention `web-gateway/backend/app/models/generated/` follows — a
+`GENERATED -- do not edit by hand` marker on every output file, idempotent,
+meant to be checked by CI once CI exists.
 [ADR 0021](../decisions/0021-generate-schema-docs-with-json-schema-for-humans.md)
 has the reasoning, including what was verified empirically about the tool's
 `$ref` resolution and filename collisions. `schema-docs/index.html` itself is

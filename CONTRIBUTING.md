@@ -16,7 +16,7 @@ issue or a short description of what and why, is all that's expected.
 ## Setting up
 
 ```bash
-git clone <this repository>
+git clone https://github.com/OpenGHM/OpenGHM.git
 cd OpenGHM
 just install dev
 just run dev
@@ -68,8 +68,8 @@ just codegen
 ```
 
 Regenerates both files. Commit the diff they produce alongside the schema
-change — CI runs the same command and fails if it produces one you didn't
-commit. The `openghm` wheel's bundled copy (`packages/openghm/src/openghm/schemas`)
+change. There is no CI yet; once there is, it runs the same command and fails
+if it produces one you didn't commit. The `openghm` wheel's bundled copy (`packages/openghm/src/openghm/schemas`)
 needs no separate step: it is a symlink to the same `schemas/` tree, not a copy.
 
 ## Pull requests

@@ -2,11 +2,19 @@
 
 How a WBM simulation is identified, stored, and reproduced.
 
-**Status: target.** This is the shape we are building toward — the page the
-mission list is derived from. Most of it does not run yet: no snapshot
-carries a `metadata.json`, and only three images are published (below). Where
-something *does* already exist, the text says so. Read it as a description of
-the destination, never as a description of the system.
+**Status: target**, with most of it built. Where something exists, the text
+says so; where it does not, it is target. Built: the five axes and their pins in
+`metadata.json`, three published snapshots and two published model inputs, the
+`wbm-code/` and `containers/` prefixes, the published spools, and publishing
+a finished run as a snapshot (`openghm snapshot publish`, [ADR 0031](../decisions/0031-a-snapshot-draft-is-published-by-a-job.md)).
+Not built: enforcement of immutability beyond the publisher's own check
+([Upload and lock](../reference/s3-layout.md#upload-and-lock)), a CI-driven
+publish, the `-s3` image variants' publication, a toolkit command that publishes
+a model input, fetching a snapshot's code from `wbm-code/` instead of from the
+snapshot, and the WBM repository that would feed `wbm-code/`
+([open items](../reference/open-items.md)). Read it as a description of the
+destination that the system is already close to, never as a description of how
+the gateway behaves.
 
 The gateway that runs today is a different document:
 [gateway.md](gateway.md).
@@ -31,12 +39,14 @@ bytes; dashed accent edges are declarations in `metadata.json`. The snapshot is
 mounted read-only, so everything the run produces lands in per-simulation
 scratch.*
 
-The snapshot folder holds the model code, run configuration, the identity
-manifest, and `metadata.json` — plus the `wbm_output/` it produced, which is
+The snapshot folder holds the model code, run configuration, `metadata.json` and
+its `SHA256SUMS` integrity manifest — plus the `wbm_output/` it produced, which is
 deliberately *not* part of its identity
 ([ADR 0009](../decisions/0009-output-is-carried-not-reproducible.md)) and is most
 of a published snapshot's bytes, which is why what to ship is a real decision
-rather than a detail.
+rather than a detail. A run's saved state, `WBM_run_state/`, is optional and
+travels the same way: it is what a run continues from
+([simulation-reuse.md](simulation-reuse.md) §3).
 
 The spool is not in the folder either. It is the model input's datasets warped
 onto a network grid, so it belongs to the model input, not the snapshot: it is
@@ -105,11 +115,15 @@ jobs read from — not the archive.
 openghm/
   snapshots/<id>/…                   # minted id — an open namespace
   model-inputs/<id>/…                # minted id — an open namespace
+  spools/<model input id>/<network>/<variant>/…   # curated — warped inputs shared by runs
   wbm-code/<name>/<version>/…        # curated
   containers/<name>/<version>/…      # curated — plain-S3 SIF mirror
   registry/…                         # zot's own blob store, opaque
-  schemas/snapshot-spec/…            # the spec's published files
+  schemas/…                          # the spec's published files
+  schema-docs/…                      # the browsable spec docs
 ```
+
+`old/` also exists, for objects that left the curated layout; nothing cites it.
 
 **The namespace decides the key, not the kind of artifact**
 ([ADR 0005](../decisions/0005-namespace-decides-the-key.md)): snapshots and
@@ -118,7 +132,8 @@ that cannot collide with a name somebody else picked
 ([ADR 0014](../decisions/0014-identity-is-a-minted-id.md),
 [ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)); the rest
 are curated by us, so a readable path is worth more. Integrity never depends on
-the path: every prefix ships a manifest, and checking it is a step of its own.
+the path: a snapshot, a model input and a code version each ship a manifest, and
+checking it is a step of its own.
 
 Per-prefix rules and mutable objects:
 [`../reference/s3-layout.md`](../reference/s3-layout.md).
@@ -127,46 +142,61 @@ Per-prefix rules and mutable objects:
 
 ![What runs where](diagrams/img/deployment_topology.png)
 
-*Three tiers, all within Anvil except the git host: Purdue GitHub Enterprise
-publishes; Anvil's Composable Subsystem and Anvil S3 serve; Anvil's HPC side
-consumes. The two accented boxes are the only new workloads.*
+*What is deployed now. A maintainer's workstation applies manifests and pushes
+images to Anvil's Composable Subsystem, and reaches Anvil's HPC side over ssh.
+The Composable Subsystem runs the gateway (dev) and the workloads that serve
+published content (prod, accented). Anvil S3 holds the published bytes and is
+read over plain HTTPS. Anvil's HPC side runs the jobs, and what writes to the
+bucket runs there too, apart from zot. The gateway's own request path is
+[gateway.md](gateway.md).*
 
-Two new workloads, both in the `openghm` namespace on the Composable
-Subsystem, **neither holding state** — both keep their bytes in Anvil S3, so a
-rescheduled pod loses nothing and there is no volume to back up:
+The diagram follows the manifests in the private `openghm-ops` repository; what
+the cluster itself holds was not re-checked.
 
-| Workload | Job | Hostname | Decision |
-|---|---|---|---|
-| **zot** | OCI registry for SIFs | `registry.openghm.org` | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
-| **nginx** | proxies the spec's schemas out of S3 | `schemas.openghm.org` | [ADR 0007](../decisions/0007-schemas-on-s3-behind-a-proxy.md) |
+| Namespace | Workload | Job | Hostname | Decision |
+|---|---|---|---|---|
+| `openghm` (prod) | **zot** | OCI registry for SIFs | `registry.openghm.org` | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
+| | **nginx** | proxies the spec's schemas out of S3 | `schemas.openghm.org` | [ADR 0007](../decisions/0007-schemas-on-s3-behind-a-proxy.md) |
+| | **nginx** | one static page, a placeholder for the gateway | `openghm.org` | |
+| `openghm-dev` | **gateway**: frontend, backend, MongoDB | the portal as it runs | `dev.openghm.org` | [ADR 0019](../decisions/0019-publishing-infrastructure-is-a-single-instance.md) |
 
-Everything else already exists: the namespace and its ingress, the bucket, and
-the Anvil install root.
+The publishing workloads are one instance, in prod, and **hold no state**: zot
+and the schemas proxy keep their bytes in Anvil S3, so a rescheduled pod loses
+nothing and there is no volume to back up. The gateway holds state, and MongoDB
+is the one workload with a volume ([gateway.md](gateway.md) section 4). The
+gateway's manifests are in prod too, at no replicas; prod serves the landing
+page until the gateway is activated there.
 
-**zot is no longer target — it is deployed and live**
-(`2026-09-25-zot-deploy`, private): one pod, anonymous read, htpasswd
-publisher auth, backed by Anvil S3 under `registry/`. Three images are
-published so far — `wbm-v1-lite`, `wbm-v2-lite`, `wbm-tools-lite`, all
-`openghm/<name>:<tag>` — mirroring the S3 layout above, `containers/` is no
-longer empty either. Each of the three has a committed lock record,
-`images/<name>/lock/<version>.lock.json`, read from the published SIF
+**zot is deployed and live** (`2026-09-25-zot-deploy`, private): one pod,
+anonymous read, htpasswd publisher auth, backed by Anvil S3 under `registry/`.
+Three images are published so far — `wbm-v1-lite`, `wbm-v2-lite`,
+`wbm-tools-lite`, all `openghm/<name>:<tag>` — mirroring the S3 layout above,
+`containers/` is no longer empty either. Each of the three has a committed lock
+record, `images/<name>/lock/<version>.lock.json`, read from the published SIF
 itself and backed by a fresh prod-comparison run
 ([metadata-format.md](../reference/metadata-format.md#container-lock-record)).
-That is axis 4's "digest + lock record" made real for them. Neither the
-`-s3` image variants nor a CI-driven publish path exist yet; both are still
-target, and neither has a lock record.
+That is axis 4's "digest + lock record" made real for them.
 
-The two edges into the HPC tier are **different operations**, not two ways of
-doing the same thing:
+**What publishes.** There is no CI (`.github/` holds only `CODEOWNERS`) and
+neither repository has a git remote, so nothing publishes from a git host. A
+publish is a script or a job that runs on Anvil and writes to the bucket with
+`s3cmd`, except zot's own writes under `registry/`
+([s3-layout.md](../reference/s3-layout.md), the *Written by* column). A snapshot
+is published by a SLURM job the gateway submits
+([ADR 0031](../decisions/0031-a-snapshot-draft-is-published-by-a-job.md)); an
+image by `ops/anvil/publish_container.sh`, which pushes it to zot with `oras`
+and mirrors it to `containers/`; model inputs and spools by the scripts under
+`ops/anvil/`, run as batch jobs. All of the private scripts are started from a
+maintainer's workstation over ssh.
 
-| Edge | What it is | Frequency |
-|---|---|---|
-| zot → login node | *installing* a revision into the shared tree | once per image revision |
-| Anvil S3 → compute node | a *job* reading what it needs | every run |
+**Still target:**
 
-The install is a login-node task because it produces shared, persistent state —
-a SIF under a versioned path plus a modulefile — that must exist before any job
-references it.
+- The `-s3` image variants are not published, and have no lock record.
+- A CI-driven publish path does not exist.
+- Installing a revision from zot into a shared tree on the login node is not
+  built: nothing in the repository pulls from zot, and a job reads the S3
+  mirror (`uses.container.https`) because it needs no credentials and no
+  `oras://` support.
 
 ## 5. The spec
 
@@ -177,9 +207,14 @@ semver version covers two files, because they are checked two different ways
 which JSON Schema cannot express.
 
 It lives in `schemas/` in this repository and is generated outward — into the
-backend model, the frontend types, and a copy bundled in the `openghm` wheel
-for offline validation. That is why the application, the toolkit and the spec
-share one repository ([ADR 0001](../decisions/0001-unified-repository.md)).
+backend model and the frontend types — while the `openghm` wheel carries
+`schemas/` itself, through a symlink, for offline validation. That is why the
+application, the toolkit and the spec share one repository
+([ADR 0001](../decisions/0001-unified-repository.md)). A model input has a spec
+of its own beside it, `model-input-spec`
+([ADR 0015](../decisions/0015-model-input-is-a-published-artifact.md)), and both
+share the `about` and `spatial-coverage` definitions under `schemas/common/`
+([ADR 0018](../decisions/0018-shared-definitions-and-no-renderings.md)).
 
 Field vocabulary, publish URLs, and version rules:
 [`../reference/snapshot-spec.md`](../reference/snapshot-spec.md).

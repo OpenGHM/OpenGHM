@@ -227,7 +227,7 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   buttons in the page header, for an ended one; on a phone those become one
   "More actions" menu. A list row's Delete is a visible icon button, with no
   "…" menu.
-- Nothing in the wizard saves by itself. A new simulation is not stored until
+- Nothing in the wizard saves by itself. A new snapshot draft is not stored until
   the user presses Save as draft or submits (`/workspace/new/<snapshot id>`),
   and a stored draft is written by its Save draft button (Ctrl or Cmd + S does
   the same; [ADR 0028](../../docs/decisions/0028-a-new-simulation-is-stored-when-the-user-saves-it.md)).
@@ -239,7 +239,7 @@ the type as a filter. Its pieces are in [`components/repository/`](components/re
   cannot be stopped from the wizard); without that API, or when the browser
   declines to let the Back be cancelled, they are not held back. See
   [`leave-guard.ts`](lib/workspace/leave-guard.ts). Anything new that
-  starts a simulation from a snapshot links to the new-simulation route; it does
+  starts a snapshot draft from a snapshot links to the `/workspace/new/<snapshot id>` route; it does
   not call the derive action itself.
 - A draft its snapshot's published output already answers is not submitted:
   Review shows the published files in place of the submit card, and "Run

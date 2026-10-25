@@ -1,15 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 660" width="830" height="660"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 816" width="940" height="816"
      role="img" aria-labelledby="dep-title" aria-describedby="dep-desc">
   <title id="dep-title">What runs where — deployment topology</title>
   <desc id="dep-desc">
-    Three tiers, all within Anvil except the git host. At the top, Purdue GitHub Enterprise holds one repository with the
-    application, the toolkit, the schemas and CI, and publishes downward into two places: the openghm namespace on
-    Anvil's Composable Subsystem, and the Anvil S3 bucket. The Composable Subsystem box lists two
-    new workloads — zot, an OCI registry for SIFs that stores its blobs directly in Anvil S3, and
-    a static JSON Schema host — plus one already running: ingress-nginx with cert-manager for TLS.
-    At the bottom, Anvil's HPC side consumes: a login node pulls from zot over the public internet
-    and stages onto GPFS, and SLURM compute nodes run the container and read raw data from Anvil
-    S3 over the internal network.
+    Three tiers. At the top, the maintainer's workstation: just recipes, kubectl, docker and ssh, with the
+    repositories held locally and no CI. It deploys manifests and images into Anvil's Composable Subsystem with
+    kubectl and docker push, and reaches Anvil's HPC side over ssh and scp to install the toolkit and run the
+    publish scripts. The Composable Subsystem box holds ingress-nginx with cert-manager, and two namespaces.
+    The openghm namespace is prod: zot, the OCI registry for SIFs, at registry.openghm.org; an nginx proxy that
+    serves the schemas out of S3 at schemas.openghm.org; and a landing page at openghm.org; the gateway's
+    manifests are there with no replicas. The openghm-dev namespace runs the gateway at dev.openghm.org: a Next.js
+    frontend, a FastAPI backend with no Ingress, and MongoDB as a StatefulSet with a volume. Anvil S3, the openghm
+    bucket with public read, sits to the right. zot stores its blobs in it, the schemas proxy reads from it, and the
+    gateway backend reads it over public HTTPS. At the bottom, Anvil's HPC side has a login node, SLURM compute
+    and scratch. The backend reaches the login node over SSH and SFTP. Jobs on compute read the bucket over public
+    HTTPS, and the publish scripts and the publish job write to it with s3cmd.
   </desc>
 
   <style>
@@ -30,73 +34,126 @@
     </marker>
   </defs>
 
-  <!-- ── tier 1 · publish ────────────────────────────────────────────────── -->
-  <rect x="250" y="16" width="500" height="76" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
-  <text class="g-b g-bd g-ink" x="500" y="45" text-anchor="middle" font-size="15">GitHub Enterprise — the source of truth</text>
-  <text class="g-m g-mut"      x="500" y="68" text-anchor="middle" font-size="11.5">one repo &#183; app &#183; toolkit &#183; schemas &#183; Actions (CI)</text>
+  <!-- ── tier 1 · who deploys and publishes ──────────────────────────────── -->
+  <rect x="36" y="16" width="440" height="88" rx="4" fill="none" stroke="#131C1B" stroke-width="1.8"/>
+  <text class="g-b g-bd g-ink" x="256" y="43" text-anchor="middle" font-size="15">Maintainer's workstation</text>
+  <text class="g-m g-mut"      x="256" y="66" text-anchor="middle" font-size="11.5">just &#183; kubectl &#183; docker &#183; ssh</text>
+  <text class="g-b g-mut"      x="256" y="86" text-anchor="middle" font-size="10.5">deploys by hand &#183; there is no CI</text>
 
   <!-- ── tier 2 · serve ──────────────────────────────────────────────────── -->
-  <rect x="20" y="150" width="450" height="216" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
-  <text class="g-m g-fnt g-cap" x="28" y="140" font-size="11.5">ANVIL COMPOSABLE SUBSYSTEM</text>
+  <text class="g-m g-fnt g-cap" x="44" y="184" font-size="11.5">ANVIL COMPOSABLE SUBSYSTEM</text>
+  <rect x="36" y="194" width="440" height="426" rx="4" fill="none" stroke="#8A9997" stroke-width="1.3" stroke-dasharray="6 5"/>
 
-  <rect x="38" y="178" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
-  <text class="g-m g-bd g-acc" x="52"  y="200" font-size="13">zot</text>
-  <text class="g-m g-bd g-acc g-cap" x="438" y="199" text-anchor="end" font-size="10">NEW</text>
-  <text class="g-b g-acc"      x="52"  y="218" font-size="10.5">OCI registry for SIFs &#183; registry.openghm.org</text>
+  <rect x="52" y="208" width="408" height="42" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="64" y="227" font-size="12.5">ingress-nginx + cert-manager</text>
+  <text class="g-b g-mut"      x="64" y="243" font-size="10.5">TLS and routing for every hostname below</text>
 
-  <rect x="38" y="240" width="414" height="50" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
-  <text class="g-m g-bd g-acc" x="52"  y="262" font-size="13">schemas</text>
-  <text class="g-m g-bd g-acc g-cap" x="438" y="261" text-anchor="end" font-size="10">NEW</text>
-  <text class="g-b g-acc"      x="52"  y="280" font-size="10.5">schema host &#183; proxies S3 &#183; schemas.openghm.org</text>
+  <!-- prod namespace: published content, a single instance (ADR 0019) -->
+  <rect x="52" y="262" width="408" height="208" rx="3" fill="none" stroke="#8A9997" stroke-width="1"/>
+  <text class="g-m g-fnt g-cap" x="64" y="279" font-size="10.5">NAMESPACE openghm &#8212; PROD</text>
 
-  <rect x="38" y="302" width="414" height="46" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="g-m g-bd g-ink" x="52" y="323" font-size="12.5">ingress-nginx + cert-manager</text>
-  <text class="g-b g-mut"      x="52" y="340" font-size="10.5">already running &#8212; TLS for both hostnames</text>
+  <rect x="64" y="292" width="384" height="44" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="g-m g-bd g-acc" x="76" y="311" font-size="13">zot</text>
+  <text class="g-b g-acc"      x="76" y="327" font-size="10.5">OCI registry for SIFs &#183; registry.openghm.org &#183; pushed from Anvil</text>
 
-  <rect x="500" y="150" width="222" height="86" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
-  <text class="g-b g-bd g-ink" x="611" y="177" text-anchor="middle" font-size="13">Anvil S3</text>
-  <text class="g-m g-mut"      x="611" y="197" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
-  <text class="g-b g-mut"      x="611" y="216" text-anchor="middle" font-size="10.5">images, snapshots, code + zot storage</text>
+  <rect x="64" y="344" width="384" height="44" rx="3" fill="none" stroke="#10695C" stroke-width="1.6"/>
+  <text class="g-m g-bd g-acc" x="76" y="363" font-size="13">schemas</text>
+  <text class="g-b g-acc"      x="76" y="379" font-size="10.5">nginx proxy of S3 schemas/ &#183; schemas.openghm.org</text>
 
-  <!-- ── tier 3 · consume ────────────────────────────────────────────────── -->
-  <rect x="250" y="520" width="500" height="120" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
-  <text class="g-m g-ink g-cap" x="258" y="510" font-size="11.5">ANVIL HPC &#8212; WHERE RUNS HAPPEN</text>
+  <rect x="64" y="396" width="384" height="44" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="76" y="415" font-size="12.5">landing</text>
+  <text class="g-b g-mut"      x="76" y="431" font-size="10.5">nginx, one static page &#183; openghm.org &#183; a placeholder for the gateway</text>
 
-  <rect x="266" y="548" width="210" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="g-m g-bd g-ink" x="371" y="573" text-anchor="middle" font-size="12">login node</text>
-  <text class="g-b g-mut"      x="371" y="592" text-anchor="middle" font-size="10.5">pull + stage &#183; outbound HTTPS</text>
+  <text class="g-b g-fnt" x="64" y="458" font-size="10.5">the gateway's manifests are here too, at 0 replicas until activation</text>
 
-  <rect x="520" y="548" width="214" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
-  <text class="g-m g-bd g-ink" x="627" y="573" text-anchor="middle" font-size="12">SLURM compute</text>
-  <text class="g-b g-mut"      x="627" y="592" text-anchor="middle" font-size="10.5">runs the container &#183; via Anvil S3</text>
+  <!-- dev namespace: the gateway -->
+  <rect x="52" y="482" width="408" height="102" rx="3" fill="none" stroke="#8A9997" stroke-width="1"/>
+  <text class="g-m g-fnt g-cap" x="64" y="499" font-size="10.5">NAMESPACE openghm-dev &#8212; dev.openghm.org</text>
 
-  <text class="g-b g-mut" x="266" y="631" font-size="10.5">Anvil S3 holds the published copy; GPFS is staging for runs.</text>
+  <rect x="64"  y="508" width="122" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="125" y="531" text-anchor="middle" font-size="12">frontend</text>
+  <text class="g-b g-mut"      x="125" y="549" text-anchor="middle" font-size="10.5">Next.js</text>
 
-  <!-- ── publish edges ───────────────────────────────────────────────────── -->
+  <rect x="194" y="508" width="122" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="255" y="531" text-anchor="middle" font-size="12">backend</text>
+  <text class="g-b g-mut"      x="255" y="549" text-anchor="middle" font-size="10.5">FastAPI</text>
+  <text class="g-b g-mut"      x="255" y="563" text-anchor="middle" font-size="10.5">no Ingress</text>
+
+  <rect x="324" y="508" width="124" height="64" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="386" y="531" text-anchor="middle" font-size="12">MongoDB</text>
+  <text class="g-b g-mut"      x="386" y="549" text-anchor="middle" font-size="10.5">StatefulSet</text>
+  <text class="g-b g-mut"      x="386" y="563" text-anchor="middle" font-size="10.5">+ a volume</text>
+
+  <!-- Anvil S3 -->
+  <rect x="580" y="260" width="340" height="332" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+  <text class="g-b g-bd g-ink" x="750" y="288" text-anchor="middle" font-size="13">Anvil S3</text>
+  <text class="g-m g-mut"      x="750" y="308" text-anchor="middle" font-size="10.5">openghm bucket &#183; public read</text>
+  <text class="g-m g-ink" x="598" y="346" font-size="10.5">snapshots/  model-inputs/  spools/</text>
+  <text class="g-m g-ink" x="598" y="366" font-size="10.5">wbm-code/  containers/  schemas/</text>
+  <text class="g-m g-ink" x="598" y="386" font-size="10.5">registry/</text>
+  <text class="g-b g-mut" x="670" y="386" font-size="10.5">zot's blobs, opaque</text>
+  <line x1="598" y1="414" x2="902" y2="414" stroke="#8A9997" stroke-width="0.8"/>
+  <text class="g-m g-fnt g-cap" x="598" y="440" font-size="10">WRITTEN BY</text>
+  <text class="g-b g-mut" x="598" y="460" font-size="10.5">s3cmd, run on Anvil &#183; zot, under registry/</text>
+  <text class="g-m g-fnt g-cap" x="598" y="498" font-size="10">READ BY</text>
+  <text class="g-b g-mut" x="598" y="518" font-size="10.5">anyone, over HTTPS, with no credentials:</text>
+  <text class="g-b g-mut" x="598" y="534" font-size="10.5">the gateway, SLURM jobs, the schemas proxy</text>
+
+  <!-- ── tier 3 · where runs happen ──────────────────────────────────────── -->
+  <text class="g-m g-ink g-cap" x="44" y="682" font-size="11.5">ANVIL HPC</text>
+  <rect x="36" y="690" width="884" height="110" rx="4" fill="none" stroke="#131C1B" stroke-width="1.5"/>
+
+  <rect x="60" y="716" width="220" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="170" y="739" text-anchor="middle" font-size="12">login node</text>
+  <text class="g-b g-mut"      x="170" y="757" text-anchor="middle" font-size="10.5">ssh target &#183; publish scripts</text>
+  <text class="g-b g-mut"      x="170" y="772" text-anchor="middle" font-size="10.5">oras &#183; s3cmd</text>
+
+  <rect x="330" y="716" width="360" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="510" y="739" text-anchor="middle" font-size="12">SLURM compute</text>
+  <text class="g-b g-mut"      x="510" y="757" text-anchor="middle" font-size="10.5">gateway jobs: toolkit fetch &#8594; run, publish</text>
+  <text class="g-b g-mut"      x="510" y="772" text-anchor="middle" font-size="10.5">WBM runs in the pinned image</text>
+
+  <rect x="730" y="716" width="174" height="70" rx="3" fill="none" stroke="#5C6B69" stroke-width="1.2"/>
+  <text class="g-m g-bd g-ink" x="817" y="739" text-anchor="middle" font-size="12">scratch (GPFS)</text>
+  <text class="g-b g-mut"      x="817" y="757" text-anchor="middle" font-size="10.5">caches &#183; run output</text>
+  <text class="g-b g-mut"      x="817" y="772" text-anchor="middle" font-size="10.5">job directories</text>
+
+  <!-- ── workstation edges ───────────────────────────────────────────────── -->
   <g fill="none" stroke="#131C1B" stroke-width="1.8">
-    <line x1="300" y1="92" x2="300" y2="146" marker-end="url(#d-ai)"/>
-    <line x1="611" y1="92" x2="611" y2="146" marker-end="url(#d-ai)"/>
+    <line x1="262" y1="104" x2="262" y2="190" marker-end="url(#d-ai)"/>
+    <polyline points="36,60 10,60 10,751 56,751" marker-end="url(#d-ai)"/>
   </g>
-  <text class="g-m g-ink" x="310" y="116" font-size="11.5">installs the chart,</text>
-  <text class="g-m g-ink" x="310" y="131" font-size="11.5">pushes the image</text>
-  <text class="g-m g-ink" x="620" y="116" font-size="11.5">copies the files</text>
-  <text class="g-m g-ink" x="620" y="131" font-size="11.5">(MinIO client)</text>
+  <text class="g-m g-ink" x="272" y="130" font-size="11.5">kubectl apply</text>
+  <text class="g-m g-ink" x="272" y="145" font-size="11.5">docker push &#8594; Anvil's registry</text>
+  <text class="g-m g-ink" x="20" y="642" font-size="11.5">ssh, scp</text>
+  <text class="g-b g-mut" x="20" y="658" font-size="10.5">toolkit install, publish scripts</text>
 
-  <!-- ── zot's storage backend (new — zot writes its blobs into Anvil S3) ─── -->
-  <polyline points="452,203 480,203 480,150 500,150" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
-  <text class="g-m g-acc" x="456" y="145" font-size="11">stores blobs</text>
-  <polyline points="452,265 510,265 510,240" fill="none" stroke="#10695C" stroke-width="1.8" marker-end="url(#d-ai)"/>
-  <text class="g-m g-acc" x="516" y="258" font-size="11">reads from</text>
+  <!-- ── Composable Subsystem into S3 ────────────────────────────────────── -->
+  <g fill="none" stroke="#10695C" stroke-width="1.8">
+    <line x1="448" y1="314" x2="576" y2="314" marker-end="url(#d-ai)"/>
+    <line x1="448" y1="366" x2="576" y2="366" marker-end="url(#d-ai)"/>
+  </g>
+  <text class="g-m g-acc" x="486" y="307" font-size="11">stores blobs</text>
+  <text class="g-m g-acc" x="486" y="359" font-size="11">reads from</text>
+  <line x1="460" y1="546" x2="576" y2="546" stroke="#131C1B" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="g-m g-ink" x="486" y="539" font-size="11.5">reads</text>
+  <text class="g-b g-mut" x="486" y="563" font-size="10.5">public HTTPS</text>
 
-  <!-- ── consume edges ───────────────────────────────────────────────────── -->
+  <!-- ── gateway backend to Anvil ────────────────────────────────────────── -->
+  <line x1="255" y1="572" x2="255" y2="712" stroke="#131C1B" stroke-width="1.8" marker-end="url(#d-ai)"/>
+  <text class="g-m g-ink" x="265" y="652" font-size="11.5">SSH + SFTP</text>
+  <text class="g-b g-mut" x="265" y="668" font-size="10.5">sbatch, logs, run-output ZIP</text>
+
+  <!-- ── S3 and Anvil HPC ────────────────────────────────────────────────── -->
   <g fill="none" stroke="#131C1B" stroke-width="1.8">
-    <polyline points="38,212 14,212 14,472 371,472 371,544" marker-end="url(#d-ai)"/>
-    <line x1="611" y1="236" x2="611" y2="544" marker-end="url(#d-ai)"/>
-    <line x1="480" y1="580" x2="516" y2="580" marker-end="url(#d-ai)"/>
+    <line x1="610" y1="596" x2="610" y2="712" marker-end="url(#d-ai)"/>
+    <line x1="660" y1="712" x2="660" y2="596" marker-end="url(#d-ai)"/>
+    <line x1="280" y1="751" x2="326" y2="751" marker-end="url(#d-ai)"/>
   </g>
-  <text class="g-m g-ink" x="22" y="436" font-size="11.5">installs a revision</text>
-  <text class="g-m g-ink" x="22" y="451" font-size="11.5">&#8212; once per image</text>
-  <text class="g-m g-ink" x="622" y="382" font-size="11.5">reads per run</text>
-  <text class="g-b g-mut" x="622" y="399" font-size="10.5">SIF mirror + snapshot/raw data</text>
-  <text class="g-m g-mut" x="498" y="570" text-anchor="middle" font-size="10.5">stage</text>
+  <line x1="694" y1="751" x2="726" y2="751" stroke="#131C1B" stroke-width="1.8" marker-start="url(#d-ai)" marker-end="url(#d-ai)"/>
+  <text class="g-m g-ink" x="602" y="652" text-anchor="end" font-size="11.5">reads per run</text>
+  <text class="g-b g-mut" x="602" y="668" text-anchor="end" font-size="10.5">public HTTPS</text>
+  <text class="g-m g-ink" x="670" y="652" font-size="11.5">publishes</text>
+  <text class="g-b g-mut" x="670" y="668" font-size="10.5">s3cmd put, sync</text>
+  <text class="g-m g-mut" x="303" y="743" text-anchor="middle" font-size="10.5">sbatch</text>
 </svg>

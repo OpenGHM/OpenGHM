@@ -102,10 +102,11 @@ One rule decides the key, and it is the **namespace**, not the artifact:
   path is worth more: `wbm-code/wbm/23.9.0/` says what it is, `wbm-code/3ab7…/`
   does not.
 
-Integrity does not depend on the key in either case. Every prefix ships a
-`SHA256SUMS` (or `TREEHASH`) manifest, and verifying it is a step of its own —
-the id says *which* artifact, the manifest says whether the bytes arrived
-intact.
+Integrity does not depend on the key in either case. Every snapshot, model input
+and code version ships a `SHA256SUMS` (a code version also a `TREEHASH`), and
+verifying it is a step of its own — the id says *which* artifact, the manifest
+says whether the bytes arrived intact. A spool day has none: it is a cache entry
+that a variant's key already fixes.
 
 **A file's mode lives on its own object** ([ADR 0022](../decisions/0022-file-modes-are-object-metadata.md)).
 Every object under `snapshots/<id>/` and `model-inputs/<id>/` carries its

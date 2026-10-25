@@ -7,12 +7,22 @@ The on-disk shape of a snapshot, and how its identity is computed.
 ```
 <snapshot>/                          # slug e.g. wbm_storage_v2.0.0; published under its id
 ├── metadata.json                    # identity + pins (metadata-format)
-├── SHA256SUMS                       # integrity manifest — inputs only; NOT PRESENT YET, see below
+├── SHA256SUMS                       # integrity manifest — inputs only (see below)
 ├── model/  utilities/               # WBM code, hashed (ADR 0008)
 ├── wbm_init/                        # run configuration
 ├── gdal_test_files/                 # GDAL fixtures the model probes at startup
+├── WBM_run_state/                   # optional — the run's saved state, what a continuation starts from
 └── wbm_output/<runId>/              # published results (ADR 0009)
 ```
+
+`<runId>` is the run's own name, not the init's: `WBM_test` for `wbm_test.init`.
+Inside it WBM writes `daily/wbm_<year>.nc`, one NetCDF-4 file per year holding
+every output variable, and `monthly/<variable>/wbm_<year>.nc` and
+`yearly/<variable>/wbm_<year>.nc`, one small file per variable and year, beside
+the run's log, `<init>.MT.csv`, `init_files` and the post-processing scripts.
+The gateway lists these names to answer a draft from published output
+([simulation-reuse.md](../architecture/simulation-reuse.md) §3), and
+`openghm output` reads them ([ADR 0033](../decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md)).
 
 A snapshot holds no input data and no spool: no `data/`, no `data_init/`, no
 `spool/`. It links one published
