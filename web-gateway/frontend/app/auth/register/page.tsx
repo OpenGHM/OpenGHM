@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  *
  * Unset is a valid configuration, not a blank to fill in later: the form then
  * renders no captcha and the backend skips verification. See
- * devdocs/reference/external-services.md.
+ * ops/docs/reference/external-services.md (private).
  */
 export default function RegisterPage() {
   return <RegisterForm siteKey={process.env.RECAPTCHA_SITE_KEY ?? ""} />;

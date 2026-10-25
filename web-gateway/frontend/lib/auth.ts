@@ -92,7 +92,7 @@ interface CILogonProfile {
 /**
  * CILogon registration (done by the operator, outside this codebase, at
  * https://cilogon.org/oauth2/register — see
- * devdocs/reference/external-services.md): register a client with redirect
+ * ops/docs/reference/external-services.md, private): register a client with redirect
  * URI `<FRONTEND_URL>/api/auth/callback/cilogon` and
  * scope `openid email profile org.cilogon.userinfo`, then set
  * CILOGON_CLIENT_ID/CILOGON_CLIENT_SECRET here. Until those are set, this

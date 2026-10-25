@@ -89,7 +89,7 @@ assert set(ROLE_PERMISSIONS) == set(Role), "ROLE_PERMISSIONS must cover every Ro
 # sessions, and unmigrated Mongo documents from the old PascalCase role set
 # (`Admin`, `PowerUser`, `User`, `Guest`). Remove once `parse_role`'s
 # "legacy role spelling accepted" log line has been silent for a full
-# NextAuth session window (see devdocs/architecture/authentication.md).
+# NextAuth session window (see docs/architecture/authentication.md).
 _LEGACY_ALIASES: dict[str, Role] = {
     "poweruser": Role.STAFF,
     "power_user": Role.STAFF,

@@ -5,7 +5,6 @@ db = db.getSiblingDB("openghm");
 
 db.createCollection("users");
 db.createCollection("jobs");
-db.createCollection("catalog");
 
 // Seed users for development (password: admin123 / user123). They back the
 // "Dev quick login" buttons on the sign-in page.

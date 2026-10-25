@@ -1,10 +1,10 @@
 """Google reCAPTCHA v2 verification for POST /auth/register.
 
 Only the public registration form is protected — see
-devdocs/architecture/authentication.md for why the SSO-completion form
+docs/architecture/authentication.md for why the SSO-completion form
 isn't: reaching it already requires having signed in through a real
 identity provider, a much higher bar than anything a captcha adds.
-Keys and setup: devdocs/reference/external-services.md.
+Keys and setup: ops/docs/reference/external-services.md (private).
 """
 
 import logging

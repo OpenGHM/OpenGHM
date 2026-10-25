@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     # Empty means skip verification (local dev default, so signup stays
     # testable without a Google account). The site key is public by design
     # (it's meant to be embedded in the page) and lives on the frontend as
-    # NEXT_PUBLIC_RECAPTCHA_SITE_KEY, not here.
+    # RECAPTCHA_SITE_KEY, read per request (docs/architecture/gateway.md), not here.
     RECAPTCHA_SECRET_KEY: str = ""
 
     # HPC / Anvil — slurmly client config

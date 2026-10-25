@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
  * These five are the only backend calls a browser makes. Every other page
  * fetches through lib/api-client.ts on the server, because FastAPI has no
  * Ingress and BACKEND_URL is a ClusterIP name (see
- * devdocs/architecture/gateway.md). These five could not do that: they run
+ * docs/architecture/gateway.md). These five could not do that: they run
  * before there is a session, so they were written as client-side fetches
  * against NEXT_PUBLIC_BACKEND_URL — a variable Next.js inlines at
  * `next build`, which meant one image could not serve two environments and,
