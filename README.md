@@ -5,9 +5,6 @@ hydrologic datasets, model outputs, and climate forcing data), the `openghm`
 **toolkit**, the WBM **container images**, and the snapshot **spec** that ties
 them together.
 
-Live at **https://dev.openghm.org** — the Data Repository; the Workspace is
-switched off there (`WORKSPACE_ENABLED=false`).
-
 ## Stack
 
 | Layer | Technology |
