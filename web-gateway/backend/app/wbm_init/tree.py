@@ -79,6 +79,8 @@ class Node:
     min: float | None = None
     max: float | None = None
     calibration: tuple[float, float] | None = None
+    #: Where the calibration range comes from, shown with it.
+    calibration_source: str | None = None
     show_if: str | None = None
     #: A string field's pattern for this version.
     pattern: str | None = None
@@ -276,6 +278,7 @@ def resolve(version: str) -> Resolved:
                 min=low,
                 max=high,
                 calibration=tuple((raw.get("calibration") or {}).get("range") or ()) or None,
+                calibration_source=(raw.get("calibration") or {}).get("source"),
                 show_if=raw.get("show_if"),
                 pattern=pattern if isinstance(pattern, str) else None,
                 aliases=tuple(raw.get("aliases") or ()),
@@ -652,6 +655,7 @@ def render(resolved: Resolved, values: dict, choices: Choices | None = None) -> 
             "options": [{"value": v, "label": label} for v, label in options] if options else None,
             "min": node.min, "max": node.max,
             "calibration": list(node.calibration) if node.calibration else None,
+            "calibration_source": node.calibration_source if node.calibration else None,
             "show_if": node.show_if,
         }
 

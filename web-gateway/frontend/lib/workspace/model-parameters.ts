@@ -91,6 +91,8 @@ export interface ParamField {
   max: number | null;
   /** The range a calibration usually stays in: a hint, not a limit. */
   calibration: [number, number] | null;
+  /** Where the calibration range comes from, shown with it. */
+  calibration_source: string | null;
   /** The tree's own expression, shown and never evaluated. */
   show_if: string | null;
 }

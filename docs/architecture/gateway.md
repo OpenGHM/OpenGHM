@@ -395,7 +395,7 @@ that cannot be read refuses nothing). A save that sends only `forks` is checked 
   datasets in the field's unit, with each one's `disabled` reason and `repair`, what a copy fixes in a file WBM
   23.9.0 refuses, on a dataset field of a module that can be switched on; else `null`), `current` (the
   init's value as text, `null` when the key is absent), `default` (resolved for the version), `unit`,
-  `options` (`{value, label}`), `min`, `max`, `calibration`, `show_if` and `doc`. Every node has
+  `options` (`{value, label}`), `min`, `max`, `calibration` and `calibration_source` (its source, or `null`), `show_if` and `doc`. Every node has
   `tier` (`basic` or `advanced`). `editable` is true only for a field that can be set now: a
   scalar, or a dataset field with `edit_as: "number"`, and not when its module is off or a file
   sets its block. `edit_as` is `"number"` for a dataset field whose `accepts` lists a number, which

@@ -489,12 +489,13 @@ export function ParamFieldRow({
       key: "calibration",
       node: (
         <>
-          Usually calibrated within <Range lo={calibration[0]} hi={calibration[1]} unit={field.unit} />
+          Suggested range <Range lo={calibration[0]} hi={calibration[1]} unit={field.unit} />
+          {field.calibration_source ? ` (${field.calibration_source})` : null}
         </>
       ),
     });
   }
-  if (outside) facts.push({ key: "outside", node: <>Outside the usual calibration range</>, tone: "warning" });
+  if (outside) facts.push({ key: "outside", node: <>Outside the suggested range</>, tone: "warning" });
   if (constant) facts.push({ key: "constant", node: <>A number replaces the dataset with a constant everywhere.</> });
 
   return (

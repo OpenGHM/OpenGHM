@@ -204,7 +204,7 @@ Each field shows its label and init key, the tree's help text, its control (the 
 number box), the snapshot's value when the draft changed it, WBM's default for the version when it
 differs, the allowed range, and a reset that takes the key out of `custom_params`. A number with a
 `calibration` range also draws the range as a bar with the snapshot's value and the draft's, and
-says when the value is outside it. The wizard fetches the tree once per snapshot as it opens and keeps it for the
+says when the value is outside it; the range is the suggested one, shown with its source. The wizard fetches the tree once per snapshot as it opens and keeps it for the
 page's life. Where the tree cannot be had (an init that cannot be read, or an error) the section
 says so and offers Try again; the rest of the wizard is untouched, and the draft's changes are
 still listed with a Remove. The Review step lists the changed keys, by the tree's label and a

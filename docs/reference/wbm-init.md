@@ -16,7 +16,7 @@ What is not established is marked open, in [Open: not established](#open-not-est
 | `W:n` | line n of `wbm.pl` of WBM 23.9.0: `images/wbm-tools-lite/wbm/model/wbm.pl` |
 | `M:n` | line n of `images/wbm-tools-lite/wbm/model/RIMS/WBM.pm`, WBM 23.9.0; `R:n` is `images/wbm-tools-lite/wbm/model/RIMS.pm` and `D:n` is `images/wbm-tools-lite/wbm/model/RIMS/DataSet.pm` |
 | `W(22):n`, `M(22):n` | the same files of WBM 22.1.1, which is not in this repository: public bucket `wbm-code/wbm/22.1.1/model/` (`https://s3.anvil.rcac.purdue.edu/openghm/wbm-code/wbm/22.1.1/model/`) |
-| `manual Ln` | line n of the text extracted from `WBM_Documentation.v2.0.Jan2023.docx`, the WBM manual |
+| `manual §n`, `eq. n`, `Fig. n`, `Table n` | section, equation, figure or table n of the WBM manual, `WBM_Documentation.v2.0.Jan2023.docx` (GitHub repository wsag/WBM, folder documentation). Section numbers are the docx's own heading numbers, the ones its cross-references use ("Section 12" is irrigation); the 2022 PDF of the same manual numbers the sections from 11.2 on one higher. Equation numbers are as printed in the text, and some are stale (the Muskingum equations are 8.1-1 to 8.1-13 under §8.3) |
 | *measured:* `case`, SLURM job | `wbm.pl` run in the snapshot's own image on Anvil with the toolkit's binds, by the harness in `ops/anvil/param-tests/`. Every case is in [Measured on Anvil](#9-measured-on-anvil) |
 
 Two more sources were read: the input spreadsheet *WBM_Usage_and_Input_Reference* (Google
@@ -25,7 +25,10 @@ are quoted as "sheet", and the metadata extraction document (Google Doc
 `1eVH-DHb3K_h9gvdD5mcThFzSW-pq369KD8u5Ja1SLzs`), whose bold names are the tree's module
 names. The manual is a process manual, not an input manual: it has no section on the run
 init, prints an init key name only for the 20 ModFlow inputs, and states most defaults not
-at all.
+at all. Two more were read for [section 14](#14-what-the-paper-and-the-wiki-say): the paper
+`Grogan_etal_2022_GMD.pdf` in the same folder (Grogan et al. 2022, "WBM v.1.0.0", Geosci. Model
+Dev. 15, 7287–7323), cited as "paper", and the WBM wiki (github.com/wsag/WBM/wiki), cited as
+"wiki".
 
 ## 2. The two code versions, and what runs them
 
@@ -236,7 +239,7 @@ derived modules with no init key of their own.
 |---|---|---|
 | Water age | an output matching `streamAge` | |
 | Runoff source tracking | an output ending `_gm`, `_sm`, `_rr` or `_bf` | 12 CSV names, all accepted (measured: `runoff_gm` prints `Component tracking: rSource`, `v2_ov_gm`) |
-| Primary source tracking | an output ending `_pg`, `_ps`, `_pr` or `_pu` | 128 CSV rows; 104 accepted on 23.9.0, 80 on 22.1.1 (108 CSV rows on 22.1.1). Choosing such a variable switches the process on (measured: `v2_ov_ps`, `Component tracking: pSource`). The manual says glacier melt can only be tracked when glacier water is provided (manual L914) |
+| Primary source tracking | an output ending `_pg`, `_ps`, `_pr` or `_pu` | 128 CSV rows; 104 accepted on 23.9.0, 80 on 22.1.1 (108 CSV rows on 22.1.1). Choosing such a variable switches the process on (measured: `v2_ov_ps`, `Component tracking: pSource`). The manual says glacier melt can only be tracked when glacier water is provided (manual §15) |
 | Irrigation re-use tracking | an output ending `_pst`, `_irr`, `_use` or `_rlt` | 19 CSV rows, 17 on 22.1.1. Cancelled when `Irrigation` is falsy (W:984; W(22):955); the variables are then dropped with a message (measured: `v2_ov_irr`, `Component tracking: None`). The `IrrReuse*` and `*_irr_N` outputs also need the component balance (W:1139-1140) |
 | Water temperature | the bucket needs `(runoff\|discharge)_twt$` (W:978); the inputs it needs are required on **any** `_twt` output (W:583) | accepted names: `discharge_twt` and `baseflow_twt` |
 | Spatial masks | the `Runoff_mask` **block** is the trigger (W:980); then at least one of `dischMsk runoffMsk grndWtMsk` is required (W:4889-4890) | a Msk output without the block has no Magic-Table entry (M:654) and fails at the start of a real run, though `-test` passes (measured: `v2_ov_msk_real`, `v2_ov_msk`) |
@@ -371,31 +374,31 @@ Every case ran `wbm.pl -v -test` unless the row says otherwise, with the harness
 
 The input spreadsheet, the WBM manual, the two code versions and the measurements, key by
 key. The code value is the one the tree uses. "-" means that source says nothing. A bare
-`Ln` is a line of the manual's text extract; `W`, `M` and `(22)` are as in section 1.
+`§n`, `eq. n`, `Fig. n` or `Table n` is of the manual; `W`, `M` and `(22)` are as in section 1.
 
 | Key | Sheet | WBM manual | 22.1.1 code | 23.9.0 code | Measured |
 |---|---|---|---|---|---|
-| wbmParam.RhRt2 | 0.56 | silent; Fig 7.1 plots C_SRP 0.05/0.2/0.8 (L274-275) | 0.56 (W(22):844-845) | 0.2 (W:872-873) | - |
-| DIN.scale | 12.1 | silent (Wollheim 2008, no numbers, L976-980) | 12.2 (W(22):709) | 12.2 (W:737) | - |
+| wbmParam.RhRt2 | 0.56 | silent; Fig 7.1 plots C_SRP 0.05/0.2/0.8 (§7.1) | 0.56 (W(22):844-845) | 0.2 (W:872-873) | - |
+| DIN.scale | 12.1 | silent (Wollheim 2008, no numbers, §17) | 12.2 (W(22):709) | 12.2 (W:737) | - |
 | DIN.asym_ag | 4.2 | silent | 4.8, only with Irrigation (W(22):711) | 4.8, only with Irrigation (W:739) | - |
-| DIN.intercept | key intcpt | -2.975 (L1007), no key | reads $param{intercept}, stores intcpt (W(22):715) | same (W:743) | - |
-| WaterDemand.StkDemandReturnFr | 0.89 | no value (L895) | 0.95 (W(22):1214) | 0.95 (W:1255) | - |
-| Aquifers.Aqf_Ph | 13.1 | 13.1, log10 m2 (L605) | stub, ignored | -13.1 (M:3478-3479) | - |
-| Aquifers.Aqf_SyCnfd | 0.001 | 0.001 (L601-627) | stub, ignored | 0.01, read as a layer (M:3476-3477) | - |
+| DIN.intercept | key intcpt | -2.975 (§17, eq. 17-9), no key | reads $param{intercept}, stores intcpt (W(22):715) | same (W:743) | - |
+| WaterDemand.StkDemandReturnFr | 0.89 | no value for R_stk, but 95% of livestock water returns (§13) | 0.95 (W(22):1214) | 0.95 (W:1255) | - |
+| Aquifers.Aqf_Ph | 13.1 | 13.1, log10 m2 (§9.3, Aqf_Ph input) | stub, ignored | -13.1 (M:3478-3479) | - |
+| Aquifers.Aqf_SyCnfd | 0.001 | 0.001 (§9.3, Aqf_SyCnfd input) | stub, ignored | 0.01, read as a layer (M:3476-3477) | - |
 | PostProcessing.Trim | 1 | silent | absent = 0 (M(22):3198) | absent = 0 (M:4232) | - |
-| openWaterEvap default | 2 x PET | 100% of PET (sec 3.2, L217) | openWtrCoeff (1) x PET (W(22):850,1530) | openWtrCoeff (1) x PET (W:878,1640) | code only (no run); sheet and the old tree were wrong |
-| lapseDownscale.lapseRate | -6.49 | -6.4; may be a gridded layer (sec 4, L238) | -6.49, only if isNumber (W(22):4297,4308) | -6.49, only if isNumber (W:4803,4814) | - |
-| Irrigation.Order | 1 = surface water first | default order: shallow groundwater in the cell, then river storage in the cell (sec 12.2.1, L792-798) | comment '0 Grnd Water; 1 Stream priority' (W(22):1077); used as a numeric ratio layer zeros+Order when SW_GW_ratio is absent | same (W:1110, 1175-1176) | -; the tree labels follow the code, the manual disagrees (open) |
-| Irrigation.IrrEfficiency | 100 (%) | Ieff [-] (eq 12.1-5, L773) | default 1; percent, read_dateLayer(...)->lclip(10)/100 (W(22):1073, 2257-2259) | default 1; same use (W:1106, 2535-2537) | a number crashes: w_irreff_num, SLURM 21521320 (exit 25, lclip on a scalar); so the default 1 is unusable as well |
-| Routing.velocity | 2.18 km/h | silent (L398) | default 2.18 at 30 arc-min, scaled by 1-0.077 ln(cellsize/0.5) (W(22):886,899) | same (W:914,927) | 2.18 gives 2.48 km/h at 5': E0, SLURM 21521192; velocity 1 gives 1.14: v2_velocity1, SLURM 21521320 |
-| wbmParam.CLeafMax unit | mm m-2 s-1 ??? | m h-1 (Table 1, L186) | mm/s, x secDay/1000 = m/day (W(22):3966) | same (W:4466) | - |
-| Aquifers.BRes unit | day | day (L619) and day-1 (L581) in the same manual | stub | comment 'Riverbed resistance (day)' (M:3496) | - |
-| DIN.asym unit | mg DIN/L | g/L (L978) | - | - | - (mg/L kept; 1.4 g/L is implausible) |
-| WaterDemand.DomDemandPP / IndDemandPP unit | per capita, per year | mm/d per capita (L892) | - | - | - (unit left blank until confirmed) |
+| openWaterEvap default | 2 x PET | 100% of PET (§3.2) | openWtrCoeff (1) x PET (W(22):850,1530) | openWtrCoeff (1) x PET (W:878,1640) | code only (no run); sheet and the old tree were wrong |
+| lapseDownscale.lapseRate | -6.49 | -6.4; may be a gridded layer (§4.1) | -6.49, only if isNumber (W(22):4297,4308) | -6.49, only if isNumber (W:4803,4814) | - |
+| Irrigation.Order | 1 = surface water first | default order: shallow groundwater in the cell, then river storage in the cell (§12.2.1) | comment '0 Grnd Water; 1 Stream priority' (W(22):1077); used as a numeric ratio layer zeros+Order when SW_GW_ratio is absent | same (W:1110, 1175-1176) | -; the tree labels follow the code, the manual disagrees (open) |
+| Irrigation.IrrEfficiency | 100 (%) | Ieff [-] (§12.1, eq. 12.1-5) | default 1; percent, read_dateLayer(...)->lclip(10)/100 (W(22):1073, 2257-2259) | default 1; same use (W:1106, 2535-2537) | a number crashes: w_irreff_num, SLURM 21521320 (exit 25, lclip on a scalar); so the default 1 is unusable as well |
+| Routing.velocity | 2.18 km/h | silent (§8.4) | default 2.18 at 30 arc-min, scaled by 1-0.077 ln(cellsize/0.5) (W(22):886,899) | same (W:914,927) | 2.18 gives 2.48 km/h at 5': E0, SLURM 21521192; velocity 1 gives 1.14: v2_velocity1, SLURM 21521320 |
+| wbmParam.CLeafMax unit | mm m-2 s-1 ??? | m h-1 (Table 1) | mm/s, x secDay/1000 = m/day (W(22):3966) | same (W:4466) | - |
+| Aquifers.BRes unit | day | day (§9.3, BRes input) and day-1 (§9.3, eq. 9.3-27) in the same manual | stub | comment 'Riverbed resistance (day)' (M:3496) | - |
+| DIN.asym unit | mg DIN/L | g/L (§17, eq. 17-1) | - | - | - (mg/L kept; 1.4 g/L is implausible) |
+| WaterDemand.DomDemandPP / IndDemandPP unit | per capita, per year | mm/d per capita (§14) | - | - | - (unit left blank until confirmed) |
 | DIN.intercept (sheet name intcpt) | intcpt | no key names | intercept (W(22):715) | intercept (W:743) | - |
-| Irrigation.SearchDist / AqfCoeff | old names | IrrSearchDist 100 km (L791) | SearchDist is aliased (W(22):1072); AqfCoeff is the live key (W(22):1080); ExtraAqfCoeff is not read | both old names are aliased (W:1104-1105); ExtraAqfCoeff is native (W:1113) | -; the tree has one field for each version's native key |
-| Aquifers key names | Net_DEM, H_DEM_B/T, Aqf_Kh, Aqf_Kv | STN_DEM, WT_DEM_B/T, Aqf_Kh_B, Aqf_Kv_B (L591-609) | stub, ignored (M(22):2989-2994) | reads the sheet names (M:3450-3497) | - |
-| Aquifers / Springs / USGS availability | enabled | not in the public release (L428, L586) | stubs 'Removed from public domain' (M(22):2899-2994) | full ModFlow, Lumped, Virtual, springs, USGS | not run |
+| Irrigation.SearchDist / AqfCoeff | old names | IrrSearchDist 100 km (§12.2.1) | SearchDist is aliased (W(22):1072); AqfCoeff is the live key (W(22):1080); ExtraAqfCoeff is not read | both old names are aliased (W:1104-1105); ExtraAqfCoeff is native (W:1113) | -; the tree has one field for each version's native key |
+| Aquifers key names | Net_DEM, H_DEM_B/T, Aqf_Kh, Aqf_Kv | STN_DEM, WT_DEM_B/T, Aqf_Kh_B, Aqf_Kv_B (§9.3 input list) | stub, ignored (M(22):2989-2994) | reads the sheet names (M:3450-3497) | - |
+| Aquifers / Springs / USGS availability | enabled | not in the public release (§9.3) | stubs 'Removed from public domain' (M(22):2899-2994) | full ModFlow, Lumped, Virtual, springs, USGS | not run |
 | openWaterEvap value | GDAL-Layer or Calculate | input data or scaled PET; 'Calculate' never appears | init only (W(22):631); Calculate keyword (W(22):560) | init only (W:652-654); Calculate keyword (W:582) | a number is taken as an MT ID: v2_owe_num, SLURM 21521320; 'Calculate' needs MT_cloudFr: v2_owe_calc, SLURM 21521320. Neither is offered |
 | MT_windU/MT_windV/MT_cloudFr/MT_humidity/MT_albedo | GDAL-Layer or MT ID/init | - | init only (W(22):562-567, 614) | init only (W:587-590, 636) | MT IDs cannot work: no DataID_DB.csv (v2_owe_num, SLURM 21521320) |
 | Runoff_mask.maskFile | GDAL-Layer or MT ID/init | - | raster only (W(22):4395) | raster only (W:4901) | - |
@@ -405,16 +408,16 @@ key. The code value is the one the tree uses. "-" means that source says nothing
 | landCover (lowercase) | alias of LandCover | - | not read; only $runIO{LandCover} (W(22):4524-4526) | not read; only $runIO{LandCover} (W:5033, 5044) | ignored: w_landcover_lc, SLURM 21521320 |
 | Projection | EPSG code or definition | - | must be exactly epsg:4326 (W(22):897-898) | same (W:925-926) | 'EPSG:4326' aborts: v2_proj_upper, SLURM 21521320 (exit 2) |
 | MT_Code_Name.Calendar 360 | standard, 366, 365 | silent | regex accepts 360, then dies (M(22):416; W(22):255) | regex accepts 360, then dies (M:468; W:278) | v2_calendar360, SLURM 21521585: WBM is not coded for 360 calendar |
-| MT_Code_Name.Time_Series | daily, hourly daily{24} | daily only (L748) | daily, daily{N}, monthly (M(22):436-437) | adds daily[N], daily[N,..lastDay], ':daily..' step suffix (M:488-491) | - |
+| MT_Code_Name.Time_Series | daily, hourly daily{24} | daily only (§11.2) | daily, daily{N}, monthly (M(22):436-437) | adds daily[N], daily[N,..lastDay], ':daily..' step suffix (M:488-491) | - |
 | Spinup flat keys | Spinup_Start/End/Loops in wbm_SHORT*.init | - | fatal (M:117-118) | fatal (M:117-118) | v2_flat_spinup, w_flat_spinup, v2_short_raw, v2_short_std_raw: 'Obsolete spinup parameters', exit 255, SLURM 21521320 |
 | Spinup.Save_Vars | bool01 | silent | not an allowed key, even 0 (M:122-123) | 1 or 2, 0 = off (M:139-140) | w_savevars0 exit 2 (22.1.1); v2_savevars0 exit 0 (23.9.0), SLURM 21521320 |
-| Routing.method Muskingum | enum | exits if abstractions exist; coarse grids only (L347) | falls back to LRR with a warning when IBT, WaterDemand, Irrigation or openWaterEvap exists (W(22):462-472) | honoured | w_muskingum: warning and LRR; v2_muskingum with openWaterEvap ran Muskingum, SLURM 21521320 |
+| Routing.method Muskingum | enum | exits if abstractions exist; coarse grids only (§8.3) | falls back to LRR with a warning when IBT, WaterDemand, Irrigation or openWaterEvap exists (W(22):462-472) | honoured | w_muskingum: warning and LRR; v2_muskingum with openWaterEvap ran Muskingum, SLURM 21521320 |
 | Output_vars | not required; empty turns output off | silent | required and truthy (M(22):361); whitespace-only passes (W(22):247) | required and truthy (M:97-100, 376); whitespace-only passes (W:264) | v2_ov_empty exit 255; v2_ov_space runs with no outputs, SLURM 21521320 |
 | Output_vars universe | 580 variables | silent | CSV 530 unique names; 407 accepted | CSV 575 named rows (5 blank); 437 accepted | v2_ov_csvonly and v2_ov_codeonly both fatal, SLURM 21521320 |
 | Elevation | yes for P-M PET and OWE calculation | silent | not in wbm_params(); used W(22):599-605, 644 | not in wbm_params() (M:94); used W:622-628, 666; a constant 0 is false for the required checks | - |
 | Runoff_mask.model | 0 simple, 1 full (see documentation) | not defined anywhere | set_default(model, 0); any true value = full (W(22):4466) | set_default(model, 0); any true value = full (W:4972) | - |
-| MT_LAI | triggers canopy interception | interception proportional to LAI (L250); also P-M (L184) and water temperature (L955) | ATTR (W(22):636); required for P-M and _twt (W(22):604) | ATTR (W:658); required for P-M and _twt (W:627) | v2_pm and v2_ov_twt need the drivers, SLURM 21521320/21521393 |
-| snowBands | flag | band range/size are preprocessing inputs (L228) | flag; band files next to the Network (W(22):830, 4177) | flag (W:858); band files (W:4683-4684) | - |
+| MT_LAI | triggers canopy interception | interception proportional to LAI (§5, eq. 5-2); also P-M (Table 1) and water temperature (§16, eq. 16-11) | ATTR (W(22):636); required for P-M and _twt (W(22):604) | ATTR (W:658); required for P-M and _twt (W:627) | v2_pm and v2_ov_twt need the drivers, SLURM 21521320/21521393 |
+| snowBands | flag | band range/size are preprocessing inputs (§4.1) | flag; band files next to the Network (W(22):830, 4177) | flag (W:858); band files (W:4683-4684) | - |
 
 Sheet defaults that differ from the tree's and are not in the table above:
 
@@ -472,10 +475,10 @@ needs none.
 
 #### River routing
 
-- `Routing.method`: Always written (measured: v2_routing_empty exit 255, SLURM 21521320). Flush = flow accumulation. On 22.1.1 Muskingum is replaced by LRR with a warning when ConnectivityNetwork, WaterDemand, Irrigation or openWaterEvap is present (measured: w_muskingum, SLURM 21521320); 23.9.0 honours it (measured: v2_muskingum, SLURM 21521320). The manual: coarse grids only, Courant number << 1, exits when abstractions exist (L347)
+- `Routing.method`: Always written (measured: v2_routing_empty exit 255, SLURM 21521320). Flush = flow accumulation. On 22.1.1 Muskingum is replaced by LRR with a warning when ConnectivityNetwork, WaterDemand, Irrigation or openWaterEvap is present (measured: w_muskingum, SLURM 21521320); 23.9.0 honours it (measured: v2_muskingum, SLURM 21521320). The manual: coarse grids only, Courant number << 1, exits when abstractions exist (manual §8.3)
 - `Routing.weightedLength`: Weighted stream reach length in LRR routing; any string without 'No' means weighted, so never offer 0/false (W:2942)
 - `Routing.velocity`: The 30 arc-min value; WBM scales it by 1-0.077*ln(cellsize/0.5) (W:927; 22.1.1: 899). Measured: 2.18 gives 2.48 km/h on a 5 arc-min network (E0, SLURM 21521192); 1 gives 1.14 (v2_velocity1, SLURM 21521320)
-- `Routing.beta`: Shape parameter sigma (manual L374)
+- `Routing.beta`: Shape parameter sigma (manual §8.3, eq. 8.1-8)
 
 #### Climate forcing
 
@@ -512,20 +515,20 @@ needs none.
 #### Model parameters
 
 - `wbmParam.alpha`: Soil moisture drying coefficient (sheet: 1 wet, 10 drier, 20 dry; larger alpha = AET less water-limited)
-  Calibration hint: source: WBM manual sec 3.1 (L208): 'can be adjusted to calibrate the model'. No range is given: Fig 3.1 plots 2, 5 and 8 only as examples (L210)
+  Calibration hint: range: [2, 20]; source: paper, Table 1. The manual says it 'can be adjusted to calibrate the model' (§3.1, eq. 3.1-2) and gives no range: Fig. 3.1 plots 2, 5 and 8 only as examples
 - `wbmParam.Infiltration`: Anything not matching /HBV/i behaves as FrAMES (W:2222)
-- `wbmParam.infiltrFrac`: Calibration hint: range: [0.4, 0.6]; source: WBM manual sec 7.1 (L271): 'generally robust in the range of 0.4 to 0.6'
-- `wbmParam.HBV_Beta`: Direct infiltration recharge factor for HBV; not documented in the manual (L291)
-- `wbmParam.groundWatBETA`: Baseflow release coefficient from groundwater storage (60-day time scale, manual L309)
+- `wbmParam.infiltrFrac`: Calibration hint: range: [0.1, 0.9]; source: paper, Table 1 (γ). The manual calls it 'generally robust in the range of 0.4 to 0.6' (§7.1), which the help text says
+- `wbmParam.HBV_Beta`: Direct infiltration recharge factor for HBV; not documented in the manual (§7.3 names the parameter, gives no value)
+- `wbmParam.groundWatBETA`: Baseflow release coefficient from groundwater storage (60-day time scale, manual §7.4, eq. 7.4-3). Calibration hint: range: [0.001, 0.1]; source: paper, Table 1 (β), whose default 0.025 is not the code's (section 14)
 - `wbmParam.RhRt2`: Runoff storage release (Rhole/Rtank)^2. The default differs by version: 0.56 on 22.1.1 (W(22):844), 0.2 on 23.9.0 (W:872); write it explicitly to reproduce a run across versions. The same coefficient drives the irrigation pool
-  Calibration hint: range: [0.05, 0.8]; source: WBM manual Fig 7.1 (L278): C_SRP = 0.05, 0.2, 0.8 are 'three reasonable values'; C_SRP is RhRt2 (eq. 7.1-1, L276, is the code's RhRt2 * sqrt(G2 * surfStg), W:2706)
-- `wbmParam.maxRffStorage`: Calibration hint: source: WBM manual sec 7.2 (L284, L287): T_SRP set to 1000 mm by default; the manual gives no tuning range; not applied to the irrigated fraction
+  Calibration hint: range: [0.2, 1.0]; source: paper, Table 1 (C_SRP). C_SRP is RhRt2: the manual's eq. 7.1-1 and the paper's eq. 15 are the code's RhRt2 * sqrt(G2 * surfStg) (W:2706). The manual's Fig. 7.1 plots 0.05, 0.2 and 0.8 as 'three reasonable values' (§7.1)
+- `wbmParam.maxRffStorage`: T_SRP, 1000 mm by default (manual §7.1); not applied to the irrigated fraction. No calibration hint: the paper's range, 10 to 50 mm (Table 1; 15 to 50 mm for a flashier response in temperate climates, Sect. 2.2.1), would put the default outside it, so the help text says it instead
 - `wbmParam.CLeafMax`: Max leaf stomatal conductance (Dingman 2008, Table 7-5); the code multiplies by secDay/1000 to m/day (W:4466), so the unit is mm/s, not the sheet's 'mm m-2 s-1' or the manual's m/h
-- `wbmParam.InterceptPar`: Canopy interception parameter (0.15 Dingman 2002 / BROOK90; 0.2 Dickinson 1984; 0.25 VIC, manual L252)
+- `wbmParam.InterceptPar`: Canopy interception coefficient: capacity = LAI × InterceptPar (W:1691) (0.15 Dingman 2002 / BROOK90; 0.2 Dickinson 1984; 0.25 VIC, manual §5, eq. 5-2). Calibration hint: range: [0, 1]; source: paper, Table 1 (C_LAI)
 - `wbmParam.openWtrCoeff`: Open-water evaporation = coeff x PET when no openWaterEvap dataset is given (W:878, 1640)
 - `wbmParam.oceanMask_file`: GDAL raster only (M:2007)
 - `wbmParam.compBalance`: Tracking component balance, written as spreadsheets to the output folder (Global_tracking: 1, Wyoming_tracking: 0). WBM forces it to 0 unless a primary-source or irrigation re-use bucket is on (W:988-989) and to 1 when one of UseReuseOutGross_irr, IrrReuseInGross_irr, IrrReuseInGrossFlow_irr, IrrReuseInGrossGrwt_irr, IrrReuseInGrossAqf_irr, IrrReuseOutNet_irr, IrrReuseOutNonben_irr, irrFracInGross, UseReuseInGross_use is listed (W:1139-1140)
-- `wbmParam.resetSpinupTracking`: Restart tracking after spin-up: 0 = representative mixtures, 1 = accumulate a component flux during the run. The sheet says 'reset groups 2 and 3', the manual says all stocks (L907-910): group scope open
+- `wbmParam.resetSpinupTracking`: Restart tracking after spin-up: 0 = representative mixtures, 1 = accumulate a component flux during the run. The sheet says 'reset groups 2 and 3', the manual says all stocks (§15): group scope open
 - `wbmParam.nIrrTracking`: Number of irrigation water reuse cycles tracked in group 3. With N > 1 WBM adds &lt;var>_irr_&lt;k> for every listed *_irr variable itself (W:4985-4999); do not list those names (discharge_irr_1..4 are fatal in the output list)
 - `wbmParam.outputScale`: /Cell/i on, anything else off (W:880-881)
 
@@ -539,7 +542,7 @@ needs none.
 - `Reservoirs.File`: Database/spreadsheet of reservoirs; must exist (M:2632). Read without the ASCII check (M:2635). Optional columns with hard-coded names, not init keys: ForceTo_Lon and ForceTo_Lat (force snapping to the network, M:2782-2784)
 - `Reservoirs.SkipLines`: Required: WBM dies when it is undefined (M:2633-2634), so always written
 - `Reservoirs.CatchArea`: Used without an existence guard (M:2737-2760): give CatchArea, Capacity and Area
-- `Reservoirs.Capacity`: Effective storage, dead storage excluded (manual L712)
+- `Reservoirs.Capacity`: Effective storage, dead storage excluded (manual §11.1.2)
 - `Reservoirs.StartYear`: The default-to-0 fix exists in 23.9.0 only (M:2737)
 - `Reservoirs.IrrFrequency`: Data .init (Merra_irrigationGross_Freq_dc.init); editing it also forks the block file
 - `Reservoirs.damUseParams`: Operating parameters by dam use (6 rows, 8 or 9 columns; manual Table 11-1 suggests values)
@@ -554,7 +557,7 @@ needs none.
 - `Glaciers.glArea`: Units must contain 'frac' on 23.9.0 (W:694-695); 22.1.1 does not check. The published ones, `global_rgi6_glaciers_area_1km.init` (ASCII, `Code_Name` equal to the file name) and `glacier_RDI6_6min_ERA-Interim_hindcast_Area_yc.init` (its `Code_Name` is the first one's, so 23.9.0 refuses it), have Units `fraction`, `yearly_clim`, and both name the file global_rgi6_glaciers_1km.tif of the model input's glaciers folder, 43200 x 21600 cells, 30 arc-seconds (gdalinfo). No 6 arc-minute area file is in the model input
 - `Glaciers.glVolume`: Optional (wbm.pl:673), exists-tested: omitted when empty, never ''. Only needed for total water mass per pixel. The published one, `glacier_RDI40_6min_ERA-Interim_hindcast_Volume_y.init`: Units `m3`, `yearly`, 6 arc-minutes
 - `Glaciers` outputs: `glMelt`, `glArea` and `glVolume` are in the output table only while `Glaciers` is set (W:3613-3617), and all three are in the output list of both versions (437 names on 23.9.0)
-- `Aquifers`: 22.1.1 ignores the whole block ('Removed from public domain', M(22):2989-2994); the manual says aquifers are not in the public release (L428, L586). Aquifers need a long spin-up to equilibrate
+- `Aquifers`: 22.1.1 ignores the whole block ('Removed from public domain', M(22):2989-2994); the manual says aquifers are not in the public release (manual §9.3). Aquifers need a long spin-up to equilibrate
 - `Aquifers.Type`: ModFlow is matched exactly (M:3447)
 - `Aquifers.gwtUseCoeff`: Shallow groundwater use before tapping the aquifer (M:3704)
 - `Aquifers.Aqf_Par_File`: CSV headers: ID, Capacity (m3, optional), Sy, InfiltFrac, Thickness and BaseElev (Lumped). Without Aqf_ID_File all cells are aquifer 1 and the file must contain ID 1 (M:3677-3685)
@@ -574,16 +577,16 @@ needs none.
 - `Aquifers.SLE`: 0, or a string starting 'min' = min(Net_DEM) (M:3498-3499); 'min' is not in the manual
 - `Aquifers.Aqf_Clump`: Read only for ModFlow (M:3501; the ModFlow branch is M:3447-3654); speeds up runs
 - `Aquifers.wellMax`: Well depth; 1e6 m = no limit. Read only for ModFlow (M:3502)
-- `Aquifers.MF_steps`: Raise when the log reports a stability criterion > 0.5 (manual L627)
+- `Aquifers.MF_steps`: Raise when the log reports a stability criterion > 0.5 (manual §9.3, MF_steps input)
 - `Springs`: CSV headers: ID, Lon, Lat, Discharge, Elevation (read_table_hash on ID, M:3140-3143). 22.1.1 ignores it. Whether a Lumped springs file needs a Conductance column: open
 - `snowBands`: Elevation bands for the snowpack; for coarse Network grids. Needs the band files made by elevation_bands.pl next to the Network file (*.elvBands.dat, *.elvAverg.dat, *.elvBands.txt; wbm.pl:4683-4684). Uses the lapse rate from climate.lapse_downscale (W:856). Band range and size are chosen when running elevation_bands.pl (default 0-5000 m, 250 m)
-- `DIN`: The block alone does nothing: WBM reads it only when an output name starts with DIN (W:730) and forces it to '' otherwise (W:763). With such an output the block is mandatory (measured: v2_ov_din2 'DIN model requires "DIN" input', SLURM 21521414). Accepted outputs: DIN_Conc_Cons, DIN_Conc_Dsch, DIN_Conc_Rnff, DIN_Denit, DIN_Land_Load, DIN_Load, DIN_WWTP_Input, DIN_WWTP_Load, DIN_WWTP_Removal (the same nine in both versions). The manual says the DIN parameters are 'accepted as input for the purposes of model calibration' (L980) and that uptake varies with water temperature (L1002): whether the water-temperature drivers are required is open
+- `DIN`: The block alone does nothing: WBM reads it only when an output name starts with DIN (W:730) and forces it to '' otherwise (W:763). With such an output the block is mandatory (measured: v2_ov_din2 'DIN model requires "DIN" input', SLURM 21521414). Accepted outputs: DIN_Conc_Cons, DIN_Conc_Dsch, DIN_Conc_Rnff, DIN_Denit, DIN_Land_Load, DIN_Load, DIN_WWTP_Input, DIN_WWTP_Load, DIN_WWTP_Removal (the same nine in both versions). The manual says the DIN parameters are 'accepted as input for the purposes of model calibration' (§17, after eq. 17-2) and that uptake varies with water temperature (§17, eq. 17-11): whether the water-temperature drivers are required is open
 - `DIN.luSub`: Land-use fraction, developed; required (W:735)
 - `DIN.luAgr`: Land-use fraction, agriculture; required (W:736). 22.1.1 clips the start year at 1800 (W(22):708), 23.9.0 does not (open)
-- `modules.din_tracking.loading`: Calibration hint: source: WBM manual L980: the sigmoid parameters are accepted as input 'for the purposes of model calibration'
+- `modules.din_tracking.loading`: Calibration hint: source: WBM manual §17, after eq. 17-2: the sigmoid parameters are accepted as input 'for the purposes of model calibration'
 - `DIN.asym_ag`: Used only when Irrigation is on (W:739)
 - `DIN.BFI`: Stored, never used (W:742)
-- `modules.din_tracking.removal`: Calibration hint: source: WBM manual L980, L1020: slope and intercept 'can be input'
+- `modules.din_tracking.removal`: Calibration hint: source: WBM manual §17, after eq. 17-2 and eq. 17-16: slope and intercept 'can be input'
 - `DIN.intercept`: Sheet calls it intcpt; WBM reads 'intercept'
 - `DIN.WWTP.PopDensity`: Data .init only: a raster path dies in read_init (W:758)
 - `DIN.WWTP.t_level`: Treatment level; the manual's removal lookup: Primary 0.1, Secondary 0.5, Secondary (Advanced)/Tertiary 0.8 (Table 17-1); exact strings unverified
@@ -613,16 +616,16 @@ needs none.
 - `Irrigation.IrrSearchDist`: Search distance for stream water. Both versions read IrrSearchDist; the old key SearchDist is an alias that wins when the init has it (section 6)
 - `Irrigation.ExtraCoeff`: Unsustainable groundwater withdrawal factor outside aquifers; cannot be a time series (W:1187)
 - `Irrigation.AqfCoeff`: The 22.1.1 name of aqf_coeff (W(22):1080); the aquifers it refers to do not exist there (Aquifers is ignored), so it has no effect
-- `Irrigation.useVIS`: Virtual irrigation storage (daily irrigation withdrawal). The manual describes it as part of the daily mode only (L772); dependency on dailyIrr is open
+- `Irrigation.useVIS`: Virtual irrigation storage (daily irrigation withdrawal). The manual describes it as part of the daily mode only (§12.1, eq. 12.1-4); dependency on dailyIrr is open
 - `Irrigation.IrrEfficiency`: Percent, clipped at 10 and divided by 100 (W:2535-2537). A number crashes (measured: w_irreff_num exit 25, SLURM 21521320), and so does the WBM default 1 when the key is absent (measured: w_irreff_absent exit 25, SLURM 21521585), so an init or raster is required unless IrrTechApplicationFile supplies the efficiency. The file is irrEfficiency.init, Code_Name fao_irrEfficiency
-- `Irrigation.ReturnCoeff`: Share of irrigation return flow going to groundwater (rest to surface runoff); whether the manual's return fraction (L809) is the same quantity is open
+- `Irrigation.ReturnCoeff`: Share of the irrigation application losses, after evaporation, that percolates to groundwater; the rest goes to surface runoff (W:5319-5320). It is the paper's R_perc (Table 1), whose default 0.5 is not the code's 1.0 (section 14)
 - `Irrigation.dailyIrr`: Not compatible with process-based irrigation efficiency (W:1204-1205)
 - `Irrigation.IrrTechDeliveryFile`: Delivery parameters for efficiency- or process-based modeling (see template headers)
 - `modules.water_age`: The published wbm_test.init lists streamAge
-- `modules.runoff_source_tracking`: Tracks runoff by source: _rr rain/surface runoff, _bf baseflow, _sm snow melt, _gm glacier melt (manual L916). 12 CSV names, all accepted. Measured: runoff_gm prints 'Component tracking: rSource' (v2_ov_gm, SLURM 21521393)
-- `modules.primary_source_tracking`: Tracks water by primary source (_ps snow, _pg glacier, _pr rain, _pu unsustainable groundwater). Choosing a suffix variable turns the process on (measured: runoff_ps prints 'Component tracking: pSource', v2_ov_ps, SLURM 21521393). Glacier melt can only be tracked when glacier water is provided (manual L914)
+- `modules.runoff_source_tracking`: Tracks runoff by source: _rr rain/surface runoff, _bf baseflow, _sm snow melt, _gm glacier melt (manual §15). 12 CSV names, all accepted. Measured: runoff_gm prints 'Component tracking: rSource' (v2_ov_gm, SLURM 21521393)
+- `modules.primary_source_tracking`: Tracks water by primary source (_ps snow, _pg glacier, _pr rain, _pu unsustainable groundwater). Choosing a suffix variable turns the process on (measured: runoff_ps prints 'Component tracking: pSource', v2_ov_ps, SLURM 21521393). Glacier melt can only be tracked when glacier water is provided (manual §15)
 - `modules.irrigation_reuse_tracking`: Tracks irrigation water re-use and related sources (_pst pristine, _rlt relict, _use dom/ind/stk return; wbm.pl:3765-3770). Cancelled when Irrigation is off: the variables are dropped silently, not an error (W:984; measured: v2_ov_irr prints 'Component tracking: None', SLURM 21521393)
-- `modules.water_temperature`: Accepted names: discharge_twt and baseflow_twt only. Needs airT_yc, MT_cloudFr, MT_windU, MT_windV, MT_humidity, canopyHt and MT_LAI (W:583-590, 625-627, 711; measured: v2_ov_twt 'MT_cloudFr input is required', SLURM 21521393). The manual: N_sr 5 d, N_bf 15 d, w_tl 0.59, depth capped at 20 m; no init keys known for them (L931-933)
+- `modules.water_temperature`: Accepted names: discharge_twt and baseflow_twt only. Needs airT_yc, MT_cloudFr, MT_windU, MT_windV, MT_humidity, canopyHt and MT_LAI (W:583-590, 625-627, 711; measured: v2_ov_twt 'MT_cloudFr input is required', SLURM 21521393). The manual: N_sr 5 d, N_bf 15 d, w_tl 0.59, depth capped at 20 m; no init keys known for them (§16, eq. 16-1, 16-2, notes to eq. 16-4)
 - `modules.green_blue_water`: Triggered by any output matching Moist(Gr|Bl) or [BG]W_(ET|SM), including the per-crop _BW_ET/_GW_ET names. Requirements are not established (open)
 - `modules.endorheic_components`: 23.9.0 accepts four names (endoStrg_mm_pg/ps/pr/pu); 22.1.1 has the trigger but no accepted name. Requirements are not established (open)
 
@@ -702,41 +705,100 @@ What the published model inputs hold of those drivers: Neither model input (5258
 
 ## 13. What the manual says users tune
 
-The manual (`WBM_Documentation.v2.0.Jan2023.docx`, lines of its text extract) names these
-as adjustable, which is where the tree's `calibration` hints and its tiers come from:
+The manual (`WBM_Documentation.v2.0.Jan2023.docx`, cited as in section 1) names these
+as adjustable, which is where the tree's tiers come from; its `calibration` ranges come from the
+paper (section 14):
 
-- `alpha`: "can be adjusted to calibrate the model" (manual L208); Fig 3.1 plots 2, 5 and 8 as examples and gives no range.
-- `infiltrFrac`: "generally robust in the range of 0.4 to 0.6" (manual L271).
-- `RhRt2` (the manual's C_SRP): Fig 7.1 plots 0.05, 0.2 and 0.8 as "three reasonable values" (manual L274-278); its equation 7.1-1 is the code's `RhRt2 * sqrt(G2 * surfStg)` (W:2706). That supports 0.2 over 0.56 as the 23.9.0 default.
-- `maxRffStorage` (T_SRP): 1000 mm by default, no tuning range (manual L284, L287).
-- `InterceptPar`: 0.15 (Dingman 2002, BROOK90), 0.2 (Dickinson 1984) or 0.25 (VIC) (manual L252).
-- `lapseRate`: -6.4, a constant or a gridded layer (manual L238); the code has -6.49 and only a number.
-- The DIN loading and removal parameters are accepted "for the purposes of model calibration" (manual L980) and slope and intercept "can be input" (manual L1020).
+- `alpha`: "can be adjusted to calibrate the model" (manual §3.1, eq. 3.1-2); Fig 3.1 plots 2, 5 and 8 as examples and gives no range.
+- `infiltrFrac`: "generally robust in the range of 0.4 to 0.6" (manual §7.1).
+- `RhRt2` (the manual's C_SRP): Fig 7.1 plots 0.05, 0.2 and 0.8 as "three reasonable values" (manual §7.1, Fig. 7.1); its equation 7.1-1 is the code's `RhRt2 * sqrt(G2 * surfStg)` (W:2706). That supports 0.2 over 0.56 as the 23.9.0 default.
+- `maxRffStorage` (T_SRP): 1000 mm by default, no tuning range (manual §7.1).
+- `InterceptPar`: 0.15 (Dingman 2002, BROOK90), 0.2 (Dickinson 1984) or 0.25 (VIC) (manual §5, eq. 5-2).
+- `lapseRate`: -6.4, a constant or a gridded layer (manual §4.1); the code has -6.49 and only a number.
+- The DIN loading and removal parameters are accepted "for the purposes of model calibration" (manual §17, after eq. 17-2) and slope and intercept "can be input" (manual §17, after eq. 17-16).
 
 Parameters the manual calls tunable but for which no init key is known are not exposed:
-the snow thresholds Ts and Tm (-1 and +1 C), reservoir F_irr_max (0.05), the spillway
+the snow thresholds Ts and Tm (-1 and +1 C, fixed in the code, W:852-853), reservoir F_irr_max (0.05), the spillway
 flood-area rate (0.3 per m), reservoir size thresholds, the water-temperature N_sr (5 d),
 N_bf (15 d) and w_tl (0.59), the WWTP removal lookup (primary 0.1, secondary 0.5,
 secondary advanced or tertiary 0.8, manual Table 17-1), and the sprinkler mist-loss fraction and
 distribution uniformity. Fixed in the model and not exposed: the 80% river withdrawal cap
-(manual L807), the 5-year rolling mean discharge (manual L341, L677), the Muskingum
+(manual §12.2.1), the 5-year rolling mean discharge (manual §8.1, §11.1.1), the Muskingum
 constants other than sigma (`beta`), the Hamon coefficient and the snowmelt polynomial.
+
+## 14. What the paper and the wiki say
+
+The paper (`Grogan_etal_2022_GMD.pdf`: Grogan et al. 2022, "WBM v.1.0.0", Geosci. Model Dev. 15,
+7287–7323) has the only table of parameter ranges WBM publishes: its Table 1, default values with a
+suggested minimum and maximum. The tree's `calibration` ranges are taken from it, with `source:
+"Grogan et al. 2022, Table 1"`. The tree's defaults are the code's: where the paper's default
+differs (in bold below), the code wins, by the order of trust in section 1.
+
+| Paper | Init key | Suggested range | Paper's default | Code's default, both versions |
+|---|---|---|---|---|
+| α, ET response to soil drying | `wbmParam.alpha` | 2 to 20 | 5 | 5 (W:865) |
+| C_LAI, maximum canopy interception storage, mm | `wbmParam.InterceptPar` | 0 to 1 | 0.2 | 0.2 (W:661); capacity = LAI × InterceptPar (W:1691) |
+| γ, percolation fraction below the root zone | `wbmParam.infiltrFrac` | 0.1 to 0.9 | 0.5 | 0.5 (W:867) |
+| β, baseflow release, 1/day | `wbmParam.groundWatBETA` | 0.001 to 0.1 | **0.025** | 0.0167 (W:869; W(22):841) |
+| C_SRP, quick-flow release | `wbmParam.RhRt2` | 0.2 to 1.0 | **0.75** | 0.2 (W:872); 0.56 (W(22):844) |
+| T_SRP, quick-flow pool threshold, mm (the table prints "–") | `wbmParam.maxRffStorage` | 10 to 50 | 1000 | 1000 (W:877). No calibration hint: the default is meant to lie outside the range |
+| L, lapse rate, C/km | `lapseDownscale.lapseRate` | −8 to −6 | −6.49 | −6.49 |
+| T_s and T_m, snowfall and snowmelt thresholds, C | none | −2 to 0, 0 to 2 | −1, 1 | fixed at −1 and 1 (W:852-853; W(22):824): no init key |
+| R_perc, irrigation returns to groundwater | `Irrigation.ReturnCoeff` | 0 to 1 | **0.5** | 1.0 (W:1111; W(22):1078) |
+| R_ind, industrial returns | `WaterDemand.IndDemandReturnFr` | 0 to 1 | **0.86** | 0.89 (W:1248) |
+| R_dom, domestic returns | `WaterDemand.DomDemandReturnFr` | 0 to 1 | **0.89** | 0.84 (W:1243) |
+| U_w, wave celerity | `Routing.velocity` | 1 to 3 | 2.18, printed in **m/s** | 2.18 km/h (W:914) |
+| η, ν, τ, φ, downstream hydraulic geometry | `Routing.eta`, `nu`, `tau`, `phi` | 0.1 to 0.33, 0.1 to 0.5, 3.7 to 10, 0.2 to 0.7 | 0.25, 0.40, 8, 0.58 | the same (W:910-913) |
+| b, at-a-site width exponent (f and m follow from it) | `Routing.aas_b` | 0 to 0.25 | 0.10 | 0.10 (W:915) |
+
+Where the paper disagrees with itself or with the code:
+
+- R_ind 0.86 and R_dom 0.89 in Table 1 contradict the paper's own text (Sect. 2.2.5: domestic 84 %,
+  industrial 89 %), which agrees with the code.
+- U_w is printed in m/s; the code's comment and the run log say km/h (measured: E0, SLURM 21521192,
+  "LRR with 2.48 km/hr"). The default is the same number, so the range is read in km/h.
+- β 0.025, C_SRP 0.75 and R_perc 0.5 are not the code's defaults in either version. The workshop
+  tutorial on the wiki writes `ReturnCoeff => 0.5` explicitly.
+- R_perc is `ReturnCoeff`: `irrLosses` sends that share of the application losses, after
+  evaporation, to percolation and the rest to runoff (W:5319-5320; W(22):4808).
+- The paper's r_sgw, the target share of groundwater in irrigation withdrawals, is 1 −
+  `Irrigation.SW_GW_ratio`: WBM takes `(1 − SW_GW_ratio) × demand` from shallow groundwater
+  before the river (W:7080). Without `SW_GW_ratio`, `Order` is that ratio (W:1175-1176).
+- The text says users can set the snowpack threshold above which snow is moved downhill (5000 mm
+  SWE as the example); the code fixes it at 5000 mm (W:1677-1679; W(22):1569).
+
+The wiki (github.com/wsag/WBM/wiki, the July 2023 workshop pages) adds:
+
+- It calls a data `.init` a "metadata.init file", says its file name must equal its `Code_Name`
+  (section 8: enforced on 23.9.0), and uses `Var_Scale` and `Var_Offset` for a linear unit
+  conversion.
+- It says `landCollapse` is required with crop inputs. The code reads it only when it is set and
+  uses every crop when it is empty (W:5033-5035), so the tree keeps it optional.
+- Its `-h` text lists `-by`. WBM 23.9.0 has no such option (W:215-219); 22.1.1 has it
+  (W(22):207), as the tree's `bench_year` says.
+- A block key takes a block or the path of an `.init` that holds it: the tree's
+  `form: block_or_file`.
+
+What the sources call these values: the paper calls the tunable coefficients "parameters"
+(Table 1) and the datasets "inputs"; WBM's code lists every run-init key, datasets included, in
+`wbm_params()` (M:92-95); the input spreadsheet calls them "Input Keys". The wizard's "Model
+parameters" follows the code.
 
 ## Open: not established
 
-Not settled by the code reading or by the measurements. A bare `Ln` is a line of the manual's
-text extract.
+Not settled by the code reading or by the measurements. A bare `§n`, `eq. n`, `Fig. n` or
+`Table n` is of the manual.
 
 - openWater.fracOpenWater read as a time series is built from MaskDataset (W:788; 22.1.1: 760): looks like a WBM bug; confirm with the WBM team before the gateway offers a time-series init
 - ConnectivityNetwork.Use, StartYear and Reservoirs.StartYear when the key is absent: $$header{undef} indexes column 0 silently (M:2111, 2737); behaviour not measured
 - PostProcessing starts 'perl -w script &' (W:4271), a background process that may be killed when the SLURM job ends right after WBM (inferred, not measured)
-- Irrigation.Order: the manual's default order (shallow groundwater in the cell first, L792-798) disagrees with the code comment and the tree labels (W:1110); whether fractional values are meaningful is unknown
+- Irrigation.Order: the manual's default order (shallow groundwater in the cell first, §12.2.1) disagrees with the code comment and the tree labels (W:1110); a fractional value acts as the surface-water share, as `SW_GW_ratio` does (W:1175-1176, 7080)
 - A constant number is accepted by the code but its use downstream is not verified for airT_yc (Springs slicing, W:1861) and Irrigation.CropAreaFracPatch; Irrigation.CropAreaFrac => 0.1 ran (measured: w_cropfrac_num, SLURM 21521585)
 - Requirements of runoff-source tracking, Green/Blue water and endorheic components (and whether compBalance applies to runoff-source tracking) are not established
-- The manual says DIN uptake depends on water temperature (L1002); whether the water-temperature drivers are required for DIN outputs is not tested
-- wbmParam.resetSpinupTracking: groups 2 and 3 (sheet) or all stocks (manual L907-910)
-- Irrigation.useVIS only matters with dailyIrr = 1 per the manual (L772); not verified in the code
-- Whether a Lumped-aquifer springs file needs a Conductance column (manual L422-426)
+- The manual says DIN uptake depends on water temperature (§17, eq. 17-11); whether the water-temperature drivers are required for DIN outputs is not tested
+- wbmParam.resetSpinupTracking: groups 2 and 3 (sheet) or all stocks (manual §15)
+- Irrigation.useVIS only matters with dailyIrr = 1 per the manual (§12.1); not verified in the code
+- Whether a Lumped-aquifer springs file needs a Conductance column (manual §9.2, eq. 9.2-2)
 - 22.1.1 clips luAgr at start year 1800 (W(22):708) and has no crop start-year clip or spool delta (W(22):4612-4668); effect on time-series crop data unknown
 - Meaning of 'lastDay' in daily[N,..lastDay] and of the ':daily...' run-step suffix is only read from the regex (M:488-491, 4121-4140), not measured
 - Glaciers on 23.9.0 with the published data: WBM 23.9.0 stops at the start when the cell sizes of `glMelt` and `glArea` differ ("Mismatch in glArea and glMelt dataset spatial resolutions", W:691-693, compared with `get_extent` of the first file of each, RIMS/WBM.pm:1168-1200), and the published melt is 6 arc-minutes and the only published area 30 arc-seconds. That is read from the code and the file headers, not run: the 22.1.1 runs of Wyoming and Global use the same files and pass because 22.1.1 has no such check. The one run so far (SLURM 21598634) stopped earlier, on the missing first file of the melt (section 8), so the resolution check was not reached; a run with the 1980 files added is the evidence
@@ -744,5 +806,5 @@ text extract.
 - Unpublished LOCA2 staging copies use forms this tree does not model: a '(low,high):' valid-range prefix and .json in File_Path, Processing pm0:noScale, NETCDF layer names like :Band1, wbmParam.snowSublimation (read by neither version), MT_Code_Name as a string
 - Calendar 360 is listed as not runnable (wbm.pl:278; measured: v2_calendar360, WBM is not coded for 360 calendar, SLURM 21521585); revisit if WBM gains a 360-day calendar
 - PET.Scale (23.9.0 block form) was not run; the key set was read from M:401-424
-- Manual parameters with no known init key (snow thresholds Ts/Tm, F_irr_max, spillway flood-area rate, N_sr/N_bf/w_tl, WWTP removal lookup) are not exposed
+- Manual parameters with no known init key (F_irr_max, spillway flood-area rate, N_sr/N_bf/w_tl, WWTP removal lookup) are not exposed
 - A data `.init` whose descriptor passes but whose data file is missing from the model input is still offered as a switch-on candidate (repaired or not): the candidate list reads the descriptor, not the files it names, and only the submit's coverage check refuses it (measured: `v2_fork_irr`, batch 7)

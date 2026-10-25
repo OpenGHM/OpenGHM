@@ -55,7 +55,8 @@
 #   options_available_if   an option is offered only where `availability` allows it
 #   rejects   list values that are refused (empty, whitespace_only)
 #   range     [lo, hi] the value must lie in; min and max are single bounds; ui_max is a
-#             form guard only; calibration.range is a tuning hint the form shows
+#             form guard only; calibration.range is a tuning hint the form shows, and
+#             calibration.source says where the range comes from, shown with it
 #   pattern, forms, n_values   per-version forms of a string value (Time_Series)
 #   values_accepted   spellings WBM accepts for an option, mapped to the option
 #   accepts   for dataset and file fields, the value kinds that work: init (a data .init),
@@ -235,7 +236,7 @@ tree:
           doc: "Weighted stream reach length in LRR routing. WBM reads any string without 'No' as yes, so only 'Yes' and 'No' are offered." }
       - { key: velocity_method, wbm: Routing.velMethod, label: "Stream velocity method", type: enum, tier: advanced, editable: true, default: Constant, options: [Constant, AASH],
           doc: "Stream velocity: constant, or at-a-site hydraulics." }
-      - { key: velocity, wbm: Routing.velocity, label: "Stream velocity", type: number, tier: advanced, editable: true, default: 2.18, unit: km/h, show_if: "velocity_method == Constant",
+      - { key: velocity, wbm: Routing.velocity, label: "Stream velocity", type: number, tier: advanced, editable: true, default: 2.18, unit: km/h, calibration: {range: [1, 3], source: "Grogan et al. 2022, Table 1"}, show_if: "velocity_method == Constant",
           doc: "Stream velocity at 30 arc-minute resolution. WBM rescales it to the cell size of the network, so the velocity in use is higher on finer grids." }
       - { key: beta, wbm: Routing.beta, label: "Muskingum shape parameter", type: number, tier: advanced, editable: true, default: 2, show_if: "method == Muskingum",
           doc: "Shape parameter sigma of Muskingum routing." }
@@ -244,12 +245,16 @@ tree:
         label: "Stream geometry"
         tier: advanced
         children:
-          - { key: eta, wbm: Routing.eta, label: "Depth coefficient", type: number, editable: true, default: 0.25 }
-          - { key: nu, wbm: Routing.nu, label: "Depth exponent", type: number, editable: true, default: 0.4 }
-          - { key: tau, wbm: Routing.tau, label: "Width coefficient", type: number, editable: true, default: 8 }
-          - { key: phi, wbm: Routing.phi, label: "Width exponent", type: number, editable: true, default: 0.58 }
-          - { key: aas_b, wbm: Routing.aas_b, label: "At-a-site exponent b", type: number, editable: true, default: 0.1, show_if: "velocity_method == AASH",
-              doc: "f and m follow from b (b+f+m=1, b+f=m); delta and epsilon from eta, tau, nu and phi." }
+          - { key: eta, wbm: Routing.eta, label: "Depth coefficient", type: number, editable: true, default: 0.25, calibration: {range: [0.1, 0.33], source: "Grogan et al. 2022, Table 1"},
+              doc: "Depth = eta × Q^nu, Q being the long-term mean discharge (Park 1977)." }
+          - { key: nu, wbm: Routing.nu, label: "Depth exponent", type: number, editable: true, default: 0.4, calibration: {range: [0.1, 0.5], source: "Grogan et al. 2022, Table 1"},
+              doc: "The exponent nu of depth = eta × Q^nu." }
+          - { key: tau, wbm: Routing.tau, label: "Width coefficient", type: number, editable: true, default: 8, calibration: {range: [3.7, 10], source: "Grogan et al. 2022, Table 1"},
+              doc: "Width = tau × Q^phi, Q being the long-term mean discharge (Park 1977)." }
+          - { key: phi, wbm: Routing.phi, label: "Width exponent", type: number, editable: true, default: 0.58, calibration: {range: [0.2, 0.7], source: "Grogan et al. 2022, Table 1"},
+              doc: "The exponent phi of width = tau × Q^phi." }
+          - { key: aas_b, wbm: Routing.aas_b, label: "At-a-site exponent b", type: number, editable: true, default: 0.1, calibration: {range: [0, 0.25], source: "Grogan et al. 2022, Table 1"}, show_if: "velocity_method == AASH",
+              doc: "How width changes with discharge at a site (Leopold and Maddock 1953). f and m follow from b (b+f+m=1, b+f=m); delta and epsilon from eta, tau, nu and phi." }
 
   - group: climate
     label: "Climate forcing"
@@ -363,7 +368,7 @@ tree:
               doc: "Elevation of the climate drivers, a data .init or raster. A constant aborts WBM. A geopotential layer needs Var_Scale 0.1019716 in its data .init." }
           - { key: net_elevation, wbm: lapseDownscale.netElevation, label: "Network elevation", type: dataset, unit: m, reads_first_file: true, accepts: [init, raster], required: true,
               doc: "Elevation of the river network grid, a data .init or raster. A constant aborts WBM." }
-          - { key: lapse_rate, wbm: lapseDownscale.lapseRate, label: "Lapse rate", type: number, editable: true, default: -6.49, unit: C/km,
+          - { key: lapse_rate, wbm: lapseDownscale.lapseRate, label: "Lapse rate", type: number, editable: true, default: -6.49, unit: C/km, calibration: {range: [-8, -6], source: "Grogan et al. 2022, Table 1"},
               doc: "Temperature lapse rate, used only when it is a number." }
           - { key: force_sec_temp, wbm: lapseDownscale.forceSecTemp, label: "Allow secondary temperature", type: bool01, editable: true, default: 0,
               doc: "Allow downscaling when a Secondary air temperature dataset is used; otherwise WBM aborts." }
@@ -410,27 +415,27 @@ tree:
       - group: soil_runoff
         label: "Soil moisture and runoff"
         children:
-          - { key: alpha, wbm: wbmParam.alpha, label: "Soil moisture drying coefficient", type: number, editable: true, default: 5,
-              doc: "Soil moisture drying coefficient: 1 wet, 10 drier, 20 dry. A larger alpha makes AET less water-limited." }
+          - { key: alpha, wbm: wbmParam.alpha, label: "Soil moisture drying coefficient", type: number, editable: true, default: 5, calibration: {range: [2, 20], source: "Grogan et al. 2022, Table 1"},
+              doc: "How fast evapotranspiration falls as the soil dries: a larger alpha keeps it near PET until the soil is drier. 5 matches the drying curve of Pierce (1958)." }
           - { key: infiltration, wbm: wbmParam.Infiltration, label: "Infiltration method", type: enum, editable: true, default: FrAMES, options: [FrAMES, HBV],
               doc: "FrAMES or HBV. Anything that does not match HBV behaves as FrAMES." }
-          - { key: infiltr_frac, wbm: wbmParam.infiltrFrac, label: "Groundwater infiltration fraction", type: dataset, default: 0.5, range: [0, 1], calibration: {range: [0.4, 0.6]}, accepts: [init, number, raster],
-              doc: "Groundwater infiltration fraction of excess water." }
+          - { key: infiltr_frac, wbm: wbmParam.infiltrFrac, label: "Groundwater infiltration fraction", type: dataset, default: 0.5, range: [0, 1], calibration: {range: [0.1, 0.9], source: "Grogan et al. 2022, Table 1"}, accepts: [init, number, raster],
+              doc: "Share of the water draining from the soil that recharges shallow groundwater; the rest becomes surface runoff. Results are generally robust between 0.4 and 0.6." }
           - { key: hbv_beta, wbm: wbmParam.HBV_Beta, label: "HBV recharge factor", type: number, editable: true, default: 60, show_if: "infiltration == HBV",
               doc: "Direct infiltration recharge factor for HBV." }
-          - { key: gw_beta, wbm: wbmParam.groundWatBETA, label: "Baseflow release coefficient", type: dataset, default: 0.0167, unit: "1/day", accepts: [init, number, raster],
-              doc: "Baseflow release coefficient from groundwater storage (a 60-day time scale)." }
-          - { key: rhrt2, wbm: wbmParam.RhRt2, label: "Runoff storage release coefficient", type: dataset, default: {"23.9.0": 0.2, "22.1.1": 0.56}, calibration: {range: [0.05, 0.8]}, accepts: [init, number, raster],
-              doc: "Runoff storage release coefficient (Rhole/Rtank)^2. The default differs by version: 0.56 on WBM 22.1.1, 0.2 on 23.9.0. The same coefficient drives the irrigation pool." }
+          - { key: gw_beta, wbm: wbmParam.groundWatBETA, label: "Baseflow release coefficient", type: dataset, default: 0.0167, unit: "1/day", calibration: {range: [0.001, 0.1], source: "Grogan et al. 2022, Table 1"}, accepts: [init, number, raster],
+              doc: "Share of shallow groundwater released to the river as baseflow each day (baseflow = coefficient × storage). 0.0167 is a 60-day time scale." }
+          - { key: rhrt2, wbm: wbmParam.RhRt2, label: "Runoff storage release coefficient", type: dataset, default: {"23.9.0": 0.2, "22.1.1": 0.56}, calibration: {range: [0.2, 1.0], source: "Grogan et al. 2022, Table 1"}, accepts: [init, number, raster],
+              doc: "Release coefficient of the surface runoff retention pool, which drains at RhRt2 × √(2 g storage): a larger value gives a quicker response. The default differs by version: 0.56 on WBM 22.1.1, 0.2 on 23.9.0. The same coefficient drives the irrigation pool." }
           - { key: max_rff_storage, wbm: wbmParam.maxRffStorage, label: "Runoff storage limit", type: number, editable: true, default: 1000, unit: mm,
-              doc: "Limit on runoff storage (1000 means practically no limit)." }
+              doc: "Storage limit of the surface runoff retention pool; water above it goes straight to the river. 1000 mm means practically no limit; 15 to 50 mm gives a flashier storm response in temperate climates." }
       - group: vegetation_evaporation
         label: "Vegetation and evaporation"
         children:
           - { key: c_leaf_max, wbm: wbmParam.CLeafMax, label: "Maximum stomatal conductance", type: dataset, default: 6, unit: mm/s, accepts: [init, number, raster], show_if: "climate.pet_method in [Penman-Monteith, FAO-56]",
               doc: "Maximum leaf stomatal conductance, in mm/s." }
-          - { key: intercept_par, wbm: wbmParam.InterceptPar, label: "Canopy interception parameter", type: number, editable: true, default: 0.2, unit: mm,
-              doc: "Canopy interception parameter; 0.15, 0.2 and 0.25 are common values." }
+          - { key: intercept_par, wbm: wbmParam.InterceptPar, label: "Canopy interception coefficient", type: number, editable: true, default: 0.2, unit: mm, calibration: {range: [0, 1], source: "Grogan et al. 2022, Table 1"},
+              doc: "Canopy water storage capacity per unit of leaf area index: capacity = coefficient × LAI. Typical values are 0.15 to 0.25 mm." }
           - { key: open_water_coeff, wbm: wbmParam.openWtrCoeff, label: "Open-water evaporation coefficient", type: number, editable: true, default: 1,
               doc: "Open-water evaporation as a multiple of PET, used when no openWaterEvap dataset is given." }
           - { key: irr_gamma, wbm: wbmParam.irrGm, label: "Soil moisture gamma (irrigation)", type: bool01, editable: true, default: 0,
@@ -658,21 +663,27 @@ tree:
           - group: loading
             label: "Loading parameters"
             children:
-              - { key: scale, wbm: DIN.scale, label: "Sigmoid scale", type: number, editable: true, default: 12.2 }
-              - { key: asym, wbm: DIN.asym, label: "Maximum DIN concentration", type: number, editable: true, default: 1.4, unit: "mg DIN/L" }
+              - { key: scale, wbm: DIN.scale, label: "Sigmoid scale", type: number, editable: true, default: 12.2,
+                  doc: "Spread of the logistic curve of DIN concentration in runoff against developed and agricultural land." }
+              - { key: asym, wbm: DIN.asym, label: "Maximum DIN concentration", type: number, editable: true, default: 1.4, unit: "mg DIN/L",
+                  doc: "Highest DIN concentration in runoff from developed land." }
               - { key: asym_ag, wbm: DIN.asym_ag, label: "Maximum concentration with irrigation", type: number, editable: true, default: 4.8, unit: "mg DIN/L", show_if: modules.irrigated_crops@enabled,
                   doc: "Used only when Irrigation is on." }
-              - { key: xmid_b, wbm: DIN.xMid_b, label: "Sigmoid midpoint b", type: number, editable: true, default: 40.3 }
-              - { key: xmid_m, wbm: DIN.xMid_m, label: "Sigmoid midpoint m", type: number, editable: true, default: 19.5 }
+              - { key: xmid_b, wbm: DIN.xMid_b, label: "Sigmoid midpoint intercept", type: number, editable: true, default: 40.3,
+                  doc: "The curve's midpoint is intercept + slope × log10(runoff)." }
+              - { key: xmid_m, wbm: DIN.xMid_m, label: "Sigmoid midpoint slope", type: number, editable: true, default: 19.5,
+                  doc: "The curve's midpoint is intercept + slope × log10(runoff)." }
               - { key: bfi, wbm: DIN.BFI, type: number, tier: locked, default: 0.6, inert: true,
                   doc: "Stored but never used." }
           - group: removal
             label: "Removal parameters"
             children:
-              - { key: slope, wbm: DIN.slope, label: "Removal slope", type: number, editable: true, default: -0.493 }
+              - { key: slope, wbm: DIN.slope, label: "Removal slope", type: number, editable: true, default: -0.493,
+                  doc: "Efficiency-loss slope of uptake velocity against concentration (Mulholland et al. 2008)." }
               - { key: intercept, wbm: DIN.intercept, label: "Removal intercept", type: number, editable: true, default: -2.975,
-                  doc: "WBM reads the key 'intercept'." }
-              - { key: tnq, wbm: DIN.TnQ, label: "Temperature factor", type: number, editable: true, default: 2 }
+                  doc: "Uptake velocity intercept, log cm/s (Mulholland et al. 2008). WBM reads the key 'intercept'." }
+              - { key: tnq, wbm: DIN.TnQ, label: "Temperature factor", type: number, editable: true, default: 2,
+                  doc: "Removal is multiplied by this factor for every 10 C of water temperature above the reference temperature, and divided by it for every 10 C below." }
               - { key: tn_ref, wbm: DIN.TnRef, label: "Reference temperature", type: number, editable: true, default: 20, unit: C }
               - { key: sz_res, wbm: DIN.SzRes, label: "Seitzinger reservoir removal", type: bool01, editable: true, default: 0,
                   doc: "Seitzinger denitrification in reservoirs." }
@@ -797,7 +808,7 @@ tree:
             label: "Water sources"
             children:
               - { key: sw_gw_ratio, wbm: Irrigation.SW_GW_ratio, label: "Surface-to-groundwater ratio", type: dataset, accepts: [init, number, raster],
-                  doc: "Surface-to-groundwater intake ratio. If absent, Order is used. Cannot be a time series." }
+                  doc: "Share of irrigation demand meant for surface water: shallow groundwater supplies the rest first, then the river. If absent, Order is used. Cannot be a time series." }
               - { key: order, wbm: Irrigation.Order, label: "Source priority", type: enum, editable: true, default: 1, options: {0: "Groundwater first", 1: "Surface water first"}, show_if: "not sw_gw_ratio",
                   doc: "Which source irrigation takes from first: 0 groundwater, 1 stream. WBM uses it as a number, so it applies only when SW_GW_ratio is absent." }
               - { key: search_dist, wbm: Irrigation.IrrSearchDist, label: "Stream search distance", type: number, editable: true, default: 100, unit: km, aliases: [Irrigation.SearchDist],
@@ -816,7 +827,7 @@ tree:
               - { key: efficiency, wbm: Irrigation.IrrEfficiency, label: "Irrigation efficiency", type: dataset, unit: "%", accepts: [init, raster], required_if: "tech_application_file is empty",
                   doc: "Irrigation efficiency in percent. Needs a data .init or raster: a constant aborts WBM, and so does leaving it out, unless IrrTechApplicationFile supplies the efficiency." }
               - { key: return_coeff, wbm: Irrigation.ReturnCoeff, label: "Return flow to groundwater", type: number, editable: true, default: 1.0, range: [0, 1],
-                  doc: "Share of irrigation return flow that goes to groundwater; the rest goes to surface runoff." }
+                  doc: "Share of irrigation application losses, after evaporation, that percolates to groundwater; the rest becomes surface runoff." }
               - { key: daily_irr, wbm: Irrigation.dailyIrr, label: "Irrigation demand mode", type: enum, editable: true, default: 0, options: {0: "By crop depletion factor", 1: Daily},
                   doc: "Not compatible with process-based irrigation efficiency." }
               - { key: app_rate_max, wbm: Irrigation.irrAppRate, label: "Maximum application rate", type: number, tier: advanced, editable: true, default: 50, unit: mm/day }

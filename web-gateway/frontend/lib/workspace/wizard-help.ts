@@ -144,13 +144,13 @@ const SECTIONS: Record<HelpSection, HelpTopic> = {
     title: "Model parameters",
     blocks: [
       text(
-        "The settings WBM reads from the snapshot's init, grouped as the model uses them. Each starts at the snapshot's value: change only what your simulation needs."
+        "The parameters and inputs WBM reads from the snapshot's init, grouped as the model uses them. Each starts at the snapshot's value: change only what your simulation needs."
       ),
       list(
         "Search finds a parameter by its name, its key in the init or its description. All, Editable and Changed narrow the list; Changed shows only what this snapshot draft changes.",
         "Advanced parameters stay hidden until you turn on Show advanced. One you have changed is always shown.",
         "A changed parameter is marked, shows the snapshot's value under it, and has a button that puts that value back. Reset all takes every change back, after asking.",
-        "Where a parameter is usually calibrated within a range, a bar shows the range and where your value lies, and a note says when it is outside."
+        "Where the WBM paper suggests a range for a parameter, a bar shows that range and where your value lies, and a note says when it is outside."
       ),
       text(
         "A module is a part of the model that is on or off. Its switch changes that where this snapshot allows it; a module that cannot be switched on here says why."

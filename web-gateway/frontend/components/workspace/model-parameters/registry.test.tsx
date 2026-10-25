@@ -251,7 +251,7 @@ describe("what a row says around its control", () => {
       .map((part) => document.getElementById(part)?.textContent ?? "")
       .join(" ");
     expect(text).toContain("In this snapshot: 5");
-    expect(text).toContain("Usually calibrated within 1–20");
+    expect(text).toContain("Suggested range 1–20");
     expect(text).toContain("larger alpha makes AET");
   });
 
@@ -281,7 +281,7 @@ describe("what a row says around its control", () => {
 
   it("gives the default only when it differs, the calibration range, and the bounds", () => {
     row(field("wbmParam.alpha"));
-    expect(screen.getByText(/Usually calibrated within 1–20/)).toBeTruthy();
+    expect(screen.getByText(/Suggested range 1–20/)).toBeTruthy();
     expect(screen.queryByText(/WBM's default/)).toBeNull();
     cleanup();
     row({ ...field("wbmParam.alpha"), current: "6", min: 0, max: 30, unit: "-" });
@@ -380,8 +380,8 @@ describe("a number with a calibration range", () => {
     expect(bar).toBeTruthy();
     expect(marks(container).snapshot).toBeTruthy();
     expect(marks(container).current).toBeNull();
-    expect(screen.getByText(/Usually calibrated within 1–20/)).toBeTruthy();
-    expect(screen.queryByText("Outside the usual calibration range")).toBeNull();
+    expect(screen.getByText(/Suggested range 1–20/)).toBeTruthy();
+    expect(screen.queryByText("Outside the suggested range")).toBeNull();
   });
 
   it("adds the draft's value as a dot when it differs, primary while it is within the range", () => {
@@ -389,19 +389,27 @@ describe("a number with a calibration range", () => {
     const dot = marks(container).current!;
     expect(dot.className).toContain("bg-primary");
     expect(dot.className).not.toContain("bg-warning");
-    expect(screen.queryByText("Outside the usual calibration range")).toBeNull();
+    expect(screen.queryByText("Outside the suggested range")).toBeNull();
   });
 
   it("turns the dot amber and says so when the value is outside the range", () => {
     const { container } = row(field("wbmParam.alpha"), { "wbmParam.alpha": "40" });
     expect(marks(container).current!.className).toContain("bg-warning");
-    expect(screen.getByText("Outside the usual calibration range")).toBeTruthy();
+    expect(screen.getByText("Outside the suggested range")).toBeTruthy();
   });
 
   it("says it when the snapshot's own value is outside", () => {
     const { container } = row({ ...field("wbmParam.alpha"), current: "50" });
     expect(marks(container).current!.className).toContain("bg-warning");
-    expect(screen.getByText("Outside the usual calibration range")).toBeTruthy();
+    expect(screen.getByText("Outside the suggested range")).toBeTruthy();
+  });
+
+  it("names the source of the range after it, when there is one", () => {
+    row(field("wbmParam.alpha"));
+    expect(screen.getByText(/Suggested range 1–20 \(Grogan et al\. 2022, Table 1\)/)).toBeTruthy();
+    cleanup();
+    row({ ...field("wbmParam.alpha"), calibration_source: null });
+    expect(screen.getByText(/Suggested range 1–20/).textContent).not.toContain("(");
   });
 
   it("has no bar without a range, for an int without one, or for a field that is not a number", () => {

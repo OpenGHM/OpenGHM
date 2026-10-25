@@ -388,6 +388,7 @@ function ownDatasetField(mod: ParamModule): ParamField | null {
     min: null,
     max: null,
     calibration: null,
+    calibration_source: null,
     show_if: null,
   };
 }

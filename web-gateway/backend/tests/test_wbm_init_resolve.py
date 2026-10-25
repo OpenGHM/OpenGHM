@@ -27,7 +27,8 @@ NODE_KEYS = {
     },
     "field": {
         "kind", "key", "label", "doc", "tier", "path", "type", "editable", "edit_as", "forkable", "required",
-        "candidates", "current", "default", "unit", "options", "min", "max", "calibration", "show_if",
+        "candidates", "current", "default", "unit", "options", "min", "max", "calibration", "calibration_source",
+        "show_if",
     },
 }
 FIELD_TYPES = {
@@ -257,6 +258,23 @@ def test_a_field_is_editable_only_where_its_change_can_be_written():
     assert v["wbmParam.RhRt2"]["editable"] is True and v["wbmParam.RhRt2"]["edit_as"] == "number"
     assert v["Irrigation.ExtraCoeff"]["editable"] is False  # a dataset in a module that is off
     assert v["Irrigation.ExtraCoeff"]["edit_as"] == "number"
+
+
+# ---- calibration --------------------------------------------------------------------
+
+
+def test_a_calibration_range_is_served_with_its_source():
+    f = by_path("23.9.0", WYOMING)
+    assert f["wbmParam.infiltrFrac"]["calibration"] == [0.1, 0.9]
+    assert f["wbmParam.RhRt2"]["calibration"] == [0.2, 1.0]
+    assert f["wbmParam.alpha"]["calibration"] == [2, 20]
+    assert f["wbmParam.alpha"]["calibration_source"] == "Grogan et al. 2022, Table 1"
+
+
+def test_a_field_without_a_calibration_serves_neither_range_nor_source():
+    f = by_path("23.9.0", WYOMING)
+    assert f["wbmParam.maxRffStorage"]["calibration"] is None
+    assert f["wbmParam.maxRffStorage"]["calibration_source"] is None
 
 
 # ---- options ----------------------------------------------------------------------

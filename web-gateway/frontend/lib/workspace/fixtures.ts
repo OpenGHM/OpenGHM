@@ -723,6 +723,7 @@ export function fakeParamField(
     min: null,
     max: null,
     calibration: null,
+    calibration_source: null,
     show_if: null,
     ...overrides,
   };
@@ -783,6 +784,7 @@ export function fakeModelParameters(): ModelParameters {
             current: "5",
             default: 5,
             calibration: [1, 20],
+            calibration_source: "Grogan et al. 2022, Table 1",
             doc: "1 wet, 10 drier, 20 dry. A larger alpha makes AET less water-limited.",
           }),
           fakeParamField("wbmParam.Infiltration", {
