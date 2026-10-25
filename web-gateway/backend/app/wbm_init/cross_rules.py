@@ -1386,12 +1386,48 @@ async def cover(source: model_input.Source, ctx: Ctx, window: Window | None) -> 
     return issues
 
 
-def _first_file(s: Series) -> str:
-    """The first file of a dataset that is not a climatology: the one `RIMS::DataSet` lists first, from
-    the middle of the period of its `Start_Date` (`unzero_dates`, R:1361-1373; as in `_names`)."""
+def _first_key(s: Series) -> tuple[int, int, int]:
+    """The first date of a dataset that is not a climatology, as `RIMS::DataSet` lists it: the middle of
+    the period of its `Start_Date` (`unzero_dates`, R:1361-1373; as in `_names`)."""
     year, month, _ = s.start
-    key = (year, month, 15) if s.form == "monthly" else (year, 7, 1) if s.form in ("yearly", "decadal") else s.start
-    return _names(s, key)[0]
+    return (year, month, 15) if s.form == "monthly" else (year, 7, 1) if s.form in ("yearly", "decadal") else s.start
+
+
+def _first_file(s: Series) -> str:
+    """The first file of a dataset that is not a climatology."""
+    return _names(s, _first_key(s))[0]
+
+
+class MissingFiles(NamedTuple):
+    """The files a data init names for its first read that the model input does not hold."""
+
+    #: A climatology, or a dataset with no `Time_Series`: the files of its first date. A run reads them
+    #: whatever its dates.
+    static: tuple[str, ...] = ()
+    #: A dated dataset: the files of its own first date. WBM opens them only for a field that
+    #: reads the first file (`reads_first_file`); any other run reads the files of its own dates.
+    first: tuple[str, ...] = ()
+
+
+async def missing_first_files(source: model_input.Source, init: model_input.InitFile) -> MissingFiles:
+    """What the dataset choices need to know of a descriptor's files, read as `cover` reads them (the
+    `File_Path` tokens, `_names`) but without any run date, which a candidate list does not know: the
+    files of a climatology's first date, and for a dated dataset the files of its first date. A
+    descriptor whose form the rule does not judge, or whose dates it refuses, has none missing here:
+    `cover` says what is wrong with it. Raises `model_input.Unavailable` when a folder cannot be listed."""
+    series = _series(init)
+    if not isinstance(series, Series):
+        return MissingFiles()
+    key = _resolve(series, _cycle(series)[0], False) if series.clim else _first_key(series)
+    names = _names(series, key) if key else []
+    found = {n: model_input.locate(source, n) for n in names}
+    folders = list(dict.fromkeys(model_input.parent_of(loc)[0] for loc in found.values() if loc))
+    listed = dict(zip(folders, await model_input.gather(model_input.list_names(f) for f in folders)))
+    missing = tuple(
+        n for n, loc in found.items()
+        if loc is not None and model_input.parent_of(loc)[1] not in listed[model_input.parent_of(loc)[0]].files
+    )
+    return MissingFiles(static=missing) if series.clim else MissingFiles(first=missing)
 
 
 def _plan(ctx: Ctx, target: Target, window: Window | None, issues: list[Issue]) -> _Plan | None:

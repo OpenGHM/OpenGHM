@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { dateMessages } from "@/lib/workspace/draft-checks";
 import { describeChanges } from "@/lib/workspace/model-parameters";
+import { ChangeList } from "@/components/workspace/model-parameters/change-list";
 import type { DraftChecksState } from "@/lib/workspace/use-draft-checks";
 import type { ModelParametersState } from "@/lib/workspace/use-model-parameters";
 import type { PublishedAnswerState } from "@/lib/workspace/use-published-answer";
@@ -377,28 +378,7 @@ export function DraftReviewStep({
                 <span className="font-medium">
                   {changes.length} changed
                 </span>
-                <ul className="mt-1 space-y-1">
-                  {changes.map((change) => (
-                    <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
-                      {change.label && <span className="mr-1.5">{change.label}</span>}
-                      {change.kind !== "change" ? (
-                        <>
-                          <code className="font-mono text-xs break-all text-muted-foreground">{change.path}</code>
-                          <span className="text-muted-foreground"> · {change.shown}</span>
-                        </>
-                      ) : (
-                        <>
-                          <code className="font-mono text-xs break-all text-muted-foreground">
-                            {change.path} = {change.value === "" ? "''" : change.value}
-                          </code>
-                          {change.shown !== change.value && (
-                            <span className="text-muted-foreground"> · {change.shown}</span>
-                          )}
-                        </>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <ChangeList changes={changes} />
               </Row>
             )}
           </dl>

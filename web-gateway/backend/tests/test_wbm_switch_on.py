@@ -17,7 +17,7 @@ import pytest
 from app.models.job import DatasetFork, JobParameters
 from app.services import job_script, model_parameters
 from app.wbm_init import choices as ch
-from app.wbm_init import cross_rules, tree, validate
+from app.wbm_init import cross_rules, model_input, tree, validate
 
 from route_helpers import changes_in
 from test_job_checks import (  # noqa: F401  (fixtures shared with the checks tests)
@@ -57,6 +57,19 @@ def glacier_1980(bucket):
     the grid, since the glacier datasets start in 1980 (tests/test_wbm_cross_rules.py): added, so that a
     draft that switches Glaciers on passes the checks here. The test that says what they are for removes them."""
     for key in GLACIER_1980:
+        bucket.put(f"model-inputs/{MODEL_INPUTS['52585562']}/{key}")
+
+
+#: The data files of the two repaired datasets 52585562 holds the descriptors of and not the data
+#: (docs/reference/wbm-init.md section 2): `mirca_cropAreaFraction.init` and `irrEfficiency.init`.
+CROP_FILES = ("crops/mirca_cropAreaFraction.nc", "irrigation/Global_Crops_IrrEfficiencyGlobalExtent_30min.nc")
+
+
+@pytest.fixture(autouse=True)
+def crop_files(bucket):
+    """The two files above, added, so that the repaired datasets are usable as copies in the tests of
+    copies and switch-on. The tests of the candidates' data take them away."""
+    for key in CROP_FILES:
         bucket.put(f"model-inputs/{MODEL_INPUTS['52585562']}/{key}")
 
 
@@ -113,6 +126,72 @@ def test_the_v2_model_inputs_datasets_are_candidates_and_23_9_0_refuses_the_ones
     assert found[MELT].repair is None
     # an init the model input does not list is no candidate
     assert AREA_RENAMED not in found
+
+
+def test_a_dataset_whose_data_file_is_not_in_the_model_input_is_disabled_with_the_file_named(bucket):
+    """As the model input is recorded: it holds the descriptors of `mirca_cropAreaFraction` and
+    `irrEfficiency` and neither's data (SLURM 21609705); the others it lists have their files."""
+    for key in CROP_FILES:
+        del bucket.objects[f"model-inputs/{MODEL_INPUTS['52585562']}/{key}"]
+    _, _, loaded = loaded_with_choices(bucket, "v2")
+    found = {c.path: c for c in loaded.choices.candidates}
+    irr = found["/wbm/data_init/irrigation/irrEfficiency.init"]
+    assert irr.reason == (
+        "Its data file is not in the model input: "
+        "/wbm/data/irrigation/Global_Crops_IrrEfficiencyGlobalExtent_30min.nc."
+    )
+    assert "Code_Name (fao_irrEfficiency)" in irr.repair  # still said: the copy would repair it, not bring the data
+    mirca = found["/wbm/data_init/crops/mirca_cropAreaFraction.init"]
+    assert mirca.reason == "Its data file is not in the model input: /wbm/data/crops/mirca_cropAreaFraction.nc."
+    # a static dataset, a monthly one and a dataset that is only repaired keep their files
+    assert found[AREA].reason is None and found[MELT].reason is None and found[ROOTING].reason is None
+    # the datasets that have no dates and no file: the two above, the soil and the two CDF climatologies
+    assert sorted(p.rsplit("/", 1)[1] for p, c in found.items() if c.reason) == [
+        "MC_nonrice_irr_CDF_av.init", "MC_rice_irr_CDF_av.init", "harmonized_AWC_5min.init",
+        "irrEfficiency.init", "mirca_cropAreaFraction.init",
+    ]
+    # a dated dataset is not disabled for the file of its own first date: a run reads the files of its own dates
+    assert found["/wbm/data_init/climate/merra2_prectotcorr_d.init"].reason is None
+    assert found["/wbm/data_init/climate/merra2_prectotcorr_d.init"].first_missing == (
+        "/wbm/data/climate/precip/1980/MERRA2.PRECTOTCORR.1980-01-01.nc",
+    )
+
+
+def test_a_dated_datasets_first_file_stops_only_a_field_that_wbm_opens_it_for(bucket):
+    """The glacier melt starts in January 1980 (a monthly file named for 1980) and the model input
+    holds 2000-2009: WBM opens the first file to read the grid, so a glacier field refuses it; a run
+    reads the files of its own dates, so a field that does not open the first file does not."""
+    for key in GLACIER_1980:
+        del bucket.objects[f"model-inputs/{MODEL_INPUTS['52585562']}/{key}"]
+    _, _, loaded = loaded_with_choices(bucket, "v2")
+    melt = loaded.choices.get(MELT)
+    assert melt.reason is None and melt.first_missing == ("/wbm/data/glaciers/glacier_RDI40_6min_1980_m.nc",)
+    assert loaded.choices.get(VOLUME).first_missing == ("/wbm/data/glaciers/glacier_RDI40_6min_1980_y.nc",)
+    assert loaded.choices.get(AREA).first_missing == ()  # a climatology: its one file is there
+    field = loaded.resolved.fields["Glaciers.glMelt"]
+    assert field.reads_first_file is True
+    assert tree.candidate_reason(melt, field) == (
+        "WBM opens the first data file when it starts, to read the grid, and it is not in the model input: "
+        "/wbm/data/glaciers/glacier_RDI40_6min_1980_m.nc."
+    )
+    # the same dataset where the field does not open the first file
+    assert ch.field_reason(melt, None) is None
+    assert ch.field_reason(melt, None, True) is not None
+
+
+def test_a_folder_of_data_that_cannot_be_listed_leaves_the_datasets_unread(bucket, monkeypatch):
+    """The descriptors are read but one data folder cannot be listed: whether its file is there is not
+    known, so no dataset is offered rather than one that may be missing its data."""
+    snapshot_id, doc, _ = snapshot_of("v2")
+    real = model_input.list_names
+
+    async def down(location):
+        if location.path.startswith("irrigation/"):
+            raise model_input.Unavailable("down")
+        return await real(location)
+
+    monkeypatch.setattr(model_input, "list_names", down)
+    assert run(model_parameters.read_choices(doc, snapshot_id, "23.9.0")) is None
 
 
 def test_wbm_22_1_1_reads_what_23_9_0_refuses(bucket):
@@ -279,6 +358,24 @@ def test_a_dataset_of_the_right_unit_that_wbm_cannot_read_is_listed_disabled(api
     assert area[AREA]["repair"] is None
 
 
+def test_a_dataset_without_its_data_is_listed_disabled_and_the_others_are_unchanged(api, snapshots, bucket):
+    """The v2 model input as recorded: the repaired `irrEfficiency.init` is a candidate of `Impervious`
+    and its data is not in the model input."""
+    for key in CROP_FILES:
+        del bucket.objects[f"model-inputs/{MODEL_INPUTS['52585562']}/{key}"]
+    by_path = {n["path"]: n for n in walk(served(api, snapshots, "v2")["groups"]) if "path" in n}
+    impervious = {c["value"]: c for c in by_path["Impervious"]["candidates"]}
+    irr = impervious["/wbm/data_init/irrigation/irrEfficiency.init"]
+    assert irr["disabled"] == (
+        "Its data file is not in the model input: /wbm/data/irrigation/Global_Crops_IrrEfficiencyGlobalExtent_30min.nc."
+    )
+    mirca = impervious["/wbm/data_init/crops/mirca_cropAreaFraction.init"]
+    assert "mirca_cropAreaFraction.nc" in mirca["disabled"]
+    others = [c for p, c in impervious.items() if c is not irr and c is not mirca]
+    assert others and all(c["disabled"] is None for c in others)
+    assert impervious[AREA]["disabled"] is None
+
+
 def test_the_units_rule_of_glarea_is_the_trees_and_a_dataset_that_breaks_it_is_disabled():
     resolved = tree.resolve("23.9.0")
     assert resolved.fields["Glaciers.glArea"].unit_contains == "frac"
@@ -399,6 +496,24 @@ def test_a_chosen_dataset_must_be_text_a_path_and_not_empty(v2):
 def test_a_module_is_not_switched_on_by_a_value_of_its_own_unless_it_is_a_dataset(v2):
     assert "by setting its parameters" in check(v2, {"Glaciers": "1"})["Glaciers"]
     assert check(v2, {"Glaciers": ""}) == {"Glaciers": "This module is already off."}
+
+
+def test_a_save_that_chooses_a_dataset_without_its_data_is_refused_with_the_reason(bucket):
+    irr = "/wbm/data_init/irrigation/irrEfficiency.init"
+    copy = [DatasetFork(path="Impervious", original=irr)]
+    for key in CROP_FILES:
+        del bucket.objects[f"model-inputs/{MODEL_INPUTS['52585562']}/{key}"]
+    _, _, v2 = loaded_with_choices(bucket, "v2")
+    # a copy does not help: the data is what is missing (the copy of a repaired dataset is tested in
+    # tests/test_wbm_forks.py, with the data there)
+    for forks_ in (None, copy):
+        errors = validate.validate({"Impervious": irr}, v2.resolved, v2.values, (), v2.choices, forks_)
+        assert errors == {
+            "Impervious": "Irrigation efficiency cannot be used here. Its data file is not in the model input: "
+            "/wbm/data/irrigation/Global_Crops_IrrEfficiencyGlobalExtent_30min.nc."
+        }
+    # a dataset whose data is there is chosen as before
+    assert validate.validate({"Impervious": AREA}, v2.resolved, v2.values, (), v2.choices) == {}
 
 
 def test_a_module_that_is_a_dataset_is_switched_on_by_a_dataset_of_its_unit_or_a_constant(v2):
@@ -582,10 +697,15 @@ def test_the_run_the_rules_judge_has_the_glaciers_block(bucket):
     assert cross_rules.effective_run(doc, bare, parameters).values["Glaciers"] == ""
 
 
-def test_the_checks_say_which_first_glacier_file_the_model_input_lacks(api, db, snapshots, bucket):
+def test_glaciers_cannot_be_switched_on_when_no_melt_dataset_has_its_first_file(bucket):
+    """WBM opens the first file of the glacier melt to read the grid (the checks' rule,
+    tests/test_wbm_cross_rules.py): with the 1980 files absent every melt dataset is disabled for
+    `Glaciers.glMelt`, so the module is not offered and a save is refused at each of its fields."""
     for key in GLACIER_1980:
         del bucket.objects[f"model-inputs/{MODEL_INPUTS['52585562']}/{key}"]
-    body = ask(api, db, snapshots, "v2", custom_params={**GLACIERS_ON, "Glaciers.glVolume": VOLUME}).json()
-    (error,) = body["errors"]
-    assert error["rule"] == "dataset_file_coverage" and error["paths"] == ["Glaciers.glMelt", "Glaciers.glVolume"]
-    assert "WBM opens /wbm/data/glaciers/glacier_RDI40_6min_1980_m.nc when it starts, to read the grid" in error["message"]
+    _, _, v2 = loaded_with_choices(bucket, "v2")
+    decision = tree.switch_on_decisions(v2.resolved, v2.values, v2.choices)["Glaciers"]
+    assert decision.offered is False
+    assert "a dataset the model input does not have, or has without its data: Glacier melt discharge" in decision.reason
+    errors = check(v2, {**GLACIERS_ON, "Glaciers.glVolume": VOLUME})
+    assert set(errors) == {"Glaciers.glMelt", "Glaciers.glArea", "Glaciers.glVolume"}

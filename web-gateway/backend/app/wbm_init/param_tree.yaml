@@ -240,7 +240,8 @@ tree:
           doc: "Stream velocity at 30 arc-minute resolution. WBM rescales it to the cell size of the network, so the velocity in use is higher on finer grids." }
       - { key: beta, wbm: Routing.beta, label: "Muskingum shape parameter", type: number, tier: advanced, editable: true, default: 2, show_if: "method == Muskingum",
           doc: "Shape parameter sigma of Muskingum routing." }
-      - { key: slope, wbm: Routing.slope, label: "Muskingum slope", type: number, tier: advanced, editable: true, default: 0.0001, unit: "m/m (0.1 m/km)", show_if: "method == Muskingum" }
+      - { key: slope, wbm: Routing.slope, label: "Riverbed slope", type: number, tier: advanced, editable: true, default: 0.0001, unit: "m/m (0.1 m/km)", show_if: "method == Muskingum",
+          doc: "Bed slope S0 in the Muskingum coefficients. Enter it in m/m: the default 0.0001 is the manual's 0.1 m/km." }
       - group: stream_geometry
         label: "Stream geometry"
         tier: advanced
@@ -253,7 +254,7 @@ tree:
               doc: "Width = tau × Q^phi, Q being the long-term mean discharge (Park 1977)." }
           - { key: phi, wbm: Routing.phi, label: "Width exponent", type: number, editable: true, default: 0.58, calibration: {range: [0.2, 0.7], source: "Grogan et al. 2022, Table 1"},
               doc: "The exponent phi of width = tau × Q^phi." }
-          - { key: aas_b, wbm: Routing.aas_b, label: "At-a-site exponent b", type: number, editable: true, default: 0.1, calibration: {range: [0, 0.25], source: "Grogan et al. 2022, Table 1"}, show_if: "velocity_method == AASH",
+          - { key: aas_b, wbm: Routing.aas_b, label: "At-a-site width exponent", type: number, editable: true, default: 0.1, calibration: {range: [0, 0.25], source: "Grogan et al. 2022, Table 1"}, show_if: "velocity_method == AASH",
               doc: "How width changes with discharge at a site (Leopold and Maddock 1953). f and m follow from b (b+f+m=1, b+f=m); delta and epsilon from eta, tau, nu and phi." }
 
   - group: climate
@@ -380,9 +381,10 @@ tree:
           - { key: mod_precip, wbm: WM_mod_precip, label: "Modeled precipitation", type: dataset, unit: "mm/day | mm/month", accepts: [init], required_if: obs_precip,
               doc: "Modeled precipitation within reference years." }
           - { key: obs_precip, wbm: WM_obs_precip, label: "Pseudo-observed precipitation", type: dataset, accepts: [init], required_if: mod_precip,
-              doc: "Pseudo-observed precipitation within reference years." }
+              doc: "Pseudo-observed precipitation within reference years. WBM subtracts modeled minus pseudo-observed, day by day or month by month, from the precipitation of the run and clips the result at 0." }
           - { key: mod_airT, wbm: WM_mod_airT, label: "Modeled air temperature", type: dataset, unit: C, accepts: [init], required_if: obs_airT }
-          - { key: obs_airT, wbm: WM_obs_airT, label: "Pseudo-observed air temperature", type: dataset, accepts: [init], required_if: mod_airT }
+          - { key: obs_airT, wbm: WM_obs_airT, label: "Pseudo-observed air temperature", type: dataset, accepts: [init], required_if: mod_airT,
+              doc: "WBM subtracts modeled minus pseudo-observed, day by day or month by month, from the air temperature of the run." }
 
   - group: land
     label: "Soil and land surface"
@@ -445,8 +447,10 @@ tree:
         children:
           - { key: endorheic_dir, wbm: wbmParam.endorheicDir, label: "Endorheic flow direction", type: bool01, editable: true, default: 0,
               doc: "Use endorheic flow direction (-1) in the network; disables the next four options." }
-          - { key: exorheic_coast, wbm: wbmParam.exorheicCoast, label: "Exorheic coast", type: bool01, editable: true, default: 1, show_if: "endorheic_dir == 0" }
-          - { key: endorheic_buffer, wbm: wbmParam.endorheicBuffer, label: "Endorheic buffer", type: number, editable: true, default: 0, unit: km, show_if: "endorheic_dir == 0" }
+          - { key: exorheic_coast, wbm: wbmParam.exorheicCoast, label: "Coastal outlet segmentation", type: bool01, editable: true, default: 1, show_if: "endorheic_dir == 0",
+              doc: "On: river mouths in a connected group of mouths (also diagonally) that reaches the edge of the network count as coastal (exorheic), never as endorheic. WBM reads it only when endorheic flow direction is off." }
+          - { key: endorheic_buffer, wbm: wbmParam.endorheicBuffer, label: "Endorheic exclusion buffer", type: number, editable: true, default: 0, unit: km, show_if: "endorheic_dir == 0",
+              doc: "A river mouth with cells outside the network, or ocean cells of the ocean mask, within this distance (a square window) counts as exorheic, not endorheic. WBM rounds the distance down to whole cells, at least one cell. WBM reads it only when endorheic flow direction is off." }
           - { key: ocean_mask, wbm: wbmParam.oceanMask_file, label: "Ocean mask", type: dataset, accepts: [raster], show_if: "endorheic_dir == 0",
               doc: "GDAL raster only." }
           - { key: endorheic_mask, wbm: wbmParam.endorheicMask, label: "Endorheic mask", type: dataset, accepts: [init, raster], show_if: "endorheic_dir == 0" }
@@ -547,7 +551,8 @@ tree:
               doc: "Custom operating parameters by dam ID; needs a column named Dam_ID." }
           - { key: obs_outflow_dir, wbm: Reservoirs.damObsOutflowDir, label: "Observed dam outflow folder", type: file, tier: advanced, accepts: [file],
               doc: "Folder of observed dam discharge files (*.csv with the columns DateTime and Q_out_m3d)." }
-          - { key: lock_year, wbm: Reservoirs.Lock_Year, label: "Lock year", type: int, tier: advanced, editable: true }
+          - { key: lock_year, wbm: Reservoirs.Lock_Year, label: "Dam lock year", type: int, tier: advanced, editable: true,
+              doc: "Use the dams that are active in this year for every date of the run: a dam counts as active when its start year is before this year and its end year after it (no end year counts as after). Other dams are dropped. Without it, each dam is used from its start year to its end year." }
       - { module: open_water_evaporation, wbm: openWaterEvap, name: "Evaporation from Open Water", type: dataset, tier: advanced, editable: switch_off, unit: mm/day, accepts: [init], on_if: key_present,
           doc: "Absent: open-water evaporation is the open-water coefficient times PET. A data .init supplies a dataset. 'Calculate' needs the cloud, wind and humidity drivers and is not offered; a number is read as a Magic-Table ID and aborts. On WBM 22.1.1 a present openWaterEvap makes Muskingum fall back to LRR." }
       - module: open_water_flush_routing
@@ -612,7 +617,8 @@ tree:
               - { key: dem, wbm: Aquifers.DEM, label: "Land surface elevation", type: dataset, unit: m, accepts: [init, raster], required: true }
               - { key: net_dem, wbm: Aquifers.Net_DEM, label: "Stream network elevation", type: dataset, unit: m, accepts: [init, raster], required: true }
               - { key: thickness, wbm: Aquifers.Aqf_Thick, label: "Aquifer thickness", type: dataset, unit: m, accepts: [init, raster], required: true }
-              - { key: conf_thick, wbm: Aquifers.Conf_Thick, label: "Confined layer thickness", type: dataset, default: 0, unit: m, accepts: [init, number, raster], empty_is_value: true }
+              - { key: conf_thick, wbm: Aquifers.Conf_Thick, label: "Confining layer thickness", type: dataset, default: 0, unit: m, accepts: [init, number, raster], empty_is_value: true,
+                  doc: "Thickness of the confining (top) layer; 0 means no confining layer." }
               - { key: head_top, wbm: Aquifers.H_DEM_T, label: "Top-layer head elevation", type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_top (both for the same layer is fatal); no constant",
                   doc: "Head elevation above sea level of the top layer; defaults to Net_DEM." }
               - { key: head_bottom, wbm: Aquifers.H_DEM_B, label: "Bottom-layer head elevation", type: dataset, accepts: [init, raster], rule: "mutually exclusive with head_depth_bottom; no constant",
@@ -627,20 +633,22 @@ tree:
                   doc: "Near-surface horizontal permeability, log10 m2; negative." }
               - { key: kh, wbm: Aquifers.Aqf_Kh, label: "Horizontal hydraulic conductivity", type: dataset, default: 10.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
               - { key: kv, wbm: Aquifers.Aqf_Kv, label: "Vertical hydraulic conductivity", type: dataset, default: 1.6, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: kh_conf, wbm: Aquifers.Aqf_KhConf, label: "Confined horizontal conductivity", type: dataset, default: 0.008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: kv_conf, wbm: Aquifers.Aqf_KvConf, label: "Confined vertical conductivity", type: dataset, default: 0.0008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
-              - { key: e_folding, wbm: Aquifers.eFolding, label: "E-folding depth", type: dataset, default: 120, unit: m, accepts: [init, number, raster], empty_is_value: true }
+              - { key: kh_conf, wbm: Aquifers.Aqf_KhConf, label: "Confining-layer horizontal conductivity", type: dataset, default: 0.008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: kv_conf, wbm: Aquifers.Aqf_KvConf, label: "Confining-layer vertical conductivity", type: dataset, default: 0.0008, unit: m/day, accepts: [init, number, raster], empty_is_value: true }
+              - { key: e_folding, wbm: Aquifers.eFolding, label: "E-folding depth", type: dataset, default: 120, unit: m, accepts: [init, number, raster], empty_is_value: true,
+                  doc: "Depth scale of the exponential decrease of horizontal conductivity with depth." }
               - { key: bed_resistance, wbm: Aquifers.BRes, label: "Riverbed resistance", type: dataset, default: 10, unit: day, accepts: [init, number, raster], empty_is_value: true,
                   doc: "Riverbed resistance, in days." }
-              - { key: sle, wbm: Aquifers.SLE, label: "SLE", type: string, editable: true, default: 0,
-                  doc: "0, or a string starting with 'min' for min(Net_DEM)." }
-              - { key: boundary_flux, wbm: Aquifers.Aqf_BndFlx, label: "Boundary flux", type: bool01, editable: true, default: 0 }
-              - { key: clump, wbm: Aquifers.Aqf_Clump, label: "Aquifer clumping", type: bool01, editable: true, default: 0,
-                  doc: "Speeds up runs. Read only for ModFlow." }
+              - { key: sle, wbm: Aquifers.SLE, label: "Sea level elevation", type: string, editable: true, default: 0,
+                  doc: "Sea level elevation in m, used at exorheic basin outlets as the constant water table elevation outside the network. 0, or a string starting with 'min' for min(Net_DEM)." }
+              - { key: boundary_flux, wbm: Aquifers.Aqf_BndFlx, label: "Allow flux outside network", type: bool01, editable: true, default: 0,
+                  doc: "Allow groundwater flux to aquifers outside the network." }
+              - { key: clump, wbm: Aquifers.Aqf_Clump, label: "Clump aquifers into one", type: bool01, editable: true, default: 0,
+                  doc: "Treats all separate aquifers as one body, which speeds up runs but gives the aquifer statistics and water component tracking for one aquifer instead of one per separate aquifer. Read only for ModFlow." }
               - { key: well_max, wbm: Aquifers.wellMax, label: "Maximum well depth", type: number, editable: true, default: 1000000, unit: m,
                   doc: "Well depth; 1e6 m means no limit. Read only for ModFlow." }
-              - { key: mf_steps, wbm: Aquifers.MF_steps, label: "ModFlow steps", type: int, editable: true, default: 1,
-                  doc: "Raise it when the log reports a stability criterion above 0.5." }
+              - { key: mf_steps, wbm: Aquifers.MF_steps, label: "Solver steps per time step", type: int, editable: true, default: 1,
+                  doc: "Raise it when the log reports a stability criterion above 0.5. More steps make the solver more stable and the run slower." }
       - { module: springs, wbm: Springs, name: Springs, type: file, tier: advanced, editable: switch_off, versions: ["23.9.0"], accepts: [file], requires: [modules.groundwater_3d@enabled], on_if: key_present,
           doc: "CSV with the headers ID, Lon, Lat, Discharge and Elevation. WBM 23.9.0 only: 22.1.1 ignores it." }
       - { module: snow_elevation_lapse, wbm: snowBands, name: "Sub-grid scale temperature lapse for snow by elevation gradient", type: flag, editable: switch_off, on_if: key_present,
@@ -683,8 +691,9 @@ tree:
               - { key: intercept, wbm: DIN.intercept, label: "Removal intercept", type: number, editable: true, default: -2.975,
                   doc: "Uptake velocity intercept, log cm/s (Mulholland et al. 2008). WBM reads the key 'intercept'." }
               - { key: tnq, wbm: DIN.TnQ, label: "Temperature factor", type: number, editable: true, default: 2,
-                  doc: "Removal is multiplied by this factor for every 10 C of water temperature above the reference temperature, and divided by it for every 10 C below." }
-              - { key: tn_ref, wbm: DIN.TnRef, label: "Reference temperature", type: number, editable: true, default: 20, unit: C }
+                  doc: "Removal is multiplied by this factor for every 10 C of water temperature above the reference temperature, and divided by it for every 10 C below. WBM uses the air temperature instead unless the run has a water temperature output (a name ending _twt)." }
+              - { key: tn_ref, wbm: DIN.TnRef, label: "Reference temperature", type: number, editable: true, default: 20, unit: C,
+                  doc: "Water temperature at which removal is neither raised nor lowered by the temperature factor." }
               - { key: sz_res, wbm: DIN.SzRes, label: "Seitzinger reservoir removal", type: bool01, editable: true, default: 0,
                   doc: "Seitzinger denitrification in reservoirs." }
           - group: wwtp
@@ -699,8 +708,8 @@ tree:
               - { key: pop_served, wbm: DIN.WWTP.popYear, label: "Population served column", type: column }
               - { key: t_level, wbm: DIN.WWTP.t_level, label: "Treatment level column", type: column,
                   doc: "Treatment level column." }
-              - { key: ref_year, wbm: DIN.WWTP.refYear, label: "Reference year", type: int, editable: true,
-                  doc: "A year, not a column name." }
+              - { key: ref_year, wbm: DIN.WWTP.refYear, label: "Population reference year", type: int, editable: true,
+                  doc: "A year, not a column name. The population served in the plant file is taken as that of this year: plant loads are scaled each day by the population density relative to this year, between 0.25 and 4 times." }
               - { key: per_capita_n, wbm: DIN.WWTP.perCapitaNLoad, label: "Per-capita nitrogen load", type: number, editable: true, default: 0.019, unit: kg/person/day }
               - { key: search_dist, wbm: DIN.WWTP.search_dist, label: "Search distance", type: number, editable: true, default: 5, unit: km }
       - module: source_water_by_land_area
@@ -737,8 +746,8 @@ tree:
               doc: "ID column in the CSV." }
           - { key: col_name, wbm: Runoff_mask.colName, label: "Name column", type: column, required: true,
               doc: "Name column in the CSV." }
-          - { key: model, wbm: Runoff_mask.model, label: "Model (simple or full)", type: enum, editable: true, default: 0, options: {0: simple, 1: full},
-              doc: "Any true value means the full model." }
+          - { key: model, wbm: Runoff_mask.model, label: "Mask tracking model", type: enum, editable: true, default: 0, options: {0: simple, 1: full},
+              doc: "Simple: the runoff of a pixel counts as coming from that pixel's own mask. Full: the mask fractions are also carried through runoff storage and shallow groundwater. Any true value means the full model." }
           - { key: post_processing, wbm: Runoff_mask.PostProcessing, label: "Include in post-processing", type: bool01, editable: true, default: 0,
               doc: "Include the mask outputs in post-processing." }
       - { module: impervious_surface_runoff, wbm: Impervious, name: "Impervious Surface Runoff", type: dataset, tier: advanced, editable: switch_off, unit: fraction, fit: unit, accepts: [init, number, raster], on_if: key_present,

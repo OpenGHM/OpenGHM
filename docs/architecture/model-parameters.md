@@ -212,6 +212,9 @@ readable value ("switched off", an option's label).
 After submit the wizard is read-only, so the Run details card of `/workspace/<id>` lists the same
 changes (`run-model-parameters.tsx`), fetching the tree only when the run changed something and
 showing the init key and raw value until it arrives or where it cannot be had.
+The Review step, the submit confirmation (`submit-summary.tsx`) and Run details draw the list with
+one component (`web-gateway/frontend/components/workspace/model-parameters/change-list.tsx`) from `describeChanges`;
+each keeps its own count line and frame.
 
 The component is chosen by `type` in one registry:
 
@@ -225,7 +228,7 @@ The component is chosen by `type` in one registry:
 | `date` | a date input | |
 | a module with `editable: switch_off` | a card with an on/off switch; switching it back on is the reset | the module the init has on; a module the snapshot has off shows no fields until it is switched on |
 | a module the snapshot has off | a card with an on/off switch when the backend says it can be, else a line with the reason; switching it back off is the reset | section 6, "Switching a module on" |
-| a `dataset` with `candidates` | a select of the model input's datasets in the field's unit, and a constant box beside it where the field takes a number | only in a module being switched on; one WBM cannot read is listed and disabled, its reason under the field |
+| a `dataset` with `candidates` | a select of the model input's datasets in the field's unit, and a constant box beside it where the field takes a number | only in a module being switched on; one WBM cannot read, or whose data is not in the model input, is listed and disabled, its reason under the field |
 | a `dataset` that is `forkable` and reads a data `.init` | the current value, read-only, with an **Edit dataset** button | opens the three values a copy may set, each with the original's value beside it, and a box that sets `Var_Scale` as the original's times a factor; section 6, "Data `.init` forks" |
 | any other `dataset`, `file`, `column`, `list`, `block`, `flag` | the current value, read-only | choosing another dataset for a module that is on is later work (section 6) |
 
@@ -247,14 +250,26 @@ built too, as its subsection marks. None of it was in the mission that built sec
 
 Built for a module being switched on (next subsection): the candidates are the entries of the model
 input's `datasets[]`, read once and kept (`web-gateway/backend/app/services/model_parameters.py`,
-`web-gateway/backend/app/wbm_init/choices.py`), and an entry is usable when its init is in the model input and WBM can
-read it. A field is offered the entries whose unit is the field's (`unit_matches`: spelling-insensitive,
+`web-gateway/backend/app/wbm_init/choices.py`), and an entry is usable when its init is in the model input, WBM can
+read it, and the data files it names are there (below). A field is offered the entries whose unit is the field's (`unit_matches`: spelling-insensitive,
 m3/sec is m3/s) and no others; the tree says nothing else about what data fits a field, so a field
 with no `unit` is offered none. An init that is not there or is not a dataset (no `Code_Name`) is listed with that reason and
 cannot be chosen. One that on 23.9.0 has a `Code_Name` that is not its file name, or a non-ASCII byte, is
 offered as **repaired by a copy** (`repair` on the candidate, `disabled` null): choosing it makes a fork
-that sets nothing, and a save refuses the choice without it (`Data .init forks`, below). The files an init points to are not looked for here; the `dataset_file_coverage` check
-before a submit does. The rest of this subsection is the target for a field of a module that is on.
+that sets nothing, and a save refuses the choice without it (`Data .init forks`, below).
+
+The data files are looked for as `dataset_file_coverage` looks for them (`cross_rules.missing_first_files`:
+the `File_Path` tokens, one listing per folder, kept by `model_input`), without the run's dates, which the list
+does not know. A climatology, or a dataset with no `Time_Series`, needs the files of its first date: without
+them the candidate is **disabled** with "Its data file is not in the model input: <path>." (said before a
+repair, since a copy does not bring data). A dated dataset is judged only for a field the tree marks
+`reads_first_file`, where WBM opens the dataset's first file at the start to read the grid
+(`Glaciers.glMelt`, `glVolume`, and `glArea` on 23.9.0): its first file must be there, else it is disabled for that
+field with that reason. For any other field a run reads the files of its own dates and the coverage check at
+Review judges them, with the draft's dates. The save refuses a disabled candidate with the same reason, and a
+module none of whose required fields has a usable dataset is not offered. A folder that cannot be listed makes the
+whole model input unread (`choices` is none), as an unreadable descriptor does. The rest of this subsection is the
+target for a field of a module that is on.
 
 A `dataset` field with `accepts: [init]` points to a data `.init` (the dataset descriptor
 [wbm-init.md](../reference/wbm-init.md#8-dataset-descriptors-data-init-files) describes).
@@ -368,7 +383,8 @@ published snapshots (v2, Wyoming, Global), Impervious (the fraction datasets, or
   `switch_on_reason` (the sentence the card shows when it is false) and, for a module that is itself
   a dataset, `candidates`. Every field has `required`, and a `dataset` field of an offered module has
   `candidates`: `{value (the container path), name, code, time_series, unit, disabled, repair}`,
-  `disabled` being the reason or null and `repair` what a copy repairs or null, listed only for a field with a `unit` (a module that is itself
+  `disabled` being the reason or null (an init WBM cannot read, a Units rule, a data file missing from the model
+  input) and `repair` what a copy repairs or null, listed only for a field with a `unit` (a module that is itself
   a dataset also has `edit_as`, `"number"` where it takes a constant). The tree's attribute
   `unit_contains` (`Glaciers.glArea`, on 23.9.0: `frac`) is the field's own rule: a dataset whose
   Units lack it is disabled for that field (a field in fractions is offered datasets whose Units

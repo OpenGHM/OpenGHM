@@ -439,15 +439,22 @@ def offered_candidates(node: Node, choices: Choices | None) -> list[Candidate]:
     """The datasets of the model input that `node` (a dataset field, or a module whose own key
     is a dataset) is offered: where the tree states `fit: unit`, those in the node's `unit`; none
     otherwise, since the tree then does not say which dataset fits. Some may be disabled
-    (`field_reason`)."""
+    (`candidate_reason`)."""
     if choices is None or "init" not in node.accepts or node.fit != "unit":
         return []
     return choices.for_unit(node.unit)
 
 
+def candidate_reason(candidate: Candidate, node: Node) -> str | None:
+    """Why `candidate` cannot be the value of `node`: its own reason, `node`'s Units rule, and for a
+    field that opens the first file of its dataset (`reads_first_file`, always, not only under a
+    condition) the dataset's first file. None when it can."""
+    return field_reason(candidate, node.unit_contains, node.reads_first_file is True)
+
+
 def usable_candidates(node: Node, choices: Choices | None) -> list[Candidate]:
     """The offered datasets that `node`'s WBM version reads and its own rule allows."""
-    return [c for c in offered_candidates(node, choices) if field_reason(c, node.unit_contains) is None]
+    return [c for c in offered_candidates(node, choices) if candidate_reason(c, node) is None]
 
 
 def _lacks(node: Node, choices: Choices | None) -> str | None:
@@ -494,7 +501,7 @@ def _decide(node: Node, required: tuple[str, ...], resolved: Resolved, choices: 
             return SwitchOn(False, "It needs a file of its own, which cannot be chosen here yet.")
         if lacks == _NEEDS_FIT:
             return SwitchOn(False, f"The tree does not say which dataset fits {node.label} ({node.path}).")
-        return SwitchOn(False, f"It needs a dataset in {node.unit}, which the model input does not have.")
+        return SwitchOn(False, f"It needs a dataset in {node.unit}, which the model input does not have, or has without its data.")
     lacking: dict[str, list[str]] = {}
     for path in required:
         field = resolved.fields.get(path)
@@ -513,7 +520,7 @@ def _decide(node: Node, required: tuple[str, ...], resolved: Resolved, choices: 
     elif _NEEDS_PART in lacking:  # a column or list names a part of such a file
         parts.append("a part of a file, which cannot be chosen here yet: " + ", ".join(lacking[_NEEDS_PART]))
     if _NEEDS_DATASET in lacking:
-        parts.append("a dataset the model input does not have: " + ", ".join(lacking[_NEEDS_DATASET]))
+        parts.append("a dataset the model input does not have, or has without its data: " + ", ".join(lacking[_NEEDS_DATASET]))
     if _NEEDS_RASTER in lacking:
         parts.append("a raster, which cannot be chosen here yet: " + ", ".join(lacking[_NEEDS_RASTER]))
     if _NEEDS_DEFAULT in lacking:
@@ -575,7 +582,7 @@ def _candidates_json(node: Node, choices: Choices) -> list[dict] | None:
     return [
         {
             "value": c.path, "name": c.name, "code": c.code, "time_series": c.time_series,
-            "unit": c.unit, "disabled": field_reason(c, node.unit_contains), "repair": c.repair,
+            "unit": c.unit, "disabled": candidate_reason(c, node), "repair": c.repair,
         }
         for c in found
     ] or None

@@ -32,7 +32,7 @@ from test_job_checks import (  # noqa: F401  (fixtures shared with the checks te
     snapshots,
 )
 from test_wbm_cross_rules import snapshot_of
-from test_wbm_switch_on import glacier_1980, one_grid  # noqa: F401  (autouse: Glaciers can be switched on)
+from test_wbm_switch_on import crop_files, glacier_1980, one_grid  # noqa: F401  (autouse: Glaciers can be switched on, the repaired datasets have data)
 from s3_fake import MODEL_INPUTS
 
 PRECIP = "MT_Precip.Primary"

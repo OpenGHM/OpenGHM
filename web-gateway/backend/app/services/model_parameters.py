@@ -9,7 +9,8 @@ The datasets of the snapshot's model input, which a module switched on is given 
 (`choices`), are read separately: only a draft that touches a module the snapshot has off needs
 them, so `load` does not wait for them. `read_choices` reads the model input's `datasets[]` and
 each data init once (`app.wbm_init.model_input` keeps what it read), and says which the
-snapshot's WBM version cannot read.
+snapshot's WBM version cannot read and which lack the data files a run must have (the
+first file of a climatology, and for a field that opens the first file of a dated dataset, that one).
 """
 
 from __future__ import annotations
@@ -100,6 +101,8 @@ def _unreadable_by(version: str, init: model_input.InitFile) -> tuple[str | None
 async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choices_mod.Choices | None:
     """The datasets of the snapshot's model input, each with whether `version` can read it, or
     None when the model input could not be read. A snapshot that names no model input has none."""
+    from app.wbm_init import cross_rules  # here: cross_rules imports this module
+
     source = model_input.source_of(snapshot_id, snapshot)
     if source.model_input_id is None:
         return choices_mod.Choices()
@@ -115,7 +118,7 @@ async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choice
         code, unit = str(entry.get("code") or ""), str(entry.get("unit") or "")
         name = str(entry.get("name") or code or relative.rsplit("/", 1)[-1]).strip()
         series = str(entry.get("timeSeries") or "")
-        repair = None
+        repair, first_missing = None, ()
         try:
             init = await model_input.read_init(location)
         except model_input.NotFound:
@@ -124,10 +127,14 @@ async def read_choices(snapshot: dict, snapshot_id: str, version: str) -> choice
             reason = f"Its init file cannot be read ({exc})."
         else:
             reason, repair = _unreadable_by(version, init)
+            if reason is None:
+                found = await cross_rules.missing_first_files(source, init)
+                reason = choices_mod.missing_data(found.static) if found.static else None
+                first_missing = found.first
             code = init.get("Code_Name") or code
             series = init.get("Time_Series") or series
             unit = init.get("Units") or unit
-        return choices_mod.Candidate(path, code, name, series, unit, reason, repair)
+        return choices_mod.Candidate(path, code, name, series, unit, reason, repair, first_missing)
 
     try:
         entries = await model_input.datasets(source.model_input_id)

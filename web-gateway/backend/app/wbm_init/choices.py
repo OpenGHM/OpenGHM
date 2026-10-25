@@ -31,12 +31,17 @@ class Candidate:
     time_series: str
     #: `Units` of the descriptor, else the metadata's unit.
     unit: str
-    #: Why the snapshot's WBM version cannot read this file, or None.
+    #: Why this dataset cannot be used, or None: its file is not a descriptor, the snapshot's WBM
+    #: version cannot read it, or it has no dates (a climatology) and the model input lacks its data.
     reason: str | None = None
     #: What a copy repairs (the file's `Code_Name` is not its file name, or it holds a non-ASCII byte,
     #: which WBM 23.9.0 refuses, ADR 0039), or None. A candidate with a `repair` is usable only as a
     #: copy: the draft chooses it together with a fork that has no values to set.
     repair: str | None = None
+    #: A dated dataset: the files of its own first date that the model input lacks. A run reads the
+    #: files of its own dates, so this stops only a field that WBM opens the first file of, to read the
+    #: grid (`reads_first_file` of the tree): `field_reason`.
+    first_missing: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -57,15 +62,29 @@ class Choices:
         return [c for c in self.candidates if unit_matches(unit, c)]
 
 
-def field_reason(candidate: Candidate, unit_contains: str | None) -> str | None:
+def missing_data(missing: tuple[str, ...] | list[str]) -> str:
+    """The sentence for data files the model input lacks."""
+    noun = "file is" if len(missing) == 1 else "files are"
+    return f"Its data {noun} not in the model input: {', '.join(missing)}."
+
+
+def field_reason(
+    candidate: Candidate, unit_contains: str | None, reads_first_file: bool = False
+) -> str | None:
     """Why `candidate` cannot be the value of a field whose tree says its Units must contain
-    `unit_contains`: the file's own reason first, then that rule. None when it can."""
+    `unit_contains` and, when `reads_first_file`, that WBM opens the dataset's first file at the start: the
+    file's own reason first, then those rules. None when it can."""
     if candidate.reason:
         return candidate.reason
     if unit_contains and unit_contains.lower() not in candidate.unit.lower():
         return (
             f"Its Units ({candidate.unit or 'none'}) must contain '{unit_contains}': "
             "WBM stops at the start otherwise."
+        )
+    if reads_first_file and candidate.first_missing:
+        return (
+            "WBM opens the first data file when it starts, to read the grid, and it is not in the "
+            f"model input: {', '.join(candidate.first_missing)}."
         )
     return None
 

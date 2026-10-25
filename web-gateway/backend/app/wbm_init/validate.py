@@ -23,7 +23,7 @@ from typing import Mapping, Sequence, Union
 
 from app.models.job import DatasetFork
 from app.wbm_init import tree
-from app.wbm_init.choices import Choices, field_reason, unit_matches
+from app.wbm_init.choices import Choices, unit_matches
 
 ChangeValue = Union[str, int, float]
 
@@ -225,7 +225,7 @@ def _check_dataset(
         return "This is not a dataset of the snapshot's model input."
     if not unit_matches(node.unit, candidate):
         return f"{candidate.name} is in {candidate.unit or 'no unit'}, and this field takes {node.unit}."
-    reason = field_reason(candidate, node.unit_contains)
+    reason = tree.candidate_reason(candidate, node)
     if reason:
         return f"{candidate.name} cannot be used here. {reason}"
     if candidate.repair and copies.get(node.path) != value:

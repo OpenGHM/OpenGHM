@@ -479,6 +479,7 @@ needs none.
 - `Routing.weightedLength`: Weighted stream reach length in LRR routing; any string without 'No' means weighted, so never offer 0/false (W:2942)
 - `Routing.velocity`: The 30 arc-min value; WBM scales it by 1-0.077*ln(cellsize/0.5) (W:927; 22.1.1: 899). Measured: 2.18 gives 2.48 km/h on a 5 arc-min network (E0, SLURM 21521192); 1 gives 1.14 (v2_velocity1, SLURM 21521320)
 - `Routing.beta`: Shape parameter sigma (manual §8.3, eq. 8.1-8)
+- `Routing.slope`: The riverbed slope S0 of the Muskingum coefficients (manual §8.3, eq. 8.1-7 and 8.1-11, in m/km, input default 0.1). The code default 0.1/1000 is used as m/m (W:905, 2929; W(22):2641), so the tree's unit is m/m
 
 #### Climate forcing
 
@@ -500,7 +501,7 @@ needs none.
 - `lapseDownscale.netElevation`: Elevation of the river network grid. A number dies (W:4831)
 - `lapseDownscale.lapseRate`: Used only if numeric (W:4814). The manual says -6.4 and allows a gridded layer; the code has -6.49 and a number (section 10)
 - `lapseDownscale.forceSecTemp`: Allow downscaling when a Secondary temperature dataset is used; otherwise a Secondary dies (W:4809-4810)
-- `climate.bias_correction`: Each modelled/observed pair needs both members; a lone member is silently ignored (M:976). Must be daily or monthly climatology datasets
+- `climate.bias_correction`: Each modelled/observed pair needs both members; a lone member is silently ignored (M:976). Must be daily or monthly climatology datasets. The bias is modelled minus observed, per day or month (M:976-1008), subtracted from the run's air temperature (W:1504) and from its precipitation, clipped at 0 (W:1511). The word "pseudo-observed" is the input sheet's: the manual, the paper, the wiki and the code do not use it, and W:701 calls the pair "climate simulation data", so the tree keeps the sheet's term
 
 #### Soil and land surface
 
@@ -527,6 +528,8 @@ needs none.
 - `wbmParam.InterceptPar`: Canopy interception coefficient: capacity = LAI × InterceptPar (W:1691) (0.15 Dingman 2002 / BROOK90; 0.2 Dickinson 1984; 0.25 VIC, manual §5, eq. 5-2). Calibration hint: range: [0, 1]; source: paper, Table 1 (C_LAI)
 - `wbmParam.openWtrCoeff`: Open-water evaporation = coeff x PET when no openWaterEvap dataset is given (W:878, 1640)
 - `wbmParam.oceanMask_file`: GDAL raster only (M:2007)
+- `wbmParam.exorheicCoast`: "Segmentation of contineous coastal river outlets" (M:1989; M(22):1835); the manual and the paper do not describe it. On, the outlets of an 8-connected group that touches the network's rim are zeroed in `endoMask`, so never endorheic (M:1997-2001). Skipped when `endorheicDir` is on
+- `wbmParam.endorheicBuffer`: "Buffer around network to exclude endorheic basins" (M:1990; M(22):1836). km: the distance is `floor(km/sqrt(cell area in km2))` cells, at least 1 (M:2006), and an outlet with ocean-mask or non-network cells in that square window is exorheic (M:2008, 2014). Skipped when `endorheicDir` is on
 - `wbmParam.compBalance`: Tracking component balance, written as spreadsheets to the output folder (Global_tracking: 1, Wyoming_tracking: 0). WBM forces it to 0 unless a primary-source or irrigation re-use bucket is on (W:988-989) and to 1 when one of UseReuseOutGross_irr, IrrReuseInGross_irr, IrrReuseInGrossFlow_irr, IrrReuseInGrossGrwt_irr, IrrReuseInGrossAqf_irr, IrrReuseOutNet_irr, IrrReuseOutNonben_irr, irrFracInGross, UseReuseInGross_use is listed (W:1139-1140)
 - `wbmParam.resetSpinupTracking`: Restart tracking after spin-up: 0 = representative mixtures, 1 = accumulate a component flux during the run. The sheet says 'reset groups 2 and 3', the manual says all stocks (§15): group scope open
 - `wbmParam.nIrrTracking`: Number of irrigation water reuse cycles tracked in group 3. With N > 1 WBM adds &lt;var>_irr_&lt;k> for every listed *_irr variable itself (W:4985-4999); do not list those names (discharge_irr_1..4 are fatal in the output list)
@@ -544,6 +547,7 @@ needs none.
 - `Reservoirs.CatchArea`: Used without an existence guard (M:2737-2760): give CatchArea, Capacity and Area
 - `Reservoirs.Capacity`: Effective storage, dead storage excluded (manual §11.1.2)
 - `Reservoirs.StartYear`: The default-to-0 fix exists in 23.9.0 only (M:2737)
+- `Reservoirs.Lock_Year`: "Use dams that are active on the Lock Year for all dates in the run" (M:2766; M(22):2549): a dam is kept, from the start to the end of time, when its `StartYear` is before and its `EndYear` after the year (M:2757-2759, 2766; no `EndYear` is the year 3000), and every other dam is dropped. The manual is silent
 - `Reservoirs.IrrFrequency`: Data .init (Merra_irrigationGross_Freq_dc.init); editing it also forks the block file
 - `Reservoirs.damUseParams`: Operating parameters by dam use (6 rows, 8 or 9 columns; manual Table 11-1 suggests values)
 - `Reservoirs.damCusParams`: Custom operating parameters by dam ID; needs a column named Dam_ID (M:2667-2669)
@@ -574,10 +578,13 @@ needs none.
 - `Aquifers.Aqf_Kh`: The manual calls it Aqf_Kh_B
 - `Aquifers.Aqf_Kv`: The manual calls it Aqf_Kv_B
 - `Aquifers.BRes`: Riverbed resistance in days (the manual also says day-1 once)
-- `Aquifers.SLE`: 0, or a string starting 'min' = min(Net_DEM) (M:3498-3499); 'min' is not in the manual
-- `Aquifers.Aqf_Clump`: Read only for ModFlow (M:3501; the ModFlow branch is M:3447-3654); speeds up runs
+- `Aquifers.SLE`: Sea level elevation in m, used at exorheic basin outlets: the constant water-table elevation outside the network (manual §9.3, SLE input; the coast boundary of the head gradient, M:3832). 0, or a string starting 'min' = min(Net_DEM) (M:3498-3499); 'min' is not in the manual
+- `Aquifers.Aqf_Clump`: Read only for ModFlow (M:3501; the ModFlow branch is M:3447-3654). Clumps the separate aquifers (4-connected pixel groups) into one body (manual §9.3, Aqf_Clump; `$clump ? $mask_B : cc4compt`, M:3620-3622): much faster, but the tracking and statistics are for one aquifer instead of one per separate aquifer
+- `Aquifers.Conf_Thick`: Thickness in m of the confining (top) aquifer layer, 0 = none (manual §9.3, Conf_Thick; M:3472). The manual and the code say "confining"; the neighbouring `Aqf_SyCnfd`, `Aqf_KhConf` and `Aqf_KvConf` keys, and their tree labels, say "confined" for the same layer
+- `Aquifers.Aqf_BndFlx`: Allow groundwater flux outside the network's domain (manual §9.3, Aqf_BndFlx); the code comment says "adjacent aquifers" (M:3500), and the flag feeds `aqf_boundary` (M:3543, 3948)
+- `Aquifers.eFolding`: The e-folding value f of the exponential decrease of horizontal conductivity with depth, default 120 m (manual §9.3, eq. 9.3-12); transmissivity is `Kh*f*(exp(-z1/f)-exp(-z0/f))` (M:3778-3779)
 - `Aquifers.wellMax`: Well depth; 1e6 m = no limit. Read only for ModFlow (M:3502)
-- `Aquifers.MF_steps`: Raise when the log reports a stability criterion > 0.5 (manual §9.3, MF_steps input)
+- `Aquifers.MF_steps`: Number of solver steps per WBM time step, `dT = 1/N_steps` (manual §9.3, MF_steps input; the loop is W:3111-3115). Raise it when the log reports a stability criterion > 0.5: a more stable solver and a slower run
 - `Springs`: CSV headers: ID, Lon, Lat, Discharge, Elevation (read_table_hash on ID, M:3140-3143). 22.1.1 ignores it. Whether a Lumped springs file needs a Conductance column: open
 - `snowBands`: Elevation bands for the snowpack; for coarse Network grids. Needs the band files made by elevation_bands.pl next to the Network file (*.elvBands.dat, *.elvAverg.dat, *.elvBands.txt; wbm.pl:4683-4684). Uses the lapse rate from climate.lapse_downscale (W:856). Band range and size are chosen when running elevation_bands.pl (default 0-5000 m, 250 m)
 - `DIN`: The block alone does nothing: WBM reads it only when an output name starts with DIN (W:730) and forces it to '' otherwise (W:763). With such an output the block is mandatory (measured: v2_ov_din2 'DIN model requires "DIN" input', SLURM 21521414). Accepted outputs: DIN_Conc_Cons, DIN_Conc_Dsch, DIN_Conc_Rnff, DIN_Denit, DIN_Land_Load, DIN_Load, DIN_WWTP_Input, DIN_WWTP_Load, DIN_WWTP_Removal (the same nine in both versions). The manual says the DIN parameters are 'accepted as input for the purposes of model calibration' (§17, after eq. 17-2) and that uptake varies with water temperature (§17, eq. 17-11): whether the water-temperature drivers are required is open
@@ -588,15 +595,16 @@ needs none.
 - `DIN.BFI`: Stored, never used (W:742)
 - `modules.din_tracking.removal`: Calibration hint: source: WBM manual §17, after eq. 17-2 and eq. 17-16: slope and intercept 'can be input'
 - `DIN.intercept`: Sheet calls it intcpt; WBM reads 'intercept'
+- `DIN.TnQ`: The factor per 10 C of temperature from the reference temperature, default 2 (manual §17, eq. 17-11). The code takes `$waterTemp ? $cStreamTw : $airT` (W:2892; W(22):2606), and `$waterTemp` is on only when an output name ends `_twt` (W:583): without one the air temperature is used
 - `DIN.WWTP.PopDensity`: Data .init only: a raster path dies in read_init (W:758)
 - `DIN.WWTP.t_level`: Treatment level; the manual's removal lookup: Primary 0.1, Secondary 0.5, Secondary (Advanced)/Tertiary 0.8 (Table 17-1); exact strings unverified
-- `DIN.WWTP.refYear`: A year (used as $refYear-00-00, W:753, 759), not a column name
+- `DIN.WWTP.refYear`: A year (used as $refYear-00-00, W:753, 759), not a column name. The plant file's served population is that of this year (M:3094, "Served population in reference year"); loads are scaled each day by the population density over that of `refYear`, clipped to 0.25-4 (W:2881). The manual says plant populations are interpolated between years: the code does not, and the code is the truth
 - `Runoff_mask`: The BLOCK is the trigger (W:980), not an output variable. When the block is present at least one of dischMsk, runoffMsk, grndWtMsk must be an output (W:4889; measured: w_mask_noout 'No Runoff Masks output variables are listed', SLURM 21521393). The reverse is also required by the gateway: a Msk output without the block fails at the start of a real run ('Attributes for ..._dischMsk are not found'; measured: v2_ov_msk_real, SLURM 21521414) although -test passes (v2_ov_msk, SLURM 21521393). Switching the module off removes the three Msk outputs
 - `Runoff_mask.maskFile`: Contains polygon IDs; GDAL raster only (W:4901)
 - `Runoff_mask.attFile`: CSV of polygon attributes; exists-tested, selects the polygon branch (W:4897)
 - `Runoff_mask.basinIDFile`: Optional; reduces output to these basins; exists-tested (W:4906); GDAL raster only (W:4908)
 - `Runoff_mask.maskList`: CSV listing at least two fraction layers; exists-tested, selects the sub-pixel branch (W:4926)
-- `Runoff_mask.model`: Any true value means the full model (W:4972). The manual does not define it
+- `Runoff_mask.model`: Any true value means the full model (W:4972). The manual and the paper do not define it. Simple keeps `cRunoffMsk` as the pixel's own mask (W:1060, "Case of simple model"); full also carries the mask fractions through runoff storage and shallow groundwater (W:5631-5633, 5663-5665, 5726-5729; W(22):1031, 4466)
 - `Impervious`: Static or time series; a static value is read as a layer (number, raster or init), a time series only as an init (W:799-808). 0 counts as off
 - `MT_LAI`: Leaf area index; turns on leaf water interception. Also required by Penman-Monteith PET and by the water-temperature model (W:627)
 - `WaterDemand.DomDemandPP`: Required: undefined dies (W:1242). Per capita; the sheet says per year, the manual mm/d
@@ -807,4 +815,3 @@ Not settled by the code reading or by the measurements. A bare `§n`, `eq. n`, `
 - Calendar 360 is listed as not runnable (wbm.pl:278; measured: v2_calendar360, WBM is not coded for 360 calendar, SLURM 21521585); revisit if WBM gains a 360-day calendar
 - PET.Scale (23.9.0 block form) was not run; the key set was read from M:401-424
 - Manual parameters with no known init key (F_irr_max, spillway flood-area rate, N_sr/N_bf/w_tl, WWTP removal lookup) are not exposed
-- A data `.init` whose descriptor passes but whose data file is missing from the model input is still offered as a switch-on candidate (repaired or not): the candidate list reads the descriptor, not the files it names, and only the submit's coverage check refuses it (measured: `v2_fork_irr`, batch 7)

@@ -7,6 +7,7 @@ import {
 import { ClampedName } from "@/components/common/clamped-name";
 import { describeOutput } from "@/components/workspace/output-choice-field";
 import type { ActionFailure, PostProcessingChoice } from "@/lib/jobs/types";
+import { ChangeList } from "@/components/workspace/model-parameters/change-list";
 import type { ChangedEntry } from "@/lib/workspace/model-parameters";
 
 /** The words a person reads when a submit does not go through. The backend's
@@ -115,30 +116,7 @@ export function SubmitSummary({
         {changes.length > 0 && (
           <SummaryRow label="Model parameters">
             {changes.length} changed
-            <ul className="mt-1 space-y-1 font-normal">
-              {changes.map((change) => (
-                <li key={`${change.kind}:${change.path}`} className="min-w-0 text-[13px]">
-                  {change.label && <span className="mr-1.5">{change.label}</span>}
-                  {/* A module switched on has no value of its own: its fields carry it. A dataset the run copies
-                      says what the copy sets. */}
-                  {change.kind !== "change" ? (
-                    <>
-                      <code className="break-all font-mono text-xs text-muted-foreground">{change.path}</code>
-                      <span className="text-muted-foreground"> · {change.shown}</span>
-                    </>
-                  ) : (
-                    <>
-                      <code className="break-all font-mono text-xs text-muted-foreground">
-                        {change.path} = {change.value === "" ? "''" : change.value}
-                      </code>
-                      {change.shown !== change.value && (
-                        <span className="text-muted-foreground"> · {change.shown}</span>
-                      )}
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <ChangeList changes={changes} />
           </SummaryRow>
         )}
         <SummaryRow label="Cores">
