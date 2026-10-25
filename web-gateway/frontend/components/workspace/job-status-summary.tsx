@@ -448,6 +448,7 @@ export function JobStatusSummary({
 
       {shown === "COMPLETED" && (
         <CompletedResults
+          jobId={job.id}
           workDir={view.work_dir ?? job.work_dir}
           completedAt={view.completed_at ?? job.completed_at}
           output={view.output ?? job.output}

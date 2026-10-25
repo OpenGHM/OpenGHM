@@ -5,7 +5,7 @@ import { Download, Loader2 } from "lucide-react";
 import { limitLabel, selectionS3Command, selectionTotals } from "@/lib/repository/selection";
 import { S3Command } from "@/components/repository/s3-command";
 import { archiveRoute } from "@/lib/repository/tree-browse";
-import type { TreeFile, TreeKind } from "@/lib/repository/types";
+import type { FileSource, ListedFile } from "@/lib/repository/types";
 import type { TreeSelection } from "@/components/repository/use-tree-selection";
 import { formatBytes } from "@/lib/workspace/format";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,8 @@ function refusalIn(frame: HTMLIFrameElement): string | null {
  * size…" until it comes. Over the limit (before compression) the button is off
  * and the reason is written right here, before anyone clicks, with the S3
  * command that brings down just what is ticked, for as long as the viewed
- * folder's URL is known to write it.
+ * folder's URL is known to write it. A run's output (`kind` `"run"`, ADR 0040) is on
+ * Anvil scratch and has no S3 command: the reason is all the bar gives.
  *
  * The download is a hidden form POSTed to the gateway, so the browser itself
  * takes the response to disk as it arrives (no `fetch`, no blob in memory) and
@@ -48,12 +49,12 @@ export function SelectionBar({
   selection,
   className,
 }: {
-  kind: TreeKind;
+  kind: FileSource;
   id: string;
   /** The folder viewed, as in `?path=`: what the names are entries of. */
   folder: string;
   /** What is loaded of it, for the files' sizes. */
-  files: TreeFile[];
+  files: ListedFile[];
   selection: TreeSelection;
   className?: string;
 }) {
@@ -66,8 +67,13 @@ export function SelectionBar({
   const limit = limitLabel(totals.limit);
   const size = formatBytes(totals.bytes);
   const tooBig = totals.status === "incomplete" || totals.status === "over";
-  const command = tooBig ? selectionS3Command({ id, folder, names, files, sizes }) : null;
-  const advice = command ? "Select less, or use the S3 command below." : "Select less, or use an S3 tool.";
+  // A run's output is not in S3: there is no command, and nothing else to offer (ADR 0040).
+  const command = tooBig && kind !== "run" ? selectionS3Command({ id, folder, names, files, sizes }) : null;
+  const advice = command
+    ? "Select less, or use the S3 command below."
+    : kind === "run"
+      ? "Select less."
+      : "Select less, or use an S3 tool.";
   const note =
     totals.status === "incomplete"
       ? `The selection holds too many files to check against the ${limit} limit for a ZIP. ${advice}`

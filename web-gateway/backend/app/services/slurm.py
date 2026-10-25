@@ -18,6 +18,7 @@ import logging
 import posixpath
 import shlex
 from collections.abc import Iterable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -448,6 +449,20 @@ async def stream_remote_file(path: str, *, chunk_size: int = 1024 * 1024):
                 if not data:
                     return
                 yield data
+
+
+@asynccontextmanager
+async def sftp_session():
+    """One SFTP channel on slurmly's one asyncssh connection, for a caller that
+    reads many files or lists folders (a run's ZIP, `run_files`): an async context
+    manager that yields asyncssh's `SFTPClient`. Private-API like
+    `stream_remote_file` (same connection, same rule 2), and outside the client's
+    command semaphore for the same reason. Raises `SSHTransportError` or `OSError`
+    when no connection can be had."""
+    client = await get_slurm_client()
+    conn = await client._transport._ensure_conn()
+    async with conn.start_sftp_client() as sftp:
+        yield sftp
 
 
 async def remove_remote_file(path: str) -> None:

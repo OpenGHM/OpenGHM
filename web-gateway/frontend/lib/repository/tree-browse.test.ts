@@ -3,7 +3,10 @@ import {
   displayText,
   folderCrumbs,
   normalizeFolder,
+  archiveRoute,
+  folderSummaryRoute,
   parentFolder,
+  runListingRoute,
   treeBaseUrl,
   treeFailureCode,
   treeHref,
@@ -41,6 +44,21 @@ describe("folders", () => {
       { name: "a", path: "a/" },
       { name: "b", path: "a/b/" },
     ]);
+  });
+});
+
+describe("a run's routes (ADR 0040)", () => {
+  it("are under the job, and the tree's stay under the repository", () => {
+    expect(folderSummaryRoute("run", "job 1", "monthly/runoff/")).toBe("/api/jobs/job%201/files/folder?path=monthly/runoff/");
+    expect(archiveRoute("run", "job-1")).toBe("/api/jobs/job-1/files/archive");
+    expect(runListingRoute("job-1", "")).toBe("/api/jobs/job-1/files?path=");
+    expect(runListingRoute("job-1", "daily/", "1000")).toBe("/api/jobs/job-1/files?path=daily/&cursor=1000");
+    expect(archiveRoute("snapshot", "abc")).toBe("/api/repository/datasets/abc/files/archive");
+    expect(folderSummaryRoute("model_input", "abc", "x/")).toBe("/api/repository/model-inputs/abc/files/folder?path=x/");
+  });
+
+  it("treeBaseUrl reads nothing off a file that has no URL", () => {
+    expect(treeBaseUrl([{ name: "a", path: "a", size: 1, lastModified: "2026-10-01T00:00:00Z" }])).toBeNull();
   });
 });
 

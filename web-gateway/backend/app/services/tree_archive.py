@@ -29,6 +29,13 @@ name and what is under it at any depth.
 A selection over `ARCHIVE_LIMIT_BYTES` is refused before anything is sent, and only
 `MAX_ARCHIVES` archives are written at once per process: one more is refused, not
 queued, since a waiting request would hold a browser's download open for nothing.
+
+The writer does not know where the bytes come from. It is given a `connect`: an async
+context manager that yields a reader, `read(obj)`, which gives the bytes of one
+`FolderObject`. The default reads a published object over HTTPS by `obj.url`; a run's
+output on Anvil scratch (ADR 0040, `run_files`) reads over SFTP by `obj.key`. The limit,
+the slot count, the stored entries, the read-ahead and the failed-stream behaviour are
+the one set, whatever the source.
 """
 
 from __future__ import annotations
@@ -36,8 +43,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import zipfile
-from collections.abc import AsyncIterator
-from contextlib import aclosing
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, aclosing, asynccontextmanager
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -82,6 +89,12 @@ class ArchiveError(Exception):
     """An object could not be read, or was not the size the listing gave."""
 
 
+#: The bytes of one object, as they arrive.
+Reader = Callable[[tree_browse.FolderObject], AsyncIterator[bytes]]
+#: Opens whatever the reads share (one HTTP client, one SFTP channel) for an archive's
+#: length and closes it at the end.
+Connect = Callable[[], AbstractAsyncContextManager[Reader]]
+
 _active = 0
 
 
@@ -99,7 +112,8 @@ class _Slot:
             _active -= 1
 
 
-def _acquire() -> _Slot:
+def acquire() -> _Slot:
+    """A place among the `MAX_ARCHIVES`, shared by every source; `ArchiveBusy` when none is free."""
     global _active
     if _active >= MAX_ARCHIVES:
         raise ArchiveBusy
@@ -171,12 +185,19 @@ async def _read(client: httpx.AsyncClient, url: str) -> AsyncIterator[bytes]:
                 yield chunk
 
 
-async def _fetch(client: httpx.AsyncClient, obj: tree_browse.FolderObject) -> bytes:
+@asynccontextmanager
+async def http_source() -> AsyncIterator[Reader]:
+    """The default `Connect`: a published object, read anonymously by its URL."""
+    async with _client() as client:
+        yield lambda obj: _read(client, obj.url)
+
+
+async def _fetch(read: Reader, obj: tree_browse.FolderObject) -> bytes:
     """The whole object, for one that is read ahead of its turn."""
     parts: list[bytes] = []
     got = 0
     try:
-        async with aclosing(_read(client, obj.url)) as chunks:
+        async with aclosing(read(obj)) as chunks:
             async for chunk in chunks:
                 got += len(chunk)
                 if (
@@ -199,10 +220,10 @@ class _Ahead:
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        read: Reader,
         entries: list[tuple[str, tree_browse.FolderObject]],
     ) -> None:
-        self._client = client
+        self._read = read
         self._entries = entries
         self._tasks: dict[int, asyncio.Task[bytes]] = {}
         self._held = 0
@@ -220,7 +241,7 @@ class _Ahead:
                 if self._held + obj.size > _PREFETCH_TOTAL_BYTES:
                     break
                 self._held += obj.size
-                self._tasks[self._scan] = asyncio.create_task(_fetch(self._client, obj))
+                self._tasks[self._scan] = asyncio.create_task(_fetch(self._read, obj))
             self._scan += 1
 
     def check(self) -> None:
@@ -258,14 +279,16 @@ class _Ahead:
 
 
 async def _write(
-    entries: list[tuple[str, tree_browse.FolderObject]], slot: _Slot
+    entries: list[tuple[str, tree_browse.FolderObject]],
+    slot: _Slot,
+    connect: Connect | None = None,
 ) -> AsyncIterator[bytes]:
     sink = _Sink()
     archive = zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED, allowZip64=True)
     current = ""
     try:
-        async with _client() as client:
-            ahead = _Ahead(client, entries)
+        async with (connect or http_source)() as read:
+            ahead = _Ahead(read, entries)
             try:
                 for index, (name, obj) in enumerate(entries):
                     current = obj.key
@@ -281,7 +304,7 @@ async def _write(
                             out.write(data)
                         else:
                             sent = 0
-                            async with aclosing(_read(client, obj.url)) as chunks:
+                            async with aclosing(read(obj)) as chunks:
                                 async for chunk in chunks:
                                     out.write(chunk)
                                     sent += len(chunk)
@@ -312,21 +335,24 @@ async def _write(
 
 class Archive:
     """A folder's ZIP, ready to stream. `release` frees its place among the
-    `MAX_ARCHIVES`; the stream does it itself when it ends."""
+    `MAX_ARCHIVES`; the stream does it itself when it ends. `connect` is where
+    the bytes come from (published objects over HTTPS unless given)."""
 
     def __init__(
         self,
         filename: str,
         entries: list[tuple[str, tree_browse.FolderObject]],
         slot: _Slot,
+        connect: Connect | None = None,
     ) -> None:
         self.filename = filename
         self.length = archive_length([(name, obj.size) for name, obj in entries])
         self._entries = entries
         self._slot = slot
+        self._connect = connect
 
     def stream(self) -> AsyncIterator[bytes]:
-        return _write(self._entries, self._slot)
+        return _write(self._entries, self._slot, self._connect)
 
     def release(self) -> None:
         self._slot.release()
@@ -404,7 +430,7 @@ async def open_archive(
     with what it holds. Raises `ArchiveBusy`, `PathNotFound` (the folder or a
     name), `ListingUnavailable`, and `SelectionTooLarge` when the selection's
     size, listed afresh, is over the limit."""
-    slot = _acquire()
+    slot = acquire()
     try:
         entries, complete = await _select(kind, artifact_id, folder, names)
         total = sum(obj.size for _, obj in entries)

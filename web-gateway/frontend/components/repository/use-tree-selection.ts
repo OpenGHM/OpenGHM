@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FolderSize } from "@/lib/repository/selection";
 import { folderSummaryRoute } from "@/lib/repository/tree-browse";
-import type { FolderSummary, TreeKind } from "@/lib/repository/types";
+import type { FileSource, FolderTotal } from "@/lib/repository/types";
 
 const NONE: string[] = [];
 
@@ -16,10 +16,11 @@ const NONE: string[] = [];
  * rather than a server action: a big folder takes seconds to total, and server
  * actions run one at a time, so it would hold up the next listing) and kept by
  * path for as long as the hook lives, which is as long as the view is open: a
- * published tree does not change, so a folder is asked about once. Until a
- * folder's answer comes, `sizes` has no entry for it.
+ * published tree does not change, so a folder is asked about once (nor does a
+ * stopped run's output, ADR 0040, where `kind` is `"run"` and `id` the job's). Until
+ * a folder's answer comes, `sizes` has no entry for it.
  */
-export function useTreeSelection(kind: TreeKind, id: string, folder: string) {
+export function useTreeSelection(kind: FileSource, id: string, folder: string) {
   const [selection, setSelection] = useState({ folder, names: [] as string[] });
   // Opening another folder clears the selection: set during render, not after it,
   // so that the new folder is never shown with the old one's ticks.
@@ -52,7 +53,7 @@ export function useTreeSelection(kind: TreeKind, id: string, folder: string) {
       fetch(folderSummaryRoute(kind, id, path)).then(async (response) => {
         if (!response.ok) return fail();
         try {
-          const summary = (await response.json()) as FolderSummary;
+          const summary = (await response.json()) as FolderTotal;
           setAnswers((prev) => ({ ...prev, [path]: { status: "ready", summary } }));
         } catch {
           fail();

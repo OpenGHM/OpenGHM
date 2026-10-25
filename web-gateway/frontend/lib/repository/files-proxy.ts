@@ -11,13 +11,13 @@ import type { TreeKind } from "@/lib/repository/types";
  * 404, 422, 503) comes back unchanged, status and JSON.
  */
 
-const UNREACHABLE = "The gateway could not reach its backend. Try again in a moment.";
+export const UNREACHABLE = "The gateway could not reach its backend. Try again in a moment.";
 
 function knownId(kind: TreeKind, id: string): boolean {
   return (kind === "snapshot" ? SNAPSHOT_ID : MODEL_INPUT_ID).test(id);
 }
 
-function relay(upstream: Response, download: boolean): Response {
+export function relay(upstream: Response, download: boolean): Response {
   const out = new Headers();
   const contentType = upstream.headers.get("content-type");
   if (contentType) out.set("Content-Type", contentType);
@@ -30,6 +30,32 @@ function relay(upstream: Response, download: boolean): Response {
   out.set("Cache-Control", "no-store");
   // The body is the backend's own stream, passed on as it arrives: never buffered here.
   return new Response(upstream.body, { status: upstream.status, headers: out });
+}
+
+export const SELECTION_MESSAGE = "Send a folder and the names of its entries to download.";
+
+/**
+ * The folder and the names of an archive request: a form (`folder` and a `names`
+ * field for each entry) or JSON. Null for a body of any other shape.
+ */
+export async function readSelection(request: Request): Promise<{ folder: string; names: string[] } | null> {
+  let folder: unknown;
+  let names: unknown;
+  try {
+    if ((request.headers.get("content-type") ?? "").startsWith("application/json")) {
+      ({ folder, names } = (await request.json()) as { folder?: unknown; names?: unknown });
+    } else {
+      const form = await request.formData();
+      folder = form.get("folder") ?? "";
+      names = form.getAll("names");
+    }
+  } catch {
+    return null;
+  }
+  if (typeof folder !== "string" || !Array.isArray(names) || !names.every((n) => typeof n === "string")) {
+    return null;
+  }
+  return { folder, names };
 }
 
 /** `GET …/files/folder?path=`: only `path` is passed on. */
@@ -53,22 +79,9 @@ export async function proxyFolder(request: Request, kind: TreeKind, id: string):
  */
 export async function proxyArchive(request: Request, kind: TreeKind, id: string): Promise<Response> {
   if (!knownId(kind, id)) return proxyRefusal(404, "not_found", "There is no such snapshot or model input.");
-  let folder: unknown;
-  let names: unknown;
-  try {
-    if ((request.headers.get("content-type") ?? "").startsWith("application/json")) {
-      ({ folder, names } = (await request.json()) as { folder?: unknown; names?: unknown });
-    } else {
-      const form = await request.formData();
-      folder = form.get("folder") ?? "";
-      names = form.getAll("names");
-    }
-  } catch {
-    folder = undefined;
-  }
-  if (typeof folder !== "string" || !Array.isArray(names) || !names.every((n) => typeof n === "string")) {
-    return proxyRefusal(422, "invalid_selection", "Send a folder and the names of its entries to download.");
-  }
+  const selection = await readSelection(request);
+  if (!selection) return proxyRefusal(422, "invalid_selection", SELECTION_MESSAGE);
+  const { folder, names } = selection;
   try {
     return relay(
       await fetch(`${BACKEND_URL}${treeRoute(kind, id)}/files/archive`, {

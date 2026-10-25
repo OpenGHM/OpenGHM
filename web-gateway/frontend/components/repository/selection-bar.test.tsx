@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { SelectionBar } from "./selection-bar";
 import { TreeBrowserTable } from "./tree-browser-table";
 import { useTreeSelection } from "./use-tree-selection";
-import type { FolderSummary, TreeFile, TreeFolder } from "@/lib/repository/types";
+import type { FolderSummary, ListedFile, TreeFile, TreeFolder } from "@/lib/repository/types";
 
 const LIMIT = 500 * 1024 * 1024;
 const fetchMock = vi.fn();
@@ -285,5 +285,57 @@ describe("the download", () => {
     const frame = document.querySelector(`iframe[name="${form.getAttribute("target")}"]`) as HTMLIFrameElement;
     fireEvent.load(frame);
     expect(within(form.parentElement as HTMLElement).queryByText(/could not be prepared/)).toBeNull();
+  });
+});
+
+describe("for a run's output on Anvil scratch (ADR 0040)", () => {
+  const runFile = (name: string, size: number): ListedFile => ({
+    name,
+    path: `daily/${name}`,
+    size,
+    lastModified: "2026-10-01T00:00:00Z",
+  });
+  const RUN_FILES = [runFile("a.nc", 1024), runFile("b.nc", 2048)];
+
+  function RunHarness() {
+    const selection = useTreeSelection("run", "job-1", "daily/");
+    return (
+      <>
+        <SelectionBar kind="run" id="job-1" folder="daily/" files={RUN_FILES} selection={selection} />
+        <TreeBrowserTable pathname="" folder="daily/" folders={FOLDERS} files={RUN_FILES} selection={selection} />
+      </>
+    );
+  }
+
+  it("asks the job's route for a folder's size and posts the ZIP form to the job's archive route", async () => {
+    answer({ "daily/deep/": summary(5 * 1024 ** 2) });
+    const { container } = render(<RunHarness />);
+    tick("Select a.nc");
+    tick("Select deep/");
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs/job-1/files/folder?path=daily/deep/");
+    await waitFor(() => expect(download().disabled).toBe(false));
+    const form = container.querySelector("form")!;
+    expect(form.getAttribute("action")).toBe("/api/jobs/job-1/files/archive");
+    expect(form.getAttribute("method")?.toLowerCase()).toBe("post");
+    expect(form.querySelector<HTMLInputElement>("input[name=folder]")!.value).toBe("daily/");
+    expect([...form.querySelectorAll<HTMLInputElement>("input[name=names]")].map((i) => i.value)).toEqual(["a.nc", "deep/"]);
+  });
+
+  it("over the limit says so and says nothing of S3, which does not hold a run's output", async () => {
+    answer({ "daily/deep/": summary(3 * 1024 ** 3) });
+    render(<RunHarness />);
+    tick("Select deep/");
+    await screen.findByText("The selection is 3.0 GB, over the 500 MB limit for a ZIP. Select less.");
+    expect(download().disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Copy S3 command" })).toBeNull();
+    expect(screen.queryByText(/S3/)).toBeNull();
+  });
+
+  it("gives a file with no public URL no link actions, and still lets it be ticked", () => {
+    render(<RunHarness />);
+    expect(screen.queryByRole("link", { name: /Download/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Copy URL/ })).toBeNull();
+    tick("Select b.nc");
+    expect(screen.getByRole("status").textContent).toBe("1 selected · 2.0 KB");
   });
 });

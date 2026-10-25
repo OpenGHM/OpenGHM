@@ -899,7 +899,7 @@ def test_more_than_65535_entries_still_make_a_valid_archive(bucket):
         bucket.objects[f"k{n}"] = b""
 
     async def run():
-        archive = tree_archive.Archive("x.zip", entries, tree_archive._acquire())
+        archive = tree_archive.Archive("x.zip", entries, tree_archive.acquire())
         assert archive.length is None
         return b"".join([piece async for piece in archive.stream()])
 

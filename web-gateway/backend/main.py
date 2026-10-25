@@ -12,6 +12,7 @@ from app.api.v1 import community as community_router
 from app.api.v1 import home as home_router
 from app.api.v1 import jobs as jobs_router
 from app.api.v1 import repository as repository_router
+from app.api.v1 import run_files as run_files_router
 from app.api.v1 import users as users_router
 from app.api.v1 import wbm_output as wbm_output_router
 from app.core import account_startup, login_throttle, pending_sso, sessions
@@ -229,6 +230,7 @@ app.include_router(repository_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(wbm_output_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(run_files_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(community_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(community_router.admin_router, prefix=settings.API_V1_PREFIX)
 app.include_router(home_router.router, prefix=settings.API_V1_PREFIX)

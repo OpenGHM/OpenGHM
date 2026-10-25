@@ -1,4 +1,4 @@
-import type { FolderSummary, TreeFile } from "@/lib/repository/types";
+import type { FolderTotal, ListedFile } from "@/lib/repository/types";
 import { s3SyncCommand } from "@/lib/repository/output";
 import { treeBaseUrl } from "@/lib/repository/tree-browse";
 import { formatBytes } from "@/lib/workspace/format";
@@ -17,7 +17,7 @@ export function limitLabel(bytes: number): string {
 
 /** What is known of a selected folder's size: absent while its summary is on its way. */
 export type FolderSize =
-  | { status: "ready"; summary: FolderSummary }
+  | { status: "ready"; summary: FolderTotal }
   | { status: "failed" };
 
 export type SelectionStatus = "ok" | "checking" | "over" | "incomplete" | "failed";
@@ -41,7 +41,7 @@ export interface SelectionTotals {
  */
 export function selectionTotals(
   names: string[],
-  files: TreeFile[],
+  files: ListedFile[],
   sizes: Record<string, FolderSize | undefined>
 ): SelectionTotals {
   const byName = new Map(files.map((f) => [f.name, f.size]));
@@ -81,14 +81,14 @@ export function selectionTotals(
 function viewedFolderUrl(
   folder: string,
   names: string[],
-  files: TreeFile[],
+  files: ListedFile[],
   sizes: Record<string, FolderSize | undefined>
 ): string | null {
   const base = treeBaseUrl(files);
   if (base) return base + folder;
   for (const name of names) {
     const size = sizes[name];
-    if (name.endsWith("/") && size?.status === "ready") {
+    if (name.endsWith("/") && size?.status === "ready" && size.summary.url) {
       for (const spelled of [name, encodeURI(name)]) {
         if (size.summary.url.endsWith(spelled)) return size.summary.url.slice(0, -spelled.length);
       }
@@ -116,7 +116,7 @@ export function selectionS3Command({
   id: string;
   folder: string;
   names: string[];
-  files: TreeFile[];
+  files: ListedFile[];
   sizes: Record<string, FolderSize | undefined>;
 }): string | null {
   if (names.length === 0) return null;

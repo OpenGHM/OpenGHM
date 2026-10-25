@@ -151,7 +151,7 @@ async def _browse_folder_summary(
         raise _folder_failure(exc, path) from exc
 
 
-async def _archive_request(request: Request) -> tuple[str, list[str]]:
+async def archive_request(request: Request) -> tuple[str, list[str]]:
     """The folder and the entry names asked for, from a form (``folder`` and a
     ``names`` field for each entry: what a browser's form sends) or from JSON
     ``{"folder": ..., "names": [...]}``. 422 ``invalid_selection`` for a body of
@@ -188,7 +188,7 @@ async def _browse_archive(
     name ``invalid_path`` and a bad count ``invalid_selection``, all 422 or 404):
     413 ``selection_too_large`` (with ``bytes`` and ``limit_bytes``) and 429
     ``archive_busy``, both before anything is sent."""
-    path, names = await _archive_request(request)
+    path, names = await archive_request(request)
     try:
         folder = tree_browse.validate_path(path)
         names = tree_browse.validate_names(names)
@@ -599,7 +599,7 @@ async def post_dataset_folder_archive(dataset_id: str, request: Request) -> Stre
     """Entries of a folder of a published snapshot as one ZIP, stored and
     streamed from the public bucket (``tree_archive``). A POST, so that a browser
     form can carry up to 1000 names; the body is a form or JSON (see
-    ``_archive_request``). Open."""
+    ``archive_request``). Open."""
     db = get_db()
     if await db["datasets"].find_one({"_id": dataset_id}) is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")

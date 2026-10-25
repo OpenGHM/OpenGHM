@@ -1,6 +1,6 @@
 import { HardDriveDownload } from "lucide-react";
 import { CopyButton } from "@/components/workspace/copy-button";
-import { OutputFileList } from "@/components/workspace/output-file-list";
+import { RunFiles } from "@/components/workspace/run-file-browser";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { FilesState, OutputManifest } from "@/lib/jobs/types";
 import { formatBytes, purgeAround, RETENTION_DAYS } from "@/lib/workspace/format";
@@ -8,16 +8,18 @@ import { formatBytes, purgeAround, RETENTION_DAYS } from "@/lib/workspace/format
 /**
  * COMPLETED, under the status headline: where the result is, from the job's
  * own record of what it wrote (`output`, ADR 0026), and when Anvil may delete
- * it. Output stays on Anvil scratch (ADR 0023): the gateway serves no download,
- * so the path is the result. A run whose files Anvil's purge has removed says
- * that instead.
+ * it. Output stays on Anvil scratch (ADR 0023): nothing is uploaded, and what
+ * is ticked in the browser (`RunFiles`) is streamed as one ZIP of at most 500 MB
+ * (ADR 0040). A run whose files Anvil's purge has removed says that instead.
  */
 export function CompletedResults({
+  jobId,
   workDir,
   completedAt,
   output,
   files,
 }: {
+  jobId: string;
   workDir: string | null;
   completedAt: string | null;
   output: OutputManifest | null;
@@ -47,21 +49,21 @@ export function CompletedResults({
         </div>
       )}
 
-      {output ? (
-        <div className="flex flex-wrap items-center justify-between gap-x-7 gap-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-7 gap-y-2.5">
+        {output ? (
           <div className="flex gap-7">
             <Stat value={output.file_count} label="files" />
             <Stat value={output.nc_count} label=".nc files" />
             <Stat value={formatBytes(output.total_bytes)} label="total" />
           </div>
-          {output.files.length > 0 && <OutputFileList files={output.files} fileCount={output.file_count} />}
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          This simulation finished before the gateway recorded what it wrote, so its file count and size are
-          not shown.
-        </p>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            This simulation finished before the gateway recorded what it wrote, so its file count and size are
+            not shown.
+          </p>
+        )}
+        <RunFiles jobId={jobId} />
+      </div>
 
       <p className="flex items-center gap-2.5 rounded-xl bg-warning/10 px-3.5 py-3 text-[13.5px] leading-normal text-warning">
         <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-queued" />

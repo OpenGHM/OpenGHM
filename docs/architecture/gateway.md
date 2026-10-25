@@ -659,6 +659,8 @@ anonymously with plain `httpx`, and only in small pieces:
   files page (`tree_browse.py`, below);
 - a folder's objects, one after another, to write it as a ZIP
   (`tree_archive.py`, below);
+- a run's output on Anvil scratch, listed and read over SFTP, to write it as a
+  ZIP for the run's owner (`run_files.py`, "Downloading a run's output" below);
 - for a snapshot's Download card, the container's size (one `HEAD`,
   `tree_browse.sizes`) and a summary of its `wbm_output/` (a listing with no
   delimiter, `tree_browse.output_folders`), both kept since a published
@@ -781,7 +783,9 @@ has, with every artifact under a prefix
 deliberately no output-bucket setting. A simulation's output stays on Anvil
 scratch and reaches S3 only when it is published as a snapshot
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)), so there is
-no job-output link to return.
+no job-output link to return; its owner downloads it as a ZIP the backend reads over
+SFTP ([ADR 0040](../decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md),
+"Downloading a run's output" below).
 
 ### Jobs — SSH, and no queue
 
@@ -1124,7 +1128,7 @@ action: Cancel simulation while it is queued or running, "Try again with these s
 after a failure or a cancel. That button and "Duplicate" are the one copy action
 (`POST /jobs/{id}/duplicate`), shown once: the header has it only where the
 summary does not. A completed job's results (scratch path, file counts, when
-Anvil may delete them) sit in the summary, a failed job's cause and log excerpt.
+Anvil may delete them, and "Browse and download files", the run's file browser) sit in the summary, a failed job's cause and log excerpt.
 The facts of the simulation are one "Run details" card
 (`run-details-card.tsx`), styled as the Data Repository's "Snapshot info": the snapshot it is based on
 (a link), the run period, the output variables and output, the cores and
@@ -1293,7 +1297,9 @@ Anvil purges scratch files untouched for 30 days, and a daily check sets
 A run uploads nothing, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
 writes to Anvil scratch, and the output stays there until the draft is
-published.
+published. Its owner can download what they tick as one ZIP of at most 500 MiB
+([ADR 0040](../decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md),
+"Downloading a run's output" below).
 
 ### Publishing — a second job, under an id minted first
 
@@ -1473,7 +1479,8 @@ through, `/api/repository/datasets/{id}/output` and `…/output/subset` (only `v
   command (checked 2026-10-14 with aws-cli against Anvil S3). There is no toolkit
   command that fetches the output; `snapshot fetch` leaves it out.
 
-A run's output on scratch has no UI yet.
+A run's output on scratch has no UI for the subset, maps or series yet; its files have a browser and a ZIP
+(next section).
 
 Every command of the `openghm` toolkit the UI shows (the fetches on the Download
 sections, the subset's "Same file from a script") carries a **Coming soon** chip
@@ -1481,6 +1488,58 @@ sections, the subset's "Same file from a script") carries a **Coming soon** chip
 command can be read and copied, but the toolkit is not on PyPI yet
 ([its README](../../packages/openghm/README.md#install)). The chips come off when it is
 published.
+
+### Downloading a run's output — a ZIP over SFTP
+
+What is ticked in a stopped run's output on scratch comes down as one ZIP of at most 500 MiB,
+read over SFTP and streamed
+([ADR 0040](../decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md)).
+It is [ADR 0036](../decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md)'s archive with
+another source of bytes: the same writer (`tree_archive.py`, given a `connect` that yields a
+reader for one entry), the same limit, the same three places per process (shared with the
+published case), the same exact `Content-Length`, read-ahead and failed-stream behaviour.
+The routes are in `web-gateway/backend/app/api/v1/run_files.py`, the listing and the SFTP
+reader in `web-gateway/backend/app/services/run_files.py`, under the job:
+
+| Route | Answers |
+|---|---|
+| `GET /api/v1/jobs/{job_id}/files?path=&cursor=` | one folder of the run's output: `{ id, path, folders: [{name, path}], files: [{name, path, size, lastModified}], nextCursor }`, folders first, 1000 entries a page, the cursor an offset |
+| `GET /api/v1/jobs/{job_id}/files/folder?path=` | `{ path, files, bytes, limit_bytes, fits, complete }`: the folder at any depth, by a walk of at most 20 000 files and 60 s; past either, `fits: false, complete: false` |
+| `POST /api/v1/jobs/{job_id}/files/archive` | the ZIP of the `names` in `folder` (a form or JSON, 1 to 1000 names, a folder's ending in `/`), named `<sim_id>-<name>.zip` for one entry, else `<sim_id>-<folder's name, or "files" at the root>.zip` |
+
+- **The output directory** is `ANVIL_OUTPUT_BASE/<sim_id>/wbm_output/<sim_id>`, the directory
+  the job's outcome record walks, built from the job's `sim_id` and never from the request or
+  the job's `work_dir`. A path is checked as text by the published tree's rules (`422
+  invalid_path`) and on Anvil: the folder's `realpath` must be the path asked for, so no part
+  of it is a link. Only regular files and folders are listed; a link is never listed,
+  followed or packed. A name or folder that is not there is `404 path_not_found`; no output
+  directory is `404 output_missing`.
+- **Who and which run.** The owner and holders of `JOB_VIEW_ANY` (staff and admins), as for
+  the logs and the output routes; anyone else gets the 404 a missing job gets. The run has
+  stopped (`COMPLETED`, `FAILED` or `CANCELLED`) and its files are on scratch: a draft that
+  never ran is `404 output_missing`, a queued or running one `409 run_not_finished`, a
+  purged one `410 output_purged`.
+- **Limits and failures.** `413 selection_too_large` (with `bytes` and `limit_bytes`) before a
+  byte is sent when the total is over 500 MiB or could not be totalled; `429 archive_busy`
+  before Anvil is asked anything; `503 anvil_unreachable` or `anvil_not_configured`. A read
+  that fails once the response has begun (a file purged, replaced or longer than listed, a lost
+  connection) ends the connection without a clean finish. Nothing is written on Anvil or in
+  the backend.
+- **The reads** use one SFTP channel on slurmly's one connection (`slurm.sftp_session`, private
+  API like `stream_remote_file`), a channel for the listing and one for the stream. A file is
+  read in 1 MiB pieces with two reads asked for at once: one at a time moved 1.0 MB/s from the
+  local stack to Anvil and two moved 2.5 MB/s, what `ssh cat` carries on that link
+  (measured 2026-10-25). Small files are read ahead by the writer.
+
+The frontend passes the three routes through with the session's token
+(`web-gateway/frontend/app/api/jobs/[id]/files/{,folder,archive}`, `web-gateway/frontend/lib/jobs/run-files-proxy.ts`). On the job page,
+"Browse and download files" (`web-gateway/frontend/components/workspace/run-file-browser.tsx`) opens a browser of
+the output directory that reuses the published files page's table, selection bar and
+selection hook with the source `"run"`: the folder is kept in state, every row has a
+checkbox, a ticked folder's size comes from `…/files/folder`, a selection over the limit is
+marked before anyone clicks, and the bar offers no S3 command because there is none. The
+backend's words are shown when the run is running, purged or has no output. It replaces the
+flat file list built from the job's recorded manifest, which is capped at 5000 files.
 
 ## 6. What is absent, and not by oversight
 

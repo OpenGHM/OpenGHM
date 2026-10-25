@@ -296,6 +296,33 @@ export interface FolderSummary {
   complete: boolean;
 }
 
+/**
+ * What the file browser's pieces (the table, the selection and its bar) read: a
+ * published tree, or a run's output on Anvil scratch (ADR 0040), whose routes are
+ * `/api/jobs/<id>/files/...` and whose rows have no public URL.
+ */
+export type FileSource = TreeKind | "run";
+
+/**
+ * A listed file. A published tree's also has its public URL and whether it can be
+ * previewed (`TreeFile`); a run's has neither, since only the ZIP route reads it.
+ */
+export type ListedFile = Pick<TreeFile, "name" | "path" | "size" | "lastModified"> &
+  Partial<Pick<TreeFile, "url" | "previewable">>;
+
+/** What a folder holds, as a selection reads it: `FolderSummary`, whose `url` a run's folder has not. */
+export type FolderTotal = Omit<FolderSummary, "url"> & { url?: string };
+
+/** `GET /jobs/{id}/files` — one page of one folder of a run's output (`RunListing` in the backend). */
+export interface RunListing {
+  id: string;
+  path: string;
+  folders: TreeFolder[];
+  files: ListedFile[];
+  /** The offset of the folder's next page; null on the last. */
+  nextCursor: string | null;
+}
+
 /** `GET .../files/preview` — a file's first bytes (`TreePreview` in the backend). */
 export interface TreePreview {
   path: string;

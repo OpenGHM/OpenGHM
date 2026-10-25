@@ -271,7 +271,7 @@ describe("a completed job", () => {
     // Nothing publishes a simulation, and nothing here says it might.
     expect(text).not.toMatch(/publish|illustrative|not wired/i);
     expect(screen.getByRole("button", { name: "Copy path" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Show file list/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Browse and download files" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancel simulation" })).toBeNull();
   });
 

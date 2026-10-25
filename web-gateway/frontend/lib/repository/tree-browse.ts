@@ -1,4 +1,4 @@
-import type { TreeErrorCode, TreeFile, TreeKind } from "@/lib/repository/types";
+import type { FileSource, ListedFile, TreeErrorCode, TreeKind } from "@/lib/repository/types";
 
 /** How much of a file the backend reads for a preview (`Range: bytes=0-262143`). */
 export const PREVIEW_BYTES = 256 * 1024;
@@ -9,15 +9,29 @@ export function treeRoute(kind: TreeKind, id: string): string {
   return `/api/v1/repository/${segment}/${encodeURIComponent(id)}`;
 }
 
-/** The gateway's own routes for a tree's folders, under `app/api/repository`; the browser never calls FastAPI. */
-function filesApi(kind: TreeKind, id: string): string {
+/**
+ * The gateway's own routes for a source's folders, the browser never calls FastAPI: a tree's
+ * under `app/api/repository`, a run's (`id` is the job's) under `app/api/jobs`.
+ */
+function filesApi(kind: FileSource, id: string): string {
+  if (kind === "run") return `/api/jobs/${encodeURIComponent(id)}/files`;
   const segment = kind === "snapshot" ? "datasets" : "model-inputs";
   return `/api/repository/${segment}/${encodeURIComponent(id)}/files`;
 }
 
 /** `GET`: what a folder holds, at any depth, and whether it is small enough for a ZIP. */
-export function folderSummaryRoute(kind: TreeKind, id: string, folder: string): string {
+export function folderSummaryRoute(kind: FileSource, id: string, folder: string): string {
   return `${filesApi(kind, id)}/folder?path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`;
+}
+
+/**
+ * `GET`: one page of one folder of a run's output (`folder` is `""` for the output directory,
+ * else ends with `/`), the next page when `cursor` is the previous one's `nextCursor`.
+ */
+export function runListingRoute(jobId: string, folder: string, cursor?: string | null): string {
+  const query = [`path=${encodeURIComponent(folder).replaceAll("%2F", "/")}`];
+  if (cursor) query.push(`cursor=${encodeURIComponent(cursor)}`);
+  return `${filesApi("run", jobId)}?${query.join("&")}`;
 }
 
 /**
@@ -25,7 +39,7 @@ export function folderSummaryRoute(kind: TreeKind, id: string, folder: string): 
  * name ends with `/`): the entries as one ZIP. A form, so that the browser
  * itself takes the stream to disk and the names are not squeezed into a URL.
  */
-export function archiveRoute(kind: TreeKind, id: string): string {
+export function archiveRoute(kind: FileSource, id: string): string {
   return `${filesApi(kind, id)}/archive`;
 }
 
@@ -64,9 +78,9 @@ export function treeHref(pathname: string, folder: string, file: string | null =
  * that file (it can be on a later page of a big folder), but its URL is the
  * root's plus its path. Null when no listed file tells.
  */
-export function treeBaseUrl(files: TreeFile[]): string | null {
+export function treeBaseUrl(files: ListedFile[]): string | null {
   for (const f of files) {
-    if (f.path && f.url.endsWith(f.path)) return f.url.slice(0, f.url.length - f.path.length);
+    if (f.url && f.path && f.url.endsWith(f.path)) return f.url.slice(0, f.url.length - f.path.length);
   }
   return null;
 }
