@@ -413,12 +413,20 @@ bump, same as a new forcing role.
 **SLURM `--time` syntax**, not ISO 8601 durations: `minutes:seconds`,
 `hours:minutes:seconds`, `days-hours`, `days-hours:minutes`, or
 `days-hours:minutes:seconds`, where the hours field is not capped at 24
-(observed on Anvil: `"4:30:00"`, `"111:30:00"`, `"15:00"`). The spec should
+(observed on Anvil: `"4:30:00"`, `"111:30:00"`, `"20:00"`). The spec should
 validate against this grammar directly rather than borrowing a duration
 `format` that doesn't match it. A walltime over one SLURM job's 96-hour limit
 runs as several jobs, each continuing from WBM's last saved state
 ([ADR 0037](../decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md));
 the Global snapshot's `111:30:00` is such a run.
+
+The walltime has to cover a draft's run, not only the snapshot's own: a draft
+that changes a parameter gets a spool variant the cache does not hold, and WBM
+builds that spool as it runs. The v2 snapshot's `20:00` is set from that case.
+On one core, its period took 9 min 49 s with every cache warm, 11 min 52 s
+with empty caches (the published spool downloaded), and 15 min 20 s with
+a spool WBM built itself (SLURM 21652123, 21651526, 21652124); the 15 min it
+said before cut a gateway run.
 
 ### Notes
 

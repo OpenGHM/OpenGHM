@@ -400,7 +400,8 @@ def test_a_non_time_is_refused():
 @pytest.mark.parametrize(
     "recommended, with_headroom",
     [
-        ("15:00", "22:30"),  # the v2 example: 13:49 of 15:00 needed
+        ("15:00", "22:30"),
+        ("20:00", "30:00"),  # the v2 snapshot: 15:20 measured with a spool WBM builds
         ("4:30:00", "6:45:00"),
         ("04:30:00", "6:45:00"),
         ("10:00", "15:00"),

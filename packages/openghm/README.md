@@ -789,9 +789,13 @@ one-month spinup, took 3887 s at `-t 8` and 4659 s at `-t 1` (job 21026529, 26
 cores held for its 34 to 35 GiB peak), 17% less time and 17% less allocation
 charge; the v2 CONUS tutorial took 858 s at `-t 8` and 849 s at `-t 1` (job
 21026015, 0.98 CPUs either way), so threads do nothing for it and it recommends 1
-core. The full 10-year Global run with its two 5-year spinup loops is not
-measured; the past full run (job 17037959, default 4 threads) averaged about 1.7
-CPUs.
+core. A longer Global run (job 21528168, 26 cores, `-t 8`, a one-year spinup and
+the run year 2000, 16 h 5 min, exit 0), sampled once a second from the job's
+cgroup, used 2.2 CPUs on average (2.21 by `getrusage`), 5.0 at the 99th percentile
+and 5.4 at most, never the 8 that `-t 8` allows: one thread was runnable in 77% of
+the samples and eight in 15%. The spinup averaged about 2.15 CPUs and the run year
+about 2.3. The full 10-year run with its two 5-year spinup loops is not measured;
+the past full run (job 17037959, default 4 threads) averaged about 1.7 CPUs.
 
 Full contract: [`../dev/openghm_cli_design.md`](../dev/openghm_cli_design.md),
 [`../dev/openghm_jobrun_params.md`](../dev/openghm_jobrun_params.md).
