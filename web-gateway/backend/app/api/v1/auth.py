@@ -30,8 +30,6 @@ from app.models.user import (
     RegisteredResponse,
     RegisterRequest,
     ResetPasswordRequest,
-    SessionEntry,
-    SessionListResponse,
     SsoConnectIntentResponse,
     SsoLoginRequest,
     SsoLoginResponse,
@@ -364,53 +362,6 @@ async def logout(current_user: TokenPayload = Depends(get_current_user)):
         await sessions.revoke_session(current_user.sid)
     else:
         await sessions.revoke_all_sessions(current_user.sub)
-
-
-@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
-async def logout_all(current_user: TokenPayload = Depends(get_current_user)):
-    """Sign out every device for the current user."""
-    revoked = await sessions.revoke_all_sessions(current_user.sub)
-    await log_event(
-        "sessions_revoked_all",
-        actor_id=current_user.sub,
-        actor_email=current_user.email,
-        detail={"revoked_count": revoked},
-    )
-
-
-@router.get("/sessions", response_model=SessionListResponse)
-async def list_my_sessions(current_user: TokenPayload = Depends(get_current_user)):
-    """The current user's signed-in devices."""
-    docs = await sessions.list_sessions(current_user.sub)
-    return SessionListResponse(
-        items=[
-            SessionEntry(
-                id=str(d["_id"]),
-                created_at=d["created_at"],
-                last_used_at=d["last_used_at"],
-                user_agent=d.get("user_agent"),
-                current=str(d["_id"]) == current_user.sid,
-            )
-            for d in docs
-        ]
-    )
-
-
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_my_session(
-    session_id: str,
-    current_user: TokenPayload = Depends(get_current_user),
-):
-    """Sign out one of the current user's other devices."""
-    db = get_db()
-    doc = await db[sessions.COLLECTION].find_one({"_id": session_id})
-    # 404 rather than 403 when it belongs to someone else: whether a given
-    # session id exists isn't something one user should learn about another.
-    if doc is None or doc["user_id"] != current_user.sub:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
-    await sessions.revoke_session(session_id)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)

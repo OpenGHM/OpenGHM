@@ -141,7 +141,7 @@ Coming soon chip with no link in every deployment: it has no pages yet.
 | `/workspace/new`, `/workspace/new/[datasetId]` | the draft wizard: choose a snapshot, then Run settings and Review & submit (§4) | yes, in place |
 | `/workspace/[id]` | a stored draft in the wizard while it is a `DRAFT`, else the job page (§5) | yes, in place |
 | `/workspace/data` | Snapshots & Inputs: what the caller published, from `GET /repository/mine`, narrowed in the browser by `?kind=snapshot\|model-input` | yes, in place |
-| `/dashboard/profile` | the account page: details, sign-in methods, signed-in devices, verification notice | redirected |
+| `/dashboard/profile` | the account page: details, sign-in methods, verification notice | redirected |
 | `/admin/...` | the admin console: Overview, Users, Simulations, Audit log, System, Home, Community | redirected; staff or admin ([authentication.md §5](authentication.md#5-accounts-and-who-manages-them)) |
 | `/workspace-unavailable` | what every `/workspace` address shows while `WORKSPACE_ENABLED` is `"false"` | no |
 | `/dev/workspace/[state]` | the job page drawn from fixtures for each status and failure cause, with nothing polled or sent; a 404 in a production build | yes |

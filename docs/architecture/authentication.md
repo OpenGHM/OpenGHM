@@ -352,9 +352,8 @@ the client ever sending its refresh token back.
 so a stolen refresh token is detectable: whoever refreshes second gets a 401.
 
 Everything is revoked, on every device, when the account's control may have
-changed hands — password reset, admin deactivation. `POST /auth/logout-all`
-does the same on request, and `GET /auth/sessions` /
-`DELETE /auth/sessions/{id}` let a user see and prune their own devices.
+changed hands — password reset, admin deactivation. A user has no page for
+their own devices; only an admin can list and revoke them (below).
 
 The same view over *another* user, `/users/{id}/sessions`, is gated on
 `user:manage` — **admin only, not staff**, unlike the rest of the staff
@@ -383,7 +382,7 @@ password hash and the CILogon fields (§3).
 - **Self-service.** `GET /users/me` returns the profile with how the account
   signs in; `PATCH /users/me` changes only `name` and `organization`, because its
   model has no `role`. The profile page (`/dashboard/profile`) adds the sign-in
-  methods card, the signed-in devices (§4), the verification notice with its
+  methods card, the verification notice with its
   resend button, and Connect and Disconnect CILogon (§3).
 - **Directory.** `GET /users` (`role`, `is_active`, and `q`, a case-insensitive
   substring of email or name; at most 100 a page) and `GET /users/{id}` (adding

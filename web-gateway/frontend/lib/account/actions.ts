@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getApiClient } from "@/lib/api-client";
 import { auth } from "@/lib/auth";
 import { SSO_CONNECT_COOKIE, SSO_CONNECT_MAX_AGE_SECONDS, connectCookieValue } from "@/lib/sso-connect";
-import type { UserProfile, SessionListResponse } from "@/lib/account/types";
+import type { UserProfile } from "@/lib/account/types";
 
 export async function fetchMe(): Promise<UserProfile | null> {
   try {
@@ -64,37 +64,6 @@ export async function changePassword(
             ? `Password: ${rule}.`
             : "Failed to change password.",
     };
-  }
-}
-
-export async function fetchMySessions(): Promise<SessionListResponse> {
-  const client = await getApiClient();
-  const res = await client.get<SessionListResponse>("/api/v1/auth/sessions");
-  return res.data;
-}
-
-export async function revokeMySession(sessionId: string): Promise<{ ok: boolean }> {
-  try {
-    const client = await getApiClient();
-    await client.delete(`/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`);
-    return { ok: true };
-  } catch {
-    return { ok: false };
-  }
-}
-
-/**
- * Revokes every session, including the one making this request — the
- * caller must sign the user out client-side afterwards (signOut(), not
- * router.refresh()), or their next request 401s against a dead token.
- */
-export async function logoutAllSessions(): Promise<{ ok: boolean }> {
-  try {
-    const client = await getApiClient();
-    await client.post("/api/v1/auth/logout-all");
-    return { ok: true };
-  } catch {
-    return { ok: false };
   }
 }
 

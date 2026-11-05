@@ -280,7 +280,7 @@ async def revoke_user_session(
     if user_id == current_user.sub:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Use POST /auth/logout-all to sign yourself out of every device.",
+            detail="Sign yourself out from the account menu instead.",
         )
     db = get_db()
     doc = await db[sessions.COLLECTION].find_one({"_id": session_id})
@@ -305,7 +305,7 @@ async def revoke_all_user_sessions(
     if user_id == current_user.sub:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Use POST /auth/logout-all to sign yourself out of every device.",
+            detail="Sign yourself out from the account menu instead.",
         )
     db = get_db()
     if await db.users.find_one({"_id": user_id}) is None:
