@@ -6,6 +6,7 @@ nothing connects to Mongo or Anvil).
 
 from __future__ import annotations
 
+import contextlib
 import copy
 
 import pytest
@@ -273,6 +274,37 @@ def auth_client(db, monkeypatch, sent_emails) -> TestClient:
 # ---- a real slurmly client over a fake transport ------------------------------
 
 REMOTE_BASE = "/anvil/scratch/x-openghm/openghm"
+
+
+class _Raised:
+    value: BaseException | None = None
+
+
+@contextlib.contextmanager
+def raises_stream_error(exc_type: type[BaseException], match: str | None = None):
+    """`pytest.raises` for an error a streamed response ends with.
+
+    A response is streamed inside an anyio task group. anyio 3 re-raised the one
+    error a task group's task raised; anyio 4 wraps it in an ExceptionGroup, and
+    `requirements.txt` does not pin anyio. Either way the client sees the same
+    thing (the connection ends), so a test names the error and not the wrapper.
+    The yielded object's `.value` is the error itself.
+    """
+    got = _Raised()
+    try:
+        yield got
+    except BaseExceptionGroup as group:
+        if len(group.exceptions) != 1:
+            raise
+        error = group.exceptions[0]
+    except exc_type as raised:
+        error = raised
+    else:
+        pytest.fail(f"DID NOT RAISE {exc_type.__name__}")
+    assert isinstance(error, exc_type), f"{error!r} is not a {exc_type.__name__}"
+    if match is not None:
+        assert re.search(match, str(error)), f"{str(error)!r} does not match {match!r}"
+    got.value = error
 
 
 @dataclass

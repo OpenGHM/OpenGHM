@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import asyncssh
 import pytest
+from conftest import raises_stream_error
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -561,7 +562,7 @@ def test_a_gateway_without_ssh_set_up_is_503_not_configured(api, sftp):
 def test_a_read_that_breaks_midway_ends_the_response_with_an_error_not_a_short_zip(api, sftp, caplog):
     broken = f"{ROOT}/daily/wbm_2001.nc"
     sftp.break_after[broken] = 10
-    with pytest.raises(tree_archive.ArchiveError, match="wbm_2001.nc"), caplog.at_level("WARNING"):
+    with raises_stream_error(tree_archive.ArchiveError, match="wbm_2001.nc"), caplog.at_level("WARNING"):
         post(api, "", ["daily/"])
     assert "connection lost" in caplog.text and tree_archive._active == 0
 
@@ -569,25 +570,25 @@ def test_a_read_that_breaks_midway_ends_the_response_with_an_error_not_a_short_z
 def test_a_big_file_that_breaks_midway_does_the_same_when_it_is_streamed_in_pieces(api, sftp, monkeypatch):
     monkeypatch.setattr(tree_archive, "_PREFETCH_OBJECT_BYTES", 10)    # nothing is read ahead
     sftp.break_after[f"{ROOT}/daily/wbm_2001.nc"] = 50
-    with pytest.raises(tree_archive.ArchiveError, match="wbm_2001.nc"):
+    with raises_stream_error(tree_archive.ArchiveError, match="wbm_2001.nc"):
         post(api, "", ["daily/"])
     assert tree_archive._active == 0
 
 
 def test_a_file_that_vanishes_between_the_listing_and_the_read_ends_the_response_with_an_error(api, sftp):
     sftp.gone.add(f"{ROOT}/daily/wbm_2002.nc")                  # purged meanwhile
-    with pytest.raises(tree_archive.ArchiveError, match="wbm_2002.nc"):
+    with raises_stream_error(tree_archive.ArchiveError, match="wbm_2002.nc"):
         post(api, "", ["daily/"])
     assert tree_archive._active == 0
 
 
 def test_a_file_that_is_not_the_listed_size_ends_the_response_with_an_error(api, sftp, monkeypatch):
     sftp.sizes[f"{ROOT}/daily/wbm_2000.nc"] = 7                 # it has shrunk since it was listed... or grown
-    with pytest.raises(tree_archive.ArchiveError):
+    with raises_stream_error(tree_archive.ArchiveError):
         post(api, "", ["daily/"])
     sftp.sizes.clear()
     sftp.grow.add(f"{ROOT}/daily/wbm_2000.nc")
-    with pytest.raises(tree_archive.ArchiveError, match="listed"):
+    with raises_stream_error(tree_archive.ArchiveError, match="listed"):
         post(api, "", ["daily/"])
     assert tree_archive._active == 0
 
@@ -595,7 +596,7 @@ def test_a_file_that_is_not_the_listed_size_ends_the_response_with_an_error(api,
 def test_a_failed_download_leaves_nothing_behind(api, sftp):
     before = (dict(sftp.files), set(sftp.dirs), dict(sftp.links))
     sftp.break_after[f"{ROOT}/daily/wbm_2000.nc"] = 3
-    with pytest.raises(tree_archive.ArchiveError):
+    with raises_stream_error(tree_archive.ArchiveError):
         post(api, "", ["daily/"])
     post(api, "", ["nope/"])
     assert (sftp.files, sftp.dirs, sftp.links) == before and tree_archive._active == 0

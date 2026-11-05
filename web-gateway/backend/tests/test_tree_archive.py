@@ -15,6 +15,7 @@ from urllib.parse import quote, unquote
 
 import httpx
 import pytest
+from conftest import raises_stream_error
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -822,7 +823,7 @@ def test_an_object_that_cannot_be_read_ends_the_response_with_an_error(
     seed(bucket, "snapshots", SNAPSHOT_ID)
     broken = f"snapshots/{SNAPSHOT_ID}/daily/wbm_2001.nc"
     reads.status[broken] = 500
-    with pytest.raises(tree_archive.ArchiveError), caplog.at_level("WARNING"):
+    with raises_stream_error(tree_archive.ArchiveError), caplog.at_level("WARNING"):
         post_folder(http, "daily")
     assert broken in caplog.text and "HTTP 500" in caplog.text
     assert tree_archive._active == 0
@@ -831,7 +832,7 @@ def test_an_object_that_cannot_be_read_ends_the_response_with_an_error(
 def test_a_read_that_breaks_midway_ends_the_response_with_an_error(http, bucket, reads):
     seed(bucket, "snapshots", SNAPSHOT_ID)
     reads.truncated.add(f"snapshots/{SNAPSHOT_ID}/daily/wbm_2000.nc")
-    with pytest.raises(tree_archive.ArchiveError, match="wbm_2000.nc") as raised:
+    with raises_stream_error(tree_archive.ArchiveError, match="wbm_2000.nc") as raised:
         post_folder(http, "daily")
     assert isinstance(raised.value.__cause__, httpx.ReadError)
     assert tree_archive._active == 0
@@ -843,7 +844,7 @@ def test_an_object_that_is_not_the_listed_size_ends_the_response_with_an_error(
     seed(bucket, "snapshots", SNAPSHOT_ID)
     prefix = f"snapshots/{SNAPSHOT_ID}/daily/"
     bucket.pages[(prefix, None)] = _xml(prefix, files=[(f"{prefix}wbm_2000.nc", 7)])
-    with pytest.raises(tree_archive.ArchiveError, match="listed"):
+    with raises_stream_error(tree_archive.ArchiveError, match="listed"):
         post_folder(http, "daily")
     assert tree_archive._active == 0
 
@@ -1062,7 +1063,7 @@ def test_a_failure_read_ahead_is_not_a_zip_that_looks_complete(http, bucket, rea
     files, keys = names(4)
     seed(bucket, "snapshots", SNAPSHOT_ID, files)
     reads.truncated.add(keys[2])
-    with pytest.raises(tree_archive.ArchiveError, match="f02.nc"):
+    with raises_stream_error(tree_archive.ArchiveError, match="f02.nc"):
         post_folder(http, "daily")
 
 

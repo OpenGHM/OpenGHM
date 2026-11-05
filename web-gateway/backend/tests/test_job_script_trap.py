@@ -100,6 +100,9 @@ class Job:
         (self.home / "venv/bin/python").symlink_to(sys.executable)
         self.submit_dir = root / "submit"
         self.submit_dir.mkdir()
+        # A real flock (Linux) opens the lock file for writing, so its directory
+        # must exist, as it does on Anvil; the stub below ignores it (macOS).
+        (root / "locks").mkdir()
         self.work_dir = root / "simulations" / SIM_ID
         self.body = render_job_body(
             **{
