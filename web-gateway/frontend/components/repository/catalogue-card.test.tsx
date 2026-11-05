@@ -37,6 +37,30 @@ function onlyLink(name: string, href: string) {
   return links[0];
 }
 
+describe("CatalogueCard and the state of a snapshot's WBM code", () => {
+  it.each(["list", "grid"] as const)("shows a Legacy chip in the %s view, above the stretched title link", (layout) => {
+    renderCard(snapshotItem({ codeState: "legacy" }), [], layout);
+    const chip = screen.getByText("Legacy");
+    expect(chip.getAttribute("data-state")).toBe("legacy");
+    expect(chip.className).toContain("z-10");
+  });
+
+  it("shows a warning chip for withdrawn code", () => {
+    renderCard(snapshotItem({ codeState: "withdrawn" }));
+    expect(screen.getByText("Withdrawn").className).toContain("text-warning");
+  });
+
+  it.each(["current", "unknown"] as const)("shows no chip for %s code", (codeState) => {
+    const { container } = renderCard(snapshotItem({ codeState }));
+    expect(container.querySelector("[data-state]")).toBeNull();
+  });
+
+  it("shows none on a model input", () => {
+    const { container } = renderCard(modelInputItem());
+    expect(container.querySelector("[data-state]")).toBeNull();
+  });
+});
+
 describe("CatalogueCard for a model snapshot", () => {
   it("has exactly one link, the title, named for the item and pointing at the snapshot's page", () => {
     renderCard(snapshotItem());

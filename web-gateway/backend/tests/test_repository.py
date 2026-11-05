@@ -269,7 +269,7 @@ def test_stored_dataset_document_round_trips_through_the_response_model(monkeypa
     *shape* decision (every field always present), not a storage one."""
     envelope, data = _write_dataset_via_route(monkeypatch, V2)
     d = DatasetResponse.from_metadata_json(envelope)
-    dumped = d.model_dump(by_alias=True, mode="json", exclude={"spatialResolutionDegrees", "licenseUrl", "generatedAt"}, exclude_none=True)
+    dumped = d.model_dump(by_alias=True, mode="json", exclude={"spatialResolutionDegrees", "licenseUrl", "generatedAt", "codeState"}, exclude_none=True)
     assert dumped == data
 
 

@@ -19,6 +19,7 @@ import {
 import type { CatalogueItem, CatalogueView } from "@/lib/repository/types";
 import { CoverageThumbnail } from "./coverage-thumbnail";
 import { KindBadge } from "./kind-badge";
+import { WbmCodeChip } from "./wbm-code-chip";
 
 /** The grid the cards sit in, wherever they are listed in the grid view. */
 export const CARD_GRID_CLASS = "grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]";
@@ -219,7 +220,10 @@ export function CatalogueCard({
           <CoverageThumbnail box={toBox(item)} aspect="wide" className="absolute inset-0 aspect-auto rounded-none border-0" />
         </div>
         <div className="flex flex-1 flex-col gap-2.5 px-2.5 pt-3.5 pb-2">
-          <KindBadge kind={item.kind} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <KindBadge kind={item.kind} />
+            {item.kind === "snapshot" && <WbmCodeChip state={item.codeState} className="relative z-10" />}
+          </div>
           <TitleLink href={href} name={about.name} className="text-[15.5px] tracking-[-0.015em]" />
           <p className="font-mono text-xs text-muted-foreground">{coverageLine(item)}</p>
           <div className="mt-auto flex items-center gap-1.5 pt-2">
@@ -255,6 +259,7 @@ export function CatalogueCard({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <KindBadge kind={item.kind} />
           <span className="font-mono text-[11.5px] text-muted-foreground">{contentsLine(item)}</span>
+          {item.kind === "snapshot" && <WbmCodeChip state={item.codeState} className="relative z-10" />}
           <span className="text-xs text-muted-foreground sm:ml-auto">
             Published <TimeStamp value={about.datePublished} format="date" />
           </span>

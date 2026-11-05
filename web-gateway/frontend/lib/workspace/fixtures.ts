@@ -692,6 +692,7 @@ export function fakeDataset(overrides: Partial<Dataset> = {}): Dataset {
         slurmJobId: "12345",
       },
     },
+    codeState: "current",
     spatialResolutionDegrees: 0.5,
     licenseUrl: "https://spdx.org/licenses/GPL-3.0-only.html",
     generatedAt: "2026-01-01T00:00:00Z",

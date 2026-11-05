@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getDataset, getModelInput } from "@/lib/repository/detail-data";
+import { fetchWbmCode } from "@/lib/repository/actions";
+import { startsNewDraft } from "@/lib/repository/wbm-code";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,12 @@ export default async function DatasetDetailPage({
   // costs the name, never the page.
   const modelInputId = uses.modelInput.id;
   const modelInput = await getModelInput(modelInputId).catch(() => null);
+  // Why a withdrawn version was withdrawn comes from the published list of code
+  // versions; a page that cannot read it still says it was withdrawn.
+  const codeReason =
+    dataset.codeState === "withdrawn"
+      ? ((await fetchWbmCode())?.versions.find((v) => v.version === uses.modelCode.version)?.reason ?? null)
+      : null;
   const temporalLabel = `${simulation.temporalCoverage.start} – ${simulation.temporalCoverage.end}`;
   const resolutionLabel = `${simulation.resolution.value} ${simulation.resolution.unit}`;
 
@@ -90,18 +98,33 @@ export default async function DatasetDetailPage({
                 </Button>
               }
             >
-              <Button
-                size="xl"
-                asChild
-                className="h-auto flex-col items-start justify-center gap-px py-2 shadow-float"
-              >
-                <Link href={newStepHref(dataset.id, "run")}>
-                  <span className="text-[11.5px] font-normal text-white/80">
-                    Start a new snapshot draft from it
+              {startsNewDraft(dataset.codeState) ? (
+                <Button
+                  size="xl"
+                  asChild
+                  className="h-auto flex-col items-start justify-center gap-px py-2 shadow-float"
+                >
+                  <Link href={newStepHref(dataset.id, "run")}>
+                    <span className="text-[11.5px] font-normal text-white/80">
+                      Start a new snapshot draft from it
+                    </span>
+                    Run this snapshot →
+                  </Link>
+                </Button>
+              ) : (
+                // Its WBM code is not current: the server refuses a new snapshot draft from it.
+                <Button
+                  variant="on-dark"
+                  size="xl"
+                  disabled
+                  className="h-auto flex-col items-start justify-center gap-px py-2 disabled:opacity-100"
+                >
+                  <span className="text-[11.5px] font-normal text-white/60">
+                    Its WBM code is not current; see Code, Container &amp; Execution
                   </span>
-                  Run this snapshot →
-                </Link>
-              </Button>
+                  <span className="opacity-60">Run this snapshot</span>
+                </Button>
+              )}
             </WhenWorkspace>
           </>
         }
@@ -192,7 +215,7 @@ export default async function DatasetDetailPage({
             />
 
             {/* Code, Container & Execution — uses/runtime, not shown by the legacy UI at all */}
-            <ExecutionCard uses={uses} runtime={runtime} />
+            <ExecutionCard uses={uses} runtime={runtime} codeState={dataset.codeState} codeReason={codeReason} />
 
             {about.keywords.length > 0 && <KeywordsSection keywords={about.keywords} />}
 

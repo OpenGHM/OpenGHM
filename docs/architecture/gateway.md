@@ -486,6 +486,19 @@ the Review step lists the keys the draft changes
 ([model-parameters.md](model-parameters.md) section 5). The step's "Settings that can't run
 yet" block now holds only a stored spatial subset.
 
+**Which WBM code a new snapshot draft may use.** A draft runs on its base snapshot's `model/` and
+`utilities/`, so the base decides the code. `wbm-code/manifest.json`
+([s3-layout.md](../reference/s3-layout.md#publish-a-code-version)) gives each published version a status:
+`current`, `legacy` or `withdrawn`. The gateway reads it over HTTPS (`app/services/wbm_code.py`, cached
+60 s; a failed read is retried after 15 s) and publishes it at `GET /api/v1/wbm-code`
+(`{versions, current, latest, readable}`, public). Every snapshot response carries a top-level
+`codeState` beside `uses`: `current`, `legacy`, `withdrawn`, `unlisted` (its version is not in the
+manifest), `mismatch` (listed, but its tree hash differs) or `unknown` (no manifest could be read, or the
+snapshot names no code). A new draft may start only from a snapshot whose state is `current` or `unknown`:
+`GET` and `POST /jobs/derive/{dataset_id}` answer 422 `wbm_code_not_current` (with `version`, `state`, `current`)
+for the others, and the New snapshot wizard offers only the allowed ones. Duplicate, Try again and Copy
+start from a draft that already has its base and are not asked. A manifest the gateway cannot read blocks nothing.
+
 A draft's `model_input_id` is optional. Absent means the snapshot draft inherits
 whichever model input its base snapshot's own `uses.modelInput.id` names; set, it
 overrides that. `_resolve_effective_model_input()` in
@@ -1056,6 +1069,9 @@ blocks a submit.
 - A draft the snapshot answers, unless the body says `{"rerun": true}`: 409
   `answered_by_published`, before the Anvil checks. A rerun is audited with
   `rerun: true`. A listing that fails lets the submit through.
+- A draft whose base snapshot's code is `withdrawn` (422 `wbm_code_withdrawn`, with the manifest's
+  `reason`) or is not the code the manifest lists for its version (422 `wbm_code_mismatch`). The check runs
+  first, and a `legacy` or `unlisted` code does not refuse.
 - A draft that overrides its model input or subsets the snapshot's spatial
   domain: 422 `unsupported_fields`, with `fields` naming `model_input_id` and
   `parameters.spatial_domain`. The toolkit has no option for these yet (open item 9). Custom

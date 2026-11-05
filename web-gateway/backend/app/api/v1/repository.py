@@ -51,6 +51,7 @@ from app.services import (
     run_start,
     tree_archive,
     tree_browse,
+    wbm_code,
 )
 from app.services.catalogue import (
     CatalogueQuery,
@@ -236,7 +237,8 @@ async def _load_all_datasets() -> list[DatasetResponse]:
     db = get_db()
     cursor = db["datasets"].find({})
     docs = await cursor.to_list(length=None)
-    return [DatasetResponse.from_metadata_json(doc) for doc in docs]
+    manifest = await wbm_code.get_manifest()
+    return [DatasetResponse.from_metadata_json(doc, manifest) for doc in docs]
 
 
 def filter_datasets(
@@ -322,7 +324,8 @@ async def _load_catalogue() -> list[SnapshotCatalogueItem | ModelInputCatalogueI
     db = get_db()
     datasets = await db["datasets"].find({}).to_list(length=None)
     model_inputs = await db["model_inputs"].find({}).to_list(length=None)
-    return [SnapshotCatalogueItem.from_metadata_json(d) for d in datasets] + [
+    manifest = await wbm_code.get_manifest()
+    return [SnapshotCatalogueItem.from_metadata_json(d, manifest) for d in datasets] + [
         ModelInputCatalogueItem.from_metadata_json(m) for m in model_inputs
     ]
 
@@ -384,8 +387,9 @@ async def _load_owned(owner_user_id: str) -> list[OwnedSnapshotItem | OwnedModel
     query = {"owner_user_id": owner_user_id}
     datasets = await db["datasets"].find(query).to_list(length=None)
     model_inputs = await db["model_inputs"].find(query).to_list(length=None)
+    manifest = await wbm_code.get_manifest()
     return newest_registered_first(
-        [(OwnedSnapshotItem.from_envelope(d), d) for d in datasets]
+        [(OwnedSnapshotItem.from_envelope(d, manifest), d) for d in datasets]
         + [(OwnedModelInputItem.from_envelope(m), m) for m in model_inputs]
     )
 
@@ -407,7 +411,7 @@ async def get_dataset(dataset_id: str) -> DatasetDetailResponse:
     doc = await db["datasets"].find_one({"_id": dataset_id})
     if doc is None:
         raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
-    detail = DatasetDetailResponse.from_metadata_json(doc)
+    detail = DatasetDetailResponse.from_metadata_json(doc, await wbm_code.get_manifest())
     # Read once per snapshot (immutable by id) and kept; None if it cannot be read.
     rules = await run_start.read_init_rules(doc["document"], dataset_id)
     if rules is not None:
@@ -674,7 +678,7 @@ async def create_dataset(metadata: OpenGHMSnapshotMetadata) -> DatasetResponse:
         await db["datasets"].insert_one(envelope)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail=f"Dataset '{metadata.id}' already exists")
-    return DatasetResponse.from_metadata_json(envelope)
+    return DatasetResponse.from_metadata_json(envelope, await wbm_code.get_manifest())
 
 
 # ---- model inputs (ADR 0015) --------------------------------------------

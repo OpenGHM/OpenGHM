@@ -28,7 +28,7 @@ openghm/
 | `snapshots/` | minted id | **open** — any user | none | [Upload and lock](#upload-and-lock) |
 | `model-inputs/` | minted id | **open** — any user | none | [Publish a model input](#publish-a-model-input) |
 | `spools/<model input id>/` | model input id, network basename, variant | curated | none — a key's content is fixed by its variant | `ops/anvil/publish_spools.sh` (private), from the published snapshots' `spool/` |
-| `wbm-code/` | name + version | curated | none | [Publish a code version](#publish-a-code-version) |
+| `wbm-code/` | name + version | curated | `wbm-code/manifest.json` only | [Publish a code version](#publish-a-code-version) |
 | `containers/` | name + version | curated | `containers/manifest.json` only | [ADR 0003](../decisions/0003-zot-as-sif-registry.md) |
 | `registry/` | content address | curated | zot's own bookkeeping | zot |
 | `schemas/` | spec version | curated | `index.json` only | [snapshot-spec.md](snapshot-spec.md) |
@@ -327,6 +327,31 @@ openghm/
   `fetch` still downloads it from the snapshot. Fetching it once from
   `wbm-code/` instead is not built.
 - **A new version is a new directory**, never an edit to an existing one.
+- **`wbm-code/manifest.json`** is the index of the published versions, the way
+  `containers/manifest.json` is for images, and the only mutable object of this prefix
+  ([ADR 0032](../decisions/0032-wbm-code-is-published-and-pinned-by-tree-hash.md)). Only the toolkit
+  writes it, and the gateway reads it over HTTPS:
+
+  ```json
+  { "manifestVersion": 1,
+    "code": { "wbm": {
+      "aliases": { "latest": "23.9.0" },
+      "versions": {
+        "22.1.1": { "treeHash": "f210a78b…", "status": "current", "published": "2026-10-07" },
+        "23.9.0": { "treeHash": "664c291d…", "status": "current", "published": "2026-10-07" } } } } }
+  ```
+
+  `status` says what a version may still be used for: `current` (a new snapshot draft may start
+  from a snapshot on it; several versions can be current at once), `legacy` (existing snapshots on it
+  keep working and stay visible, no new draft starts from them), `withdrawn` (known bad, with a
+  `reason`; a draft on it cannot be submitted). `aliases.latest` is the highest version
+  (`22.1.1` < `23.9.0` < `23.10.0`; `-r<N>` after its base) and is informational. A treeHash entry is
+  never overwritten.
+  - `openghm code publish` adds the version it published as `current` and today's date.
+  - `openghm code set-status <version> current|legacy|withdrawn [--reason TEXT]` changes a status; when
+    a new WBM release is published, the versions it replaces are set to `legacy` with it.
+  - `openghm code manifest` prints it; `openghm code manifest sync` builds or repairs it from the
+    bucket's `wbm-code/wbm/*/TREEHASH` (a version it adds is `current`).
 - **`openghm code publish <archive or directory>`** puts one there (plan, upload,
   re-read; the source is UNH's public release archive, or a clone of its
   repository). It publishes `model/wbm.pl` and `utilities/build_spool.pl` as

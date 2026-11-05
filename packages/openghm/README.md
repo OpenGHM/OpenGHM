@@ -158,6 +158,9 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec, and its WBM code against the tree hash `uses.modelCode.treeHash` pins (ADR 0032) |
 | `openghm code hash [DIR]` | — | print the tree hash of the WBM code in `DIR` (`model/` and `utilities/`, `_Inline` left out; ADR 0032), the value `uses.modelCode.treeHash` pins |
 | `openghm code publish SOURCE` | `s3cmd`, anonymous HTTPS | publish WBM code from a directory or `.tar`/`.tar.gz`/`.tgz`/`.zip` as `wbm-code/wbm/<version>/`; `--revision`, `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`, `--jobs`; see below |
+| `openghm code manifest` | anonymous HTTPS | print `wbm-code/manifest.json`, the index of published WBM code versions and their status; `--base-url` |
+| `openghm code manifest sync` | `s3cmd`, anonymous HTTPS | build or refresh that manifest from the bucket's `wbm-code/wbm/` trees; `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url` |
+| `openghm code set-status <version> current\|legacy\|withdrawn` | `s3cmd`, anonymous HTTPS | change a version's status in the manifest; `--reason` (required for `withdrawn`), `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`; see below |
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
@@ -386,6 +389,52 @@ Exit codes:
 | 5 | no credentials: `--s3cfg` missing or unreadable, or no `s3cmd` |
 | 6 | an `s3cmd` call failed (a read or an upload) |
 | 7 | verification failed: a key is missing, not public-read, or the wrong size, mode or hash |
+| 8 | the code is published and verified, but `wbm-code/manifest.json` could not be updated (repair: `openghm code manifest sync`) |
+
+Last, `code publish` lists the version in `wbm-code/manifest.json` (below): added as `current` with
+today's UTC date, unless it is already listed with this tree hash (then nothing is written). A listing
+with another tree hash, or a manifest that is not valid, stops the publish before the first write
+(exit 4); a manifest write that fails afterwards is exit 8, not a failed publish. `--dry-run` shows the
+manifest action.
+
+### The code manifest (`wbm-code/manifest.json`)
+
+The one mutable object under `wbm-code/`, written only by the toolkit (the trees stay immutable):
+
+```json
+{
+  "manifestVersion": 1,
+  "code": {
+    "wbm": {
+      "aliases": { "latest": "23.9.0" },
+      "versions": {
+        "22.1.1": { "treeHash": "<64 hex>", "status": "current", "published": "2026-10-07" },
+        "23.9.0": { "treeHash": "<64 hex>", "status": "legacy", "published": "2026-10-07" },
+        "23.9.0-r1": { "treeHash": "<64 hex>", "status": "withdrawn", "published": "2026-10-08", "reason": "<text>" }
+      }
+    }
+  }
+}
+```
+
+- Versions are `WBM_VERSION` values, optionally `-r<N>`. They are ordered by splitting the base on `.`
+  and comparing numeric parts as integers, a non-numeric part as a string after the numeric ones, and
+  `-r<N>` after the same base without it (`23.9.0 < 23.9.0-r1 < 23.9.0-r2 < 23.9.1`, `23.9.0 < 23.10.0`).
+  `aliases.latest` is the highest, informational only. `published` is an ISO date (UTC).
+- `status`: `current` (new snapshot drafts may start from a snapshot on this code; several versions
+  may be current), `legacy` (existing snapshots on it keep working and stay visible, no new draft
+  starts from them), `withdrawn` (known bad; the entry also has `reason`, and only it does).
+- `openghm code manifest [--base-url URL]` prints it; a manifest of any other shape is an error (exit 4).
+- `openghm code manifest sync` lists `wbm-code/wbm/` anonymously, reads each `<version>/TREEHASH`, and
+  adds the versions the manifest lacks as `current` (published = the `TREEHASH` object's Last-Modified
+  date). Existing entries are kept as they are; one whose tree hash differs from the bucket's `TREEHASH`
+  is an error (exit 4) and nothing is written. A prefix without `TREEHASH` is skipped. `--dry-run`
+  prints the result only.
+- `openghm code set-status <version> <status> [--reason TEXT]` changes one entry (the version must be
+  listed; `withdrawn` needs `--reason`; another status drops it), prints the before and after, and says
+  so when nothing changes.
+- Every write reads the manifest anonymously first, uploads it public-read through `s3cmd`, and reads it
+  back anonymously to confirm (exit 7 if it differs).
 
 ### Reading output (`openghm output`)
 

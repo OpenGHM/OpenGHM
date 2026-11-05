@@ -26,6 +26,7 @@ import {
   TreeListing,
   TreePreview,
   TreeResult,
+  WbmCodeResponse,
 } from "@/lib/repository/types";
 import { treeFailureCode, treeRoute } from "@/lib/repository/tree-browse";
 
@@ -119,6 +120,21 @@ export async function fetchDatasetById(id: string): Promise<Dataset | null> {
       return null;
     }
     throw error;
+  }
+}
+
+/**
+ * The published WBM code versions and their status (`GET /api/v1/wbm-code`,
+ * public), for the reason a version was withdrawn. `null` when the call failed:
+ * a page that only adds a sentence to what it shows does without it.
+ */
+export async function fetchWbmCode(): Promise<WbmCodeResponse | null> {
+  try {
+    const client = await getApiClient({ allowAnonymous: true });
+    const response = await client.get<WbmCodeResponse>("/api/v1/wbm-code");
+    return response.data;
+  } catch {
+    return null;
   }
 }
 

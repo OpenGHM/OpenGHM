@@ -31,16 +31,25 @@ absent, it writes it; present with the same bytes, it skips it; present with oth
 **Verify** re-reads ``SHA256SUMS`` and ``TREEHASH``, HEADs every key anonymously, and recomputes the
 tree hash from the published ``SHA256SUMS``.
 
+Last, the version is listed in ``wbm-code/manifest.json`` (:mod:`wbm_code_manifest`): added as
+``current`` with today's UTC date unless it is already listed with this tree hash; an entry is never
+overwritten, and a listing with another tree hash stops the publish **before** anything is written. A
+failure to write the manifest happens after the code is published and verified, so it is its own error
+(exit 8), not a failed publish: ``openghm code manifest sync`` repairs it, and so does running the same
+publish again (already published, but not yet listed, it lists it).
+
 Exit codes (``openghm code publish``; the same numbers as ``snapshot publish``, which has no use here for 3):
 
 ====  ===========================================================================
 0     done, already published (the same tree hash), or, with ``--dry-run``, a plan that would go through
 2     bad input: an unreadable or unsafe source, no code root, no ``WBM_VERSION``, a path or
       link that cannot be published, a bad ``--revision``
-4     the version (or a key under it) already holds other bytes (nothing is replaced)
+4     the version (or a key under it) already holds other bytes (nothing is replaced); or
+      ``wbm-code/manifest.json`` is not valid or lists the version with another tree hash
 5     no credentials: ``--s3cfg`` missing or unreadable, or no ``s3cmd``
 6     an ``s3cmd`` call failed (read or upload)
 7     verification failed: a key is missing, not public-read, or the wrong size, mode or hash
+8     the code is published and verified, but ``wbm-code/manifest.json`` could not be updated
 ====  ===========================================================================
 
 Stdlib only; Python 3.9 (Anvil).
@@ -63,6 +72,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from . import assets, fetch
 from . import code as wbm_code
 from . import publish as pub
+from . import wbm_code_manifest as manifest
 from .errors import OpenghmError
 from .publish import (EXIT_BAD_INPUT, EXIT_OTHER_BYTES, EXIT_UPLOAD_FAILED, EXIT_VERIFY_FAILED, Action, Anon,
                       Counts, PublishError, S3Client, S3Error)
@@ -70,6 +80,9 @@ from .publish import (EXIT_BAD_INPUT, EXIT_OTHER_BYTES, EXIT_UPLOAD_FAILED, EXIT
 SUMS_NAME = fetch.SUMS_NAME
 TREEHASH_NAME = "TREEHASH"
 PREFIX = "wbm-code/wbm/"
+
+#: The code is published, but its manifest entry could not be written.
+EXIT_MANIFEST_FAILED = 8
 
 #: Files WBM runs directly: they must be executable in the published tree.
 EXECUTABLE = ("model/wbm.pl", "utilities/build_spool.pl")
@@ -379,6 +392,20 @@ class CodePublishResult:
     counts: Counts = field(default_factory=Counts)
     verified: int = 0
     mode_fixes: List[Tuple[str, int, int]] = field(default_factory=list)
+    #: What happened to ``wbm-code/manifest.json``: ``added``, ``unchanged``, or ``failed`` (then
+    #: ``manifest_error`` says why and the CLI exits 8).
+    manifest: str = ""
+    manifest_error: Optional[str] = None
+
+
+def _list_in_manifest(result: CodePublishResult, anon: Anon, client: Optional[S3Client],
+                      out: Callable[[str], None]) -> None:
+    """The last step: list the version. A failure is recorded, not raised: the code is already published."""
+    try:
+        result.manifest = manifest.record(anon, client, result.name, result.tree_hash, dry_run=result.dry_run,
+                                          out=out)
+    except (PublishError, OpenghmError) as e:
+        result.manifest, result.manifest_error = "failed", str(e)
 
 
 def publish_code(
@@ -434,14 +461,17 @@ def publish_code(
             if published != plan.tree_hash:
                 raise PublishError(other_bytes_message(plan, published, anon, source), EXIT_OTHER_BYTES)
             result.already_published = True
+            manifest.check_record(anon, plan.name, plan.tree_hash)
             out(f"already published: {plan.prefix} holds this tree hash; nothing is changed")
             for rel in EXECUTABLE:
                 info = anon.head(plan.prefix + rel)
                 if info is not None and info.mode is not None and not info.mode & 0o111:
                     out(f"warning: {plan.prefix}{rel} is published with mode {oct(info.mode)[2:].zfill(4)}, "
                         "not executable; a published object is not changed")
+            _list_in_manifest(result, anon, client, out)
             return result
 
+        manifest.check_record(anon, plan.name, plan.tree_hash)     # refuse before the first byte is written
         if dry_run:
             out("dry run: nothing is written")
         counts = result.counts
@@ -452,7 +482,9 @@ def publish_code(
                 if what == "upload":
                     counts.bytes_uploaded += a.size
                 out(f"{what:<7} {a.key}")
+            _list_in_manifest(result, anon, client, out)
             return result
         result.counts = apply_plan(plan, client, jobs=jobs, out=out)
         result.verified = verify(plan, anon)
+        _list_in_manifest(result, anon, client, out)
     return result

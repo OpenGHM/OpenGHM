@@ -26,8 +26,11 @@ export function describeSubmitFailure(
         .map(describeUnsupportedField)
         .join(", ")}. Put them back to the model snapshot's own values, save, and submit again.`;
     case "run_over_limit":
+    case "wbm_code_withdrawn":
+    case "wbm_code_mismatch":
       // The backend's sentence says how long the run is estimated to take and
-      // what the limit is.
+      // what the limit is; for the two code refusals, which WBM code version
+      // and why (the reason it was withdrawn).
       return failure.message;
     case "answered_by_published":
       return "The model snapshot already publishes these results, so nothing was run. Use Run anyway if you want to run it again.";

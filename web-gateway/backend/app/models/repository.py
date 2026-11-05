@@ -42,6 +42,7 @@ from .generated.model_input import OpenGHMModelInputMetadata
 from .generated.model_input import Resolution as ModelInputResolution
 from .generated.snapshot import OpenGHMSnapshotMetadata, Resolution
 from .job import JobParameters
+from app.services.wbm_code import CodeState, Manifest, code_state
 
 
 #: Who may find an artifact in the catalogue. Separate from freezing: a
@@ -118,17 +119,25 @@ class DatasetResponse(OpenGHMSnapshotMetadata):
     #: ``runtime.generatedAt``, exposed under the spec's own name at the top
     #: level too — this is the catalogue's default sort key.
     generatedAt: AwareDatetime
+    #: Where ``uses.modelCode`` stands against the WBM code manifest
+    #: (``app.services.wbm_code.code_state``): ``current``, ``legacy``,
+    #: ``withdrawn``, ``unlisted``, ``mismatch`` or ``unknown`` (no manifest was
+    #: given or it could not be read, or the snapshot names no code).
+    codeState: CodeState = "unknown"
 
     @classmethod
-    def from_metadata_json(cls, envelope: dict) -> "DatasetResponse":
+    def from_metadata_json(cls, envelope: dict, manifest: Manifest | None = None) -> "DatasetResponse":
         """Build from a ``datasets`` Mongo envelope
         (``{_id, document, owner_user_id, visibility, registered_at}`` —
         see the module docstring). Only ``envelope["document"]`` — the spec's
         own shape — feeds the response; the envelope's own fields are not
-        exposed here (spec.md, out of scope: no behaviour change yet)."""
+        exposed here (spec.md, out of scope: no behaviour change yet).
+        ``manifest`` is the WBM code manifest ``codeState`` is judged against
+        (None: unreadable, so ``unknown``)."""
         doc = envelope["document"]
         meta = OpenGHMSnapshotMetadata.model_validate(doc)
         payload = meta.model_dump(by_alias=True, mode="json")
+        payload["codeState"] = code_state(meta.uses.modelCode, manifest)
         payload["spatialResolutionDegrees"] = resolution_to_degrees(meta.simulation.resolution)
         payload["licenseUrl"] = license_url(meta.about.license)
         payload["generatedAt"] = meta.runtime.generatedAt
@@ -300,8 +309,10 @@ def _owned_payload(item: BaseModel, envelope: dict) -> dict:
 
 class OwnedSnapshotItem(SnapshotCatalogueItem, _OwnedFields):
     @classmethod
-    def from_envelope(cls, envelope: dict) -> "OwnedSnapshotItem":
-        return cls.model_validate(_owned_payload(SnapshotCatalogueItem.from_metadata_json(envelope), envelope))
+    def from_envelope(cls, envelope: dict, manifest: Manifest | None = None) -> "OwnedSnapshotItem":
+        return cls.model_validate(
+            _owned_payload(SnapshotCatalogueItem.from_metadata_json(envelope, manifest), envelope)
+        )
 
 
 class OwnedModelInputItem(ModelInputCatalogueItem, _OwnedFields):

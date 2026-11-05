@@ -4,6 +4,7 @@ import { pathWithQuery } from "@/lib/auth-redirect";
 import { workspaceSession } from "@/lib/auth-guard";
 import { SignInRequired } from "@/components/workspace/sign-in-required";
 import { Footer } from "@/components/landing/footer";
+import { CodeNotCurrent } from "@/components/workspace/code-not-current";
 import { DraftWizard } from "@/components/workspace/draft-wizard";
 import { fetchMe } from "@/lib/account/actions";
 import { previewDraft } from "@/lib/jobs/actions";
@@ -40,6 +41,10 @@ export default async function NewDraftFromSnapshotPage({
   if (!preview.ok) {
     if (preview.reason === "session_expired") return <SignInRequired reason="expired" here={here} />;
     if (preview.reason === "not_found") notFound();
+    // Its WBM code is not current: the backend's own sentence, and the way back.
+    if (preview.code === "wbm_code_not_current") {
+      return <CodeNotCurrent datasetId={datasetId} message={preview.message} />;
+    }
     throw new Error(preview.message);
   }
 

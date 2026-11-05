@@ -138,6 +138,8 @@ class ObjectInfo:
     etag: str = ""
     #: ``x-amz-meta-<name>`` -> value, names lower-cased (``sha256``, ``s3cmd-attrs``).
     meta: Dict[str, str] = field(default_factory=dict)
+    #: The ``Last-Modified`` header of an anonymous HEAD, as served (RFC 1123); ``None`` from ``s3cmd info``.
+    last_modified: Optional[str] = None
 
     @property
     def mode(self) -> Optional[int]:
@@ -265,7 +267,8 @@ class Anon:
             raise OpenghmError(f"{self.url(key)}: HTTP {status}")
         meta = {k.lower()[len("x-amz-meta-"):]: v for k, v in headers.items() if k.lower().startswith("x-amz-meta-")}
         return ObjectInfo(size=int(headers.get("Content-Length", "0")),
-                          etag=(headers.get("ETag") or "").strip('"'), meta=meta)
+                          etag=(headers.get("ETag") or "").strip('"'), meta=meta,
+                          last_modified=headers.get("Last-Modified"))
 
 
 def check_credentials(s3cfg: str, s3cmd: str) -> Tuple[str, str]:

@@ -67,8 +67,8 @@ def attrs(mode: int) -> str:
 
 
 class Obj:
-    def __init__(self, body: bytes, meta=None, public=True, etag=None):
-        self.body, self.meta, self.public = body, dict(meta or {}), public
+    def __init__(self, body: bytes, meta=None, public=True, etag=None, modified="Wed, 07 Oct 2026 12:00:00 GMT"):
+        self.body, self.meta, self.public, self.modified = body, dict(meta or {}), public, modified
         self.etag = etag if etag is not None else hashlib.md5(body).hexdigest()
 
 
@@ -92,7 +92,7 @@ class Store:
                     return self._send(404, b"", send_body)
                 if not obj.public:
                     return self._send(403, b"", send_body)
-                headers = {"ETag": f'"{obj.etag}"'}
+                headers = {"ETag": f'"{obj.etag}"', "Last-Modified": obj.modified}
                 headers.update({f"x-amz-meta-{k}": v for k, v in obj.meta.items()})
                 self._send(200, obj.body, send_body, headers)
 
@@ -103,10 +103,16 @@ class Store:
                 prefix = q.get("prefix", [""])[0]
                 xml = ['<?xml version="1.0"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">',
                        "<IsTruncated>false</IsTruncated>"]
+                delimiter = q.get("delimiter", [""])[0]
+                folders = set()
                 for k in sorted(k for k in store.objects if k.startswith(prefix)):
+                    if delimiter and delimiter in k[len(prefix):]:
+                        folders.add(prefix + k[len(prefix):].split(delimiter, 1)[0] + delimiter)
+                        continue
                     o = store.objects[k]
                     xml.append(f"<Contents><Key>{escape(k)}</Key><Size>{len(o.body)}</Size>"
                                f"<ETag>&quot;{o.etag}&quot;</ETag></Contents>")
+                xml.extend(f"<CommonPrefixes><Prefix>{escape(f)}</Prefix></CommonPrefixes>" for f in sorted(folders))
                 xml.append("</ListBucketResult>")
                 self._send(200, "".join(xml).encode(), True)
 

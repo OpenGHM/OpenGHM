@@ -15,6 +15,7 @@ import {
   hasActiveFilters,
   SNAPSHOT_PICKER_FIXED_FILTERS,
 } from "@/lib/repository/catalogue";
+import { hiddenSnapshotsNote, splitByCodeState } from "@/lib/repository/wbm-code";
 import { parsePickerFilters, pickerFiltersToParams } from "@/lib/repository/url-filters";
 import { useUrlSyncedFilters } from "@/lib/repository/use-url-filters";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
@@ -120,7 +121,15 @@ export function SnapshotPicker({
   const query = filters.searchQuery.trim();
   const clear = () => setFilters(clearedFilters(filters));
   // `type=snapshot` leaves nothing else, but the type says so.
-  const snapshots = result.items.filter((item): item is Dataset & { kind: "snapshot" } => item.kind === "snapshot");
+  const listed = result.items.filter((item): item is Dataset & { kind: "snapshot" } => item.kind === "snapshot");
+  // Only a snapshot on current code can start a new snapshot draft (the server
+  // refuses the others); the rest are counted in one line under the list.
+  const { offered: snapshots, hidden } = splitByCodeState(listed);
+  const paged = result.totalPages > 1;
+  const hiddenNote = hidden.length > 0 ? hiddenSnapshotsNote(hidden, paged) : null;
+  // The repository's count includes what the picker leaves out. On one page that
+  // is exact to correct; across pages the other pages are not known, so it stays.
+  const offeredCount = paged ? result.totalCount : result.totalCount - hidden.length;
   // Used snapshots lead only a list with no order of its own to keep: not a
   // search (relevance ranks it) and not one that goes on over several pages
   // (the first would be reordered on every page, and none across them).
@@ -132,7 +141,7 @@ export function SnapshotPicker({
         filters={filters}
         facets={facets}
         onChange={setFilters}
-        resultCount={error ? null : result.totalCount}
+        resultCount={error ? null : offeredCount}
       />
 
       <div ref={resultsRef} className="flex min-h-7 scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-2">
@@ -148,8 +157,8 @@ export function SnapshotPicker({
             "Model snapshots unavailable"
           ) : (
             <>
-              <strong className="font-semibold text-highlight">{result.totalCount}</strong> model snapshot
-              {result.totalCount !== 1 ? "s" : ""}
+              <strong className="font-semibold text-highlight">{offeredCount}</strong> model snapshot
+              {offeredCount !== 1 ? "s" : ""}
               {query && (
                 <>
                   {" "}
@@ -193,12 +202,20 @@ export function SnapshotPicker({
           <div className="flex flex-col items-center gap-2 rounded-card border border-dashed border-border bg-card px-6 py-14 text-center shadow-card">
             <SearchX aria-hidden="true" className="size-10 text-muted-foreground/60" />
             <h3 className="text-lg font-semibold text-foreground">
-              {filtered ? "No model snapshots match" : "No model snapshots have been published yet"}
+              {hiddenNote
+                ? paged
+                  ? "No model snapshot on this page can start a new snapshot draft"
+                  : "No model snapshot can start a new snapshot draft"
+                : filtered
+                  ? "No model snapshots match"
+                  : "No model snapshots have been published yet"}
             </h3>
             <p className="max-w-sm text-sm text-muted-foreground">
-              {filtered
-                ? "Remove a filter or change the search to see more."
-                : "Published model snapshots will appear here."}
+              {hiddenNote
+                ? `${hiddenNote} ${filtered ? "Remove a filter or change the search to see more." : "Snapshots on current WBM code will appear here once they are published."}`
+                : filtered
+                  ? "Remove a filter or change the search to see more."
+                  : "Published model snapshots will appear here."}
             </p>
             {filtered && (
               <Button type="button" variant="outline" onClick={clear} className="mt-2 h-10 rounded-lg sm:h-9">
@@ -216,6 +233,9 @@ export function SnapshotPicker({
             pendingId={pendingId}
             disabled={disabled}
           />
+        )}
+        {!error && hiddenNote && snapshots.length > 0 && (
+          <p className="mt-4 text-[13px] text-muted-foreground">{hiddenNote}</p>
         )}
         {!error && (
           <Pagination

@@ -98,6 +98,20 @@ snapshot's `metadata.json` pins the code it runs by tree hash, in
   `23.9.0` had the second at 0644, so `wbm.pl -bldSpool` failed silently
   with "Permission denied". It was corrected in place on 2026-11-05 (mode
   only, size and ETag unchanged).
+- **A manifest says what each version may be used for** (2026-11-06):
+  `wbm-code/manifest.json`, in the shape of `containers/manifest.json`, lists every published version
+  with its tree hash, its date and a `status`: `current`, `legacy` or `withdrawn`
+  ([`../reference/s3-layout.md`](../reference/s3-layout.md#publish-a-code-version)). It is an
+  index, not a version: the bytes of a published version stay fixed, and only this file changes. The
+  toolkit is its only writer (`openghm code publish`, `code manifest sync`, `code set-status`).
+- **The gateway applies the status.** A new snapshot draft starts from a base snapshot and runs on
+  that snapshot's own `model/`, so the code of a new draft is decided by its base. Only snapshots on
+  `current` code are offered as a base, and the server refuses another one (422
+  `wbm_code_not_current`). Existing snapshots and drafts on a `legacy` version keep working, and a draft on
+  `withdrawn` code, or on code whose tree hash is not the listed one, cannot be submitted (422
+  `wbm_code_withdrawn`, `wbm_code_mismatch`). A manifest the gateway cannot read blocks nothing (the
+  state of every snapshot is then `unknown`). When a new WBM release is published, the maintainers
+  set the older versions to `legacy`, and from then on new snapshots start from the new one.
 - **The original archive is kept somewhere other than S3.** The bucket is not
   backed up (confirmed 2026-11-05), so the archive and `publish` are what makes a
   version reproducible. `22.1.1` and `23.9.0` have no archive; a verified
@@ -111,6 +125,7 @@ snapshot's `metadata.json` pins the code it runs by tree hash, in
 | Pin by name and version only | Rule 2: a name is a convenience, and only the hash shows that the bytes are the bytes. |
 | Leave `_Inline` out of `wbm-code/` | A snapshot assembled from it could not run, since `_Inline` cannot be compiled into a read-only bind. |
 | Wait for a WBM repository before publishing anything | The published snapshots already ran these two trees. Pinning them now costs nothing a repository's structure could change. |
+| The gateway offers every published version, and a draft picks its code | A draft runs on its base snapshot's code, so a pick would need the toolkit to run a snapshot on other code (not built) and a rule for which `.init` parameters carry over. Limiting the base snapshots to those on `current` code gives "new snapshots on the newest code" without either. |
 | A private repository of our own for the WBM source | UNH maintains the code and releases it publicly, so ours would be a second source to keep in step. `wbm-code/` already holds fixed, hash-pinned versions, and `publish` takes a clone as readily as an archive. |
 | Version by the image's version (`1.0.0`, `2.0.0`) | Those are image versions. The code says what it is itself. |
 

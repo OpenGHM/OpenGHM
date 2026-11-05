@@ -560,3 +560,76 @@ describe("the Details sheet", () => {
     expect(within(dialog).getByRole("heading", { name: LONG_TITLE })).toBeTruthy();
   });
 });
+
+describe("snapshots whose WBM code a new snapshot draft cannot start from", () => {
+  const onCode = (id: string, version: string, codeState: Dataset["codeState"]) => ({
+    ...named(id, `On ${id}`, version, ["2000", "2001"]),
+    codeState,
+  });
+  const CURRENT = onCode("current", "23.9.0", "current");
+  const UNKNOWN = onCode("unknown", "23.9.0", "unknown");
+  const LEGACY = onCode("legacy", "22.1.1", "legacy");
+  const LEGACY_TOO = onCode("legacy-too", "22.1.1", "legacy");
+  const WITHDRAWN = onCode("withdrawn", "21.0.0", "withdrawn");
+  const UNLISTED = onCode("unlisted", "19.0.0", "unlisted");
+  const MISMATCH = onCode("mismatch", "23.8.0", "mismatch");
+
+  const titles = () =>
+    within(screen.getByRole("list", { name: "Model snapshots" }))
+      .getAllByRole("heading", { level: 3 })
+      .map((h) => h.textContent);
+
+  it("keeps current and unknown ones, and leaves out legacy, withdrawn, unlisted and mismatched ones", () => {
+    renderPicker({}, page([CURRENT, LEGACY, UNKNOWN, WITHDRAWN, UNLISTED, MISMATCH]));
+    expect(titles()).toEqual(["On current", "On unknown"]);
+  });
+
+  it("counts only the ones it offers when the list is one page", () => {
+    renderPicker({}, page([CURRENT, LEGACY, LEGACY_TOO]));
+    expect(screen.getByText("1", { selector: "strong" }).parentElement?.textContent).toBe("1 model snapshot");
+  });
+
+  it("says in one line how many are left out, why and which versions, when all are legacy", () => {
+    renderPicker({}, page([CURRENT, LEGACY, LEGACY_TOO]));
+    expect(
+      screen.getByText(
+        "2 model snapshots are not offered: they run on older WBM code (22.1.1), which no new snapshot draft starts from."
+      )
+    ).toBeTruthy();
+  });
+
+  it("says the code is no longer current when one of them is withdrawn, and lists each version once", () => {
+    renderPicker({}, page([CURRENT, LEGACY, WITHDRAWN]));
+    expect(
+      screen.getByText(
+        "2 model snapshots are not offered: they run on no longer current WBM code (22.1.1, 21.0.0), which no new snapshot draft starts from."
+      )
+    ).toBeTruthy();
+  });
+
+  it("writes no line when nothing is left out", () => {
+    renderPicker({}, page([CURRENT, UNKNOWN]));
+    expect(screen.queryByText(/not offered/)).toBeNull();
+  });
+
+  it("says it is about this page when the list goes on, and keeps the repository's count", () => {
+    renderPicker({}, page([CURRENT, LEGACY], 3));
+    expect(screen.getByText(/1 model snapshot is not offered on this page: it runs on older WBM code \(22\.1\.1\)/)).toBeTruthy();
+    expect(screen.getByText("2", { selector: "strong" })).toBeTruthy();
+  });
+
+  it("explains an empty list when every snapshot found is left out, instead of saying none are published", () => {
+    renderPicker({}, page([LEGACY, LEGACY_TOO]));
+    expect(screen.queryByRole("list", { name: "Model snapshots" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "No model snapshot can start a new snapshot draft" })).toBeTruthy();
+    expect(screen.getByText(/2 model snapshots are not offered: they run on older WBM code \(22\.1\.1\)/)).toBeTruthy();
+    expect(screen.queryByText("No model snapshots have been published yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("offers Clear filters in that empty state when a search is on", () => {
+    renderPicker({ initialFilters: { ...FILTERS, searchQuery: "legacy" } }, page([LEGACY]));
+    expect(screen.getByRole("heading", { name: "No model snapshot can start a new snapshot draft" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+  });
+});

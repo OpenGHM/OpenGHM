@@ -70,6 +70,7 @@ from app.services import (
     run_start,
     sbatch_refusal,
     slurm,
+    wbm_code,
 )
 from app.wbm_init import cross_rules, model_input
 from app.wbm_init import forks as wbm_forks
@@ -414,6 +415,7 @@ async def _derived_draft(
             status_code=404, detail=f"Dataset '{dataset_id}' not found"
         )
     dataset_doc = dataset_envelope["document"]
+    await _refuse_code_not_current(dataset_doc)
 
     return _new_draft_document(
         job_id=job_id,
@@ -655,6 +657,73 @@ def _error(http_status: int, code: str, message: str, **extra) -> HTTPException:
     same shape `app.core.authz` refuses with."""
     return HTTPException(
         status_code=http_status, detail={"code": code, "message": message, **extra}
+    )
+
+
+def _code_of(snapshot: dict) -> tuple[str, str]:
+    """The (name, version) a snapshot's `uses.modelCode` names, for a message."""
+    code = (snapshot.get("uses") or {}).get("modelCode") or {}
+    return code.get("name") or wbm_code.CODE_NAME, code.get("version") or "?"
+
+
+async def _refuse_code_not_current(snapshot: dict) -> None:
+    """422 `wbm_code_not_current` when a NEW snapshot draft would start from a snapshot
+    whose WBM code is not `current` in the manifest (`legacy`, `withdrawn`, `unlisted` or
+    `mismatch`). A manifest that cannot be read, or a snapshot that names no code, is
+    `unknown` and refuses nothing. Only the two ways a draft starts from a catalogue
+    snapshot ask this: a copy of an existing draft carries its base and does not."""
+    state, manifest = await wbm_code.state_of(snapshot)
+    if state in ("current", "unknown"):
+        return
+    name, version = _code_of(snapshot)
+    current = manifest.current if manifest is not None else []
+    if state == "legacy":
+        why = "is legacy: snapshots on it keep working, but no new snapshot draft starts from them"
+    elif state == "withdrawn":
+        reason = manifest.versions[version].reason if manifest is not None else None
+        why = "was withdrawn" + (f": {reason}" if reason else "")
+    elif state == "mismatch":
+        why = "is listed, but this snapshot's code does not match the listed one (its tree hash differs)"
+    else:
+        why = "is not in the list of published WBM code versions"
+    raise _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "wbm_code_not_current",
+        f"This snapshot runs {name.upper()} code {version}, which {why}, so a new snapshot "
+        "draft cannot start from it."
+        + (f" Start from a snapshot on current code ({', '.join(current)})." if current else ""),
+        version=version,
+        state=state,
+        current=current,
+    )
+
+
+async def _refuse_withdrawn_or_mismatched_code(snapshot: dict) -> None:
+    """422 `wbm_code_withdrawn` (with the manifest's `reason`) or `wbm_code_mismatch` when the
+    snapshot a draft runs on has withdrawn code, or code that is not the bytes the manifest
+    lists for its version. `legacy`, `unlisted` and `unknown` (an unreadable manifest) do not
+    refuse: a draft already started keeps working."""
+    state, manifest = await wbm_code.state_of(snapshot)
+    if state not in ("withdrawn", "mismatch"):
+        return
+    name, version = _code_of(snapshot)
+    if state == "withdrawn":
+        reason = manifest.versions[version].reason if manifest is not None else None
+        raise _error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "wbm_code_withdrawn",
+            f"{name.upper()} code {version} was withdrawn"
+            + (f": {reason}" if reason else " as known to be bad")
+            + ". A snapshot draft on this snapshot cannot be run.",
+            version=version,
+            reason=reason,
+        )
+    raise _error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "wbm_code_mismatch",
+        f"This snapshot's code is not the {name.upper()} {version} that was published: its tree "
+        "hash differs from the listed one. A snapshot draft on this snapshot cannot be run.",
+        version=version,
     )
 
 
@@ -978,6 +1047,7 @@ async def submit_simulation(
                 "The snapshot this snapshot draft is based on is no longer in the repository.",
             )
         snapshot = envelope["document"]
+        await _refuse_withdrawn_or_mismatched_code(snapshot)
         job = JobDB(**doc)
         rerun = body is not None and body.rerun
 

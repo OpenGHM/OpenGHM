@@ -991,7 +991,8 @@ def _validate_cmd(spec: str):
 
 @cli.group("code")
 def code_group() -> None:
-    """the WBM code a snapshot pins (ADR 0032): print the tree hash of a folder, publish a code version."""
+    """the WBM code a snapshot pins (ADR 0032): print the tree hash of a folder, publish a code version, and
+    keep the index of published versions (wbm-code/manifest.json) and their status."""
 
 
 @code_group.command("hash")
@@ -1051,8 +1052,15 @@ def code_publish_cmd(source: str, revision: Optional[int], dry_run: bool, s3cfg:
       6  an s3cmd call failed
       7  verification failed: a key is missing, not public-read, or the wrong
          size, mode or hash
+      8  the code is published and verified, but wbm-code/manifest.json could not
+         be updated (repair: openghm code manifest sync)
+
+    Last it lists the version in wbm-code/manifest.json as `current` (today's UTC
+    date), unless it is already listed with this tree hash; an entry is never
+    overwritten, and one with another tree hash stops the publish before anything
+    is written (exit 4).
     """
-    from ..code_publish import publish_code
+    from ..code_publish import EXIT_MANIFEST_FAILED, publish_code
     from ..publish import PublishError
 
     try:
@@ -1066,12 +1074,164 @@ def code_publish_cmd(source: str, revision: Optional[int], dry_run: bool, s3cfg:
         raise SystemExit(2)
     c = result.counts
     if result.already_published:
-        return
-    if result.dry_run:
+        pass
+    elif result.dry_run:
         click.echo(f"plan: {c.upload} upload, {c.skip} skip ({c.bytes_uploaded} bytes to upload)")
     else:
         click.echo(f"done: {c.upload} uploaded, {c.skip} skipped; {result.verified} keys verified anonymously")
         click.echo(f"published: {result.prefix}")
+    if result.manifest_error:
+        click.echo(f"openghm: the code is published at {result.prefix}"
+                   f"{'' if result.already_published else ' and verified'}, but wbm-code/manifest.json was not "
+                   f"updated: {result.manifest_error}\n"
+                   "Repair it with `openghm code manifest sync` (or run this publish again).", err=True)
+        raise SystemExit(EXIT_MANIFEST_FAILED)
+
+
+def _manifest_run(fn):
+    """Run ``fn``; a :class:`PublishError` or other toolkit error is printed and exits with its code."""
+    from ..publish import PublishError
+
+    try:
+        return fn()
+    except PublishError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(e.code)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+
+
+_base_url_option = click.option("--base-url", default=None, metavar="URL",
+                                help="the bucket's public URL (default: Anvil S3); its last path segment is the "
+                                     "bucket name")
+_s3_options = [
+    click.option("--s3cfg", default="~/.s3cfg", show_default=True, metavar="FILE",
+                 help="s3cmd credentials file (only checked to exist; never read or printed)"),
+    click.option("--s3cmd", default="s3cmd", show_default=True, metavar="EXE", help="the s3cmd executable"),
+]
+
+
+def _s3_options_apply(fn):
+    for opt in reversed(_s3_options):
+        fn = opt(fn)
+    return fn
+
+
+@code_group.group("manifest", invoke_without_command=True)
+@_base_url_option
+@click.pass_context
+def code_manifest_group(ctx: click.Context, base_url: Optional[str]) -> None:
+    """print wbm-code/manifest.json, the index of published WBM code versions (anonymous, read only)
+
+    \b
+    {"manifestVersion": 1,
+     "code": {"wbm": {"aliases": {"latest": "<highest version>"},
+                      "versions": {"<WBM_VERSION>[-r<N>]": {"treeHash": "<64 hex>",
+                                                            "status": "current|legacy|withdrawn",
+                                                            "published": "YYYY-MM-DD",
+                                                            "reason": "only when withdrawn"}}}}}
+
+    current: new snapshot drafts may start from a snapshot on this code (several
+    versions may be current). legacy: existing snapshots keep working and stay
+    visible, no new draft starts from them. withdrawn: known bad, with a reason.
+    `sync` builds or refreshes it from the bucket; `openghm code set-status`
+    changes a status; `openghm code publish` adds a version.
+
+    \b
+    Exit codes:
+      0  printed
+      2  no manifest in the bucket (create it with `sync`)
+      4  the manifest is not valid
+      6  it could not be read
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    from .. import fetch, wbm_code_manifest as wm
+    from ..publish import Anon
+
+    def run() -> None:
+        m = wm.read_manifest(Anon((base_url or fetch.S3_BASE).rstrip("/")))
+        if m is None:
+            raise OpenghmError(f"{wm.MANIFEST_KEY} does not exist in the bucket; create it with "
+                               "`openghm code manifest sync`")
+        click.echo(wm.serialise(m).decode("utf-8"), nl=False)
+
+    _manifest_run(run)
+
+
+@code_manifest_group.command("sync")
+@click.option("--dry-run", "dry_run", is_flag=True, help="print what would be added and write nothing")
+@_s3_options_apply
+@_base_url_option
+def code_manifest_sync_cmd(dry_run: bool, s3cfg: str, s3cmd: str, base_url: Optional[str]) -> None:
+    """build or refresh wbm-code/manifest.json from the bucket
+
+    Lists wbm-code/wbm/ anonymously and reads each <version>/TREEHASH. A version
+    the manifest lacks is added as `current`, published = the TREEHASH object's
+    Last-Modified date (UTC). Existing entries are kept untouched. A manifest
+    entry whose tree hash differs from the bucket's TREEHASH is an error and
+    nothing is written. A prefix without TREEHASH (an unfinished publish) is
+    skipped. Writes with s3cmd, then reads the result back anonymously.
+
+    \b
+    Exit codes:
+      0  done, or nothing to change
+      2  bad input
+      4  the manifest is not valid, or disagrees with a TREEHASH
+      5  no credentials: --s3cfg missing or unreadable, or no s3cmd
+      6  an s3cmd call or a read failed
+      7  what the bucket serves after the write is not what was written
+    """
+    from .. import fetch, wbm_code_manifest as wm
+    from ..publish import Anon
+
+    def run() -> None:
+        url = (base_url or fetch.S3_BASE).rstrip("/")
+        client = None if dry_run else wm.client_for(url, s3cfg, s3cmd)
+        wm.sync(url, Anon(url), client, dry_run=dry_run, out=click.echo)
+
+    _manifest_run(run)
+
+
+@code_group.command("set-status")
+@click.argument("version", metavar="VERSION")
+@click.argument("status", type=click.Choice(["current", "legacy", "withdrawn"]))
+@click.option("--reason", default=None, metavar="TEXT", help="why the version is withdrawn (required for, and only "
+                                                             "allowed with, withdrawn)")
+@click.option("--dry-run", "dry_run", is_flag=True, help="print the before and after and write nothing")
+@_s3_options_apply
+@_base_url_option
+def code_set_status_cmd(version: str, status: str, reason: Optional[str], dry_run: bool, s3cfg: str, s3cmd: str,
+                        base_url: Optional[str]) -> None:
+    """set the policy status of a published WBM code version in wbm-code/manifest.json
+
+    current: new snapshot drafts may start from a snapshot on this code. legacy:
+    existing snapshots on it keep working and stay visible, no new draft starts
+    from them. withdrawn: known bad; --reason is required. Moving to another
+    status drops the reason. The version must already be in the manifest. The code
+    itself is never touched. Prints the before and after; a no-op says so.
+
+    \b
+    Exit codes:
+      0  done, or no change
+      2  bad input: the version is not in the manifest, withdrawn without
+         --reason, --reason with another status, no manifest
+      4  the manifest is not valid
+      5  no credentials: --s3cfg missing or unreadable, or no s3cmd
+      6  an s3cmd call or a read failed
+      7  what the bucket serves after the write is not what was written
+    """
+    from .. import fetch, wbm_code_manifest as wm
+    from ..publish import Anon
+
+    def run() -> None:
+        url = (base_url or fetch.S3_BASE).rstrip("/")
+        wm.check_status_args(status, reason)          # bad arguments (2) before credentials (5)
+        client = None if dry_run else wm.client_for(url, s3cfg, s3cmd)
+        wm.set_status_command(Anon(url), client, version, status, reason, dry_run=dry_run, out=click.echo)
+
+    _manifest_run(run)
 
 
 @cli.group("snapshot")

@@ -15,7 +15,7 @@ import {
   BACKEND_UNREACHABLE_MESSAGE,
   SERVER_ERROR_MESSAGE,
 } from "@/lib/action-failure";
-import { cancelJob, deleteDraft, draftChecks, duplicateDraft, pollJobStatus, publishDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
+import { cancelJob, deleteDraft, draftChecks, duplicateDraft, previewDraft, pollJobStatus, publishDraft, publishedAnswer, submitDraft, updateDraft } from "./actions";
 
 beforeEach(() => {
   patch.mockReset();
@@ -276,6 +276,23 @@ describe("duplicateDraft", () => {
   });
 });
 
+describe("previewDraft", () => {
+  it("answers a snapshot on code that is not current with its code and the backend's sentence", async () => {
+    const message = "This snapshot runs WBM code 22.1.1, which is legacy. Start from a snapshot on current code (23.9.0).";
+    get.mockRejectedValue(
+      refused(422, { code: "wbm_code_not_current", message, version: "22.1.1", state: "legacy", current: ["23.9.0"] })
+    );
+    await expect(previewDraft("snap/1")).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 422,
+      code: "wbm_code_not_current",
+      message,
+    });
+    expect(get).toHaveBeenCalledWith("/api/v1/jobs/derive/snap%2F1");
+  });
+});
+
 describe("submitDraft", () => {
   it("sends no body for an ordinary submit", async () => {
     post.mockResolvedValue({ data: { id: "job/1" } });
@@ -293,6 +310,17 @@ describe("submitDraft", () => {
     post.mockResolvedValue({ data: {} });
     await submitDraft("j", { rerun: true });
     expect(post).toHaveBeenCalledWith("/api/v1/jobs/j/submit", { rerun: true });
+  });
+
+  it.each(["wbm_code_withdrawn", "wbm_code_mismatch"])("answers a %s refusal with its code and sentence", async (code) => {
+    post.mockRejectedValue(refused(422, { code, message: "The code cannot be run.", version: "21.0.0" }));
+    await expect(submitDraft("j")).resolves.toMatchObject({
+      ok: false,
+      reason: "error",
+      status: 422,
+      code,
+      message: "The code cannot be run.",
+    });
   });
 
   it("answers the refusal of a published draft with its code", async () => {

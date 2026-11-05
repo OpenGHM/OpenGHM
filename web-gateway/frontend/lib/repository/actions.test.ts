@@ -6,7 +6,7 @@ const { get, getApiClient } = vi.hoisted(() => {
 });
 vi.mock("@/lib/api-client", () => ({ getApiClient }));
 
-import { fetchCatalogue, fetchMine, fetchSnapshots } from "./actions";
+import { fetchCatalogue, fetchMine, fetchSnapshots, fetchWbmCode } from "./actions";
 import { EMPTY_CATALOGUE_FILTERS } from "./catalogue";
 
 beforeEach(() => {
@@ -30,6 +30,28 @@ describe("fetchMine", () => {
     get.mockRejectedValue(unauthorized);
 
     await expect(fetchMine()).rejects.toBe(unauthorized);
+  });
+});
+
+describe("fetchWbmCode", () => {
+  it("reads the public list of WBM code versions and returns the body", async () => {
+    const body = {
+      versions: [{ version: "21.0.0", treeHash: "a".repeat(64), status: "withdrawn", published: "2026-01-01", reason: "bad" }],
+      current: [],
+      latest: null,
+      readable: true,
+    };
+    get.mockResolvedValue({ data: body });
+
+    await expect(fetchWbmCode()).resolves.toBe(body);
+
+    expect(getApiClient).toHaveBeenCalledWith({ allowAnonymous: true });
+    expect(get).toHaveBeenCalledWith("/api/v1/wbm-code");
+  });
+
+  it("answers null when the call fails, so a page that only adds a sentence goes on without it", async () => {
+    get.mockRejectedValue(new Error("down"));
+    await expect(fetchWbmCode()).resolves.toBeNull();
   });
 });
 

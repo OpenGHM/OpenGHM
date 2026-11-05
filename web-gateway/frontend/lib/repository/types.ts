@@ -21,6 +21,39 @@ export type CatalogueSortOption = SortOption | "coverage-start";
 /** How the catalogue lays its cards out. A view of the same results, so it is not sent to the backend. */
 export type CatalogueView = "list" | "grid";
 
+// ─── WBM code versions ──────────────────────────────────────────────────────
+
+/**
+ * A snapshot's WBM code against the manifest of published code versions.
+ * `current`: a new snapshot draft may start from it. `legacy`: it keeps working
+ * and stays visible, but no new draft starts from it. `withdrawn`: known bad.
+ * `unlisted`: its version is not in the list. `mismatch`: listed, but its tree
+ * hash is not the listed one. `unknown`: the list could not be read (nothing is
+ * refused) or the snapshot names no code.
+ */
+export type CodeState = "current" | "legacy" | "withdrawn" | "unlisted" | "mismatch" | "unknown";
+
+/** One entry of `GET /api/v1/wbm-code` (`WbmCodeVersion` in the backend). */
+export interface WbmCodeVersion {
+  version: string;
+  /** sha256 of the code tree: the identity; `version` is a name. */
+  treeHash: string;
+  status: "current" | "legacy" | "withdrawn";
+  /** ISO date. */
+  published: string;
+  /** Why it was withdrawn; absent unless the manifest gives one. */
+  reason?: string;
+}
+
+/** `GET /api/v1/wbm-code` (`WbmCodeResponse`): `readable` is false, with empty lists, when the list could not be read. */
+export interface WbmCodeResponse {
+  versions: WbmCodeVersion[];
+  /** The versions with status `current`. */
+  current: string[];
+  latest: string | null;
+  readable: boolean;
+}
+
 // ─── Dataset ──────────────────────────────────────────────────────────────────
 
 /**
@@ -29,6 +62,9 @@ export type CatalogueView = "list" | "grid";
  * `app/models/repository.py`'s `DatasetResponse`.
  */
 export interface Dataset extends OpenGHMSnapshotMetadata {
+  /** Where `uses.modelCode` stands against the published WBM code list
+   *  (`app/services/wbm_code.py`): the picker offers only `current` and `unknown`. */
+  codeState: CodeState;
   spatialResolutionDegrees: number;
   licenseUrl: string;
   /** `runtime.generatedAt`, exposed at the top level too — the default sort key. */

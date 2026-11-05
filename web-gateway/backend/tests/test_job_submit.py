@@ -731,8 +731,8 @@ def test_spec_for_the_v2_snapshot_asks_for_its_recommended_compute(v2_spec_input
     job, snapshot = v2_spec_inputs
     spec = slurm.build_job_spec(job, snapshot, "echo body")
     assert isinstance(spec, JobSpec)
-    # 15:00 recommended (15 minutes) plus 50%; cores as recommended.
-    assert (spec.cpus_per_task, spec.time_limit) == (1, "22:30")
+    # 20:00 recommended (20 minutes) plus 50%; cores as recommended.
+    assert (spec.cpus_per_task, spec.time_limit) == (1, "30:00")
     assert (spec.nodes, spec.ntasks, spec.memory) == (None, None, None)
     assert (spec.account, spec.partition, spec.qos) == ("ees260008", "shared", "cpu")
     assert spec.name == "sim-20260930-0a1b2c"
@@ -744,7 +744,7 @@ def test_spec_prefers_the_drafts_own_cores_and_never_its_walltime(v2_spec_inputs
     job, snapshot = v2_spec_inputs
     job.slurm_config.cores = 4
     spec = slurm.build_job_spec(job, snapshot, "echo body")
-    assert (spec.cpus_per_task, spec.time_limit) == (4, "22:30")
+    assert (spec.cpus_per_task, spec.time_limit) == (4, "30:00")
 
 
 def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inputs):
@@ -770,7 +770,7 @@ def test_the_rendered_batch_script_requests_cpus_per_task_not_nodes(v2_spec_inpu
     )
     directives = [l for l in script.splitlines() if l.startswith("#SBATCH")]
     assert "#SBATCH --cpus-per-task=1" in directives
-    assert "#SBATCH --time=22:30" in directives
+    assert "#SBATCH --time=30:00" in directives
     assert "#SBATCH --account=ees260008" in directives
     assert not [d for d in directives if "--nodes" in d or "--ntasks" in d]
     assert "--id sim-20260930-0a1b2c --spool cache" in script
@@ -796,7 +796,7 @@ def test_a_stored_walltime_is_not_a_field_of_the_draft_any_more(v2_spec_inputs):
     stored = SlurmConfig(**{"cores": None, "walltime": "00:15:00"})
     assert not hasattr(stored, "walltime") and stored.model_dump() == {"cores": None}
     spec = slurm.build_job_spec(job, snapshot, "echo body")
-    assert spec.time_limit == "22:30"  # the recommendation's, with headroom
+    assert spec.time_limit == "30:00"  # the recommendation's, with headroom
     assert spec.cpus_per_task == 1  # cores still the snapshot's
 
 

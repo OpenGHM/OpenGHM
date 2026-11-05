@@ -6,6 +6,8 @@ nothing connects to Mongo or Anvil).
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -23,7 +25,7 @@ from app.api.v1 import jobs as jobs_router
 from app.api.v1 import users as users_router
 from app.core import audit, authz, pending_sso, sessions
 from app.core.config import settings
-from app.services import job_live, published_answer, run_start, slurm, tree_browse
+from app.services import job_live, published_answer, run_start, slurm, tree_browse, wbm_code
 from app.wbm_init import model_input
 
 
@@ -86,6 +88,41 @@ def _no_model_input_read(monkeypatch):
     yield
     model_input.reset()
     tree_browse.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_code_manifest_read(monkeypatch):
+    """No test reads the WBM code manifest from Anvil S3 either: it is then unreadable, every
+    snapshot's `codeState` is `unknown` and nothing is refused because of it. A test that
+    wants a manifest uses the `serve_manifest` fixture. What was read stays process-wide, so
+    each test starts without another's."""
+
+    async def no_network(url: str):
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(wbm_code, "_fetch", no_network)
+    wbm_code.reset()
+    yield
+    wbm_code.reset()
+
+
+@pytest.fixture
+def serve_manifest(monkeypatch):
+    """`serve(manifest)` makes `wbm-code/manifest.json` answer with that JSON value (or raise
+    it, when it is an exception); `serve.calls` counts the fetches. Forgets what was read."""
+
+    def serve(answer):
+        async def fetch(url: str):
+            serve.calls += 1
+            if isinstance(answer, Exception):
+                raise answer
+            return copy.deepcopy(answer)
+
+        monkeypatch.setattr(wbm_code, "_fetch", fetch)
+        wbm_code.reset()
+
+    serve.calls = 0
+    return serve
 
 
 @pytest.fixture

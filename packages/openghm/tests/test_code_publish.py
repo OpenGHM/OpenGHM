@@ -66,7 +66,7 @@ def exit_code(source, store, **kw):
 
 
 def keys(store):
-    return store.keys("wbm-code/")
+    return store.keys("wbm-code/wbm/")
 
 
 def expected_hash(tree: Path) -> str:
@@ -271,8 +271,10 @@ def test_a_source_without_wbm_pl_or_build_spool_is_not_wbm_code(tmp_path, store)
 def test_treehash_is_uploaded_last(tmp_path, store):
     go(make_tree(tmp_path / "src"), store)
     order = [k for _kind, k in store.writes]
-    assert order[-1] == PREFIX + "TREEHASH" and order[-2] == PREFIX + "SHA256SUMS"
-    assert len(order) == len(FILES) + 2
+    # the manifest entry comes after the verified tree, so it is never listed before the code is whole
+    assert order[-1] == "wbm-code/manifest.json"
+    assert order[-2] == PREFIX + "TREEHASH" and order[-3] == PREFIX + "SHA256SUMS"
+    assert len(order) == len(FILES) + 3
 
 
 def test_retry_after_a_partial_upload_continues(tmp_path, store):
