@@ -991,7 +991,7 @@ def _validate_cmd(spec: str):
 
 @cli.group("code")
 def code_group() -> None:
-    """the WBM code a snapshot pins (ADR 0032): print the tree hash of a folder."""
+    """the WBM code a snapshot pins (ADR 0032): print the tree hash of a folder, publish a code version."""
 
 
 @code_group.command("hash")
@@ -1010,6 +1010,68 @@ def code_hash_cmd(path: str) -> None:
     except OpenghmError as e:
         click.echo(f"openghm: {e}", err=True)
         raise SystemExit(2)
+
+
+@code_group.command("publish")
+@click.argument("source", metavar="SOURCE")
+@click.option("--revision", "revision", type=click.IntRange(min=1), default=None, metavar="N",
+              help="publish under wbm-code/wbm/<version>-r<N>/ instead of <version>/ (never chosen automatically)")
+@click.option("--dry-run", "dry_run", is_flag=True,
+              help="print the version, the tree hash, every key with its action (upload, skip) and the mode "
+                   "fixes, and write nothing")
+@click.option("--s3cfg", default="~/.s3cfg", show_default=True, metavar="FILE",
+              help="s3cmd credentials file (only checked to exist; never read or printed)")
+@click.option("--s3cmd", default="s3cmd", show_default=True, metavar="EXE", help="the s3cmd executable")
+@click.option("--base-url", default=None, metavar="URL",
+              help="the bucket's public URL (default: Anvil S3); its last path segment is the bucket name")
+@click.option("--jobs", type=click.IntRange(min=1), default=4, show_default=True, help="parallel uploads")
+def code_publish_cmd(source: str, revision: Optional[int], dry_run: bool, s3cfg: str, s3cmd: str,
+                     base_url: Optional[str], jobs: int) -> None:
+    """publish WBM code as wbm-code/wbm/<version>/ (ADR 0032)
+
+    SOURCE is a directory or a .tar / .tar.gz / .tgz / .zip. The code root is the
+    folder holding model/ and utilities/: SOURCE itself or its single top-level
+    folder. An archive is extracted safely (absolute paths, '..', links and
+    devices are refused). <version> is WBM_VERSION in model/wbm.pl. The tree is
+    model/ and utilities/ (_Inline included), each file public-read with its mode,
+    then SHA256SUMS, then TREEHASH last: a prefix without TREEHASH is an unfinished
+    publish, and a retry continues where it stopped. Modes are the source's own,
+    except model/wbm.pl and utilities/build_spool.pl, which WBM runs directly and
+    which are published 0755 (the command says so). The same tree hash already
+    published is reported and changes nothing; other bytes under the same version
+    are refused and the next free -r<N> is named. It re-reads the result anonymously.
+
+    \b
+    Exit codes:
+      0  done, or already published
+      2  bad input: unreadable or unsafe source, no code root, no WBM_VERSION, a
+         link or special file in the tree, a bad --revision
+      4  the version (or a key under it) already holds other bytes
+      5  no credentials: --s3cfg missing or unreadable, or no s3cmd
+      6  an s3cmd call failed
+      7  verification failed: a key is missing, not public-read, or the wrong
+         size, mode or hash
+    """
+    from ..code_publish import publish_code
+    from ..publish import PublishError
+
+    try:
+        result = publish_code(source, revision=revision, base_url=base_url, s3cfg=s3cfg, s3cmd=s3cmd,
+                              dry_run=dry_run, jobs=jobs, out=click.echo)
+    except PublishError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(e.code)
+    except OpenghmError as e:
+        click.echo(f"openghm: {e}", err=True)
+        raise SystemExit(2)
+    c = result.counts
+    if result.already_published:
+        return
+    if result.dry_run:
+        click.echo(f"plan: {c.upload} upload, {c.skip} skip ({c.bytes_uploaded} bytes to upload)")
+    else:
+        click.echo(f"done: {c.upload} uploaded, {c.skip} skipped; {result.verified} keys verified anonymously")
+        click.echo(f"published: {result.prefix}")
 
 
 @cli.group("snapshot")

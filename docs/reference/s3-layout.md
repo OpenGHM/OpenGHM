@@ -327,6 +327,11 @@ openghm/
   `fetch` still downloads it from the snapshot. Fetching it once from
   `wbm-code/` instead is not built.
 - **A new version is a new directory**, never an edit to an existing one.
+- **`openghm code publish <archive or directory>`** puts one there (plan, upload,
+  re-read; the source is UNH's public release archive, or a clone of its
+  repository). It publishes `model/wbm.pl` and `utilities/build_spool.pl` as
+  0755 because WBM runs them directly. Keep the original archive outside the
+  bucket: the bucket is not backed up.
 
 The first two versions were published on 2026-10-07 (mission
 `2026-10-07-wbm-code-is-pinned`, private), copied server-side from the
@@ -340,7 +345,11 @@ published snapshots whose code ran:
 Each was downloaded anonymously afterwards:
 
 - every file matched its `SHA256SUMS` line;
-- every mode matched its source's (`model/wbm.pl` is `mode:33261`);
+- every mode matched its source's (`model/wbm.pl` is `mode:33261`); the
+  source's `23.9.0/utilities/build_spool.pl` was `mode:33188` (0644), which made
+  WBM's own `-bldSpool` fail with "Permission denied", and it was set to
+  `mode:33261` in place on 2026-11-05 (mode only: size, ETag and the tree hash
+  are unchanged);
 - the tree hash recomputed from the download equals `TREEHASH`.
 
 `23.9.0` is also the hash of `images/wbm-tools-lite/wbm/`. The three

@@ -10,9 +10,10 @@ a finished run as a snapshot (`openghm snapshot publish`, [ADR 0031](../decision
 Not built: enforcement of immutability beyond the publisher's own check
 ([Upload and lock](../reference/s3-layout.md#upload-and-lock)), a CI-driven
 publish, the `-s3` image variants' publication, a toolkit command that publishes
-a model input, fetching a snapshot's code from `wbm-code/` instead of from the
-snapshot, and the WBM repository that would feed `wbm-code/`
-([open items](../reference/open-items.md)). Read it as a description of the
+a model input, and fetching a snapshot's code from `wbm-code/` instead of from the
+snapshot ([open items](../reference/open-items.md)). A WBM code
+version is published with `openghm code publish` from UNH's release archive or
+repository. Read it as a description of the
 destination that the system is already close to, never as a description of how
 the gateway behaves.
 

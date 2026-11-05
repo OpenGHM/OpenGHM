@@ -13,7 +13,7 @@ for notebooks, batch scripts, and a future GUI.
 > `temporal` — plus `sim`, WBM model runs either **locally** (`run`, foreground) or
 > on **SLURM** (`submit` / `status` / `list` / `logs` / `cancel`), setup
 > commands (`init`, `sif`), `snapshot` (`fetch` a published snapshot,
-> `publish` a finished run as one, `validate` a folder), `code` (`hash` the WBM code a snapshot pins), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
+> `publish` a finished run as one, `validate` a folder), `code` (`hash` the WBM code a snapshot pins, `publish` a version of it), and `model-input` (`fetch`, `validate`). Snapshots are **self-describing folders** (a root
 > `metadata.json`), and `sim` runs the folder you point it at.
 
 **Status:** `sim submit` has run a real WBM job to completion on Anvil (Python 3.9.5)
@@ -157,6 +157,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm snapshot publish <run dir> --metadata FILE` | `s3cmd`, anonymous HTTPS | publish a finished run's work directory as `snapshots/<id>/`; `--id`, `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`, `--jobs`; see below |
 | `openghm snapshot validate [PATH]` | — | check a folder's `metadata.json` and layout against the snapshot spec, and its WBM code against the tree hash `uses.modelCode.treeHash` pins (ADR 0032) |
 | `openghm code hash [DIR]` | — | print the tree hash of the WBM code in `DIR` (`model/` and `utilities/`, `_Inline` left out; ADR 0032), the value `uses.modelCode.treeHash` pins |
+| `openghm code publish SOURCE` | `s3cmd`, anonymous HTTPS | publish WBM code from a directory or `.tar`/`.tar.gz`/`.tgz`/`.zip` as `wbm-code/wbm/<version>/`; `--revision`, `--dry-run`, `--s3cfg`, `--s3cmd`, `--base-url`, `--jobs`; see below |
 | `openghm model-input fetch <id>` | anonymous HTTPS | download `model-inputs/<id>/` into `model_input_dir`, verified; `--dest`, `--jobs` |
 | `openghm model-input validate [PATH]` | — | check a folder's `metadata.json` and layout against the model-input spec |
 | `openghm sim run [PATH]` | `singularity`/`docker` WBM run | **local, foreground, no SLURM**; same snapshot mechanism as `submit` |
@@ -344,6 +345,47 @@ Exit codes:
 | 7 | verification failed: a key is missing, not public-read, or the wrong size, mode or hash |
 
 A line `snapshot id: <id>` is printed, to stdout, before the first write.
+
+### Publishing WBM code (`openghm code publish`)
+
+```sh
+openghm code publish <dir or archive> --dry-run     # version, tree hash, keys, mode fixes; writes nothing, needs no credentials
+openghm code publish <dir or archive>               # publish wbm-code/wbm/<version>/
+openghm code publish <dir or archive> --revision 1  # other bytes under a published version: wbm-code/wbm/<version>-r1/
+```
+
+`SOURCE` is a directory or a `.tar`, `.tar.gz`, `.tgz` or `.zip`. The code root is the folder
+holding `model/` and `utilities/`: the source itself or its single top-level folder; anything
+else is refused, listing what was found. An archive is extracted into a temporary directory
+member by member, and an absolute path, a `..` component, a link, a device or a fifo is refused.
+`<version>` is the `WBM_VERSION` constant in `model/wbm.pl` (ADR 0032). Like `snapshot publish`
+it uses `s3cmd` with `--s3cfg` (default `~/.s3cfg`, never read or printed) and writes only keys
+that are absent.
+
+The tree is `model/` and `utilities/` (`_Inline` included, although the tree hash leaves it
+out), each file public-read with its mode and sha256 (`x-amz-meta-s3cmd-attrs`,
+`x-amz-meta-sha256`; ADR 0022), then `SHA256SUMS`, then `TREEHASH` (one line), **last**: a prefix
+without `TREEHASH` is an unfinished publish, and a retry continues where it stopped. Modes are
+the source's own, except that `model/wbm.pl` and `utilities/build_spool.pl`, which WBM runs
+directly, are published `0755` when the source has them non-executable; a `mode fix:` line says
+so. A symlink in the tree is refused.
+
+If `wbm-code/wbm/<version>/TREEHASH` already holds this tree hash, it prints
+`already published` and changes nothing. If it holds another, the command stops (exit 4) and names
+the next free `<version>-r<N>`; republish with `--revision N`, which is never chosen for you.
+Afterwards it HEADs every key anonymously, re-reads `SHA256SUMS` and `TREEHASH`, and recomputes
+the tree hash from the published `SHA256SUMS`.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | done, or already published (with `--dry-run`: a plan that would go through) |
+| 2 | bad input: an unreadable or unsafe source, no code root, no `WBM_VERSION`, a link or special file in the tree, a bad `--revision` |
+| 4 | the version, or a key under it, already holds other bytes (nothing is replaced) |
+| 5 | no credentials: `--s3cfg` missing or unreadable, or no `s3cmd` |
+| 6 | an `s3cmd` call failed (a read or an upload) |
+| 7 | verification failed: a key is missing, not public-read, or the wrong size, mode or hash |
 
 ### Reading output (`openghm output`)
 
