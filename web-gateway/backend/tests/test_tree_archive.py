@@ -258,7 +258,7 @@ def test_a_summary_counts_the_folder_at_any_depth(
         "url": f"{BASE}/{BUCKET}/{kind}/{artifact_id}/wbm_output/run/daily/",
         "files": 3,
         "bytes": 16,
-        "limit_bytes": 500 * 1024 * 1024,
+        "limit_bytes": 10 * 1024 * 1024 * 1024,
         "fits": True,
         "complete": True,
     }
@@ -277,7 +277,7 @@ def test_a_summary_follows_the_listing_pages(http, bucket):
 
 
 def test_the_limit_is_five_hundred_mebibytes_inclusive(http, bucket):
-    assert ARCHIVE_LIMIT_BYTES == 500 * 1024 * 1024
+    assert ARCHIVE_LIMIT_BYTES == 10 * 1024 * 1024 * 1024
     prefix = f"snapshots/{SNAPSHOT_ID}/"
     bucket.pages[(f"{prefix}at/", None)] = _xml(
         f"{prefix}at/", files=[(f"{prefix}at/a.nc", ARCHIVE_LIMIT_BYTES)]
@@ -876,13 +876,62 @@ def test_an_object_too_large_to_buffer_is_written_in_pieces_not_whole(
 # ---- ZIP64 -----------------------------------------------------------------------
 
 
-def test_the_length_is_left_out_when_zip64_would_change_it():
-    assert tree_archive.archive_length([("a/b", 3), ("a/c", 4)]) is not None
-    assert tree_archive.archive_length([("a/b", 3 * 1024**3)]) is None
-    assert tree_archive.archive_length([(f"a/{n}", 0) for n in range(65536)]) is None
-    assert (
-        tree_archive.archive_length([(f"a/{n}", 0) for n in range(65535)]) is not None
-    )
+class _CountingSink:
+    """Like `tree_archive._Sink`, without keeping the bytes: no `tell()` (so `zipfile` writes
+    data descriptors, as the stream does), and a count of what was written."""
+
+    def __init__(self) -> None:
+        self.size = 0
+
+    def write(self, data) -> int:
+        self.size += len(data)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+
+def _written_length(entries: list[tuple[str, int]]) -> int:
+    """The bytes `zipfile` really writes for stored entries of these sizes, the way
+    `tree_archive._write` sets them up (data is zeros: the length does not depend on it)."""
+    sink = _CountingSink()
+    chunk = bytes(8 * 1024 * 1024)
+    with zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for name, size in entries:
+            info = zipfile.ZipInfo(name, (2026, 11, 8, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o644 << 16
+            info.file_size = size
+            with archive.open(info, "w") as out:
+                left = size
+                while left:
+                    part = min(left, len(chunk))
+                    out.write(chunk[:part] if part < len(chunk) else chunk)
+                    left -= part
+    return sink.size
+
+
+def test_the_length_is_exact_without_zip64():
+    entries = [("a/b", 3), ("a/c.nc", 4_000_000), ("é/ü ñ.nc", 0)]
+    assert tree_archive.archive_length(entries) == _written_length(entries)
+
+
+def test_the_length_is_exact_past_the_zip64_margins():
+    # An entry just under the margin `zipfile` uses for its local header, one just over
+    # it (a ZIP64 local header and data descriptor, no ZIP64 sizes in the directory yet).
+    margin = int(zipfile.ZIP64_LIMIT / 1.05)
+    around = [("d/under.nc", margin - 1_000_000), ("d/over.nc", margin + 1_000_000)]
+    assert tree_archive.archive_length(around) == _written_length(around)
+    # An entry over the limit itself (ZIP64 sizes in the directory), after which every
+    # entry starts past the limit (ZIP64 offsets), and the directory's end needs ZIP64.
+    big = [("d/big.nc", zipfile.ZIP64_LIMIT + 50_000_000), ("d/b.nc", 5), ("e/c.nc", 1000)]
+    assert tree_archive.archive_length(big) == _written_length(big)
+
+
+def test_the_length_is_exact_for_more_than_65535_entries():
+    for count in (zipfile.ZIP_FILECOUNT_LIMIT, zipfile.ZIP_FILECOUNT_LIMIT + 1):
+        entries = [(f"a/{n}", 0) for n in range(count)]
+        assert tree_archive.archive_length(entries) == _written_length(entries)
 
 
 def test_more_than_65535_entries_still_make_a_valid_archive(bucket):
@@ -901,10 +950,10 @@ def test_more_than_65535_entries_still_make_a_valid_archive(bucket):
 
     async def run():
         archive = tree_archive.Archive("x.zip", entries, tree_archive.acquire())
-        assert archive.length is None
-        return b"".join([piece async for piece in archive.stream()])
+        return archive.length, b"".join([piece async for piece in archive.stream()])
 
-    body = asyncio.run(run())
+    length, body = asyncio.run(run())
+    assert length == len(body)  # ZIP64 end records included
     with opened(body) as archive:
         assert len(archive.namelist()) == count and archive.testzip() is None
 

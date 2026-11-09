@@ -22,8 +22,9 @@ const FILES = [file("a.nc", 100), file("b.nc", 200)];
 const MB = 1024 * 1024;
 
 describe("the limit label", () => {
-  it("writes the limit as 500 MB", () => {
-    expect(limitLabel(ZIP_LIMIT_BYTES)).toBe("500 MB");
+  it("writes the limit as 10 GB", () => {
+    expect(limitLabel(ZIP_LIMIT_BYTES)).toBe("10 GB");
+    expect(limitLabel(500 * 1024 * 1024)).toBe("500 MB");
     expect(limitLabel(1536 * 1024)).toBe("1.5 MB");
   });
 });

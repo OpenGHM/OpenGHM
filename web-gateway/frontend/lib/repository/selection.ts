@@ -4,11 +4,17 @@ import { treeBaseUrl } from "@/lib/repository/tree-browse";
 import { formatBytes } from "@/lib/workspace/format";
 
 /**
- * What one ZIP may hold before compression (ADR 0036). The backend decides, from
+ * What one ZIP may hold before compression (ADR 0036, 0040). The backend decides, from
  * its own listing, and refuses a larger one with 413; this is only for telling
  * a person before they click, when the selection holds no folder to say so.
  */
-export const ZIP_LIMIT_BYTES = 500 * 1024 * 1024;
+export const ZIP_LIMIT_BYTES = 10 * 1024 ** 3;
+
+/**
+ * From this size a ZIP is asked about before it starts: it takes a while, and an
+ * interrupted one starts over (a stored ZIP streamed as it is read cannot be resumed).
+ */
+export const CONFIRM_BYTES = 1024 ** 3;
 
 /** "500 MB": a limit as the sizes beside it are written, without the `.0`. */
 export function limitLabel(bytes: number): string {

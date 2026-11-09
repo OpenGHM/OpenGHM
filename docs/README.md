@@ -136,11 +136,12 @@ and 0012 were folded into 0010.
 | [0033](decisions/0033-wbm-output-is-read-on-anvil-by-the-toolkit.md) | WBM output is read on Anvil by the toolkit, and the gateway asks for subsets | accepted |
 | [0034](decisions/0034-community-content-lives-in-the-gateway-database.md) | Community-page content lives in the gateway's database, and its files in GridFS | accepted |
 | [0035](decisions/0035-cilogon-is-ordinary-sso.md) | CILogon is ordinary single sign-on: a matching email connects, a connected identity signs in | accepted |
-| [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted |
+| [0036](decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md) | What a visitor checks in a published tree downloads as one ZIP, up to 500 MB | accepted; the limit raised by 0041 |
 | [0037](decisions/0037-a-run-longer-than-one-job-continues-in-the-next.md) | A run longer than one job continues in the next job, from WBM's last saved state | accepted |
 | [0038](decisions/0038-a-run-gets-its-init-edits-as-one-changes-file.md) | A run gets its init edits as one changes file, and the gateway owns the parameter schema | accepted |
 | [0039](decisions/0039-a-draft-edits-a-data-init-as-its-own-copy.md) | A draft edits a data `.init` as its own copy, a fork the changes file carries | accepted |
-| [0040](decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md) | What a person checks in a run's output on scratch downloads as one ZIP, up to 500 MB | accepted |
+| [0040](decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md) | What a person checks in a run's output on scratch downloads as one ZIP, up to 500 MB | accepted; the limit raised by 0041 |
+| [0041](decisions/0041-the-zip-limit-is-10-gib.md) | The ZIP limit is 10 GiB, with an exact length at any size and a question before a large one | accepted |
 
 ## Missions
 

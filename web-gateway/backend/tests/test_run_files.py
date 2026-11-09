@@ -379,7 +379,7 @@ def test_a_folder_is_totalled_at_any_depth(api):
     total = sum(len(FILES[p]) for p in FILES if p.startswith("monthly/"))
     assert r.status_code == 200 and r.json() == {
         "path": "monthly/", "files": 2, "bytes": total,
-        "limit_bytes": 500 * 1024 * 1024, "fits": True, "complete": True,
+        "limit_bytes": tree_browse.ARCHIVE_LIMIT_BYTES, "fits": True, "complete": True,
     }
     everything = api.get(FOLDER, headers=OWNER_HEADERS).json()
     assert everything["path"] == "" and everything["files"] == len(FILES)
@@ -389,11 +389,12 @@ def test_a_folder_is_totalled_at_any_depth(api):
 def test_an_empty_folder_fits_and_a_folder_over_the_limit_does_not(api, sftp):
     sftp.mkdir(f"{ROOT}/empty")
     assert api.get(f"{FOLDER}?path=empty/", headers=OWNER_HEADERS).json() == {
-        "path": "empty/", "files": 0, "bytes": 0, "limit_bytes": 500 * 1024 * 1024, "fits": True, "complete": True}
-    sftp.sizes[f"{ROOT}/daily/wbm_2000.nc"] = 300 * 1024 * 1024
-    sftp.sizes[f"{ROOT}/daily/wbm_2001.nc"] = 300 * 1024 * 1024
+        "path": "empty/", "files": 0, "bytes": 0, "limit_bytes": tree_browse.ARCHIVE_LIMIT_BYTES, "fits": True, "complete": True}
+    half = tree_browse.ARCHIVE_LIMIT_BYTES // 2 + 1
+    sftp.sizes[f"{ROOT}/daily/wbm_2000.nc"] = half
+    sftp.sizes[f"{ROOT}/daily/wbm_2001.nc"] = half
     r = api.get(f"{FOLDER}?path=daily/", headers=OWNER_HEADERS).json()
-    assert r["bytes"] > 500 * 1024 * 1024 and r["fits"] is False and r["complete"] is True
+    assert r["bytes"] > 10 * 1024 * 1024 * 1024 and r["fits"] is False and r["complete"] is True
 
 
 def test_a_folder_with_too_many_files_is_cut_off_and_does_not_fit(api, monkeypatch):
@@ -484,8 +485,8 @@ def test_a_folder_with_nothing_in_it_has_nothing_to_download(api, sftp):
 # ---- the limit, before a byte is sent ----------------------------------------------------------
 
 
-def test_a_selection_over_500_mb_is_413_before_any_byte_is_read(api, sftp):
-    limit = 500 * 1024 * 1024
+def test_a_selection_over_the_limit_is_413_before_any_byte_is_read(api, sftp):
+    limit = tree_browse.ARCHIVE_LIMIT_BYTES
     sftp.sizes[f"{ROOT}/daily/wbm_2000.nc"] = limit
     sftp.sizes[f"{ROOT}/daily/wbm_2001.nc"] = 1
     r = post(api, "", ["daily/"])
@@ -502,7 +503,7 @@ def test_a_selection_over_500_mb_is_413_before_any_byte_is_read(api, sftp):
 
 
 def test_the_limit_adds_up_across_the_folders_ticked(api, sftp):
-    half = 300 * 1024 * 1024
+    half = tree_browse.ARCHIVE_LIMIT_BYTES // 2 + 1
     sftp.sizes[f"{ROOT}/daily/wbm_2000.nc"] = half
     sftp.sizes[f"{ROOT}/monthly/runoff/wbm_2000.nc"] = half
     r = post(api, "", ["daily/", "monthly/"])
@@ -636,4 +637,4 @@ def test_the_published_trees_download_still_reads_over_http():
 
 
 def test_the_limit_is_the_published_trees_limit():
-    assert tree_browse.ARCHIVE_LIMIT_BYTES == 500 * 1024 * 1024
+    assert tree_browse.ARCHIVE_LIMIT_BYTES == 10 * 1024**3

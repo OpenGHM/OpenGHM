@@ -1,8 +1,18 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { limitLabel, selectionS3Command, selectionTotals } from "@/lib/repository/selection";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CONFIRM_BYTES, limitLabel, selectionS3Command, selectionTotals } from "@/lib/repository/selection";
 import { S3Command } from "@/components/repository/s3-command";
 import { archiveRoute } from "@/lib/repository/tree-browse";
 import type { FileSource, ListedFile } from "@/lib/repository/types";
@@ -35,6 +45,9 @@ function refusalIn(frame: HTMLIFrameElement): string | null {
  * folder's URL is known to write it. A run's output (`kind` `"run"`, ADR 0040) is on
  * Anvil scratch and has no S3 command: the reason is all the bar gives.
  *
+ * From `CONFIRM_BYTES` (1 GB) the click first opens a dialog that says how big the ZIP is and
+ * that an interrupted one starts over; the form is submitted when it is confirmed.
+ *
  * The download is a hidden form POSTed to the gateway, so the browser itself
  * takes the response to disk as it arrives (no `fetch`, no blob in memory) and
  * any number of names can go. It targets a hidden frame, so that a refusal the
@@ -60,6 +73,10 @@ export function SelectionBar({
 }) {
   const frame = useId();
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  // Set by the dialog's button, so the submit it triggers is not asked about again.
+  const confirmed = useRef(false);
   const { names, sizes, clear, retry } = selection;
   if (names.length === 0) return null;
 
@@ -92,10 +109,19 @@ export function SelectionBar({
           </span>
         </span>
         <form
+          ref={form}
           method="POST"
           action={archiveRoute(kind, id)}
           target={frame}
-          onSubmit={() => setRefusal(null)}
+          onSubmit={(event) => {
+            if (totals.bytes >= CONFIRM_BYTES && !confirmed.current) {
+              event.preventDefault();
+              setConfirming(true);
+              return;
+            }
+            confirmed.current = false;
+            setRefusal(null);
+          }}
           className="flex items-center gap-2"
         >
           <input type="hidden" name="folder" value={folder} />
@@ -145,6 +171,29 @@ export function SelectionBar({
           </p>
         ))}
       {refusal && <p className="text-[13px] text-pretty text-muted-foreground">{refusal}</p>}
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Download a {size} ZIP?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It comes as one file and cannot be resumed: if the connection drops, the download starts over.
+              Only a few ZIPs are prepared at a time, so it can be refused while others are downloading.
+              {kind !== "run" && " To resume an interrupted download, use an S3 tool such as aws s3 sync."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                confirmed.current = true;
+                form.current?.requestSubmit();
+              }}
+            >
+              Download ZIP
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <iframe
         name={frame}
         title="ZIP download"

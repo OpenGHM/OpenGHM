@@ -814,7 +814,7 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
 - **`GET …/files/folder?path=<folder>`** totals a folder at any depth, by a
   listing with no delimiter (at most 20 pages): `{ path, files, bytes,
   limit_bytes, fits, complete, url }`, `url` being the folder's public HTTPS URL.
-  `fits` is whether the folder is at most 500 MiB, the most one ZIP may hold. A listing cut off at the cap answers
+  `fits` is whether the folder is at most 10 GiB, the most one ZIP may hold ([ADR 0041](../decisions/0041-the-zip-limit-is-10-gib.md)). A listing cut off at the cap answers
   `fits: false, complete: false` with the counts it reached. A complete answer
   is kept in the process like a page.
 - **`POST …/files/archive`** streams entries of one folder as one ZIP
@@ -829,7 +829,7 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   at any depth. It lists afresh, finding the names in `folder`'s listing and
   each folder's objects in one listing of at most 20 pages shared by all of
   them, and answers `413 selection_too_large` (with `bytes` and `limit_bytes`)
-  before sending anything when the total is over 500 MiB or could not be listed
+  before sending anything when the total is over 10 GiB or could not be listed
   whole. The file is `<id>-<name>.zip` for one entry, else `<id>-<folder's name,
   or "files" at the root>.zip`. Entries are stored, not
   deflated (NetCDF is compressed already), written by the standard library's
@@ -840,8 +840,10 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   within 64 MiB, a larger one streamed in 64 KiB pieces in its turn; the
   output order is the selection's, and a failed read ends the response and
   cancels the others. The exact length
-  follows from the listed sizes and names and is sent as `Content-Length`,
-  except above 65535 entries or near 2 GiB, where ZIP64 changes the records.
+  follows from the listed sizes and names, ZIP64 records included (`archive_length`,
+  checked against `zipfile`'s own output in the tests), and is sent as `Content-Length`
+  at any size. The ZIP is not resumable: it is one stream whose directory needs every
+  file's checksum, and the form that asks for it is a POST.
   At most three archives are written at once per process; another is `429
   archive_busy`, not queued. A read that fails once the response has begun
   ends the connection without a clean finish (and is logged), so the browser
@@ -853,11 +855,12 @@ Every row of the files page's table and of the output dialog's browser starts
 with a checkbox (the header's ticks the rows loaded so far), and a bar over the
 table totals what is ticked: files at their listed size, a ticked folder by its
 `…/files/folder` summary, asked once per folder while the view is open. Over
-500 MiB, or with a folder the summary could list only in part, the bar's
+10 GiB, or with a folder the summary could list only in part, the bar's
 **Download ZIP** is off and says so before anyone clicks, and the bar gives the
 anonymous `aws s3 sync` that copies the ticked entries instead: the folder
 itself when one folder is ticked, else the viewed folder with an
-`--exclude "*"` and one `--include` per entry, so the tree is kept. Otherwise it submits
+`--exclude "*"` and one `--include` per entry, so the tree is kept. Otherwise, from 1 GiB, it first asks in a dialog (the size, that an interrupted
+ZIP starts over, and for a published tree the `aws s3 sync` that can resume), and then it submits
 a hidden form to the archive route, aimed at a hidden frame in which a refusal
 the backend still gives is read and shown in the bar.
 
@@ -1393,7 +1396,7 @@ Anvil purges scratch files untouched for 30 days, and a daily check sets
 A run uploads nothing, by decision
 ([ADR 0023](../decisions/0023-simulation-output-stays-on-scratch.md)). The job
 writes to Anvil scratch, and the output stays there until the draft is
-published. Its owner can download what they tick as one ZIP of at most 500 MiB
+published. Its owner can download what they tick as one ZIP of at most 10 GiB
 ([ADR 0040](../decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md),
 "Downloading a run's output" below).
 
@@ -1579,7 +1582,7 @@ published.
 
 ### Downloading a run's output — a ZIP over SFTP
 
-What is ticked in a stopped run's output on scratch comes down as one ZIP of at most 500 MiB,
+What is ticked in a stopped run's output on scratch comes down as one ZIP of at most 10 GiB,
 read over SFTP and streamed
 ([ADR 0040](../decisions/0040-a-runs-output-on-scratch-downloads-as-a-zip-up-to-500-mb.md)).
 It is [ADR 0036](../decisions/0036-a-folder-downloads-as-a-zip-up-to-500-mb.md)'s archive with
@@ -1608,7 +1611,7 @@ reader in `web-gateway/backend/app/services/run_files.py`, under the job:
   never ran is `404 output_missing`, a queued or running one `409 run_not_finished`, a
   purged one `410 output_purged`.
 - **Limits and failures.** `413 selection_too_large` (with `bytes` and `limit_bytes`) before a
-  byte is sent when the total is over 500 MiB or could not be totalled; `429 archive_busy`
+  byte is sent when the total is over 10 GiB or could not be totalled; `429 archive_busy`
   before Anvil is asked anything; `503 anvil_unreachable` or `anvil_not_configured`. A read
   that fails once the response has begun (a file purged, replaced or longer than listed, a lost
   connection) ends the connection without a clean finish. Nothing is written on Anvil or in

@@ -56,7 +56,7 @@ _OUTPUT_MAX_PAGES = 20
 #: folder of millions of objects is not listed to its end for a yes or no.
 _FOLDER_MAX_PAGES = 20
 #: What a folder's ZIP may hold before compression (ADR 0036).
-ARCHIVE_LIMIT_BYTES = 500 * 1024 * 1024
+ARCHIVE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
 PREVIEW_BYTES = 256 * 1024
 _CACHE_SIZE = 512
 _MAX_PATH = 900  # an S3 key is at most 1024 bytes; the prefix takes the rest

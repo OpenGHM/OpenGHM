@@ -288,6 +288,64 @@ describe("the download", () => {
   });
 });
 
+describe("a large ZIP is asked about first", () => {
+  const GB = 1024 ** 3;
+  const big = (bytes: number) => summary(bytes, { limit_bytes: 10 * GB });
+
+  /** `requestSubmit` as a browser would run it: the submit event, and whether anything stopped it. */
+  function spyOnRequestSubmit() {
+    const went: boolean[] = [];
+    vi.spyOn(HTMLFormElement.prototype, "requestSubmit").mockImplementation(function (this: HTMLFormElement) {
+      const event = new Event("submit", { bubbles: true, cancelable: true });
+      this.dispatchEvent(event);
+      went.push(!event.defaultPrevented);
+    });
+    return went;
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("goes at once below 1 GB, with no question", () => {
+    render(<Harness />);
+    tick("Select a.nc");
+    const form = download().closest("form") as HTMLFormElement;
+    expect(fireEvent.submit(form)).toBe(true);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("stops at 1 GB and says how big it is, that it cannot be resumed, and what to use instead", async () => {
+    answer({ "d/deep/": big(3 * GB) });
+    render(<Harness />);
+    tick("Select deep/");
+    await screen.findByText(/3\.0 GB/);
+    const form = download().closest("form") as HTMLFormElement;
+    expect(fireEvent.submit(form)).toBe(false); // the page did not go on
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Download a 3.0 GB ZIP?")).toBeTruthy();
+    expect(within(dialog).getByText(/cannot be resumed/)).toBeTruthy();
+    expect(within(dialog).getByText(/aws s3 sync/)).toBeTruthy();
+  });
+
+  it("sends nothing on Cancel, and submits the form once on confirm, without asking again", async () => {
+    answer({ "d/deep/": big(3 * GB) });
+    const went = spyOnRequestSubmit();
+    render(<Harness />);
+    tick("Select deep/");
+    await screen.findByText(/3\.0 GB/);
+    const form = download().closest("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(went).toEqual([]);
+
+    fireEvent.submit(form);
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Download ZIP" }));
+    expect(went).toEqual([true]); // the submit the dialog made was not stopped
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+});
+
 describe("for a run's output on Anvil scratch (ADR 0040)", () => {
   const runFile = (name: string, size: number): ListedFile => ({
     name,

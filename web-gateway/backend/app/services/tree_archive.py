@@ -11,8 +11,8 @@ writes each entry's sizes and checksum after its data (a data descriptor) rather
 than seeking back, which is what a stream needs. Entries are stored, not
 deflated: the output is NetCDF, already compressed, and storing is what keeps the
 stream as fast as the bucket. A stored archive's length follows from the listed
-sizes and the names alone, so it is sent as `Content-Length` and the browser shows
-real progress.
+sizes and the names alone, ZIP64 records included, so it is sent as `Content-Length`
+and the browser shows real progress at any size.
 
 Reading the objects one after another costs a round trip each, which for a folder
 of hundreds of small files is most of the time. So up to `PREFETCH` objects are
@@ -66,10 +66,7 @@ _PREFETCH_OBJECT_BYTES = 16 * 1024 * 1024
 _PREFETCH_TOTAL_BYTES = 64 * 1024 * 1024
 #: Between two reads of one object, not for the whole of it.
 _READ_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
-#: What a stored entry costs beyond its name and data, without ZIP64: a local
-#: header (30 + name), a data descriptor (16), a central directory entry (46 +
-#: name); and the end-of-archive record (22).
-_ENTRY_FIXED = 30 + 16 + 46
+#: The end-of-archive record; the rest of an entry's overhead is in `archive_length`.
 _END_RECORD = 22
 
 
@@ -156,17 +153,35 @@ def _date_time(modified: str) -> tuple[int, int, int, int, int, int]:
     return (when.year, when.month, when.day, when.hour, when.minute, when.second)
 
 
-def archive_length(entries: list[tuple[str, int]]) -> int | None:
-    """The exact size of the stored archive of `entries` (ZIP name, size), or
-    `None` when ZIP64 would be needed, which changes the records' sizes and is
-    left to the stream: more than 65535 entries, or a size near 2 GiB."""
-    total = _END_RECORD
+def archive_length(entries: list[tuple[str, int]]) -> int:
+    """The exact size of the stored archive of `entries` (ZIP name, size), ZIP64 records
+    included, so the browser can show real progress however large it is.
+
+    It follows what `zipfile` writes to a sink with no `tell()` (data descriptors), the
+    way `_write` uses it: an entry whose size is over `zipfile`'s ZIP64 margin gets a ZIP64
+    extra field in its local header (20 bytes) and a 24-byte data descriptor instead of 16;
+    in the central directory it carries its sizes (16 bytes) once it is over `ZIP64_LIMIT`,
+    and its offset (8) once it starts past it, each behind a 4-byte extra header; and the
+    end of the archive grows a ZIP64 end record (56) and locator (20) when the entries,
+    the directory's offset or its size are over the limits. `tests/test_tree_archive.py`
+    checks every one of these against `zipfile` itself."""
+    offset = 0
+    directory = 0
     for name, size in entries:
-        if size * 1.05 > zipfile.ZIP64_LIMIT:
-            return None
-        total += _ENTRY_FIXED + 2 * len(name.encode("utf-8")) + size
-    if len(entries) > zipfile.ZIP_FILECOUNT_LIMIT or total > zipfile.ZIP64_LIMIT:
-        return None
+        n = len(name.encode("utf-8"))
+        wide = size * 1.05 > zipfile.ZIP64_LIMIT
+        central_extra = (16 if size > zipfile.ZIP64_LIMIT else 0) + (
+            8 if offset > zipfile.ZIP64_LIMIT else 0
+        )
+        directory += 46 + n + (4 + central_extra if central_extra else 0)
+        offset += 30 + n + (20 if wide else 0) + size + (24 if wide else 16)
+    total = offset + directory + _END_RECORD
+    if (
+        len(entries) > zipfile.ZIP_FILECOUNT_LIMIT
+        or offset > zipfile.ZIP64_LIMIT
+        or directory > zipfile.ZIP64_LIMIT
+    ):
+        total += 56 + 20
     return total
 
 

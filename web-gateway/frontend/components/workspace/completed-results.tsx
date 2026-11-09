@@ -9,7 +9,7 @@ import { formatBytes, purgeAround, RETENTION_DAYS } from "@/lib/workspace/format
  * COMPLETED, under the status headline: where the result is, from the job's
  * own record of what it wrote (`output`, ADR 0026), and when Anvil may delete
  * it. Output stays on Anvil scratch (ADR 0023): nothing is uploaded, and what
- * is ticked in the browser (`RunFiles`) is streamed as one ZIP of at most 500 MB
+ * is ticked in the browser (`RunFiles`) is streamed as one ZIP of at most 10 GB
  * (ADR 0040). A run whose files Anvil's purge has removed says that instead.
  */
 export function CompletedResults({

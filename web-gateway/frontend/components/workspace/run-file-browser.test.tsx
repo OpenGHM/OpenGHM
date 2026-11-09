@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { RunFileBrowser, RunFiles } from "./run-file-browser";
 import type { FolderTotal, RunListing } from "@/lib/repository/types";
 
-const LIMIT = 500 * 1024 * 1024;
+const LIMIT = 10 * 1024 ** 3;
 const fetchMock = vi.fn();
 
 const NC = (name: string, size: number, path = name) => ({
@@ -63,7 +63,7 @@ describe("the run's file browser", () => {
     await screen.findByRole("button", { name: "daily/" });
     expect(screen.getByRole("button", { name: "monthly/" })).toBeTruthy();
     expect(screen.getByText("wbm_test.MT.csv")).toBeTruthy();
-    expect(screen.getByText(/one ZIP of up to 500 MB/)).toBeTruthy();
+    expect(screen.getByText(/one ZIP of up to 10 GB/)).toBeTruthy();
     expect(screen.getByLabelText("Select wbm_test.log")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Download/ })).toBeNull(); // no public URL to give
     expect(screen.queryByText("Download ZIP")).toBeNull(); // nothing ticked yet
@@ -108,15 +108,15 @@ describe("the run's file browser", () => {
     ]);
   });
 
-  it("marks a selection over 500 MB before anyone clicks, in words that offer no other way", async () => {
+  it("marks a selection over 10 GB before anyone clicks, in words that offer no other way", async () => {
     routes({
       "/api/jobs/job-1/files?path=": json(ROOT),
-      "/api/jobs/job-1/files/folder?path=daily/": json(total("daily/", 1.3 * 1024 ** 3)),
+      "/api/jobs/job-1/files/folder?path=daily/": json(total("daily/", 12.5 * 1024 ** 3)),
     });
     render(<RunFileBrowser jobId="job-1" />);
     await screen.findByRole("button", { name: "daily/" });
     fireEvent.click(screen.getByLabelText("Select daily/"));
-    await screen.findByText("The selection is 1.3 GB, over the 500 MB limit for a ZIP. Select less.");
+    await screen.findByText("The selection is 12.5 GB, over the 10 GB limit for a ZIP. Select less.");
     expect((screen.getByRole("button", { name: "Download ZIP" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/S3|rsync|Globus/)).toBeNull();
   });
@@ -129,7 +129,7 @@ describe("the run's file browser", () => {
     render(<RunFileBrowser jobId="job-1" />);
     await screen.findByRole("button", { name: "daily/" });
     fireEvent.click(screen.getByLabelText("Select daily/"));
-    await screen.findByText(/too many files to check against the 500 MB limit/);
+    await screen.findByText(/too many files to check against the 10 GB limit/);
   });
 
   it.each([
