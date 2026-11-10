@@ -1616,7 +1616,9 @@ reader in `web-gateway/backend/app/services/run_files.py`, under the job:
   purged one `410 output_purged`.
 - **Limits and failures.** `413 selection_too_large` (with `bytes` and `limit_bytes`) before a
   byte is sent when the total is over 10 GiB or could not be totalled; `429 archive_busy`
-  before Anvil is asked anything; `503 anvil_unreachable` or `anvil_not_configured`. A read
+  before Anvil is asked anything; `503 anvil_unreachable` (also when the login node's `python3`,
+  `ANVIL_REMOTE_PYTHON`, is missing or older than 3.6, checked before the first byte) or
+  `anvil_not_configured`. A read
   that fails once the response has begun (a file purged, replaced or longer than listed, a lost
   connection) ends the connection without a clean finish. Nothing is written on Anvil or in
   the backend.

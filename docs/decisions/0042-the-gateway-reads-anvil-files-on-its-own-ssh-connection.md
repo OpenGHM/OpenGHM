@@ -120,12 +120,17 @@ files was not measured.
   56, and the places per pod (three) bind before the CPU does. The sizing in ADR 0041 (a 10 GiB
   ZIP is about 180 CPU-seconds, a pod at 500m about 30 MB/s) is superseded by about 43
   CPU-seconds and about 230 MB/s at 1000m.
-- A ZIP now runs a process on the login node for as long as it streams: a Python reading files
-  and writing them to its channel, a light load, but RCAC stops front-end processes that use
-  significant processor time ([front-end use](https://db.rcac.purdue.edu/policies/frontenduse)),
-  so it is bounded by the three places per pod. Its CPU use on the login node was not measured.
-- The protocol depends on `/usr/bin/python3` on the login node being there and at least 3.6; a
-  login node without it fails every ZIP (exit status, reported as a broken stream).
+- A ZIP now runs a process on the login node for as long as it streams. RCAC stops front-end
+  processes that use significant processor time
+  ([front-end use](https://db.rcac.purdue.edu/policies/frontenduse)); what counts as significant
+  is not stated, so the load was measured (below) and is bounded by the three places per pod.
+- **The script needs a Python 3.6 or newer on the login node**, at `ANVIL_REMOTE_PYTHON`
+  (default `/usr/bin/python3`, which is 3.6.8 on Anvil). The first ZIP after the connection is
+  opened runs `<python> -I -c <version>` there and remembers a success; a missing interpreter
+  (status 127), a failing one, an answer that is not a version or a version below 3.6 refuses the
+  ZIP before any byte, as `503 anvil_unreachable` with a message that names no path (the detail,
+  with the setting to change, is in the log). The script also refuses to run on an older
+  interpreter itself.
 - The backend holds **two** SSH connections to Anvil per process, not one (slurmly's and this
   one), and N pods hold 2N. What Anvil's login nodes tolerate was not measured past two pods
   with one connection each.
@@ -136,5 +141,25 @@ files was not measured.
   moves.
 - Host keys are not verified, as before; moving to a pinned `known_hosts` is one change in
   `_connect_kwargs` here and one in slurmly's connect, and not part of this decision.
-- The `nc` download (`stream_file`) was covered by tests with a fake server and was **not**
-  exercised on dev, where no run has toolkit output.
+- The `nc` download's own read (`stream_file`) and its removal (`remove_file`) were run against
+  Anvil from the dev pod (a 50 MiB file read whole, a read closed after its first chunk, a second
+  removal of the same file, a missing file raising `SFTPNoSuchFile`); the toolkit step that
+  writes the subset was not run on dev, where no run has toolkit output.
+
+## Risks that were measured afterwards (2026-11-11, dev)
+
+- **Load on the login node**: three ZIPs at once for 138 s (30 GiB): the three scripts used 7, 7
+  and 6 CPU-seconds (5 to 6% of a core each) and the connection's `sshd` 31 (about 20% of a core),
+  about 1.7 CPU-seconds per GiB in all and a little over a third of one core at 237 MB/s.
+- **Files not in any cache**: 3.5 GB of files not read for a month were read at 1.6 GB/s the first
+  time, 2.4 GB/s the second time and 1.4 GB/s from another login node, against the 223 to
+  237 MB/s the gateway can carry, so the first read of cold output does not limit a ZIP.
+- **The ingress and the Next.js proxy**: a 2.1 GB published ZIP (the public route, which reads
+  S3, so it is not a run's ZIP) came through whole with `Content-Length` equal to the bytes. The
+  backend alone gave 112 MB/s, the Next.js proxy without the ingress 118 MB/s (the proxy costs
+  nothing; the frontend pod used 0.18 of a core and was not throttled), and the path through the
+  ingress 70 to 77 MB/s for one download, from a login node and from inside the cluster, and
+  47 MB/s each for three at once (141 in all). So the ingress limits one download to about
+  70 MB/s; its configuration cannot be read from here. A person on a home line (about 37 MB/s)
+  does not reach it. A run's ZIP through the ingress was not run, since that needs a signed-in
+  session.

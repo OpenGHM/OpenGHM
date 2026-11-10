@@ -162,9 +162,11 @@ measured on dev and is in Consequences.
   when another pod has a place; with every pod full the person still sees the refusal.
 - The limit of three ZIPs at once per process stays. It is what keeps a handful of people from
   sharing one core into downloads that each take twenty minutes.
-- The ingress must not buffer the response to disk. ingress-nginx's default is
-  `proxy-buffering: off`, but this cluster's controller configuration was **not checked**; with
-  buffering on, a response over `proxy_max_temp_file_size` (1 GiB by default) is cut short.
+- The ingress must not buffer the response to disk, or a response over `proxy_max_temp_file_size`
+  (1 GiB by default) is cut short. The controller's configuration was not read (no access to its
+  namespace), but a 2.1 GB ZIP (`Content-Length` 2 119 172 058) came through the dev ingress whole
+  and equal to its length, from a login node and from inside the cluster, so it does not cut at
+  1 GiB ([ADR 0042](0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md)).
 - The ZIP's `Content-Length` is now sent for every archive, so a failure after the response has
   begun is still a download that ends short of its length, which the browser reports as failed.
 - Totalling a folder is bounded as before (20 000 files, 60 s); a folder past either is `413`.

@@ -64,6 +64,8 @@ class FakeSftp:
         self.grow: set[str] = set()  # paths that have more bytes than they were listed with
         self.sessions = 0
         self.unreachable: BaseException | None = None
+        self.python_error: BaseException | None = None    # what the login-node pre-flight raises
+        self.preflights = 0
 
     def put(self, path: str, data: bytes = b"") -> None:
         self.files[path] = data
@@ -179,6 +181,12 @@ def sftp(monkeypatch) -> FakeSftp:
         finally:
             fake.stream_open -= 1
 
+    async def check_remote_python():
+        fake.preflights += 1
+        if fake.python_error is not None:
+            raise fake.python_error
+
+    monkeypatch.setattr(anvil_files, "check_remote_python", check_remote_python)
     monkeypatch.setattr(anvil_files, "sftp_session", session)
     monkeypatch.setattr(anvil_files, "stream_files", stream_files)
     monkeypatch.setattr(settings, "ANVIL_OUTPUT_BASE", OUTPUT_BASE)
@@ -668,6 +676,47 @@ def test_a_stream_that_cannot_be_opened_ends_the_response_with_an_archive_error(
     with raises_stream_error(tree_archive.ArchiveError, match="no route"):
         post(api, "", ["daily/"])
     assert tree_archive._active == 0
+
+
+def test_a_login_node_that_cannot_run_the_script_is_a_503_before_any_byte_and_gives_the_place_back(
+    api, sftp, caplog
+):
+    sftp.python_error = anvil_files.RemoteUnavailable("python3 not found at /usr/bin/python3 on the login node; set ANVIL_REMOTE_PYTHON")
+    r = post(api, "", ["daily/"])
+    assert r.status_code == 503 and detail(r)["code"] == "anvil_unreachable"
+    assert "/usr/bin/python3" not in r.text and "ANVIL_REMOTE_PYTHON" not in r.text
+    assert "cannot prepare this ZIP" in detail(r)["message"]
+    assert "python3 not found at /usr/bin/python3" in caplog.text     # the detail is in the log
+    assert sftp.preflights == 1 and sftp.streams == [] and sftp.opened == []
+    assert tree_archive._active == 0
+
+
+def test_the_failed_check_is_asked_again_for_the_next_archive(api, sftp):
+    sftp.python_error = anvil_files.RemoteUnavailable("too old")
+    assert post(api, "", ["daily/"]).status_code == 503
+    sftp.python_error = None
+    assert post(api, "", ["daily/"]).status_code == 200
+    assert sftp.preflights == 2
+
+
+@pytest.mark.parametrize(
+    "error, code",
+    [
+        (OSError("reset"), "anvil_unreachable"),
+        (asyncssh.ConnectionLost("gone"), "anvil_unreachable"),
+        (slurm.AnvilNotConfigured("no key"), "anvil_not_configured"),
+    ],
+)
+def test_a_connection_failure_in_the_check_is_a_503_too(api, sftp, error, code):
+    sftp.python_error = error
+    r = post(api, "", ["daily/"])
+    assert r.status_code == 503 and detail(r)["code"] == code
+    assert sftp.streams == [] and tree_archive._active == 0
+
+
+def test_the_check_runs_after_the_listing_so_a_refused_selection_never_reaches_it(api, sftp):
+    assert post(api, "", ["nope.nc"]).status_code == 404
+    assert sftp.preflights == 0
 
 
 def test_the_limit_is_the_published_trees_limit():

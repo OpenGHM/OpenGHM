@@ -17,6 +17,8 @@ import sys
 import asyncssh
 import pytest
 
+from types import SimpleNamespace
+
 from app.core.config import settings
 from app.services import anvil_files, slurm
 
@@ -74,6 +76,8 @@ class FakeConn:
         self.waited = 0
         self.commands: list[tuple[str, dict]] = []
         self.process = None
+        self.runs: list[str] = []
+        self.run_result = None    # what `run` answers: a SimpleNamespace, or an exception to raise
 
     def is_closed(self) -> bool:
         return self.closed
@@ -87,6 +91,15 @@ class FakeConn:
 
     def start_sftp_client(self):
         return self.sftp
+
+    async def run(self, command, **kwargs):
+        self.runs.append(command)
+        assert kwargs.get("check") is False
+        if isinstance(self.run_result, BaseException):
+            raise self.run_result
+        if self.run_result == "hang":
+            await asyncio.sleep(3600)
+        return self.run_result
 
     async def create_process(self, command, **kwargs):
         self.commands.append((command, kwargs))
@@ -116,6 +129,8 @@ def connects(monkeypatch) -> Connects:
     monkeypatch.setattr(asyncssh, "connect", fake)
     monkeypatch.setattr(anvil_files, "_conn", None)
     monkeypatch.setattr(anvil_files, "_lock", asyncio.Lock())
+    monkeypatch.setattr(anvil_files, "_python_checked", set())
+    monkeypatch.setattr(settings, "ANVIL_REMOTE_PYTHON", "/usr/bin/python3")
     monkeypatch.setattr(settings, "ANVIL_SSH_HOST", "anvil.example.org")
     monkeypatch.setattr(settings, "ANVIL_SSH_PORT", 2222)
     monkeypatch.setattr(settings, "ANVIL_SSH_USERNAME", "x-openghm")
@@ -418,6 +433,31 @@ def test_the_remote_script_is_plain_python_3_6():
     ast.parse(anvil_files.REMOTE_SCRIPT, feature_version=(3, 6))
     compile(anvil_files.REMOTE_SCRIPT, "<remote>", "exec")
     assert anvil_files.remote_command().startswith("/usr/bin/python3 -I -c ")
+
+
+def test_the_interpreter_is_a_setting_and_is_quoted(monkeypatch):
+    monkeypatch.setattr(settings, "ANVIL_REMOTE_PYTHON", "/opt/my py/bin/python3.9")
+    assert anvil_files.remote_command().startswith("'/opt/my py/bin/python3.9' -I -c ")
+
+
+def test_the_script_checks_its_interpreter_first_and_says_so_in_an_error_frame(tmp_path):
+    """The real script, run with `sys.version_info` replaced by 3.5 before it starts: it must
+    write an ERROR frame and exit 3 without reading stdin."""
+    driver = (
+        "import sys\n"
+        "sys.version_info = (3, 5, 2, 'final', 0)\n"
+        "exec(compile(sys.argv[1], '<remote>', 'exec'))\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c", driver, anvil_files.REMOTE_SCRIPT],
+        input=b"", capture_output=True, timeout=30,
+    )
+    assert proc.returncode == anvil_files.REMOTE_FAILURE_STATUS
+    assert parse(proc.stdout) == [("error", "python 3.6 or newer is needed, this is 3.5")]
+
+
+def test_the_scripts_guard_lets_the_current_interpreter_through(tmp_path):
+    assert run_script([])[1] == 0
 
 
 def test_the_script_sends_each_file_as_data_frames_then_an_end(tmp_path):
@@ -968,3 +1008,135 @@ def test_credit_goes_out_as_data_is_consumed_and_never_more_than_the_bound_is_ou
         assert grant - consumed <= 100                        # never more than the bound outstanding
         assert grant - consumed > 100 - 50                    # and credit does keep flowing
     assert seen[-1][0] > 100
+
+
+# ---- the pre-flight ------------------------------------------------------------------------
+
+
+def answer(status=0, stdout="3.6\n", stderr=""):
+    return SimpleNamespace(exit_status=status, stdout=stdout, stderr=stderr)
+
+
+async def _preflight(connects, result):
+    """Run the check on a connection whose `run` answers `result`; the connection."""
+    conn = await anvil_files._connection()
+    conn.run_result = result
+    await anvil_files.check_remote_python()
+    return conn
+
+
+def test_a_good_interpreter_passes_and_the_command_is_the_quoted_isolated_query(connects):
+    conn = asyncio.run(_preflight(connects, answer(stdout="3.6\n")))
+    assert conn.runs == ["/usr/bin/python3 -I -c " + __import__("shlex").quote(anvil_files._VERSION_PROGRAM)]
+    assert anvil_files._python_checked == {"/usr/bin/python3"}
+
+
+def test_a_success_is_remembered_so_the_second_check_runs_nothing(connects):
+    async def go():
+        conn = await _preflight(connects, answer(stdout="3.9"))
+        await anvil_files.check_remote_python()
+        return conn
+
+    assert len(asyncio.run(go()).runs) == 1
+
+
+def test_the_setting_is_honoured_and_a_changed_one_is_checked_afresh(connects, monkeypatch):
+    async def go():
+        conn = await _preflight(connects, answer())
+        monkeypatch.setattr(settings, "ANVIL_REMOTE_PYTHON", "/opt/py 3/bin/python3")
+        await anvil_files.check_remote_python()
+        return conn
+
+    conn = asyncio.run(go())
+    assert len(conn.runs) == 2 and conn.runs[1].startswith("'/opt/py 3/bin/python3' -I -c ")
+
+
+def test_status_127_says_python_is_not_there_and_names_the_setting(connects):
+    with pytest.raises(anvil_files.RemoteUnavailable) as err:
+        asyncio.run(_preflight(connects, answer(status=127, stdout="", stderr="bash: command not found")))
+    assert str(err.value) == "python3 not found at /usr/bin/python3 on the login node; set ANVIL_REMOTE_PYTHON"
+
+
+def test_another_failing_status_carries_the_end_of_stderr(connects):
+    with pytest.raises(anvil_files.RemoteUnavailable) as err:
+        asyncio.run(_preflight(connects, answer(status=1, stdout="", stderr="boom\nlibpython missing\n")))
+    assert str(err.value) == (
+        "/usr/bin/python3 on the login node failed with exit status 1: boom\nlibpython missing"
+    )
+    with pytest.raises(anvil_files.RemoteUnavailable) as err:
+        asyncio.run(_preflight(connects, answer(status=2, stdout="", stderr=b"")))
+    assert str(err.value) == "/usr/bin/python3 on the login node failed with exit status 2"
+
+
+@pytest.mark.parametrize("text", ["", "hello", "3", "3.6.8", "a.b"])
+def test_an_answer_that_is_not_major_dot_minor_is_refused(connects, text):
+    with pytest.raises(anvil_files.RemoteUnavailable, match="not major.minor"):
+        asyncio.run(_preflight(connects, answer(stdout=text)))
+
+
+def test_a_version_older_than_3_6_is_refused_and_3_6_and_newer_pass(connects):
+    with pytest.raises(anvil_files.RemoteUnavailable) as err:
+        asyncio.run(_preflight(connects, answer(stdout="3.5\n")))
+    assert str(err.value) == "/usr/bin/python3 on the login node is 3.5, 3.6 or newer is needed"
+    assert anvil_files._python_checked == set()
+    for version in ("3.6", "3.10", "4.0"):
+        anvil_files._python_checked.clear()
+        asyncio.run(_preflight(connects, answer(stdout=version)))
+
+
+def test_a_query_that_does_not_answer_in_time_is_refused(connects, monkeypatch):
+    monkeypatch.setattr(anvil_files, "_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
+    with pytest.raises(anvil_files.RemoteUnavailable, match="did not answer in 0.05 s"):
+        asyncio.run(_preflight(connects, "hang"))
+
+
+def test_a_failure_is_not_remembered_and_the_next_check_asks_again(connects):
+    async def go():
+        conn = await _preflight(connects, answer())
+        anvil_files._python_checked.clear()
+        conn.run_result = answer(status=127)
+        with pytest.raises(anvil_files.RemoteUnavailable):
+            await anvil_files.check_remote_python()
+        assert anvil_files._python_checked == set()
+        conn.run_result = answer()       # fixed on the login node
+        await anvil_files.check_remote_python()
+        return conn
+
+    conn = asyncio.run(go())
+    assert len(conn.runs) == 3 and anvil_files._python_checked == {"/usr/bin/python3"}
+
+
+def test_the_remembered_check_goes_with_the_connection(connects):
+    async def go():
+        await _preflight(connects, answer())
+        assert anvil_files._python_checked
+        anvil_files._discard(anvil_files._conn)
+        assert anvil_files._python_checked == set()
+        conn = await _preflight(connects, answer())     # a new connection is asked again
+        assert conn.runs and connects.conns[0] is not conn
+        await anvil_files.close()
+        assert anvil_files._python_checked == set()
+
+    asyncio.run(go())
+
+
+def test_a_connection_that_closed_by_itself_forgets_the_check_when_replaced(connects):
+    async def go():
+        conn = await _preflight(connects, answer())
+        conn.closed = True
+        await anvil_files._connection()
+        assert anvil_files._python_checked == set()
+
+    asyncio.run(go())
+
+
+def test_a_connection_level_failure_in_the_check_drops_the_connection_and_propagates(connects):
+    async def go():
+        conn = await anvil_files._connection()
+        conn.run_result = asyncssh.ConnectionLost("gone")
+        with pytest.raises(asyncssh.ConnectionLost):
+            await anvil_files.check_remote_python()
+        return conn
+
+    conn = asyncio.run(go())
+    assert conn.closed and anvil_files._conn is None and anvil_files._python_checked == set()

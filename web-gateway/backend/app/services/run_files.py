@@ -276,6 +276,24 @@ def framed_source(entries: list[tuple[str, int]]):
     return connect
 
 
+async def _check_remote_python() -> None:
+    """`anvil_files.check_remote_python`, with what can go wrong as `AnvilUnavailable`: the
+    detail (it names paths) goes to the log, the person is told the login node cannot pack a
+    ZIP."""
+    try:
+        await anvil_files.check_remote_python()
+    except anvil_files.RemoteUnavailable as exc:
+        logger.warning("Run files: the login node cannot stream files: %s", exc)
+        raise AnvilUnavailable(
+            "anvil_unreachable", "Anvil's login node cannot prepare this ZIP right now. Try again later or contact the operators."
+        ) from exc
+    except slurm.AnvilNotConfigured as exc:
+        raise AnvilUnavailable("anvil_not_configured", _NOT_CONFIGURED) from exc
+    except (SlurmlyError, OSError, asyncssh.Error) as exc:
+        logger.warning("Run files: Anvil unreachable: %s", exc)
+        raise AnvilUnavailable() from exc
+
+
 async def open_archive(sim_id: str, folder: str, names: list[str]) -> tree_archive.Archive:
     """The ZIP of `names` (`validate_names`'s) in `folder` (`validate_path`'s) of the run's
     output: each file under its name, each folder under its name with what it holds. Raises
@@ -300,6 +318,7 @@ async def open_archive(sim_id: str, folder: str, names: list[str]) -> tree_archi
             safe.append((name, obj))
         if not safe:
             raise PathNotFound(folder)
+        await _check_remote_python()
         if len(names) == 1:
             stem = names[0].removesuffix("/")
         else:

@@ -99,8 +99,10 @@ _CONNECTION_ERRORS = (
     OSError,
 )
 
-#: The interpreter of the login node (Python 3.6.8 there), run isolated (`-I`).
-REMOTE_PYTHON = "/usr/bin/python3"
+#: The oldest Python the script runs on, and the pre-flight's command's answer (`major.minor`).
+REMOTE_PYTHON_MIN = (3, 6)
+#: How long the pre-flight's `python -c` is waited for.
+_PREFLIGHT_TIMEOUT_SECONDS = 15
 #: The exec channel's window and packet size for `stream_files` (measured: 235 MB/s with these,
 #: against asyncssh's 2 MiB and 32 KiB defaults, for the same single file). The window is NOT what
 #: bounds the bytes in flight: when a slow consumer makes asyncssh pause a channel and then resume
@@ -148,6 +150,15 @@ MAX = %d
 ERROR = %d
 FAILED = %d
 GONE = %d
+
+if sys.version_info < (3, 6):
+    # Checked before anything else runs: an older interpreter says so in an ERROR frame.
+    message = ("python 3.6 or newer is needed, this is %%d.%%d" %% tuple(sys.version_info[:2])).encode("ascii")
+    stream = getattr(sys.stdout, "buffer", sys.stdout)
+    stream.write(struct.pack(">II", ERROR, len(message)) + message)
+    stream.flush()
+    sys.exit(FAILED)
+
 out = sys.stdout.buffer
 stdin = sys.stdin.buffer
 credit = 0
@@ -241,6 +252,9 @@ except Exception as exc:
 
 _conn: asyncssh.SSHClientConnection | None = None
 _lock = asyncio.Lock()
+#: The interpreters (by path) that the pre-flight found good on the current connection. Only
+#: success is kept; it is emptied when the connection is discarded or closed.
+_python_checked: set[str] = set()
 
 
 def _encryption_algs() -> list[str]:
@@ -290,6 +304,7 @@ async def _connection() -> asyncssh.SSHClientConnection:
         if conn is not None and not conn.is_closed():
             return conn
         _conn = None
+        _python_checked.clear()
         kwargs = _connect_kwargs()
         _conn = await asyncssh.connect(**kwargs)
         logger.info("Anvil files: connected (host=%s user=%s)", kwargs["host"], kwargs["username"])
@@ -302,6 +317,7 @@ def _discard(conn: asyncssh.SSHClientConnection) -> None:
     global _conn
     if _conn is conn:
         _conn = None
+        _python_checked.clear()
     try:
         conn.close()
     except Exception:  # noqa: BLE001 - already broken; nothing more to do
@@ -344,6 +360,9 @@ async def stream_file(path: str, *, chunk_size: int = 1024 * 1024) -> AsyncItera
                 yield data
 
 
+_VERSION_PROGRAM = "import sys; print('%d.%d' % sys.version_info[:2])"
+
+
 def _credit_line(count: int) -> bytes:
     return json.dumps({"credit": count}).encode("ascii") + b"\n"
 
@@ -354,9 +373,62 @@ class RemoteReadError(Exception):
     understood, or a file was asked for out of order. The message says which and why."""
 
 
+class RemoteUnavailable(Exception):
+    """The login node cannot run the file-streaming script (no interpreter, too old, or it
+    does not answer). The message says what is wrong and what setting to change; it names
+    server paths, so it is for the log, not for a person."""
+
+
 def remote_command() -> str:
     """The command line `stream_files` runs on the login node."""
-    return f"{REMOTE_PYTHON} -I -c {shlex.quote(REMOTE_SCRIPT)}"
+    return f"{shlex.quote(settings.ANVIL_REMOTE_PYTHON)} -I -c {shlex.quote(REMOTE_SCRIPT)}"
+
+
+async def check_remote_python() -> None:
+    """Ask the login node for `ANVIL_REMOTE_PYTHON`'s version, before a stream is started, so
+    that a missing or too old interpreter is known before a byte of a response is sent.
+    `RemoteUnavailable` says which. A success is remembered per interpreter path until the
+    connection is replaced or closed, so only the first archive pays the round trip; a failure
+    is asked again next time. A connection-level failure drops the connection and is raised as
+    asyncssh's error or `OSError`, as in the other calls."""
+    python = settings.ANVIL_REMOTE_PYTHON
+    if python in _python_checked:
+        return
+    conn = await _connection()
+    command = f"{shlex.quote(python)} -I -c {shlex.quote(_VERSION_PROGRAM)}"
+    try:
+        result = await asyncio.wait_for(conn.run(command, check=False), _PREFLIGHT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError as exc:
+        raise RemoteUnavailable(
+            f"{python} on the login node did not answer in {_PREFLIGHT_TIMEOUT_SECONDS} s"
+        ) from exc
+    except _CONNECTION_ERRORS:
+        _discard(conn)
+        raise
+    status = result.exit_status
+    if status == 127:
+        raise RemoteUnavailable(f"python3 not found at {python} on the login node; set ANVIL_REMOTE_PYTHON")
+    if status != 0:
+        stderr = result.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", "replace")
+        tail = (stderr or "").strip()[-_STDERR_TAIL_BYTES:]
+        detail = f"{python} on the login node failed with exit status {status}"
+        raise RemoteUnavailable(f"{detail}: {tail}" if tail else detail)
+    stdout = result.stdout
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode("utf-8", "replace")
+    text = (stdout or "").strip()
+    try:
+        major, minor = (int(part) for part in text.split("."))
+    except ValueError as exc:
+        raise RemoteUnavailable(
+            f"{python} on the login node answered {text[:100]!r} to a version query, not major.minor"
+        ) from exc
+    if (major, minor) < REMOTE_PYTHON_MIN:
+        needed = ".".join(str(n) for n in REMOTE_PYTHON_MIN)
+        raise RemoteUnavailable(f"{python} on the login node is {major}.{minor}, {needed} or newer is needed")
+    _python_checked.add(python)
 
 
 class FileStream:
@@ -537,6 +609,7 @@ async def close() -> None:
     to call twice, and when none was ever opened."""
     global _conn
     conn, _conn = _conn, None
+    _python_checked.clear()
     if conn is None:
         return
     try:

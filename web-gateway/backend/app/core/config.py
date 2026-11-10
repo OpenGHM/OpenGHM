@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     ANVIL_ACCOUNT: str = ""
     ANVIL_MAX_CONCURRENT_COMMANDS: int = 4
     ANVIL_EXECUTION_PROFILE: str = "anvil_cpu_modules"
+    # The interpreter on the login node that runs the file-streaming script (a run's ZIP); needs Python 3.6 or newer.
+    ANVIL_REMOTE_PYTHON: str = "/usr/bin/python3"
     # The pinned toolkit install a job runs (ADR 0025): a directory named for
     # the public commit, holding bin/openghm and gateway.toml. Empty means no
     # toolkit is installed for this gateway, so submit refuses (503
