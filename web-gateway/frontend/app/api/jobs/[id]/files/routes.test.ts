@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { getBackendAuth } = vi.hoisted(() => ({ getBackendAuth: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ BACKEND_URL: "http://backend.test", getBackendAuth }));
+// The retry's waits are the helper's own test's business; here they are as short as can be.
+vi.mock("@/lib/archive-fetch", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/archive-fetch")>();
+  return { ...actual, fetchArchive: (url: string, init: RequestInit) => actual.fetchArchive(url, init, { delaysMs: [0, 0] }) };
+});
 
 import { GET as list } from "./route";
 import { POST as archive } from "./archive/route";
@@ -109,6 +114,45 @@ describe("a run's file routes (ADR 0040)", () => {
       expect(await res.json()).toEqual(body);
       expect(res.headers.get("content-disposition")).toBeNull();
     }
+  });
+
+  it("send a busy backend's ZIP request again with the same token and body, and give the browser the second answer's ZIP", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => Response.json({ detail: { code: "archive_busy" } }, { status: 429 }))
+      .mockImplementationOnce(async () => new Response("PK-zip", { headers: { "content-type": "application/zip", "content-length": "6" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await archive(form("daily/", ["a.nc"]), params());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.headers).toEqual({ Authorization: "Bearer t", "Content-Type": "application/json" });
+      expect(JSON.parse(init.body)).toEqual({ folder: "daily/", names: ["a.nc"] });
+    }
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-length")).toBe("6");
+    expect(await res.text()).toBe("PK-zip");
+  });
+
+  it("give the browser the 429 archive_busy after three busy answers, and do not retry a 413, a 429 with another code, or a folder summary", async () => {
+    const body = { detail: { code: "archive_busy", message: "busy" } };
+    const busy = vi.fn().mockImplementation(async () => Response.json(body, { status: 429 }));
+    vi.stubGlobal("fetch", busy);
+    const res = await archive(form("", ["a"]), params());
+    expect(busy).toHaveBeenCalledTimes(3);
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual(body);
+
+    for (const [status, code] of [[429, "other"], [413, "selection_too_large"]] as const) {
+      const once = vi.fn().mockImplementation(async () => Response.json({ detail: { code } }, { status }));
+      vi.stubGlobal("fetch", once);
+      expect((await archive(form("", ["a"]), params())).status).toBe(status);
+      expect(once).toHaveBeenCalledTimes(1);
+    }
+
+    const folderBusy = vi.fn().mockImplementation(async () => Response.json(body, { status: 429 }));
+    vi.stubGlobal("fetch", folderBusy);
+    expect((await folder(new Request("http://app.test/x?path=a/"), params())).status).toBe(429);
+    expect(folderBusy).toHaveBeenCalledTimes(1);
   });
 
   it("answer 502 when the backend cannot be reached", async () => {

@@ -1,4 +1,5 @@
 import { BACKEND_URL, getBackendAuth } from "@/lib/api-client";
+import { fetchArchive } from "@/lib/archive-fetch";
 import { proxyRefusal } from "@/lib/repository/output-proxy";
 import { readSelection, relay, SELECTION_MESSAGE, UNREACHABLE } from "@/lib/repository/files-proxy";
 
@@ -41,7 +42,10 @@ export async function proxyRunFiles(request: Request, id: string, route: Route):
   }
   try {
     // The body is the backend's own stream, passed on as it arrives: never buffered here.
-    return relay(await fetch(target(id, route, new URL(request.url).searchParams), init), route === "archive");
+    const url = target(id, route, new URL(request.url).searchParams);
+    // A busy backend pod's refusal of a ZIP is tried again before it is passed on.
+    const upstream = route === "archive" ? await fetchArchive(url, init) : await fetch(url, init);
+    return relay(upstream, route === "archive");
   } catch {
     return proxyRefusal(502, "gateway_unreachable", UNREACHABLE);
   }

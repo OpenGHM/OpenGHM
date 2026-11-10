@@ -1,4 +1,5 @@
 import { BACKEND_URL } from "@/lib/api-client";
+import { fetchArchive } from "@/lib/archive-fetch";
 import { MODEL_INPUT_ID, SNAPSHOT_ID, proxyRefusal } from "@/lib/repository/output-proxy";
 import { treeRoute } from "@/lib/repository/tree-browse";
 import type { TreeKind } from "@/lib/repository/types";
@@ -75,7 +76,8 @@ export async function proxyFolder(request: Request, kind: TreeKind, id: string):
 /**
  * `POST …/files/archive`: a form of `folder` and a `names` field for each entry
  * (or the same as JSON), forwarded to the backend as JSON. The ZIP comes back
- * with its name and exact length, so the browser shows real progress.
+ * with its name and exact length, so the browser shows real progress. A 429
+ * `archive_busy` is tried again a couple of times first (`fetchArchive`).
  */
 export async function proxyArchive(request: Request, kind: TreeKind, id: string): Promise<Response> {
   if (!knownId(kind, id)) return proxyRefusal(404, "not_found", "There is no such snapshot or model input.");
@@ -84,7 +86,7 @@ export async function proxyArchive(request: Request, kind: TreeKind, id: string)
   const { folder, names } = selection;
   try {
     return relay(
-      await fetch(`${BACKEND_URL}${treeRoute(kind, id)}/files/archive`, {
+      await fetchArchive(`${BACKEND_URL}${treeRoute(kind, id)}/files/archive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ folder, names }),
