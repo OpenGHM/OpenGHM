@@ -1,18 +1,24 @@
-"""A run's output on Anvil scratch, listed and packed as a ZIP over SFTP (ADR 0040).
+"""A run's output on Anvil scratch, listed over SFTP and packed as a ZIP (ADR 0040).
 
 The output directory is `ANVIL_OUTPUT_BASE/<sim_id>/wbm_output/<sim_id>` (the directory the
 job's outcome record walks), built from the job's own `sim_id` as `wbm_output.run_source`
-does and never from a request. Everything here reads over one SFTP channel on the connection
-the backend already holds for jobs (`slurm.sftp_session`) and writes nothing, on Anvil or here.
+does and never from a request. Listing, totalling and path checks go over one SFTP channel on
+the gateway's own connection for files (`anvil_files.sftp_session`; the one slurmly keeps for jobs
+is not used); the ZIP's bytes come over a second, exec channel on the same connection
+(`anvil_files.stream_files`): one remote process per archive reads every file, in the archive's
+order, and sends them framed, each with the size the listing gave. Nothing is written, on Anvil
+or here.
 
 What is listed is only real files and real folders: a symbolic link is never listed, followed
 or packed. A path is checked as text by `tree_browse.validate_path` (no `..`) and then on
 Anvil: the viewed folder's `realpath` must be the path asked for, so no part of it is a link.
 
-The ZIP is `tree_archive`'s writer, which is given this module's SFTP reader (`sftp_source`):
-its limit (`ARCHIVE_LIMIT_BYTES`), its places (`MAX_ARCHIVES`, shared with the published
-case), its stored entries, its read-ahead and its failed-stream behaviour are not repeated
-here. A folder is totalled by walking it, at most `SCAN_MAX_FILES` files (the 20 pages of 1000
+The ZIP is `tree_archive`'s writer, which is given this module's framed reader
+(`framed_source`) and told to read in order with no read-ahead (`sequential`, since the stream
+is one ordered process): its limit (`ARCHIVE_LIMIT_BYTES`), its places (`MAX_ARCHIVES`, shared
+with the published case), its stored entries and its failed-stream behaviour are not repeated
+here. A file that is gone, another size than listed, shrinks or grows while it is read, or a
+broken stream, is a `tree_archive.ArchiveError`, and the response ends short. A folder is totalled by walking it, at most `SCAN_MAX_FILES` files (the 20 pages of 1000
 keys a published folder gets) in at most `SCAN_TIMEOUT_SECONDS`; past either, the folder
 counts as too large, as in ADR 0036.
 """
@@ -22,7 +28,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import posixpath
-from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -34,7 +39,7 @@ from slurmly.exceptions import SlurmlyError
 from app.core.config import settings
 from app.models.repository import TreeFolder
 from app.models.run_files import RunFile, RunFolderSummary, RunListing
-from app.services import slurm, tree_archive, tree_browse
+from app.services import anvil_files, slurm, tree_archive, tree_browse
 from app.services.tree_browse import FolderObject
 
 logger = logging.getLogger(__name__)
@@ -43,9 +48,6 @@ logger = logging.getLogger(__name__)
 PAGE_SIZE = 1000
 SCAN_MAX_FILES = 20_000
 SCAN_TIMEOUT_SECONDS = 60
-#: Bytes per SFTP read of an entry, and how many reads of one entry are asked for at once.
-READ_CHUNK = 1024 * 1024
-READ_AHEAD = 2
 _UNREACHABLE = "Anvil could not be reached. Try again in a few minutes."
 _NOT_CONFIGURED = "This gateway is not set up to run anything on Anvil yet."
 
@@ -91,7 +93,7 @@ def _iso(mtime: int | None) -> str:
 async def _session():
     """An SFTP channel, with what can go wrong in reaching Anvil as `AnvilUnavailable`."""
     try:
-        async with slurm.sftp_session() as sftp:
+        async with anvil_files.sftp_session() as sftp:
             yield sftp
     except slurm.AnvilNotConfigured as exc:
         raise AnvilUnavailable("anvil_not_configured", _NOT_CONFIGURED) from exc
@@ -243,67 +245,35 @@ async def folder_summary(sim_id: str, folder: str) -> RunFolderSummary:
     )
 
 
-async def _read_exact(remote, offset: int, size: int) -> bytes:
-    """`size` bytes at `offset`, fewer only at the end of the file. asyncssh answers a read in
-    one piece normally; this keeps asking when a server answers with less."""
-    parts: list[bytes] = []
-    got = 0
-    while got < size:
-        data = await remote.read(size - got, offset + got)
-        if not data:
-            break
-        parts.append(data)
-        got += len(data)
-    return parts[0] if len(parts) == 1 else b"".join(parts)
-
-
-async def _read(sftp, obj: FolderObject) -> AsyncIterator[bytes]:
-    """The bytes of one file, exactly `obj.size` of them, `READ_CHUNK` at a time with
-    `READ_AHEAD` reads asked for at once: a read waits a round trip for its answer, so one
-    at a time moves a fraction of what the link carries (measured from the local stack to
-    Anvil: 1.0 MB/s one at a time, 2.5 MB/s with two in flight, the speed of `ssh cat`). A
-    file that has shrunk ends the read short (the writer sees the count is wrong), one that
-    has grown is an error here, so no byte beyond the length already promised is sent. A file
-    that is gone, or a lost connection, is an `ArchiveError`."""
-    pending: deque[asyncio.Task[bytes]] = deque()
+async def _read(files: anvil_files.FileStream, obj: FolderObject) -> AsyncIterator[bytes]:
+    """The bytes of one file from the framed stream, exactly `obj.size` of them. Whatever the
+    stream says is wrong with it (the file is gone, has another size, is not a regular file,
+    the connection broke) is an `ArchiveError` naming the file."""
     try:
-        async with sftp.open(obj.key, "rb") as remote:
-            asked = 0
-
-            def ask() -> None:
-                nonlocal asked
-                if asked < obj.size:
-                    size = min(READ_CHUNK, obj.size - asked)
-                    pending.append(asyncio.ensure_future(_read_exact(remote, asked, size)))
-                    asked += size
-
-            for _ in range(READ_AHEAD):
-                ask()
-            sent = 0
-            while pending:
-                data = await pending.popleft()
-                ask()
-                if not data:
-                    return
-                sent += len(data)
-                yield data
-            if await remote.read(1, sent):
-                raise tree_archive.ArchiveError(f"more than the {obj.size} bytes listed")
+        async for data in files.read_file(obj.key, obj.size):
+            yield data
     except tree_archive.ArchiveError:
         raise
     except Exception as exc:
         raise tree_archive.ArchiveError(f"{posixpath.basename(obj.key)}: {exc}") from exc
-    finally:
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
 
 
-@asynccontextmanager
-async def sftp_source() -> AsyncIterator[tree_archive.Reader]:
-    """The `Connect` of a run's ZIP: one SFTP channel for all of its entries."""
-    async with _session() as sftp:
-        yield lambda obj: _read(sftp, obj)
+def framed_source(entries: list[tuple[str, int]]):
+    """The `Connect` of a run's ZIP: one remote process that sends all of `entries` (real path,
+    listed size), in order. Reads must follow that order (`Archive(sequential=True)`). A
+    stream that cannot be opened is an `ArchiveError` too, raised where the first read is."""
+
+    @asynccontextmanager
+    async def connect() -> AsyncIterator[tree_archive.Reader]:
+        try:
+            async with anvil_files.stream_files(entries) as files:
+                yield lambda obj: _read(files, obj)
+        except tree_archive.ArchiveError:
+            raise
+        except Exception as exc:
+            raise tree_archive.ArchiveError(f"the file stream: {exc}") from exc
+
+    return connect
 
 
 async def open_archive(sim_id: str, folder: str, names: list[str]) -> tree_archive.Archive:
@@ -334,7 +304,8 @@ async def open_archive(sim_id: str, folder: str, names: list[str]) -> tree_archi
             stem = names[0].removesuffix("/")
         else:
             stem = folder.removesuffix("/").rpartition("/")[2] or "files"
-        return tree_archive.Archive(f"{sim_id}-{stem}.zip", safe, slot, sftp_source)
+        connect = framed_source([(obj.key, obj.size) for _, obj in safe])
+        return tree_archive.Archive(f"{sim_id}-{stem}.zip", safe, slot, connect, sequential=True)
     except asyncio.TimeoutError as exc:
         slot.release()
         logger.warning("Run files: listing for a ZIP of %s took over %s s", sim_id, SCAN_TIMEOUT_SECONDS)

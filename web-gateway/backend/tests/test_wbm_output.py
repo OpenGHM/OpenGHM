@@ -4,10 +4,10 @@ The routes `/jobs/{id}/output...` (a draft's run on scratch: its owner, staff an
 `/repository/datasets/{id}/output...` (a published snapshot: anyone), their error mapping, and the download
 that is written on Anvil by the toolkit, streamed back over SFTP and deleted.
 
-`slurm.run_remote`, `slurm.stream_remote_file` and `slurm.remove_remote_file` are replaced by an in-memory
+`slurm.run_remote`, `anvil_files.stream_file` and `anvil_files.remove_file` are replaced by an in-memory
 Anvil, so no SSH runs and the backend needs neither the toolkit nor h5py. What the toolkit prints is
 whatever the test says it printed; its real answers are exercised in packages/openghm/tests/test_output.py.
-The SFTP helpers themselves are tested against a fake asyncssh connection at the end.
+The SFTP helpers themselves (`anvil_files`) are tested in test_anvil_files.py.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from slurmly.exceptions import SlurmlyError
 from app.api.v1 import wbm_output as routes
 from app.core.config import settings
 from app.core.roles import Role
-from app.services import slurm, wbm_output
+from app.services import anvil_files, slurm, wbm_output
 
 from route_helpers import make_job, make_user, token_for
 
@@ -99,14 +99,14 @@ class Anvil:
     def toolkit_commands(self) -> list[list[str]]:
         return [shlex.split(c) for c in self.commands if not c.startswith("find ")]
 
-    # -- slurm.stream_remote_file / remove_remote_file
-    async def stream_remote_file(self, path, *, chunk_size=1024 * 1024):
+    # -- anvil_files.stream_file / remove_file
+    async def stream_file(self, path, *, chunk_size=1024 * 1024):
         self.streams.append(path)
         data = self.files[path]
         for i in range(0, len(data), 4096):
             yield data[i:i + 4096]
 
-    async def remove_remote_file(self, path):
+    async def remove_file(self, path):
         self.removed.append(path)
         self.files.pop(path, None)
 
@@ -115,8 +115,8 @@ class Anvil:
 def anvil(monkeypatch, db) -> Anvil:
     fake = Anvil()
     monkeypatch.setattr(slurm, "run_remote", fake.run_remote)
-    monkeypatch.setattr(slurm, "stream_remote_file", fake.stream_remote_file)
-    monkeypatch.setattr(slurm, "remove_remote_file", fake.remove_remote_file)
+    monkeypatch.setattr(anvil_files, "stream_file", fake.stream_file)
+    monkeypatch.setattr(anvil_files, "remove_file", fake.remove_file)
     monkeypatch.setattr(settings, "ANVIL_OPENGHM_HOME", HOME)
     monkeypatch.setattr(settings, "ANVIL_OUTPUT_BASE", OUTPUT_BASE)
     monkeypatch.setattr(settings, "ANVIL_SSH_USERNAME", "x-openghm")
@@ -451,7 +451,7 @@ def test_a_stream_that_breaks_or_is_short_still_deletes_the_file(anvil, monkeypa
         raise OSError("sftp connection lost")
         yield b""  # pragma: no cover
 
-    monkeypatch.setattr(slurm, "stream_remote_file", broken)
+    monkeypatch.setattr(anvil_files, "stream_file", broken)
     got, err = asyncio.run(run())
     assert got == [NC[:10]] and isinstance(err, OSError)
     assert anvil.removed == [f"{DOWNLOADS}/x.nc", f"{DOWNLOADS}/x.nc.part"]
@@ -460,7 +460,7 @@ def test_a_stream_that_breaks_or_is_short_still_deletes_the_file(anvil, monkeypa
     async def short(path, *, chunk_size):
         yield NC[:-1]
 
-    monkeypatch.setattr(slurm, "stream_remote_file", short)
+    monkeypatch.setattr(anvil_files, "stream_file", short)
     got, err = asyncio.run(run())
     assert isinstance(err, RuntimeError) and "not the" in str(err)
     assert anvil.removed[0] == f"{DOWNLOADS}/x.nc"
@@ -483,7 +483,7 @@ def test_a_removal_that_fails_is_logged_not_raised(anvil, monkeypatch, caplog):
     async def boom(path):
         raise OSError("sftp down")
 
-    monkeypatch.setattr(slurm, "remove_remote_file", boom)
+    monkeypatch.setattr(anvil_files, "remove_file", boom)
 
     async def scenario():
         d = wbm_output.Download(path=f"{DOWNLOADS}/z.nc", size=len(NC), filename="z.nc")
@@ -492,87 +492,3 @@ def test_a_removal_that_fails_is_logged_not_raised(anvil, monkeypatch, caplog):
 
     assert b"".join(asyncio.run(scenario())) == NC
     assert "could not remove" in caplog.text
-
-
-# ---- the SFTP helpers (private slurmly API), against a fake asyncssh connection -------------------
-
-
-class FakeFile:
-    def __init__(self, data: bytes) -> None:
-        self.data, self.pos, self.reads = data, 0, []
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def read(self, size):
-        self.reads.append(size)
-        chunk = self.data[self.pos:self.pos + size]
-        self.pos += len(chunk)
-        return chunk
-
-
-class FakeSftp:
-    def __init__(self, files: dict[str, bytes]) -> None:
-        self.files, self.removed, self.opened = files, [], []
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def open(self, path, mode):
-        self.opened.append((path, mode))
-        return FakeFile(self.files[path])
-
-    async def remove(self, path):
-        import asyncssh
-
-        if path not in self.files:
-            raise asyncssh.SFTPNoSuchFile("no such file")
-        self.removed.append(path)
-        del self.files[path]
-
-
-@pytest.fixture
-def sftp(monkeypatch):
-    fake = FakeSftp({"/a/b.nc": b"0123456789" * 10})
-    conn = SimpleNamespace(start_sftp_client=lambda: fake)
-
-    async def ensure_conn():
-        return conn
-
-    client = SimpleNamespace(_transport=SimpleNamespace(_ensure_conn=ensure_conn))
-
-    async def get_client():
-        return client
-
-    monkeypatch.setattr(slurm, "get_slurm_client", get_client)
-    return fake
-
-
-def test_stream_remote_file_reads_the_file_in_chunks_over_sftp(sftp):
-    async def collect():
-        return [c async for c in slurm.stream_remote_file("/a/b.nc", chunk_size=30)]
-
-    chunks = asyncio.run(collect())
-    assert [len(c) for c in chunks] == [30, 30, 30, 10] and b"".join(chunks) == b"0123456789" * 10
-    assert sftp.opened == [("/a/b.nc", "rb")]
-
-
-def test_stream_remote_file_raises_for_a_file_that_is_not_there(sftp):
-    async def collect():
-        return [c async for c in slurm.stream_remote_file("/a/missing.nc")]
-
-    with pytest.raises(KeyError):       # the fake's stand-in for asyncssh's SFTPNoSuchFile
-        asyncio.run(collect())
-
-
-def test_remove_remote_file_removes_and_ignores_a_file_already_gone(sftp):
-    asyncio.run(slurm.remove_remote_file("/a/b.nc"))
-    assert sftp.removed == ["/a/b.nc"]
-    asyncio.run(slurm.remove_remote_file("/a/b.nc"))               # a second removal is not an error
-    assert sftp.removed == ["/a/b.nc"]

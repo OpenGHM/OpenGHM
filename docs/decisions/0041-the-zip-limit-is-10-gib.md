@@ -24,16 +24,76 @@ What was measured (2026-11-05 to 2026-11-09, a synthetic run output of 40 files 
 - **Throughput to a person** was not measured. From the maintainer's machine to Anvil the link
   carries 1.1 MB/s (208 ms round trip), so a local download measures that link and not the
   gateway.
-- **The gateway's own cost**, measured 2026-11-09 with the real `run_files` and `tree_archive`
-  over one SSH connection (as the backend holds one) to an OpenSSH `sshd` on loopback, reading
-  the same 10 GiB and dropping the bytes at once (no client to slow it), on one Apple-silicon
-  core: 1, 2 and 3 ZIPs at once took 26 s, 47 s and 70 s, 10.00 GiB each with `Content-Length`
-  equal to the bytes sent, so 393 to 437 MB/s in all however many ran; a fourth request while
-  three ran was refused (`ArchiveBusy`, `429`). The Python process used 2.3 to 2.6 CPU-seconds
-  per GiB, which is one whole core, so the limit is the CPU of one process and not the
-  connection; its peak memory was 229, 281 and 325 MB (about 100 MB of it the interpreter and the
-  app); the event loop was never held up for more than 7 ms. Not covered: Anvil's latency and
-  sshd, the Next.js proxy, the ingress, and the pod's CPU limit and core speed.
+- **The gateway's own cost on a laptop**, measured 2026-11-09 with the real `run_files` and
+  `tree_archive` over one SSH connection (as the backend holds one) to an OpenSSH `sshd` on
+  loopback, reading the same 10 GiB and dropping the bytes at once, on one Apple-silicon core:
+  1, 2 and 3 ZIPs at once took 26 s, 47 s and 70 s, 393 to 437 MB/s in all, 2.3 to 2.6
+  CPU-seconds per GiB. **This is not what the cluster does** (next item): the same code costs
+  about seven times as much CPU per GiB in the pod.
+- **The gateway's own cost on dev**, measured 2026-11-10 on the dev backend pod (an AMD EPYC
+  7763 core) reading the same 10 GiB from Anvil scratch over the real SSH connection, the
+  client being a process in the dev frontend pod that called the backend service and dropped
+  the bytes (so neither the ingress nor the Next.js proxy is in these figures). Every ZIP came
+  out 10.00 GiB with `Content-Length` equal to the bytes sent, and the first byte came after
+  1 to 3 s.
+
+  | CPU limit | ZIPs at once | Time each | In all | CPU used |
+  |---|---|---|---|---|
+  | 500m (what dev and prod set) | 1 | 348 s | 31 MB/s | throttled in 3295 of 3509 periods |
+  | 500m | 3 | 1159 s | 28 MB/s | 579 CPU-s, 0.50 core; throttled in 9261 of 11 608 periods |
+  | 4000m (temporary) | 1 | 194 s | 56 MB/s | 172 CPU-s, 0.89 core: **17.2 CPU-s per GiB** |
+  | 4000m (temporary) | 4 asked | 619 s (three ran) | 52 MB/s | 562 CPU-s, 0.91 core; the fourth refused in 0.06 s with `429` |
+
+  The limit is the CPU of one process: with four cores allowed it still used 0.9 of one (the
+  event loop and the GIL), so **a core is worth about 55 MB/s of ZIP, and raising the limit above
+  1000m changes nothing**. The cost is 17 to 19 CPU-seconds per GiB, against 2.4 for the same
+  code on the laptop. **Where they go** was profiled on the dev pod (2026-11-10, a sampling
+  profiler on the event-loop thread, `daily/`, 2.5 GiB, one stream): 51% in the socket `send`
+  of the SFTP read requests, 18% in the socket `recv`, 25% in ChaCha20, and 1.5% in the ZIP
+  writer; copying and checksumming are not it (`zlib.crc32` 0.3 and a memory copy 0.9
+  CPU-seconds per GiB). The cost is per packet, and a packet is small: asyncssh's limits for
+  this server are `max_read_len=16384`, so it cuts every read into 16 KiB requests, 65 536 round
+  trips per GiB (it is the value asyncssh falls back on when the server states none; that
+  Anvil's `sftp-server` states none was not checked). Why a socket call costs several times
+  more in the pod than on the laptop (2.4 CPU-seconds per GiB there) was not measured.
+  Measured on the same 2.5 GiB, one stream, the pod at 1000m:
+
+  | SFTP read size | Cipher | Speed | CPU per GiB |
+  |---|---|---|---|
+  | 16 KiB (what is run now) | `chacha20-poly1305` (what is negotiated) | 48 MB/s | 19.9 s |
+  | 64 KiB | `chacha20-poly1305` | 116 MB/s | 8.5 s |
+  | 64 KiB | `aes128-gcm` | 159 MB/s | 6.1 s |
+  | 64 KiB | `aes256-gcm` | 172 MB/s | 5.5 s |
+  | 16 KiB | `aes128-gcm` | 78 MB/s | 12.0 s |
+  | 128 KiB | `aes128-gcm` | 150 MB/s | 6.5 s (no better than 64 KiB: the server answers 64 KiB per read at most, measured in ADR 0042) |
+
+  So the read size alone gives 2.4 times the speed (`sftp.open(..., block_size=65536)`), and the
+  cipher a further 1.4 times; the cipher cannot be chosen through slurmly's `connect` (it passes
+  no `encryption_algs`), only on a connection of the gateway's own. **Both were then applied**
+  ([ADR 0042](0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md): a connection of
+  the gateway's own, 64 KiB reads, AES-GCM) and measured again: a lone 10 GiB ZIP in 65 s, three
+  in 207 s each. **Every other figure in this ADR was measured before that, at 16 KiB and
+  ChaCha20**, on slurmly's shared connection, and is history; the current ones are in 0042.
+  Meanwhile a `GET` of a folder's listing, which
+  shares the one SSH connection, took a median of 0.5 to 0.6 s with one ZIP running, 0.8 s with
+  three and 1.1 s with three at 500m, at most 1.5 s; a request that does not touch Anvil
+  answered in a median of 18 to 97 ms and at most 291 ms. Memory was not recorded.
+
+  **Two backend pods** (the deployment scaled to 2 at a 1000m limit, on two nodes), six ZIPs
+  asked at once: all six completed in 584 to 617 s, 17 to 18 MB/s each, **104 MB/s in all**,
+  every length right, no request refused (the Service happened to send three to each pod; with
+  random balancing a pod can be given more than its three and answer `429` while the other is
+  idle, which one run does not rule out), each pod using 0.85 to 0.90 of a core and never
+  throttled; a listing took a median of 0.75 s, at most 1.2 s, and a request that does not
+  touch Anvil a median of 41 ms. Twice the pods gave 1.9 times the throughput of one pod at
+  1000m. Neither pod logged an error. No job was settling during the run, so what two pods'
+  background sweeps do to one job at the same moment was **not exercised**: from the code, every
+  sweep step writes with a compare-and-set on the state it read (`_move`, `_start_continuation`,
+  the claim in `_reconcile_continuation`, `write_publish`), the audit event is written by the
+  writer that won, a repeated registration is a duplicate key counted as done, and
+  `scancel --name` and the purge check are the same however often they run; the cost is that
+  each pod makes its own SSH reads for the same sweep.
+  Not covered: the ingress and the Next.js proxy.
 - **Publishing the same 10 GiB to S3** from an Anvil compute node (the toolkit's own `s3cmd put`
   flags): 9.4 s to hash, 87 s to upload one file at a time, 0.7 s to verify; 4 files at a time
   took 24.6 s. The upload from a login node: 256 MiB in 2.2 s, 1.4 s of CPU, no `ulimit`.
@@ -50,8 +110,8 @@ centres, ships a default maximum download of 10737418240 bytes (10 GiB) for a di
 at most 10 GiB (10 × 1024³ bytes) before compression.** One constant, `ARCHIVE_LIMIT_BYTES`,
 sets it for both, as the 500 MB did. Nothing else about ADR 0036 and 0040 changes: the writer,
 the confinement, who may download, the codes of every refusal, and at most three archives at
-once per process (`MAX_ARCHIVES`), which stays because the cluster's cost at three 10 GiB
-streams is not measured.
+once per process (`MAX_ARCHIVES`), which stays: the cost of three 10 GiB streams at once was
+measured on dev and is in Consequences.
 
 - **The exact length is sent at any size.** `archive_length` used to give up above about
   2 GiB, where ZIP64 changes the records, and the browser lost its progress. It now counts the
@@ -79,15 +139,29 @@ streams is not measured.
 
 ## Consequences
 
-- A request costs the cluster up to 10 GiB in and out, and three at once 30 GiB. The backend
-  spends about 2.4 CPU-seconds per GiB, so a 10 GiB ZIP is about 24 CPU-seconds, spread over
-  however long the person's connection takes: at 10 MB/s that is under 3% of a core, and the
-  backend pod's 500m CPU limit is reached only when downloads together run faster than roughly
-  100 to 200 MB/s (the measured 400 MB/s scaled by that limit and a slower core: an estimate,
-  not a measurement). Memory is well inside the pod's 1 GiB. **Still to measure on dev**: one
-  10 GiB download and three at once through the real ingress, the pod's CPU throttling, and the
-  time of a `GET /api/v1/jobs/{id}` meanwhile, since a run's reads share the one SSH connection
-  the backend holds for jobs (ADR 0040).
+- *(Measured before [ADR 0042](0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md);
+  a pod now serves about three times what this says: about 6 CPU-seconds per GiB, 155 to 166 MB/s
+  per core at 1000m.)* A request costs the cluster up to 10 GiB in and out, and three at once
+  30 GiB. On dev the
+  backend spent 17 to 19 CPU-seconds per GiB, so **a 10 GiB ZIP was about 180 CPU-seconds**, and
+  one pod with a 500m limit serves about 30 MB/s of ZIP in all, however many people ask: one
+  person on an ordinary home line (about 37 MB/s) already uses all of it, and a campus line
+  takes it for a few minutes (a lone 10 GiB ZIP took 348 s at 500m, 194 s at 1000m or more).
+  Several people at once each get a share (three took 1159 s each at 500m). This is slow, not
+  wrong: every ZIP completed with the right length, the fourth request was refused, and the
+  rest of the site stayed responsive (above). The two ways to more are a CPU limit of 1000m
+  (about 55 MB/s; the backend's manifest sets it from this ADR) and more backend pods, each
+  worth one core, three more places and one more SSH connection to Anvil: two pods measured
+  104 MB/s. A core is the unit, so past a few pods the stage-in-S3 option in the table above is
+  the answer. Replicas are not set in the manifest by this ADR; scaling is a decision of
+  `ops/`, and what Anvil's login nodes tolerate in SSH connections beyond two is not known.
+- Places are counted per pod, and the Service does not know which pod has a free one: with
+  more than one pod a request can be refused (`429`) while another pod is idle. So the two
+  Next.js proxies of a ZIP (`lib/archive-fetch.ts`) send it again after a `429 archive_busy`,
+  twice at most, after 0.5 s and 1.5 s; the last refusal reaches the browser as it is. It helps
+  when another pod has a place; with every pod full the person still sees the refusal.
+- The limit of three ZIPs at once per process stays. It is what keeps a handful of people from
+  sharing one core into downloads that each take twenty minutes.
 - The ingress must not buffer the response to disk. ingress-nginx's default is
   `proxy-buffering: off`, but this cluster's controller configuration was **not checked**; with
   buffering on, a response over `proxy_max_temp_file_size` (1 GiB by default) is cut short.

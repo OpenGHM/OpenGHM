@@ -1,7 +1,8 @@
 """Slurm job orchestration via the slurmly library.
 
 All Anvil interactions (sbatch / squeue / sacct / scancel / SFTP log tail)
-go through a single shared `SlurmSSHClient`. This module exposes the same
+go through a single shared `SlurmSSHClient`. (Reading files in bulk, a run's
+ZIP or a NetCDF subset, does not: `anvil_files` has its own connection.) This module exposes the same
 async surface that the API layer used previously — `submit_job`,
 `update_job_status`, `cancel_job`, `read_log` — plus the sweep
 (`sync_active_jobs`, `clear_orphans`, `detect_purged_files`) that brings every
@@ -18,7 +19,6 @@ import logging
 import posixpath
 import shlex
 from collections.abc import Iterable
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -423,62 +423,6 @@ async def run_remote(
     return await client._run(
         command, operation=operation, check=False, retry_safe=retry_safe, timeout=timeout
     )
-
-
-async def stream_remote_file(path: str, *, chunk_size: int = 1024 * 1024):
-    """The bytes of a file on Anvil, `chunk_size` at a time, over SFTP: an async
-    generator, so the file is never held whole. A file that is not there, or a
-    transport failure, raises when the generator is advanced (`SSHTransportError`
-    for a connection that cannot be had, asyncssh's own `SFTPError` for the
-    file).
-
-    slurmly has no public "read this file" API (its `read_text` decodes text and
-    returns it whole), so this reaches for the client's transport and the one
-    asyncssh connection it keeps open (`_transport._ensure_conn`), and opens an
-    SFTP channel on it. Both are private to a pinned commit of slurmly (rule 2),
-    like `run_remote`'s `_run`: this and `remove_remote_file` are the places to
-    change when the pin moves. The channel is outside the client's command
-    semaphore, which bounds commands, not the bytes of a long read. Closing the
-    generator early (a client that went away) closes the channel."""
-    client = await get_slurm_client()
-    conn = await client._transport._ensure_conn()
-    async with conn.start_sftp_client() as sftp:
-        async with sftp.open(path, "rb") as remote:
-            while True:
-                data = await remote.read(chunk_size)
-                if not data:
-                    return
-                yield data
-
-
-@asynccontextmanager
-async def sftp_session():
-    """One SFTP channel on slurmly's one asyncssh connection, for a caller that
-    reads many files or lists folders (a run's ZIP, `run_files`): an async context
-    manager that yields asyncssh's `SFTPClient`. Private-API like
-    `stream_remote_file` (same connection, same rule 2), and outside the client's
-    command semaphore for the same reason. Raises `SSHTransportError` or `OSError`
-    when no connection can be had."""
-    client = await get_slurm_client()
-    conn = await client._transport._ensure_conn()
-    async with conn.start_sftp_client() as sftp:
-        yield sftp
-
-
-async def remove_remote_file(path: str) -> None:
-    """Delete one file on Anvil over SFTP; a file that is already gone is not an
-    error. Private-API like `stream_remote_file` (same connection, same rule 2).
-    It removes whatever path it is given: the caller decides which paths are its
-    own to remove."""
-    import asyncssh
-
-    client = await get_slurm_client()
-    conn = await client._transport._ensure_conn()
-    async with conn.start_sftp_client() as sftp:
-        try:
-            await sftp.remove(path)
-        except asyncssh.SFTPNoSuchFile:
-            pass
 
 
 async def read_outcome(remote_job_dir: str, name: str = "outcome.json") -> dict | None:

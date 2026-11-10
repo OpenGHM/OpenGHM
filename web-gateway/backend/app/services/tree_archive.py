@@ -36,6 +36,10 @@ context manager that yields a reader, `read(obj)`, which gives the bytes of one
 output on Anvil scratch (ADR 0040, `run_files`) reads over SFTP by `obj.key`. The limit,
 the slot count, the stored entries, the read-ahead and the failed-stream behaviour are
 the one set, whatever the source.
+
+A source that is one ordered stream (`run_files`: a single remote process that sends every
+file in turn) cannot serve reads ahead or out of order, so `Archive(..., sequential=True)`
+turns the read-ahead off: each object is streamed in its turn and nothing else changes.
 """
 
 from __future__ import annotations
@@ -237,7 +241,9 @@ class _Ahead:
         self,
         read: Reader,
         entries: list[tuple[str, tree_browse.FolderObject]],
+        enabled: bool = True,
     ) -> None:
+        self._enabled = enabled
         self._read = read
         self._entries = entries
         self._tasks: dict[int, asyncio.Task[bytes]] = {}
@@ -248,6 +254,8 @@ class _Ahead:
 
     def fill(self, current: int) -> None:
         """Start reads from `current` on, as far as the limits allow."""
+        if not self._enabled:
+            return
         self.check()
         self._scan = max(self._scan, current)
         while len(self._tasks) < PREFETCH and self._scan < len(self._entries):
@@ -297,13 +305,14 @@ async def _write(
     entries: list[tuple[str, tree_browse.FolderObject]],
     slot: _Slot,
     connect: Connect | None = None,
+    sequential: bool = False,
 ) -> AsyncIterator[bytes]:
     sink = _Sink()
     archive = zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED, allowZip64=True)
     current = ""
     try:
         async with (connect or http_source)() as read:
-            ahead = _Ahead(read, entries)
+            ahead = _Ahead(read, entries, enabled=not sequential)
             try:
                 for index, (name, obj) in enumerate(entries):
                     current = obj.key
@@ -351,7 +360,8 @@ async def _write(
 class Archive:
     """A folder's ZIP, ready to stream. `release` frees its place among the
     `MAX_ARCHIVES`; the stream does it itself when it ends. `connect` is where
-    the bytes come from (published objects over HTTPS unless given)."""
+    the bytes come from (published objects over HTTPS unless given); `sequential`
+    says it must be read strictly in order, with no read-ahead."""
 
     def __init__(
         self,
@@ -359,15 +369,17 @@ class Archive:
         entries: list[tuple[str, tree_browse.FolderObject]],
         slot: _Slot,
         connect: Connect | None = None,
+        sequential: bool = False,
     ) -> None:
         self.filename = filename
         self.length = archive_length([(name, obj.size) for name, obj in entries])
         self._entries = entries
         self._slot = slot
         self._connect = connect
+        self._sequential = sequential
 
     def stream(self) -> AsyncIterator[bytes]:
-        return _write(self._entries, self._slot, self._connect)
+        return _write(self._entries, self._slot, self._connect, self._sequential)
 
     def release(self) -> None:
         self._slot.release()

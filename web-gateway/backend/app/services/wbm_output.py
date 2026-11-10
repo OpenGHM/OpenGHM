@@ -21,7 +21,7 @@ How the toolkit's answer maps to the response:
 
 **A download** (`prepare_download`, `stream_download`): the toolkit writes the `nc` subset to a file of
 its own per request under `output_download_dir()` on Anvil (`<uuid>.nc`); the backend streams it back
-over SFTP (`slurm.stream_remote_file`) and deletes it when the stream ends, whichever way it ends. A
+over SFTP (`anvil_files.stream_file`, on the gateway's own connection for files) and deletes it when the stream ends, whichever way it ends. A
 file that is never streamed (a client that left before the first byte, a gateway that restarted) is
 deleted by the sweep that runs, at most every ten minutes, before a download: anything there older than
 a day.
@@ -45,7 +45,7 @@ import anyio
 from slurmly.exceptions import SlurmlyError
 
 from app.core.config import settings
-from app.services import job_script, slurm
+from app.services import anvil_files, job_script, slurm
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +273,7 @@ async def _remove(path: str) -> None:
     with anyio.CancelScope(shield=True):
         for name in (path, path + ".part"):
             try:
-                await slurm.remove_remote_file(name)
+                await anvil_files.remove_file(name)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("could not remove %s: %s", name, exc)
 
@@ -318,7 +318,7 @@ async def stream_download(download: Download) -> AsyncIterator[bytes]:
     that many)."""
     sent = 0
     try:
-        async for chunk in slurm.stream_remote_file(download.path, chunk_size=DOWNLOAD_CHUNK_BYTES):
+        async for chunk in anvil_files.stream_file(download.path, chunk_size=DOWNLOAD_CHUNK_BYTES):
             sent += len(chunk)
             yield chunk
         if sent != download.size:

@@ -36,12 +36,15 @@ What each arrow is:
 
 - **MongoDB** is the only state the gateway owns (§4); the backend reaches it with
   motor, and nothing else in the cluster does.
-- **Anvil, over one SSH connection** opened lazily by the backend
+- **Anvil, over two SSH connections** opened lazily by the backend. One is slurmly's
   (`web-gateway/backend/app/services/slurm.py`, one `slurmly` client, at most
   `ANVIL_MAX_CONCURRENT_COMMANDS` commands at a time): `sbatch`, `squeue`, `sacct`,
-  `scancel`, the toolkit commands for output and the scratch cache, and **SFTP** for
-  log tails, output subsets and run-output ZIPs (§5). Jobs that run there upload to S3
-  with their own credentials; the backend never does.
+  `scancel`, and the toolkit commands for output and the scratch cache. The other is the
+  gateway's own, for files (`app/services/anvil_files.py`, [ADR 0042](../decisions/0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md)):
+  **SFTP** for listings and output subsets, and for a run-output ZIP's bytes one remote
+  `python3` per archive that streams the files as frames, writing only what the backend has
+  granted (§5); AES-GCM preferred, replaced when it drops. Jobs that run there upload to S3 with their own
+  credentials; the backend never does.
 - **Anvil S3 over public HTTPS** is read anonymously by the backend in small pieces
   (§5), and by the browser through the links the backend builds.
 - **CILogon** is reached by the frontend only: NextAuth does the OIDC handshake and
@@ -845,7 +848,8 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   at any size. The ZIP is not resumable: it is one stream whose directory needs every
   file's checksum, and the form that asks for it is a POST.
   At most three archives are written at once per process; another is `429
-  archive_busy`, not queued. A read that fails once the response has begun
+  archive_busy`, not queued (the Next.js proxy asks again twice, 0.5 s and 1.5 s
+  later, since another backend pod may have a place). A read that fails once the response has begun
   ends the connection without a clean finish (and is logged), so the browser
   shows a failed download.
 
@@ -890,7 +894,7 @@ A snapshot draft is created as a DRAFT (`POST /jobs/derive/{dataset_id}` or
 There is no worker and no broker.
 `web-gateway/backend/app/services/slurm.py` holds one lazily created
 `slurmly.SlurmSSHClient` behind an asyncio lock. It runs `sbatch`, `squeue`,
-`sacct`, `scancel` and the SFTP log tail over that one SSH connection, as
+`sacct`, `scancel` and the log tail over that one SSH connection, as
 `x-openghm` (`ANVIL_SSH_USERNAME`), with the key from `ANVIL_SSH_KEY_CONTENT`, or
 the file `ANVIL_SSH_KEY_PATH` names (the local stack mounts one,
 [local-development.md](local-development.md)); where the deployed key lives is

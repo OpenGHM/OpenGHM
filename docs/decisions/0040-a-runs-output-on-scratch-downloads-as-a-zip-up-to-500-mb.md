@@ -5,7 +5,7 @@
 | **Status** | accepted |
 | **Date** | 2026-10-25 |
 | **Affects** | [ADR 0023](0023-simulation-output-stays-on-scratch.md) (its last sentence: no download route exists); [`../architecture/gateway.md`](../architecture/gateway.md) (§5) |
-| **Amended by** | [0041](0041-the-zip-limit-is-10-gib.md) — the limit is 10 GiB, not 500 MB; everything else here stands. The reasoning below is kept as written. |
+| **Amended by** | [0041](0041-the-zip-limit-is-10-gib.md) — the limit is 10 GiB, not 500 MB. [0042](0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md) — the files are read on an SSH connection of the gateway's own, not the one slurmly holds for jobs. Everything else here stands. The reasoning below is kept as written. |
 
 ## Context
 

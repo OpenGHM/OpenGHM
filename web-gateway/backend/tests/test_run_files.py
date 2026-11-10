@@ -2,7 +2,7 @@
 mission 2026-10-25-scratch-run-download): `GET /jobs/{id}/files`, `.../files/folder` and
 `POST .../files/archive`, `app.services.run_files`, and the shared writer in `tree_archive`.
 
-No SSH: `slurm.sftp_session` is replaced by an in-memory SFTP server (`FakeSftp`) that has
+No SSH: `anvil_files.sftp_session` is replaced by an in-memory SFTP server (`FakeSftp`) that has
 folders, files, symbolic links, sizes that need no bytes behind them, and reads that can
 break. The ZIP writer's own behaviour for published objects is `test_tree_archive`'s.
 """
@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from app.api.v1 import run_files as routes
 from app.core.config import settings
 from app.core.roles import Role
-from app.services import run_files, slurm, tree_archive, tree_browse
+from app.services import anvil_files, run_files, slurm, tree_archive, tree_browse
 from route_helpers import make_job, make_user, token_for
 
 OUTPUT_BASE = "/anvil/scratch/x-openghm/simulations"
@@ -55,15 +55,14 @@ class FakeSftp:
         self.dirs: set[str] = {"/"}
         self.links: dict[str, str] = {}
         self.sizes: dict[str, int] = {}  # what a listing says, when it is not the data's length
-        self.opened: list[str] = []
-        self.reads: list[tuple[str, int, int]] = []  # (path, offset, size asked)
+        self.opened: list[str] = []  # paths the file stream was asked to read
+        self.streams: list[list[tuple[str, int]]] = []  # one entry list per remote process
+        self.stream_open = 0
         self.listed: list[str] = []
         self.break_after: dict[str, int] = {}  # path -> bytes before the connection is lost
         self.gone: set[str] = set()  # paths that vanish between the listing and the read
         self.grow: set[str] = set()  # paths that have more bytes than they were listed with
         self.sessions = 0
-        self.inflight = 0
-        self.max_inflight = 0
         self.unreachable: BaseException | None = None
 
     def put(self, path: str, data: bytes = b"") -> None:
@@ -120,44 +119,39 @@ class FakeSftp:
                                            attrs=SimpleNamespace(type=kind, size=size, mtime=STAMP)))
         return out
 
-    def open(self, path: str, mode: str = "rb"):
-        self.opened.append(path)
-        if path in self.gone or path not in self.files:
-            raise asyncssh.SFTPNoSuchFile("no such file")
-        return _FakeFile(self, path)
 
+class FakeStream:
+    """`anvil_files.FileStream` over the same dicts: it answers as the remote script does (a
+    file that is gone, another size than listed, or grown is an error), in the entries' order,
+    and a path in `break_after` loses the connection after that many bytes."""
 
-class _FakeFile:
-    def __init__(self, sftp: FakeSftp, path: str) -> None:
-        self.sftp, self.path, self.at = sftp, path, 0
+    def __init__(self, fake: FakeSftp, entries: list[tuple[str, int]]) -> None:
+        self.fake, self.entries, self.at = fake, entries, 0
 
-    async def __aenter__(self):
-        return self
+    def read_file(self, path: str, size: int):
+        if self.at >= len(self.entries) or self.entries[self.at] != (path, size):
+            raise anvil_files.RemoteReadError(f"{path}: not the next file of the stream")
+        self.at += 1
+        return self._read(path, size)
 
-    async def __aexit__(self, *exc):
-        return None
-
-    async def read(self, size: int, offset: int | None = None) -> bytes:
-        """Like asyncssh's: `size` bytes at `offset`, fewer only at the end of the file.
-        The server answers at most 4096 bytes at a time, as a limit it cannot be asked past."""
-        data = self.sftp.files[self.path]
-        if self.path in self.sftp.grow:
-            data = data + b"EXTRA"
-        at = self.at if offset is None else offset
-        limit = self.sftp.break_after.get(self.path)
-        if limit is not None and at >= limit:
-            raise asyncssh.SFTPConnectionLost("connection lost")
-        self.sftp.inflight += 1
-        self.sftp.max_inflight = max(self.sftp.max_inflight, self.sftp.inflight)
-        try:
+    async def _read(self, path: str, size: int):
+        fake = self.fake
+        fake.opened.append(path)
+        if path in fake.gone or path not in fake.files:
+            raise anvil_files.RemoteReadError(f"{path}: FileNotFoundError: no such file")
+        data = fake.files[path] + (b"EXTRA" if path in fake.grow else b"")
+        if len(fake.files[path]) != size:
+            raise anvil_files.RemoteReadError(f"{path} is {len(fake.files[path])} bytes, {size} expected")
+        if path in fake.grow:
+            raise anvil_files.RemoteReadError(f"{path} grew while it was read")
+        limit = fake.break_after.get(path)
+        for at in range(0, len(data), 4096):
+            piece = data[at : at + 4096]
+            if limit is not None and at + len(piece) > limit:
+                yield piece[: max(limit - at, 0)] if limit > at else b""
+                raise asyncssh.ConnectionLost("connection lost")
             await asyncio.sleep(0)
-        finally:
-            self.sftp.inflight -= 1
-        want = min(size, 4096, (limit - at) if limit is not None else size)
-        chunk = data[at : at + want]
-        self.at = at + len(chunk)
-        self.sftp.reads.append((self.path, at, size))
-        return chunk
+            yield piece
 
 
 @pytest.fixture
@@ -174,7 +168,19 @@ def sftp(monkeypatch) -> FakeSftp:
         fake.sessions += 1
         yield fake
 
-    monkeypatch.setattr(slurm, "sftp_session", session)
+    @asynccontextmanager
+    async def stream_files(entries):
+        if fake.unreachable is not None:
+            raise fake.unreachable
+        fake.streams.append(list(entries))
+        fake.stream_open += 1
+        try:
+            yield FakeStream(fake, list(entries))
+        finally:
+            fake.stream_open -= 1
+
+    monkeypatch.setattr(anvil_files, "sftp_session", session)
+    monkeypatch.setattr(anvil_files, "stream_files", stream_files)
     monkeypatch.setattr(settings, "ANVIL_OUTPUT_BASE", OUTPUT_BASE)
     monkeypatch.setattr(tree_archive, "_active", 0)
     return fake
@@ -431,7 +437,7 @@ def test_a_file_and_a_folder_come_down_as_one_stored_zip_that_keeps_the_tree(api
     for name, data in want.items():
         assert sha(zf.read(name)) == sha(data)
     assert {i.compress_type for i in zf.infolist()} == {zipfile.ZIP_STORED}
-    assert zf.testzip() is None and tree_archive._active == 0 and sftp.sessions == 2   # one to list, one to read
+    assert zf.testzip() is None and tree_archive._active == 0 and sftp.sessions == 1 and len(sftp.streams) == 1 and sftp.stream_open == 0  # one SFTP channel to list, one process to read
 
 
 def test_a_folder_viewed_deeper_keeps_names_relative_to_it_and_one_entry_names_the_file(api):
@@ -441,26 +447,6 @@ def test_a_folder_viewed_deeper_keeps_names_relative_to_it_and_one_entry_names_t
     r = post(api, "daily/", ["wbm_2001.nc"])
     assert opened(r.content).namelist() == ["wbm_2001.nc"]
     assert r.headers["content-disposition"] == f'attachment; filename="{SIM}-wbm_2001.nc.zip"'
-
-
-def test_a_big_file_is_read_in_chunks_with_two_reads_asked_for_at_once(api, sftp, monkeypatch):
-    monkeypatch.setattr(run_files, "READ_CHUNK", 1000)
-    big = bytes(range(256)) * 18                                   # 4608 bytes
-    sftp.put(f"{ROOT}/big/big.nc", big)
-    r = post(api, "big/", ["big.nc"])
-    assert opened(r.content).read("big.nc") == big
-    asked = [(offset, size) for _, offset, size in sftp.reads]
-    assert asked == [(0, 1000), (1000, 1000), (2000, 1000), (3000, 1000), (4000, 608), (4608, 1)]
-    assert sftp.max_inflight == run_files.READ_AHEAD == 2
-
-
-def test_a_server_that_answers_a_read_with_less_is_asked_for_the_rest(api, sftp, monkeypatch):
-    monkeypatch.setattr(run_files, "READ_CHUNK", 10_000)           # the fake answers 4096 at most
-    big = bytes(range(256)) * 36                                   # 9216 bytes
-    sftp.put(f"{ROOT}/big/big.nc", big)
-    r = post(api, "big/", ["big.nc"])
-    assert opened(r.content).read("big.nc") == big
-    assert [(o, n) for _, o, n in sftp.reads] == [(0, 9216), (4096, 5120), (8192, 1024), (9216, 1)]
 
 
 def test_a_browser_form_posts_the_same_thing(api):
@@ -589,7 +575,7 @@ def test_a_file_that_is_not_the_listed_size_ends_the_response_with_an_error(api,
         post(api, "", ["daily/"])
     sftp.sizes.clear()
     sftp.grow.add(f"{ROOT}/daily/wbm_2000.nc")
-    with raises_stream_error(tree_archive.ArchiveError, match="listed"):
+    with raises_stream_error(tree_archive.ArchiveError, match="grew"):
         post(api, "", ["daily/"])
     assert tree_archive._active == 0
 
@@ -631,9 +617,57 @@ def test_the_same_writer_serves_both_sources(sftp):
                                                           ((f, FILES[f]) for f in sorted(DAILY))])
 
 
+def test_the_zip_is_what_the_writer_makes_of_the_same_files_read_one_by_one(api, sftp):
+    """Byte for byte the archive `tree_archive` writes when each file is read on its own and
+    ahead (the source the SFTP reads were), and as long as `length` said before it began."""
+    async def run():
+        archive = await run_files.open_archive(SIM, "", ["daily/", "monthly/", "wbm_test.MT.csv"])
+        got = b"".join([piece async for piece in archive.stream()])
+        entries = archive._entries
+
+        async def one_by_one(obj):
+            yield FILES[obj.key[len(ROOT) + 1:]]
+
+        @asynccontextmanager
+        async def connect():
+            yield one_by_one
+
+        slot = tree_archive.acquire()
+        expected = b"".join([piece async for piece in tree_archive.Archive("x.zip", entries, slot, connect).stream()])
+        return archive, got, expected
+
+    archive, got, expected = asyncio.run(run())
+    assert got == expected and len(got) == archive.length and opened(got).testzip() is None
+    assert sftp.streams == [[(obj.key, obj.size) for _, obj in archive._entries]]   # one process, in the archive's order
+    assert [size for _, size in sftp.streams[0]] == [len(FILES[k[len(ROOT) + 1:]]) for k, _ in sftp.streams[0]]
+
+
+def test_the_archive_reads_in_order_with_no_read_ahead(sftp):
+    async def run():
+        archive = await run_files.open_archive(SIM, "", ["daily/"])
+        return archive
+
+    archive = asyncio.run(run())
+    assert archive._sequential is True
+    archive.release()
+
+
 def test_the_published_trees_download_still_reads_over_http():
     assert tree_archive.Archive("x.zip", [], tree_archive.acquire())._connect is None
+    assert tree_archive.Archive("x.zip", [], tree_archive.acquire())._sequential is False
     tree_archive._active = 0
+
+
+def test_a_stream_that_cannot_be_opened_ends_the_response_with_an_archive_error(api, sftp, monkeypatch):
+    @asynccontextmanager
+    async def refused(entries):
+        raise OSError("no route")
+        yield
+
+    monkeypatch.setattr(anvil_files, "stream_files", refused)
+    with raises_stream_error(tree_archive.ArchiveError, match="no route"):
+        post(api, "", ["daily/"])
+    assert tree_archive._active == 0
 
 
 def test_the_limit_is_the_published_trees_limit():

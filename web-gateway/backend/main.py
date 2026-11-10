@@ -20,6 +20,7 @@ from app.core import account_startup, login_throttle, pending_sso, sessions
 from app.core.config import settings
 from app.core.database import close_db, get_client, get_db
 from app.core.roles import Role
+from app.services import anvil_files
 from app.services.background_sync import run_background_sync
 from app.services.slurm import (
     close_slurm_client,
@@ -207,7 +208,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    await close_slurm_client()
+    # One close failing must not skip the others.
+    for close in (anvil_files.close, close_slurm_client):
+        try:
+            await close()
+        except Exception:  # noqa: BLE001
+            logger.exception("shutdown: %s failed", getattr(close, "__qualname__", close))
     await close_db()
 
 
