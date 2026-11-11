@@ -163,3 +163,31 @@ files was not measured.
   70 MB/s; its configuration cannot be read from here. A person on a home line (about 37 MB/s)
   does not reach it. A run's ZIP through the ingress was not run, since that needs a signed-in
   session.
+
+## Places per pod: six (2026-11-11)
+
+Three places per process (`MAX_ARCHIVES`, now the setting `ARCHIVE_MAX_CONCURRENT`) was too few
+for a workshop, and the limit that fixes the most is not CPU but the connection: **one SSH
+connection to Anvil accepts 10 channels at once** (measured on dev: the 11th exec channel was
+refused with `ChannelOpenError`, and an SFTP channel could not be opened while ten were held). A
+run's ZIP holds one for as long as it streams, and a listing, a total, a pre-flight or the `nc`
+download needs another for a moment, so the setting must stay at 8 or less. **Its default is 6**:
+four channels remain for the short ones, and one core's roughly 220 MB/s gives each of six about
+37 MB/s, an ordinary home line.
+
+Measured on dev with six ZIPs of 10 GiB at once on one pod at 1000m: all six complete, each
+10.00 GiB with `Content-Length` equal to the bytes, 163 to 171 s each (63 to 66 MB/s), **377 MB/s
+in all**, the backend at 0.91 core and **2.6 CPU-s per GiB** (less than the 4.2 at one to three
+streams, since fewer socket calls are made per byte as the buffers fill), no throttling. The
+backend process peaked at **201 MB** (the credits bound each stream), listings took a median of
+0.87 s and at most 1.7 s, and a request that does not touch Anvil a median of 31 ms and at most
+60 ms. The published ZIPs, which read S3 and share the same places, hold 64 MiB of read-ahead
+each, so six of them buffer at most 384 MiB, inside the pod's 1 GiB.
+
+The Next.js proxy then needs about 2.5 CPU-seconds per GiB (measured: 5 CPU-s for the 2.1 GB
+ZIP through the ingress, outside the pod), 0.9 of a core at 377 MB/s, and the frontend's limit
+was 500m, which would have capped the pair near 200 MB/s. Its limit is now 1000m (Node uses one
+core at most). That the proxy carries 377 MB/s was **not** measured: a run's ZIP through it needs
+a signed-in session, and the public ZIP that can be fetched without one is limited to about
+140 MB/s by the backend reading S3. The ingress, separately, held one download to about 70 MB/s
+(Consequences above), so a person sees at most that, whatever the pod can carry.

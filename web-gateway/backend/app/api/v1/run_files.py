@@ -4,7 +4,7 @@
 `GET /jobs/{job_id}/files/folder?path=` totals one at any depth and says whether a ZIP of it
 is allowed, and `POST /jobs/{job_id}/files/archive` streams the entries named in the viewed
 folder as a stored ZIP of at most 10 GiB, read over SFTP (`app.services.run_files`, which uses
-`tree_archive`'s writer: the same limit, the same three-at-once limit as the published tree).
+`tree_archive`'s writer: the same limit, the same at-once limit (`ARCHIVE_MAX_CONCURRENT`) as the published tree).
 
 Who: the run's owner and holders of `JOB_VIEW_ANY`, as for its logs and its output (ADR 0024,
 0033); anyone else gets the 404 a missing job gets. Which run: one that has stopped, with its

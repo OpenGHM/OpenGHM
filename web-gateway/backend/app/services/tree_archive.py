@@ -54,18 +54,19 @@ from urllib.parse import quote
 
 import httpx
 
+from app.core.config import settings
 from app.services import tree_browse
 from app.services.tree_browse import Kind
 
 logger = logging.getLogger(__name__)
 
-MAX_ARCHIVES = 3
+MAX_ARCHIVES = settings.ARCHIVE_MAX_CONCURRENT
 _CHUNK = 64 * 1024
 #: Objects requested ahead of the one being written, buffered or in flight.
 PREFETCH = 8
 _PREFETCH_OBJECT_BYTES = 16 * 1024 * 1024
-# Per archive. With MAX_ARCHIVES at once that is 192 MiB of buffered objects,
-# well inside the backend pod's 1 GiB limit (it idles near 128 MiB);
+# Per archive. With MAX_ARCHIVES (6) at once that is 384 MiB of buffered objects,
+# inside the backend pod's 1 GiB limit (it idles near 128 MiB);
 # output files are mostly under 1 MiB, so 64 MiB still fills the window.
 _PREFETCH_TOTAL_BYTES = 64 * 1024 * 1024
 #: Between two reads of one object, not for the whole of it.

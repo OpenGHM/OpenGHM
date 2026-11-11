@@ -160,8 +160,11 @@ measured on dev and is in Consequences.
   Next.js proxies of a ZIP (`lib/archive-fetch.ts`) send it again after a `429 archive_busy`,
   twice at most, after 0.5 s and 1.5 s; the last refusal reaches the browser as it is. It helps
   when another pod has a place; with every pod full the person still sees the refusal.
-- The limit of three ZIPs at once per process stays. It is what keeps a handful of people from
-  sharing one core into downloads that each take twenty minutes.
+- The limit of ZIPs at once per process stays, and is now six (the setting
+  `ARCHIVE_MAX_CONCURRENT`; it was three when this was written). It is what keeps a handful of
+  people from sharing one core into downloads that each take twenty minutes; the reasons for
+  six, and the connection's limit of ten channels, are in
+  [ADR 0042](0042-the-gateway-reads-anvil-files-on-its-own-ssh-connection.md).
 - The ingress must not buffer the response to disk, or a response over `proxy_max_temp_file_size`
   (1 GiB by default) is cut short. The controller's configuration was not read (no access to its
   namespace), but a 2.1 GB ZIP (`Content-Length` 2 119 172 058) came through the dev ingress whole

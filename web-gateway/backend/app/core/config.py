@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     ANVIL_QOS: str = "cpu"
     ANVIL_ACCOUNT: str = ""
     ANVIL_MAX_CONCURRENT_COMMANDS: int = 4
+    # ZIPs (published trees and a run's output) written at once per backend process; one more is
+    # refused with 429. A run's ZIP holds one exec channel of the one SSH connection to Anvil,
+    # which accepts 10 at once (measured on dev: the 11th is refused, ADR 0042), and a listing or
+    # a total needs a channel too: keep this at 8 or less. One core carries about 220 MB/s of
+    # ZIP, so 6 give each about 37 MB/s, an ordinary home line.
+    ARCHIVE_MAX_CONCURRENT: int = 6
     ANVIL_EXECUTION_PROFILE: str = "anvil_cpu_modules"
     # The interpreter on the login node that runs the file-streaming script (a run's ZIP); needs Python 3.6 or newer.
     ANVIL_REMOTE_PYTHON: str = "/usr/bin/python3"

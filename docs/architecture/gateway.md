@@ -847,7 +847,8 @@ preview. It reads two open routes per kind, under `datasets/{id}` and
   checked against `zipfile`'s own output in the tests), and is sent as `Content-Length`
   at any size. The ZIP is not resumable: it is one stream whose directory needs every
   file's checksum, and the form that asks for it is a POST.
-  At most three archives are written at once per process; another is `429
+  At most `ARCHIVE_MAX_CONCURRENT` (6; the SSH connection to Anvil accepts 10 channels, so
+  at most 8) archives are written at once per process; another is `429
   archive_busy`, not queued (the Next.js proxy asks again twice, 0.5 s and 1.5 s
   later, since another backend pod may have a place). A read that fails once the response has begun
   ends the connection without a clean finish (and is logged), so the browser
