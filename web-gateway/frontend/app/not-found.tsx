@@ -2,9 +2,12 @@ import Link from "next/link";
 import { Footer } from "@/components/landing/footer";
 import { PageBody, PageHero } from "@/components/layout/page-hero";
 import { Button } from "@/components/ui/button";
+import { siteFeatures } from "@/lib/features";
 
 /** Any address the site has no page for. */
 export default function NotFound() {
+  // The repository's button goes while the Data Repository is off (lib/features.ts).
+  const { repository } = siteFeatures();
   return (
     <div className="flex min-h-screen flex-col">
       <PageHero breadcrumb={[{ label: "Home", href: "/" }]} title="Page not found" />
@@ -17,9 +20,11 @@ export default function NotFound() {
             <Button asChild className="min-h-10">
               <Link href="/">Go to the home page</Link>
             </Button>
-            <Button asChild variant="outline" className="min-h-10">
-              <Link href="/repository">Browse the Data Repository</Link>
-            </Button>
+            {repository && (
+              <Button asChild variant="outline" className="min-h-10">
+                <Link href="/repository">Browse the Data Repository</Link>
+              </Button>
+            )}
           </div>
         </div>
       </PageBody>

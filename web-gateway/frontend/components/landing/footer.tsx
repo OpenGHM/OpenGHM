@@ -1,12 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { WhenWorkspace } from "@/components/site-features";
+import { WhenRepository, WhenWorkspace } from "@/components/site-features";
 import { ComingSoonChip } from "@/components/ui/coming-soon-chip";
 import { CurrentYear } from "./current-year";
 
 // Only pages that exist. Add a link when its page does.
 const PLATFORM_LINKS: FooterLink[] = [
-  { label: "Data Repository", href: "/repository" },
+  { label: "Data Repository", href: "/repository", repository: true },
   { label: "Workspace", href: "/workspace", workspace: true },
 ];
 const COMMUNITY_LINKS: FooterLink[] = [
@@ -14,11 +14,23 @@ const COMMUNITY_LINKS: FooterLink[] = [
   { label: "News", href: "/news" },
 ];
 
+/** A link to a part of the site that is off: marked and not a link. */
+function comingSoon(label: string) {
+  return (
+    <span aria-disabled="true" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+      {label}
+      <ComingSoonChip />
+    </span>
+  );
+}
+
 interface FooterLink {
   label: string;
   href: string;
   /** A way into the Workspace: marked and not a link while it is off. */
   workspace?: boolean;
+  /** A way into the Data Repository: marked and not a link while it is off. */
+  repository?: boolean;
 }
 
 export function Footer() {
@@ -88,19 +100,11 @@ function FooterColumn({
               {link.label}
             </Link>
           );
+          const When = link.workspace ? WhenWorkspace : WhenRepository;
           return (
             <li key={link.href}>
-              {link.workspace ? (
-                <WhenWorkspace
-                  off={
-                    <span aria-disabled="true" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                      {link.label}
-                      <ComingSoonChip />
-                    </span>
-                  }
-                >
-                  {anchor}
-                </WhenWorkspace>
+              {link.workspace || link.repository ? (
+                <When off={comingSoon(link.label)}>{anchor}</When>
               ) : (
                 anchor
               )}

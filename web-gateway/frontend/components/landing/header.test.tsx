@@ -279,7 +279,7 @@ describe("the header on the navy band", () => {
 describe("the header with the Workspace off", () => {
   const renderOff = () =>
     render(
-      <SiteFeaturesProvider features={{ workspace: false }}>
+      <SiteFeaturesProvider features={{ workspace: false, repository: true }}>
         <Header />
       </SiteFeaturesProvider>
     );
@@ -296,6 +296,32 @@ describe("the header with the Workspace off", () => {
     useSession.mockReturnValue({ data: null });
     renderOff();
     const item = openMenu().getByRole("menuitem", { name: /Workspace/ });
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain("Coming soon");
+  });
+});
+
+describe("the header with the Data Repository off", () => {
+  const renderOff = () =>
+    render(
+      <SiteFeaturesProvider features={{ workspace: true, repository: false }}>
+        <Header />
+      </SiteFeaturesProvider>
+    );
+
+  it("keeps the item, marked Coming soon and not a link, and leaves the Workspace linked", () => {
+    useSession.mockReturnValue({ data: null });
+    renderOff();
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    expect(nav.queryByRole("link", { name: /Data Repository/ })).toBeNull();
+    expect(nav.getByText("Data Repository").closest("[aria-disabled]")?.textContent).toContain("Coming soon");
+    expect(nav.getByRole("link", { name: "Workspace" }).getAttribute("href")).toBe("/workspace");
+  });
+
+  it("disables it in the phone menu", () => {
+    useSession.mockReturnValue({ data: null });
+    renderOff();
+    const item = openMenu().getByRole("menuitem", { name: /Data Repository/ });
     expect(item.getAttribute("aria-disabled")).toBe("true");
     expect(item.textContent).toContain("Coming soon");
   });

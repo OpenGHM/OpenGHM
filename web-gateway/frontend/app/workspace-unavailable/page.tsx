@@ -6,6 +6,7 @@ import { PageBody } from "@/components/layout/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/workspace/page-header";
+import { siteFeatures } from "@/lib/features";
 
 export const metadata: Metadata = { title: "Workspace | OpenGHM" };
 
@@ -15,6 +16,8 @@ export const metadata: Metadata = { title: "Workspace | OpenGHM" };
  * pages are not rendered at all.
  */
 export default function WorkspaceUnavailablePage() {
+  // The pointer to the repository goes while that is off too.
+  const { repository } = siteFeatures();
   return (
     <div className="flex min-h-screen flex-col">
       <PageHeader eyebrow="Workspace" title="Workspace" />
@@ -31,11 +34,15 @@ export default function WorkspaceUnavailablePage() {
               The Workspace is coming soon
             </h2>
             <p className="max-w-md text-sm text-muted-foreground text-pretty">
-              Running model snapshots with your own settings is not available on this site yet. The
-              published snapshots and their output are in the Data Repository.
+              Running model snapshots with your own settings is not available on this site yet.
+              {repository ? " The published snapshots and their output are in the Data Repository." : ""}
             </p>
             <Button asChild size="lg" className="mt-2">
-              <Link href="/repository">Browse the Data Repository</Link>
+              {repository ? (
+                <Link href="/repository">Browse the Data Repository</Link>
+              ) : (
+                <Link href="/community">Visit the Community</Link>
+              )}
             </Button>
           </Card>
         </section>

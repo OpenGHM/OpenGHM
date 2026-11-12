@@ -75,4 +75,24 @@ describe("proxy", () => {
       expect(res.headers.get("x-middleware-rewrite")).toBeNull();
     });
   });
+
+  describe("with the Data Repository off", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it.each(["/repository", "/repository/abc", "/repository/model-inputs/m1/files"])(
+      "shows %s as the one page that says so",
+      (path) => {
+        vi.stubEnv("REPOSITORY_ENABLED", "false");
+        const res = call(request({ path, auth: null }));
+        expect(res.headers.get("x-middleware-rewrite")).toBe("http://localhost:3100/repository-unavailable");
+      }
+    );
+
+    it("leaves the other pages, the Workspace included, alone", () => {
+      vi.stubEnv("REPOSITORY_ENABLED", "false");
+      for (const path of ["/repositories", "/workspace", "/community"]) {
+        expect(call(request({ path, auth: null })).headers.get("x-middleware-rewrite")).toBeNull();
+      }
+    });
+  });
 });

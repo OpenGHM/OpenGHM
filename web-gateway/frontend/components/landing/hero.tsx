@@ -1,7 +1,5 @@
-import { ArrowRight } from "lucide-react";
-import Link from "next/link";
 import { PageHero } from "@/components/layout/page-hero";
-import { Button } from "@/components/ui/button";
+import { ExploreRepositoryButton } from "@/components/landing/explore-repository-button";
 import { OpenWorkspaceButton } from "@/components/landing/open-workspace-button";
 
 export function Hero() {
@@ -22,16 +20,7 @@ export function Hero() {
       className="pb-[136px]"
       actions={
         <>
-          <Button
-            asChild
-            size="xl"
-            className="shadow-float"
-          >
-            <Link href="/repository">
-              Explore Data Repository
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
+          <ExploreRepositoryButton className="shadow-float" />
           <OpenWorkspaceButton />
         </>
       }

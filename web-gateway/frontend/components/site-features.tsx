@@ -3,7 +3,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { SiteFeatures } from "@/lib/features";
 
-const SiteFeaturesContext = createContext<SiteFeatures>({ workspace: true });
+const SiteFeaturesContext = createContext<SiteFeatures>({ workspace: true, repository: true });
 
 /** Hands the root layout's `siteFeatures()` to every client component below it. */
 export function SiteFeaturesProvider({ features, children }: { features: SiteFeatures; children: ReactNode }) {
@@ -21,4 +21,9 @@ export function useSiteFeatures(): SiteFeatures {
  */
 export function WhenWorkspace({ children, off }: { children: ReactNode; off: ReactNode }) {
   return useSiteFeatures().workspace ? children : off;
+}
+
+/** `children` while the Data Repository is on, else `off`; the same idea as `WhenWorkspace`. */
+export function WhenRepository({ children, off }: { children: ReactNode; off: ReactNode }) {
+  return useSiteFeatures().repository ? children : off;
 }

@@ -21,6 +21,11 @@ export default auth((req) => {
     return NextResponse.rewrite(new URL("/workspace-unavailable", req.nextUrl.origin));
   }
 
+  // The same for the Data Repository: every address under it shows one page.
+  if (!siteFeatures().repository && (pathname === "/repository" || pathname.startsWith("/repository/"))) {
+    return NextResponse.rewrite(new URL("/repository-unavailable", req.nextUrl.origin));
+  }
+
   const isProtected = PROTECTED_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );

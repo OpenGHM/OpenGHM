@@ -13,7 +13,7 @@ describe("OpenWorkspaceButton", () => {
 
   it("is a disabled button marked Coming soon while the Workspace is off", () => {
     render(
-      <SiteFeaturesProvider features={{ workspace: false }}>
+      <SiteFeaturesProvider features={{ workspace: false, repository: true }}>
         <OpenWorkspaceButton />
       </SiteFeaturesProvider>
     );

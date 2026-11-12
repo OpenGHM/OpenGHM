@@ -1,6 +1,4 @@
-import { ArrowRight } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { ExploreRepositoryButton } from "@/components/landing/explore-repository-button";
 import { OpenWorkspaceButton } from "@/components/landing/open-workspace-button";
 import { PanelDots, SectionTitle } from "./section-parts";
 
@@ -22,12 +20,7 @@ export function CtaSection() {
         </p>
       </div>
       <div className="relative flex flex-wrap gap-2.5">
-        <Button asChild size="xl">
-          <Link href="/repository">
-            Explore Data Repository
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </Button>
+        <ExploreRepositoryButton />
         <OpenWorkspaceButton />
       </div>
     </section>

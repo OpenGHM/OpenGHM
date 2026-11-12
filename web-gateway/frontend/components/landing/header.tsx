@@ -33,6 +33,7 @@ const NAV_ITEMS_BEFORE = [
 ];
 
 const WORKSPACE_HREF = "/workspace";
+const REPOSITORY_HREF = "/repository";
 
 const NAV_ITEMS_AFTER = [
   { label: "Community", href: "/community" },
@@ -81,9 +82,11 @@ const POPOVER_ITEM =
 export function Header({ variant = "standalone" }: { variant?: "overlay" | "standalone" }) {
   const { data: session } = useSession();
   const pathname = usePathname();
-  // Off on a deployment that only shows the repository: the item stays, marked
-  // and not a link (lib/features.ts).
-  const { workspace } = useSiteFeatures();
+  // An item for a part of the site that is off stays, marked and not a link
+  // (lib/features.ts).
+  const { workspace, repository } = useSiteFeatures();
+  const isOff = (href: string) =>
+    (href === WORKSPACE_HREF && !workspace) || (href === REPOSITORY_HREF && !repository);
 
   return (
     <header
@@ -110,7 +113,7 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
           className="mx-auto hidden items-center gap-0.5 rounded-full border border-white/10 bg-white/6 p-[5px] backdrop-blur-sm lg:flex"
         >
           {NAV_ITEMS_BEFORE.map((item) =>
-            item.href === WORKSPACE_HREF && !workspace ? (
+            isOff(item.href) ? (
               <span key={item.label} aria-disabled="true" className={`${NAV_LINK} ${NAV_LINK_OFF}`}>
                 {item.label}
                 <ComingSoonChip tone="dark" />
@@ -228,7 +231,7 @@ export function Header({ variant = "standalone" }: { variant?: "overlay" | "stan
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
             {NAV_ITEMS_BEFORE.map((item) =>
-              item.href === WORKSPACE_HREF && !workspace ? (
+              isOff(item.href) ? (
                 <DropdownMenuItem key={item.label} disabled className="min-h-10 text-[15px] font-medium">
                   {item.label}
                   <ComingSoonChip className="ml-auto" />

@@ -125,6 +125,17 @@ client component. While it is `"false"`:
   edit, submit and publish. Reading, cancelling and deleting the drafts that
   exist still work, so the admin console's job list keeps working.
 
+**`REPOSITORY_ENABLED`** does the same for the Data Repository, and only the
+frontend reads it: the repository's data is public on S3 and the backend has no
+draft to refuse. While it is `"false"` the header item, the footer link and
+Home's "Explore Data Repository" buttons are marked Coming soon and are not
+links, `proxy.ts` rewrites every `/repository` address to
+`/repository-unavailable`, and the datasets are left out of Home's feed and of
+`/news`. The `/api/repository/...` routes the pages call are not closed, and
+neither is the backend's `/api/v1/repository`: anyone who knows an address can
+still read what S3 already serves anonymously. The two switches are
+independent.
+
 Every page also carries the development notice
 (`web-gateway/frontend/components/layout/development-notice.tsx`), a strip above the header. It
 stays until the first release. The header's Resources item (Models, Toolkit) is a

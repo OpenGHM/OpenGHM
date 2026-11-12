@@ -38,11 +38,24 @@ describe("the footer", () => {
 describe("the footer with the Workspace off", () => {
   it("marks Workspace Coming soon and does not link to it", () => {
     render(
-      <SiteFeaturesProvider features={{ workspace: false }}>
+      <SiteFeaturesProvider features={{ workspace: false, repository: true }}>
         <Footer />
       </SiteFeaturesProvider>
     );
     expect(screen.queryByRole("link", { name: "Workspace" })).toBeNull();
     expect(screen.getByText("Workspace").textContent).toContain("Coming soon");
+  });
+});
+
+describe("the footer with the Data Repository off", () => {
+  it("marks Data Repository Coming soon, does not link to it, and still links the Workspace", () => {
+    render(
+      <SiteFeaturesProvider features={{ workspace: true, repository: false }}>
+        <Footer />
+      </SiteFeaturesProvider>
+    );
+    expect(screen.queryByRole("link", { name: "Data Repository" })).toBeNull();
+    expect(screen.getByText("Data Repository").textContent).toContain("Coming soon");
+    expect(screen.getByRole("link", { name: "Workspace" }).getAttribute("href")).toBe("/workspace");
   });
 });

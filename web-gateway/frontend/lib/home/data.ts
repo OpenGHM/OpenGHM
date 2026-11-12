@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { getApiClient } from "@/lib/api-client";
+import { siteFeatures } from "@/lib/features";
 import { DEFAULT_HOME_SETTINGS } from "@/lib/home/settings";
-import type { HomeUpdates, UpdatesArchive } from "@/lib/home/types";
+import type { FeedItem, HomeUpdates, UpdatesArchive } from "@/lib/home/types";
 import type { NewsPost } from "@/lib/community/types";
 
 /**
@@ -25,19 +26,28 @@ export function withDefaults(data: Partial<HomeUpdates> | null | undefined): Hom
   return { settings, items: data?.items ?? [] };
 }
 
+/**
+ * A dataset's card leads to its page in the Data Repository, so while that is
+ * off (lib/features.ts) the datasets are left out of the feed.
+ */
+function withoutOffDatasets(items: FeedItem[]): FeedItem[] {
+  return siteFeatures().repository ? items : items.filter((item) => item.kind !== "dataset");
+}
+
 /** The cards of the home page. Throws when the backend cannot be reached; the section hides itself. */
 export async function fetchHomeUpdates(): Promise<HomeUpdates> {
   // The home page waits for this: a short timeout, so a slow backend costs it seconds, not the default ten.
   const client = await getApiClient({ allowAnonymous: true, timeoutMs: 4000 });
   const response = await client.get<HomeUpdates>("/api/v1/home/updates");
-  return withDefaults(response.data);
+  const updates = withDefaults(response.data);
+  return { ...updates, items: withoutOffDatasets(updates.items) };
 }
 
 /** Everything `/news` lists, newest first. Throws when the backend cannot be reached; the page shows its error box. */
 export async function fetchAllUpdates(): Promise<UpdatesArchive> {
   const client = await getApiClient({ allowAnonymous: true });
   const response = await client.get<UpdatesArchive>("/api/v1/home/updates/all");
-  return { items: response.data?.items ?? [] };
+  return { items: withoutOffDatasets(response.data?.items ?? []) };
 }
 
 /** One published news post that has page text, or null when there is none by that slug. */
