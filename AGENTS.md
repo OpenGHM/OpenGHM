@@ -16,9 +16,9 @@ this file.
    been released for anyone to depend on, so a wrong artifact is corrected
    where it is — replaced, rewritten or deleted — rather than re-published
    beside itself. "In operation" starts when the first complete release is
-   deployed and used, and that date is written here when it happens. Until
-   it is, this rule describes the discipline the project is building
-   toward, and every other rule still applies.
+   deployed and used. **The project has been in operation since 2026-11-13**,
+   so this rule is in force: a published artifact is never edited in place,
+   and every other rule applies as before.
 2. **Pin by identity, not by name.** Tags, slugs and `latest` are conveniences
    for humans. Anything recorded in `metadata.json` or used to reproduce a run
    cites a digest, a hash or an immutable serial.
