@@ -94,7 +94,15 @@ export async function revokeAllUserSessions(userId: string): Promise<{ ok: boole
 
 export async function updateUser(
   userId: string,
-  updates: { role?: UserRole; is_active?: boolean; can_run_simulations?: boolean; email_verified?: true }
+  updates: {
+    role?: UserRole;
+    is_active?: boolean;
+    can_run_simulations?: boolean;
+    email_verified?: true;
+    name?: string;
+    organization?: string;
+    email?: string;
+  }
 ): Promise<{ ok: boolean; message?: string; user?: AdminUser }> {
   try {
     const client = await getApiClient();
@@ -110,6 +118,20 @@ export async function updateUser(
           ? (detail as { message: string }).message
           : "Update failed.";
     return { ok: false, message };
+  }
+}
+
+/** Permanently delete an account (admin only). The backend refuses your own
+ *  account, the last active admin, and a user with a simulation in progress,
+ *  and says why in `detail`. */
+export async function deleteUser(userId: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const client = await getApiClient();
+    await client.delete(`/api/v1/users/${encodeURIComponent(userId)}`);
+    return { ok: true };
+  } catch (err) {
+    const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    return { ok: false, message: typeof detail === "string" ? detail : "Delete failed." };
   }
 }
 

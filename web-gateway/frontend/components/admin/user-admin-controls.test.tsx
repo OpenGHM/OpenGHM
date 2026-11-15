@@ -1,16 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-const { updateUser, toast, refresh } = vi.hoisted(() => ({
+const { updateUser, deleteUser, toast, refresh, push } = vi.hoisted(() => ({
   updateUser: vi.fn(),
+  deleteUser: vi.fn(),
+  push: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   refresh: vi.fn(),
 }));
-vi.mock("@/lib/admin/actions", () => ({ updateUser }));
+vi.mock("@/lib/admin/actions", () => ({ updateUser, deleteUser }));
 vi.mock("sonner", () => ({ toast }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push }) }));
 
 import {
+  DeleteUserControl,
+  EditProfileControl,
   EmailVerifiedControl,
   RoleControl,
   RunPermissionControl,
@@ -270,5 +274,73 @@ describe("marking an email verified", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(updateUser).toHaveBeenCalledWith("u2", { email_verified: true });
     expect(toast.success).toHaveBeenCalledWith("Alice's email is now verified.");
+  });
+});
+
+describe("editing a profile", () => {
+  const user = {
+    id: "u1",
+    name: "Ada Lovelace",
+    email: "ada@example.org",
+    organization: "Analytical Engines",
+  };
+
+  it("sends only what changed and refreshes", async () => {
+    updateUser.mockResolvedValue({ ok: true });
+    render(<EditProfileControl user={user} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Ada Lovelace's profile" }));
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada King" } });
+    fireEvent.click(save);
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith("u1", { name: "Ada King" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("sends a changed email address", async () => {
+    updateUser.mockResolvedValue({ ok: true });
+    render(<EditProfileControl user={user} iconOnly />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Ada Lovelace's profile" }));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "Ada@New.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith("u1", { email: "Ada@New.org" }));
+  });
+
+  it("keeps the dialog open and shows the reason when the backend refuses", async () => {
+    updateUser.mockResolvedValue({ ok: false, message: "The name cannot be empty." });
+    render(<EditProfileControl user={user} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Ada Lovelace's profile" }));
+    fireEvent.change(screen.getByLabelText("Organization"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "The name cannot be empty.");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleting an account", () => {
+  const user = { id: "u1", name: "Ada Lovelace", email: "ada@example.org" };
+
+  it("asks first, deletes on confirm and goes back to the list", async () => {
+    deleteUser.mockResolvedValue({ ok: true });
+    render(<DeleteUserControl user={user} disabled={false} redirectTo="/admin/users" />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Ada Lovelace's account" }));
+    expect(deleteUser).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete account" }));
+    await waitFor(() => expect(deleteUser).toHaveBeenCalledWith("u1"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/admin/users"));
+  });
+
+  it("shows the backend's reason and stays open when it is refused", async () => {
+    deleteUser.mockResolvedValue({ ok: false, message: "Cannot delete the last active admin." });
+    render(<DeleteUserControl user={user} disabled={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete Ada Lovelace's account" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete account" }));
+    expect(await within(screen.getByRole("alertdialog")).findByText("Cannot delete the last active admin.")).toBeTruthy();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("is disabled for your own account", () => {
+    render(<DeleteUserControl user={user} disabled />);
+    expect((screen.getByRole("button", { name: "Delete Ada Lovelace's account" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

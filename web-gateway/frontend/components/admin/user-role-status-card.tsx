@@ -6,6 +6,8 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AdminUserDetail } from "@/lib/admin/types";
 import {
+  DeleteUserControl,
+  EditProfileControl,
   EmailVerifiedControl,
   RoleControl,
   RunPermissionControl,
@@ -128,9 +130,15 @@ export function UserRoleStatusCard({
               {runNever && " A guest can never run simulations."}
             </p>
           </div>
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+              <EditProfileControl user={user} />
+              <DeleteUserControl user={user} disabled={isSelf} redirectTo="/admin/users" />
+            </div>
+          )}
           {isSelf && (
             <p className="text-xs text-muted-foreground">
-              You can&apos;t change your own role, status, run permission or email verification.
+              You can&apos;t change your own role, status, run permission or email verification, or delete your own account.
             </p>
           )}
         </div>

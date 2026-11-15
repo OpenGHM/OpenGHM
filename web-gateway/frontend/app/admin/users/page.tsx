@@ -43,7 +43,7 @@ export default async function AdminUsersPage({
       title="Users"
       description={
         isAdmin
-          ? "User directory — change roles or deactivate accounts."
+          ? "User directory — edit, change roles, deactivate or delete accounts."
           : "Read-only view — role and status changes require admin."
       }
     >

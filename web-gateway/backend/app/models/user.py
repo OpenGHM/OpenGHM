@@ -228,6 +228,11 @@ class UserAdminUpdateRequest(BaseModel):
     is_active: bool | None = None
     can_run_simulations: bool | None = None
     email_verified: Literal[True] | None = None
+    # Profile fixes (a misspelt name, a changed institution, a new address).
+    # A new address is stored unverified: see admin_update_user.
+    email: LowercaseEmail | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    organization: str | None = Field(default=None, max_length=200)
 
 
 class AuditLogEntry(BaseModel):

@@ -10,6 +10,7 @@ from app.core.authz import require_permission
 from app.core.database import get_db
 from app.core.roles import Permission, Role
 from app.core.security import get_current_user
+from app.models.job import ACTIVE_STATUSES
 from app.models.user import (
     SessionEntry,
     SessionListResponse,
@@ -357,6 +358,37 @@ async def admin_update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     updates = body.model_dump(exclude_unset=True)
+    if "name" in updates:
+        name = (updates["name"] or "").strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The name cannot be empty.",
+            )
+        updates["name"] = name
+    if "organization" in updates:
+        # Empty clears it, the way the account page treats it.
+        updates["organization"] = (updates["organization"] or "").strip() or None
+    email_changed = False
+    if "email" in updates:
+        if updates["email"] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The email address cannot be empty.",
+            )
+        if updates["email"] == target["email"]:
+            del updates["email"]
+        else:
+            if await db.users.find_one({"email": updates["email"]}) is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Another account already uses this email address.",
+                )
+            email_changed = True
+            # Nobody has shown the owner reads the new address, so it starts
+            # unverified; "Mark verified" or a resent link settles it. The old
+            # address's link no longer applies.
+            updates["email_verified"] = False
     if not updates:
         return _to_user_response(target)
 
@@ -376,13 +408,17 @@ async def admin_update_user(
 
     updates["updated_at"] = datetime.now(timezone.utc)
     change: dict = {"$set": updates}
-    if updates.get("email_verified"):
+    if email_changed:
+        change["$unset"] = {"verify_token_hash": "", "verify_token_expires_at": ""}
+    elif updates.get("email_verified"):
         # The emailed link is spent the same way POST /auth/verify-email
         # spends it, so it cannot be used afterwards.
         change["$unset"] = {"verify_token_hash": "", "verify_token_expires_at": ""}
     await db.users.update_one({"_id": user_id}, change)
 
     audit_detail = {k: str(v) for k, v in updates.items() if k != "updated_at"}
+    if email_changed:
+        audit_detail["previous_email"] = target["email"]
 
     # Deactivation has to take effect now, not whenever the target's access
     # token happens to expire — revoke every session so their next request
@@ -402,3 +438,63 @@ async def admin_update_user(
 
     doc = await db.users.find_one({"_id": user_id})
     return _to_user_response(doc)
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_user(
+    user_id: str,
+    current_user: TokenPayload = Depends(require_permission(Permission.USER_MANAGE)),
+):
+    """Admin-only: permanently delete an account.
+
+    Removes the account and signs it out everywhere. What the person made is
+    left alone: their snapshot drafts and the audit trail keep the user id, and
+    published snapshots are artifacts of their own (rule 1). Refused for the
+    caller's own account, for the last active admin, and while the user has a
+    simulation in flight, since deleting under a running job would orphan it.
+    Deactivating (PATCH is_active) is the reversible alternative.
+    """
+    if user_id == current_user.sub:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+    db = get_db()
+    target = await db.users.find_one({"_id": user_id})
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if target["role"] == Role.ADMIN.value and target.get("is_active", True) is not False:
+        active_admin_count = await db.users.count_documents(
+            {"role": Role.ADMIN.value, "is_active": {"$ne": False}}
+        )
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete the last active admin.",
+            )
+
+    running = await db.jobs.count_documents(
+        {"user_id": user_id, "status": {"$in": ACTIVE_STATUSES}}
+    )
+    if running:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This user has {running} simulation(s) in progress. "
+            "Cancel them first, or deactivate the account instead.",
+        )
+
+    revoked = await sessions.revoke_all_sessions(user_id)
+    await db.users.delete_one({"_id": user_id})
+    await log_event(
+        "user_deleted",
+        actor_id=current_user.sub,
+        actor_email=current_user.email,
+        target_id=user_id,
+        detail={
+            "email": target["email"],
+            "name": target["name"],
+            "role": target["role"],
+            "sessions_revoked": str(revoked),
+        },
+    )

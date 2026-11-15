@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/admin/admin-states";
 import { Badge } from "@/components/ui/badge";
 import { TimeStamp } from "@/components/common/time-stamp";
 import type { AdminUser } from "@/lib/admin/types";
-import { RoleControl, StatusControl } from "@/components/admin/user-admin-controls";
+import { DeleteUserControl, EditProfileControl, RoleControl, StatusControl } from "@/components/admin/user-admin-controls";
 
 function AdminUserRow({
   user,
@@ -66,6 +66,14 @@ function AdminUserRow({
       <StackedCell label="Joined" className="text-xs text-muted-foreground">
         {user.created_at ? <TimeStamp value={user.created_at} format="date" /> : "—"}
       </StackedCell>
+      {canManage && (
+        <StackedCell label="Actions">
+          <div className="flex items-center gap-1.5">
+            <EditProfileControl user={user} iconOnly />
+            <DeleteUserControl user={user} disabled={isSelf} iconOnly />
+          </div>
+        </StackedCell>
+      )}
     </StackedRow>
   );
 }
@@ -98,6 +106,7 @@ export function UsersTable({
           <TableHead>Status</TableHead>
           <TableHead>Verified</TableHead>
           <TableHead>Joined</TableHead>
+          {canManage && <TableHead>Actions</TableHead>}
         </TableRow>
       </StackedHeader>
       <StackedBody>

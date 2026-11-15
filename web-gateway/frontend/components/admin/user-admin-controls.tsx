@@ -3,7 +3,20 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmActionDialog } from "@/components/admin/confirm-action-dialog";
-import { updateUser } from "@/lib/admin/actions";
+import { toast } from "sonner";
+import { Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { deleteUser, updateUser } from "@/lib/admin/actions";
 import type { UserRole } from "@/lib/auth.types";
 
 export const ROLE_OPTIONS: UserRole[] = ["admin", "staff", "user", "guest"];
@@ -268,6 +281,186 @@ export function EmailVerifiedControl({ user }: { user: { id: string; name: strin
           return result.ok ? { ok: true } : { ok: false, message: result.message };
         }}
         onDone={() => router.refresh()}
+      />
+    </>
+  );
+}
+
+/** "Edit", beside the profile: fixes the name, email and organization. The address is
+ *  email, which is stored unverified when it changes. */
+export function EditProfileControl({
+  user,
+  iconOnly = false,
+}: {
+  user: { id: string; name: string; email: string; organization: string | null };
+  iconOnly?: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(user.name);
+  const [organization, setOrganization] = useState(user.organization ?? "");
+  const [email, setEmail] = useState(user.email);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const changed =
+    name.trim() !== user.name ||
+    email.trim().toLowerCase() !== user.email || organization.trim() !== (user.organization ?? "");
+
+  const save = async () => {
+    if (pending || !name.trim()) return;
+    setPending(true);
+    setError(null);
+    const updates: { name?: string; organization?: string; email?: string } = {};
+    if (email.trim().toLowerCase() !== user.email) updates.email = email.trim();
+    if (name.trim() !== user.name) updates.name = name.trim();
+    if (organization.trim() !== (user.organization ?? "")) updates.organization = organization.trim();
+    const result = await updateUser(user.id, updates);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.message || "Couldn't save the changes. Try again.");
+      return;
+    }
+    setOpen(false);
+    toast.success("Profile updated.");
+    router.refresh();
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size={iconOnly ? "icon" : "sm"}
+        aria-label={`Edit ${user.name}'s profile`}
+        title="Edit profile"
+        onClick={() => {
+          setName(user.name);
+          setOrganization(user.organization ?? "");
+          setEmail(user.email);
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        {iconOnly ? <Pencil aria-hidden="true" /> : "Edit profile"}
+      </Button>
+      <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {user.name}&apos;s profile</DialogTitle>
+            <DialogDescription>
+              Changing the email address marks it unverified until you mark it verified or the owner
+              confirms it. Sign-in through CILogon is unaffected.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-user-name">Name</Label>
+              <Input
+                id="edit-user-name"
+                value={name}
+                maxLength={100}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-user-email">Email</Label>
+              <Input
+                id="edit-user-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-user-org">Organization</Label>
+              <Input
+                id="edit-user-org"
+                value={organization}
+                maxLength={200}
+                onChange={(e) => setOrganization(e.target.value)}
+              />
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending || !changed || !name.trim() || !email.trim()}>
+                {pending ? "Saving…" : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** "Delete account". Permanent, so it asks first and says what stays: the
+ *  backend removes the account and signs it out everywhere, and leaves the
+ *  person's snapshot drafts, published snapshots and the audit trail. After a
+ *  delete from the user's own page it goes back to the list. */
+export function DeleteUserControl({
+  user,
+  disabled,
+  className,
+  redirectTo,
+  iconOnly = false,
+}: {
+  iconOnly?: boolean;
+  user: { id: string; name: string; email: string };
+  disabled: boolean;
+  className?: string;
+  /** Where to go after the delete, when the page being shown is the user's own. */
+  redirectTo?: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size={iconOnly ? "icon" : "sm"}
+        disabled={disabled}
+        aria-label={`Delete ${user.name}'s account`}
+        onClick={() => setOpen(true)}
+        title="Delete account"
+        className={`border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive ${className ?? ""}`}
+      >
+        {iconOnly ? <Trash2 aria-hidden="true" /> : "Delete"}
+      </Button>
+      <ConfirmActionDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${user.name}'s account?`}
+        description="The account is removed for good and signed out of every device. Their snapshot drafts, published snapshots and the activity log stay. To keep the account but block sign-in, deactivate it instead."
+        detail={user.email}
+        confirmLabel="Delete account"
+        pendingLabel="Deleting…"
+        cancelLabel="Keep account"
+        destructive
+        successMessage={`${user.name}'s account was deleted.`}
+        failureMessage="Couldn't delete the account. Try again. If it keeps failing, the service may be unavailable."
+        onConfirm={async () => {
+          const result = await deleteUser(user.id);
+          return result.ok ? { ok: true } : { ok: false, message: result.message };
+        }}
+        onDone={() => (redirectTo ? router.push(redirectTo) : router.refresh())}
       />
     </>
   );
