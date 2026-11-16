@@ -517,7 +517,10 @@ climatology is listed, not cut) between `--start` and `--end` over `--bbox W,S,E
   (`legend.auto` true). Written to `--out`, or returned as `base64` in the answer. Answer: `width`, `height`,
   `bbox` (the box drawn), `time`, `units` (displayed), `legend` (`ramp`, `rampUsed`, `min`, `max`, `log`, `auto`, nine
   `colors` for a legend bar), `valueRange` (of the cells drawn, displayed), `bytes`, `path`, `base64`, `mediaType`.
-  `--ramp`, `--min`, `--max` and `--log/--no-log` each replace that part of the legend.
+  `--ramp`, `--min`, `--max` and `--log/--no-log` each replace that part of the legend. `--projection mercator` spaces the
+  rows in equal steps of web Mercator y (EPSG:3857) instead of latitude, with the box held within 85.0511 degrees, so the
+  image lies on a web map's tiles (Leaflet stretches an image overlay linearly in Mercator between its edges); the answer's
+  `projection` says which.
 - `--format webp` is the same map and answer as lossless WebP (`mediaType: image/webp`), with Pillow: about 40% smaller
   than the PNG (a 1024 px Global map: 100 KB against 169 KB) and as fast to write.
 - `--format json` needs `--point`: the nearest cell's values over the period, `{"point": {"lon", "lat", "row", "col",

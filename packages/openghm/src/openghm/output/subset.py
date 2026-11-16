@@ -58,6 +58,10 @@ from .source import Source
 FORMATS = ("nc", "png", "webp", "json")
 #: The formats that draw a map.
 IMAGE_FORMATS = ("png", "webp")
+#: How an image's rows are spaced (see ``Request.projection``).
+PROJECTIONS = ("lonlat", "mercator")
+#: Where spherical Mercator is cut off, as web maps do: the latitude at which the world is square.
+MERCATOR_MAX_LAT = 85.0511287798066
 RESOLUTIONS = ("daily", "monthly", "yearly")
 _DATE = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
 _YEAR_FILE = re.compile(r"wbm_(\d{4})\.nc$")
@@ -91,6 +95,10 @@ class Request:
     vmin: Optional[float] = None
     vmax: Optional[float] = None
     log: Optional[bool] = None
+    #: An image's rows: ``lonlat`` (equal steps of latitude, as the grid is) or ``mercator`` (equal steps of
+    #: spherical Mercator y, EPSG:3857, so the image lies on a web map's tiles: Leaflet stretches an image overlay
+    #: linearly in Mercator between its north and south edges).
+    projection: str = "lonlat"
 
 
 @dataclass
@@ -206,6 +214,10 @@ def _check(req: Request) -> None:
         raise OpenghmError(f"--min must be less than --max (got {req.vmin:g} and {req.vmax:g})")
     if req.log and req.vmin is not None and req.vmin <= 0:
         raise OpenghmError(f"a log scale needs --min above zero (got {req.vmin:g})")
+    if req.projection not in PROJECTIONS:
+        raise OpenghmError(f"--projection is one of {', '.join(PROJECTIONS)}")
+    if req.format not in IMAGE_FORMATS and req.projection != "lonlat":
+        raise OpenghmError("--projection is for --format png or webp")
     if req.format not in IMAGE_FORMATS and (req.width or req.height):
         raise OpenghmError("--width and --height are for --format png or webp")
     for name, v in (("--width", req.width), ("--height", req.height)):
@@ -441,32 +453,53 @@ def _do_json(source: Source, plan: _Plan, req: Request, row: int, col: int, disp
     }
 
 
+def _merc_y(lat: float) -> float:
+    """Spherical Mercator y of a latitude, in radians."""
+    return math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+
+
 def _image_size(req: Request, grid: "netcdf.Grid", box: Tuple[float, float, float, float]) -> Tuple[int, int]:
     west, south, east, north = box
-    w_deg, h_deg = east - west, north - south
+    w_deg = east - west
+    # The image's height in the units of its width: degrees of latitude, or Mercator y as degrees.
+    h_deg = (math.degrees(_merc_y(north) - _merc_y(south)) if req.projection == "mercator" else north - south)
     if req.width and req.height:
         return req.width, req.height
     if req.width:
         return req.width, max(1, round(req.width * h_deg / w_deg))
     if req.height:
         return max(1, round(req.height * w_deg / h_deg)), req.height
-    w, h = max(1, round(w_deg / abs(grid.dlon))), max(1, round(h_deg / abs(grid.dlat)))
+    w = max(1, round(w_deg / abs(grid.dlon)))
+    h = max(1, round(w * h_deg / w_deg)) if req.projection == "mercator" else max(1, round((north - south) / abs(grid.dlat)))
     shrink = max(w / limits.MAX_IMAGE_SIDE, h / limits.MAX_IMAGE_SIDE, math.sqrt(w * h / limits.MAX_IMAGE_PIXELS), 1.0)
     return max(1, int(w / shrink)), max(1, int(h / shrink))
 
 
 def _map_geometry(plan: _Plan, req: Request):
     """The pixel grid of a map: ``(box, width, height, row of each pixel row, col of each pixel col,
-    the cell window)``. A pixel takes the cell its centre falls in."""
+    the cell window)``. A pixel takes the cell its centre falls in. With ``mercator`` the box's north and
+    south are held within the Mercator limit (85.0511 degrees) and the pixel rows are equal steps of
+    Mercator y, so each row's latitude is where a web map draws it."""
     grid = plan.grid
     box = req.bbox or grid.bounds
     west, south, east, north = box
+    if req.projection == "mercator":
+        south, north = max(south, -MERCATOR_MAX_LAT), min(north, MERCATOR_MAX_LAT)
+        if not south < north:
+            raise OpenghmError(f"the box {box[0]:g},{box[1]:g},{box[2]:g},{box[3]:g} lies beyond the Mercator limit "
+                               f"of {MERCATOR_MAX_LAT:g} degrees")
+        box = (west, south, east, north)
     width, height = _image_size(req, grid, box)
     if width * height > limits.MAX_IMAGE_PIXELS or max(width, height) > limits.MAX_IMAGE_SIDE:
         raise OpenghmError(f"a map may be at most {limits.MAX_IMAGE_SIDE} pixels on a side and {limits.MAX_IMAGE_PIXELS:,} "
                            f"in all; this box at this size is {width} x {height}. Ask for a smaller --width/--height.")
     lons = west + (np.arange(width) + 0.5) * (east - west) / width
-    lats = north - (np.arange(height) + 0.5) * (north - south) / height
+    if req.projection == "mercator":
+        y_n, y_s = _merc_y(north), _merc_y(south)
+        ys = y_n - (np.arange(height) + 0.5) * (y_n - y_s) / height
+        lats = np.degrees(np.arctan(np.sinh(ys)))
+    else:
+        lats = north - (np.arange(height) + 0.5) * (north - south) / height
     cols_of = np.floor((lons - grid.lon0) / grid.dlon + 0.5).astype(np.int64)
     rows_of = np.floor((lats - grid.lat0) / grid.dlat + 0.5).astype(np.int64)
     ok_c = (cols_of >= 0) & (cols_of < grid.cols)
@@ -534,7 +567,7 @@ def _do_png(source: Source, plan: _Plan, req: Request, geometry, display: Option
     data = image.webp_bytes(rgba) if req.format == "webp" else image.png_bytes(rgba)
     answer = {
         "mediaType": "image/webp" if req.format == "webp" else "image/png",
-        "width": width, "height": height, "northUp": True,
+        "width": width, "height": height, "northUp": True, "projection": req.projection,
         "bbox": {"west": box[0], "south": box[1], "east": box[2], "north": box[3]},
         "time": plan.times[0].isoformat(),
         "units": (display.units if display and display.units else _stored_units(plan)),

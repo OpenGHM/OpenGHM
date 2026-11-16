@@ -907,8 +907,10 @@ def output_inventory_cmd(source, snapshot, run, config_path, as_json) -> None:
 @click.option("--min", "vmin", type=float, default=None, metavar="X", help="png/webp: the legend's low end, replacing the MT's")
 @click.option("--max", "vmax", type=float, default=None, metavar="X", help="png/webp: the legend's high end, replacing the MT's")
 @click.option("--log/--no-log", "log", default=None, help="png/webp: a log scale on or off, replacing the MT's (needs min above zero)")
+@click.option("--projection", type=click.Choice(["lonlat", "mercator"]), default="lonlat", show_default=True,
+              help="png/webp: rows in equal steps of latitude, or of web Mercator y (EPSG:3857) to lie on a web map's tiles")
 def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, resolution, fmt, start, end,
-                      bbox, point, width, height, out, display, ramp, vmin, vmax, log) -> None:
+                      bbox, point, width, height, out, display, ramp, vmin, vmax, log, projection) -> None:
     """cut one variable by period and area: a NetCDF file, a map, or a pixel's time series
 
     \b
@@ -919,14 +921,14 @@ def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, res
     A png or webp takes its colours from the MT's legend; --ramp, --min, --max and --log each replace one part of
     it (an unknown --ramp is refused, exit 2), and the answer's legend says what was drawn.
     With --json: format, variable, resolution, source, period, read, and the format's own fields
-    (nc: path, bytes, rows, cols, bbox; png, webp: mediaType, width, height, bbox, legend, valueRange, path or base64;
+    (nc: path, bytes, rows, cols, bbox; png, webp: mediaType, projection, width, height, bbox, legend, valueRange, path or base64;
     json: point, units, times, values).
     """
     from ..output import subset as sub
 
     req = sub.Request(variable=variable, resolution=resolution, format=fmt, start=start, end=end, bbox=bbox,
                       point=point, width=width, height=height, out=out, display=display,
-                      ramp=ramp, vmin=vmin, vmax=vmax, log=log)
+                      ramp=ramp, vmin=vmin, vmax=vmax, log=log, projection=projection)
     _run_output(config_path, source, snapshot, run, lambda s: sub.subset(s, req), as_json, sub.describe)
 
 

@@ -1159,3 +1159,63 @@ def test_webp_without_pillow_is_a_refusal_and_the_cli_exits_2(work, tmp_path, mo
     r = run_cli("subset", str(work), "--config", str(cfg), "--var", "runoff", "--resolution", "monthly", "--format", "webp",
                 "--start", "2000-03")
     assert r.exit_code == 2 and "needs Pillow" in r.stderr
+
+
+# ---- projection ----------------------------------------------------------------------------------
+
+
+class _GridOnly:
+    """What :func:`subset._map_geometry` reads of a plan."""
+
+    def __init__(self, grid) -> None:
+        self.grid = grid
+
+
+def _global_grid():
+    # A Global WBM grid: 1/12 degree, 60 S to 85 N, south to north.
+    return netcdf.Grid(rows=1740, cols=4320, lat0=-60 + 1 / 24, dlat=1 / 12, lon0=-180 + 1 / 24, dlon=1 / 12)
+
+
+def test_a_mercator_map_spaces_its_rows_as_a_web_map_draws_them():
+    grid = _global_grid()
+    req = subset.Request(variable="v", resolution="daily", format="png", width=1024, projection="mercator")
+    box, width, height, rows_of, cols_of, ok_r, ok_c, rows, cols = subset._map_geometry(_GridOnly(grid), req)
+    west, south, east, north = box
+    # The grid's own north (85) is inside the Mercator limit, so the box is the grid's.
+    assert (west, south, east, north) == pytest.approx((-180, -60, 180, 85))
+    y = lambda lat: np.log(np.tan(np.pi / 4 + np.radians(lat) / 2))  # noqa: E731
+    # Square pixels in Mercator: the height follows from the width.
+    assert height == round(1024 * np.degrees(y(north) - y(south)) / 360)
+    for k in (0, height // 4, height // 2, height - 1):
+        # The latitude a web map puts at this row's centre, and the cell it falls in.
+        lat = np.degrees(np.arctan(np.sinh(y(north) - (k + 0.5) * (y(north) - y(south)) / height)))
+        assert rows_of[k] == int(np.floor((lat - grid.lat0) / grid.dlat + 0.5))
+    # Equal latitude steps would put the middle row at 12.5 N; Mercator puts it much further north.
+    lonlat = subset._map_geometry(_GridOnly(grid), subset.Request(variable="v", resolution="daily", format="png", width=1024))
+    mid_lonlat = grid.lat0 + lonlat[3][lonlat[2] // 2] * grid.dlat
+    mid_merc = grid.lat0 + rows_of[height // 2] * grid.dlat
+    assert abs(mid_lonlat - 12.5) < 0.25 and mid_merc > 40
+
+
+def test_a_mercator_box_is_held_within_the_mercator_limit_and_refused_beyond_it():
+    grid = _global_grid()
+    req = subset.Request(variable="v", resolution="daily", format="png", width=64, projection="mercator",
+                         bbox=(-10.0, -90.0, 10.0, 90.0))
+    box = subset._map_geometry(_GridOnly(grid), req)[0]
+    assert box[1] == pytest.approx(-subset.MERCATOR_MAX_LAT) and box[3] == pytest.approx(subset.MERCATOR_MAX_LAT)
+    req.bbox = (-10.0, 86.0, 10.0, 89.0)
+    with pytest.raises(OpenghmError, match="Mercator limit"):
+        subset._map_geometry(_GridOnly(grid), req)
+
+
+def test_the_answer_names_its_projection_and_json_refuses_one(work):
+    a = cut(source_of(work), "runoff", "monthly", "png", start="2000-03", projection="mercator")
+    b = cut(source_of(work), "runoff", "monthly", "png", start="2000-03")
+    assert a["projection"] == "mercator" and b["projection"] == "lonlat"
+    assert a["bbox"] == b["bbox"] and a["width"] == b["width"] == COLS
+    with pytest.raises(OpenghmError, match="--projection is for"):
+        cut(source_of(work), "runoff", "monthly", "json", start="2000-03", point=(-100.5, 41.0), projection="mercator")
+    r = CliRunner().invoke(cli, ["output", "subset", str(work), "--var", "runoff", "--resolution", "monthly",
+                                 "--format", "png", "--start", "2000-03", "--projection", "mercator", "--json"])
+    assert r.exit_code == 0, r.output
+    assert json.loads(r.output)["projection"] == "mercator"
