@@ -35,7 +35,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from ..errors import OpenghmError
-from . import mt, netcdf
+from . import image, mt, netcdf
 from .source import Source
 
 RESOLUTIONS = ("daily", "monthly", "yearly")
@@ -230,6 +230,8 @@ def inventory(source: Source) -> dict:
         "mt": mt_name,
         "grid": None if grid is None else _grid_json(grid),
         "resolutions": resolutions,
+        #: the ramps a map can be drawn with (``--ramp``), in the order the toolkit lists them
+        "ramps": list(image.RAMPS),
         "variables": variables,
         "files": {"count": len(files), "bytes": sum(files.values())},
         "warnings": warnings,

@@ -511,6 +511,90 @@ def test_an_unknown_ramp_is_drawn_with_the_fallback_and_says_so(tmp_path):
     assert (a["legend"]["ramp"], a["legend"]["rampUsed"], a["legend"]["auto"]) == ("Plasma", "Rainbow", False)
 
 
+def _png_legend(work, variable="runoff", resolution="monthly", start="2000-03", **kw):
+    import base64
+
+    a = cut(source_of(work), variable, resolution, "png", start=start, **kw)
+    return a["legend"], decode_png(base64.b64decode(a["base64"]))[2]
+
+
+def test_a_style_override_replaces_only_its_own_part_of_the_mt_legend(work):
+    base, base_px = _png_legend(work)
+    assert (base["ramp"], base["min"], base["max"], base["log"]) == ("DarkBlue", 0.0, 100.0, False)
+    lg, px = _png_legend(work, ramp="darkred")                   # names match without regard to case
+    assert (lg["ramp"], lg["rampUsed"], lg["min"], lg["max"], lg["log"], lg["auto"]) == ("darkred", "DarkRed", 0.0, 100.0, False, False)
+    assert lg["colors"] == image.legend_colors("DarkRed") and tuple(px[0, 0][:3]) == tuple(image.lut("DarkRed")[255])
+    lg, px = _png_legend(work, vmin=50.0)
+    assert (lg["ramp"], lg["min"], lg["max"], lg["auto"]) == ("DarkBlue", 50.0, 100.0, False) and not (px == base_px).all()
+    lg, _ = _png_legend(work, vmax=200.0)
+    assert (lg["min"], lg["max"], lg["rampUsed"]) == (0.0, 200.0, "DarkBlue")
+    lg, px = _png_legend(work, vmin=1.0, log=True)               # MT linear -> log; the MT's max stays
+    assert (lg["log"], lg["min"], lg["max"]) == (True, 1.0, 100.0)
+    lg, _ = _png_legend(work, log=False)
+    assert lg["log"] is False
+
+
+def test_no_style_override_draws_exactly_as_before(work):
+    import base64
+
+    a = cut(source_of(work), "runoff", "monthly", "png", start="2000-03")
+    b = cut(source_of(work), "runoff", "monthly", "png", start="2000-03", ramp=None, vmin=None, vmax=None, log=None)
+    assert a["base64"] == b["base64"] and a["legend"] == b["legend"]
+    c = cut(source_of(work), "runoff", "monthly", "png", start="2000-03", ramp="DarkBlue", vmin=0.0, vmax=100.0, log=False)
+    assert c["base64"] == a["base64"]
+
+
+def test_all_style_overrides_together(work):
+    lg, px = _png_legend(work, ramp="RainbowRB", vmin=5.0, vmax=50.0, log=True)
+    assert (lg["ramp"], lg["rampUsed"], lg["min"], lg["max"], lg["log"], lg["auto"]) == ("RainbowRB", "RainbowRB", 5.0, 50.0, True, False)
+    assert lg["colors"] == image.legend_colors("RainbowRB")
+    assert px.shape[:2] == (ROWS, COLS)
+
+
+def test_style_overrides_on_a_variable_the_mt_does_not_describe(work):
+    lg, _ = _png_legend(work, "extra", start="2000-01", ramp="DarkGreen")
+    assert (lg["rampUsed"], lg["auto"]) == ("DarkGreen", True)        # the range is still measured
+    lg, _ = _png_legend(work, "extra", start="2000-01", vmin=-5.0, vmax=500.0)
+    assert (lg["min"], lg["max"], lg["auto"], lg["rampUsed"]) == (-5.0, 500.0, False, "Rainbow")
+
+
+def test_an_unknown_ramp_given_by_the_caller_is_refused_not_drawn_as_rainbow(work):
+    with pytest.raises(OpenghmError, match="'Plasma' is not a ramp this toolkit draws; choose one of DarkBlue"):
+        cut(source_of(work), "runoff", "monthly", "png", start="2000-03", ramp="Plasma")
+
+
+def test_a_style_that_cannot_be_drawn_is_refused(work):
+    for kw, msg in ((dict(vmin=10.0, vmax=10.0), "--min must be less than --max"),
+                    (dict(vmin=20.0, vmax=10.0), "--min must be less than --max"),
+                    (dict(vmin=500.0), "is empty"),                      # the MT's max is 100
+                    (dict(vmax=0.0), "is empty"),                        # the MT's min is 0
+                    (dict(log=True, vmin=0.0), "log scale needs --min above zero"),
+                    (dict(log=True, vmin=-1.0, vmax=5.0), "log scale needs --min above zero"),
+                    (dict(log=True), "log scale needs a minimum above zero"),   # the MT's min is 0
+                    (dict(vmin=float("nan")), "finite")):
+        with pytest.raises(OpenghmError, match=msg):
+            cut(source_of(work), "runoff", "monthly", "png", start="2000-03", **kw)
+    with pytest.raises(OpenghmError, match="are for --format png"):
+        cut(source_of(work), "runoff", "monthly", "json", point=cell(1, 1), start="2000-03", ramp="DarkBlue")
+
+
+def test_cli_map_style_options_and_an_unknown_ramp(work, tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text("")
+    base = ["subset", str(work), "--var", "runoff", "--resolution", "monthly", "--format", "png", "--start", "2000-03",
+            "--config", str(cfg), "--json"]
+    ok = run_cli(*base, "--ramp", "DarkRed", "--min", "10", "--max", "90", "--log")
+    assert ok.exit_code == 0, ok.stderr
+    lg = json.loads(ok.stdout)["legend"]
+    assert (lg["rampUsed"], lg["min"], lg["max"], lg["log"], lg["auto"]) == ("DarkRed", 10.0, 90.0, True, False)
+    off = run_cli(*base, "--no-log")
+    assert off.exit_code == 0 and json.loads(off.stdout)["legend"]["log"] is False
+    bad = run_cli(*base, "--ramp", "Plasma")
+    assert bad.exit_code == 2 and bad.stderr.startswith("openghm: 'Plasma' is not a ramp")
+    flip = run_cli(*base, "--min", "5", "--max", "5")
+    assert flip.exit_code == 2 and "--min must be less than --max" in flip.stderr
+
+
 def test_a_map_is_one_time_step(work):
     with pytest.raises(OpenghmError, match="one time step; this period holds 31"):
         cut(source_of(work), "runoff", "daily", "png", start="2000-01")
@@ -795,7 +879,8 @@ def test_cli_inventory_json_and_text(work, tmp_path):
     assert r.exit_code == 0, r.stderr
     data = json.loads(r.stdout)
     assert [v["name"] for v in data["variables"]] == ["runoff", "discharge", "extra"]
-    assert sorted(data) == ["files", "grid", "mt", "resolutions", "source", "variables", "warnings"]
+    assert sorted(data) == ["files", "grid", "mt", "ramps", "resolutions", "source", "variables", "warnings"]
+    assert data["ramps"] == list(image.RAMPS)
     t = run_cli("inventory", str(work), "--config", str(cfg))
     assert t.exit_code == 0 and "3 variables" in t.stdout and "daily: 2000-2002 (2 years)" in t.stdout
 

@@ -877,7 +877,7 @@ def output_inventory_cmd(source, snapshot, run, config_path, as_json) -> None:
 
     Built from the files that exist, not from the run's MT csv (which lists climatology records
     that were never written); the MT adds each variable's display units, scale, legend and rounding.
-    Opens only a few files' headers. With --json: source, mt, grid, resolutions, variables, files, warnings.
+    Opens only a few files' headers. With --json: source, mt, grid, resolutions, ramps, variables, files, warnings.
     """
     from ..output import inventory as inv
 
@@ -902,8 +902,13 @@ def output_inventory_cmd(source, snapshot, run, config_path, as_json) -> None:
 @click.option("--out", "out", default=None, metavar="PATH",
               help="nc: where to write (required); png: write here instead of returning base64")
 @click.option("--display", is_flag=True, help="json: values as the MT shows them (stored * scale + offset)")
+@click.option("--ramp", default=None, metavar="NAME",
+              help="png: colour ramp, replacing the MT's (a name `output inventory --json` lists under ramps)")
+@click.option("--min", "vmin", type=float, default=None, metavar="X", help="png: the legend's low end, replacing the MT's")
+@click.option("--max", "vmax", type=float, default=None, metavar="X", help="png: the legend's high end, replacing the MT's")
+@click.option("--log/--no-log", "log", default=None, help="png: a log scale on or off, replacing the MT's (needs min above zero)")
 def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, resolution, fmt, start, end,
-                      bbox, point, width, height, out, display) -> None:
+                      bbox, point, width, height, out, display, ramp, vmin, vmax, log) -> None:
     """cut one variable by period and area: a NetCDF file, a map, or a pixel's time series
 
     \b
@@ -911,6 +916,8 @@ def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, res
     day, month or year. Every year in the period must have a file. The cells a call may read
     (whole chunks, however small the area) and an nc file's size are limited; a call over a
     limit is refused with a message before it reads anything.
+    A png takes its colours from the MT's legend; --ramp, --min, --max and --log each replace one part of
+    it (an unknown --ramp is refused, exit 2), and the answer's legend says what was drawn.
     With --json: format, variable, resolution, source, period, read, and the format's own fields
     (nc: path, bytes, rows, cols, bbox; png: width, height, bbox, legend, valueRange, path or base64;
     json: point, units, times, values).
@@ -918,7 +925,8 @@ def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, res
     from ..output import subset as sub
 
     req = sub.Request(variable=variable, resolution=resolution, format=fmt, start=start, end=end, bbox=bbox,
-                      point=point, width=width, height=height, out=out, display=display)
+                      point=point, width=width, height=height, out=out, display=display,
+                      ramp=ramp, vmin=vmin, vmax=vmax, log=log)
     _run_output(config_path, source, snapshot, run, lambda s: sub.subset(s, req), as_json, sub.describe)
 
 

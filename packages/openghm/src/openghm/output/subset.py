@@ -10,6 +10,13 @@ dates and over a box or a point, and answers in one of three forms:
           value of the cell its centre falls in, coloured by the variable's legend (the MT's range, our
           colours: :mod:`openghm.output.image`); fill and cells outside the grid are transparent. Written
           to ``out``, or returned base64 in the answer.
+          The caller may restyle it: ``ramp``, ``vmin``, ``vmax`` and ``log`` each replace that one part of the
+          legend and what is not given stays the MT's (or the automatic range's, for a variable the MT does not
+          describe). The answer's ``legend`` is what was drawn, so a client never has to repeat our defaults:
+          ``ramp`` is the name asked for (the MT's or the caller's), ``rampUsed`` the ramp of :data:`image.RAMPS`
+          drawn, and ``auto`` is true only when a bound was measured from the data, that is, neither the MT nor
+          the caller gave it. A ramp *name the caller gives* must exist: the Rainbow fallback is for names in an
+          MT we have not met, not for a choice a person made.
 ``json``  the values of the nearest cell to ``point`` over the period, as a time series.
 
 **Dates.** ``YYYY``, ``YYYY-MM`` or ``YYYY-MM-DD``. A start rounds down to the first day it names and an
@@ -74,6 +81,12 @@ class Request:
     out: Optional[str] = None
     #: ``json`` only: values as the MT shows them.
     display: bool = False
+    #: ``png`` only: the caller's style, each part overriding the same part of the MT's legend (or of the
+    #: automatic one) and nothing else. ``None`` is "not given", which for ``log`` is not the same as False.
+    ramp: Optional[str] = None
+    vmin: Optional[float] = None
+    vmax: Optional[float] = None
+    log: Optional[bool] = None
 
 
 @dataclass
@@ -178,6 +191,17 @@ def _check(req: Request) -> None:
     if req.format == "nc":
         if not req.out:
             raise OpenghmError("--format nc needs --out PATH")
+    if req.format != "png" and (req.ramp is not None or req.vmin is not None or req.vmax is not None or req.log is not None):
+        raise OpenghmError("--ramp, --min, --max and --log are for --format png")
+    if req.ramp is not None and not image.resolve_ramp(req.ramp)[1]:
+        raise OpenghmError(f"{req.ramp!r} is not a ramp this toolkit draws; choose one of {', '.join(image.RAMPS)}")
+    for name, v in (("--min", req.vmin), ("--max", req.vmax)):
+        if v is not None and not math.isfinite(v):
+            raise OpenghmError(f"{name} must be a finite number")
+    if req.vmin is not None and req.vmax is not None and not req.vmin < req.vmax:
+        raise OpenghmError(f"--min must be less than --max (got {req.vmin:g} and {req.vmax:g})")
+    if req.log and req.vmin is not None and req.vmin <= 0:
+        raise OpenghmError(f"a log scale needs --min above zero (got {req.vmin:g})")
     if req.format != "png" and (req.width or req.height):
         raise OpenghmError("--width and --height are for --format png")
     for name, v in (("--width", req.width), ("--height", req.height)):
@@ -448,6 +472,40 @@ def _map_geometry(plan: _Plan, req: Request):
     return box, width, height, rows_of, cols_of, ok_r, ok_c, rows, cols
 
 
+def _legend_drawn(legend: Optional[mt.Legend], req: Request, shown, valid):
+    """``(min, max, log, ramp as named, ramp drawn, auto)``: the MT's legend (the automatic one when the MT
+    has none) with the caller's ramp, bounds and log replacing their own parts.
+
+    The automatic range is the displayed values' own, measured only for a bound still missing. An MT
+    legend that is log over a range starting at or below zero has always been drawn linear (a log of it is
+    undefined); a caller who *asks* for log, or moves the min under an MT log legend, gets a refusal instead,
+    because silently drawing something else than what was asked would make the legend lie.
+    """
+    lo = req.vmin if req.vmin is not None else (legend.min if legend else None)
+    hi = req.vmax if req.vmax is not None else (legend.max if legend else None)
+    auto = lo is None or hi is None
+    if auto:
+        have = shown[valid]
+        mlo, mhi = (float(have.min()), float(have.max())) if have.size else (0.0, 1.0)
+        measured_hi = hi is None
+        lo = mlo if lo is None else lo
+        hi = mhi if hi is None else hi
+        if measured_hi and not hi > lo:      # a constant field still needs a range to draw over
+            hi = lo + 1.0
+    if not hi > lo:
+        raise OpenghmError(f"the range {lo:g} to {hi:g} is empty: --min must be less than --max "
+                           "(the bound not given comes from the legend or the data)")
+    from_caller = req.log is not None or req.vmin is not None
+    log = req.log if req.log is not None else (legend.log if legend else False)
+    if log and lo <= 0:
+        if from_caller:
+            raise OpenghmError(f"a log scale needs a minimum above zero; this one starts at {lo:g}. Give --min above zero or --no-log")
+        log = False
+    requested = req.ramp or (legend.ramp if legend else image.FALLBACK_RAMP)
+    ramp_name, _known = image.resolve_ramp(requested)
+    return lo, hi, log, requested, ramp_name, auto
+
+
 def _do_png(source: Source, plan: _Plan, req: Request, geometry, display: Optional[mt.Display]) -> dict:
     box, width, height, rows_of, cols_of, ok_r, ok_c, rows, cols = geometry
     p = plan.pieces[0]
@@ -464,19 +522,7 @@ def _do_png(source: Source, plan: _Plan, req: Request, geometry, display: Option
     offset = display.offset if display else 0.0
     shown = sample * scale + offset
 
-    legend = display.legend if display else None
-    auto = legend is None
-    if auto:
-        have = shown[valid]
-        lo, hi = (float(have.min()), float(have.max())) if have.size else (0.0, 1.0)
-        if not hi > lo:
-            hi = lo + 1.0
-        ramp_name, log, requested = image.FALLBACK_RAMP, False, image.FALLBACK_RAMP
-    else:
-        lo, hi = legend.min, legend.max
-        requested = legend.ramp
-        ramp_name, _known = image.resolve_ramp(legend.ramp)
-        log = legend.log and lo > 0
+    lo, hi, log, requested, ramp_name, auto = _legend_drawn(display.legend if display else None, req, shown, valid)
     rgba = image.colorize(shown, valid, lo, hi, log, ramp_name)
     data = image.png_bytes(rgba)
     answer = {
