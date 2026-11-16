@@ -8,6 +8,7 @@
 import {
   OUTPUT_RESOLUTIONS,
   periodSteps,
+  type OutputBounds,
   type OutputInventory,
   type OutputPeriod,
   type OutputResolution,
@@ -252,13 +253,36 @@ export function styleProblem(
 }
 
 /** The query of a map request: a style is sent only for the parts the person set. */
-export function mapQuery(r: { variable: string; resolution: OutputResolution; date: string }, s: ViewState): string {
+export function mapQuery(
+  r: { variable: string; resolution: OutputResolution; date: string },
+  s: ViewState,
+  width: number | null = null
+): string {
   const q = new URLSearchParams({ variable: r.variable, resolution: r.resolution, start: r.date });
+  if (width !== null) q.set("width", String(width));
   if (s.ramp) q.set("ramp", s.ramp);
   if (s.min !== null) q.set("min", String(s.min));
   if (s.max !== null) q.set("max", String(s.max));
   if (s.log !== null) q.set("log", String(s.log));
   return q.toString();
+}
+
+/** The widest map the card asks for, in image pixels. */
+export const MAP_WIDTH_CAP = 2048;
+/** Widths are rounded up to this, so a small resize does not ask for a new image. */
+const MAP_WIDTH_STEP = 512;
+
+/**
+ * The width to ask the map for: what the map shows on screen (CSS pixels times
+ * the pixel ratio), rounded up to a step and capped. Null, which asks for the
+ * grid's own width, when the grid is no wider than that: a CONUS grid is drawn
+ * cell for cell, a Global one (4320 cells, a 2.2 MB PNG) at about screen size.
+ */
+export function mapWidth(grid: OutputBounds, cellSize: number, screenPixels: number): number | null {
+  if (!(screenPixels > 0) || !(cellSize > 0)) return null;
+  const cells = Math.round((grid.east - grid.west) / cellSize);
+  const wanted = Math.min(MAP_WIDTH_CAP, Math.ceil(screenPixels / MAP_WIDTH_STEP) * MAP_WIDTH_STEP);
+  return cells > wanted ? wanted : null;
 }
 
 export function hasStyle(s: ViewState): boolean {

@@ -13,6 +13,7 @@ import {
   filterSeries,
   formatPoint,
   mapQuery,
+  mapWidth,
   offeredResolutions,
   outputBase,
   parseView,
@@ -82,9 +83,16 @@ export function OutputCard({ source }: { source: OutputSourceRef }) {
   // ─── The map ───
   // Only what the person typed is checked here; a clash with the MT's own range (a min above its max) is the API's 422, shown on the map.
   const problem = resolved ? styleProblem(effective, null) : null;
+  // The map's on-screen width in device pixels, read once when the map is placed; no request goes
+  // out before it is known, so a Global grid is never first drawn at its full 4320 cells.
+  const [screenPixels, setScreenPixels] = useState<number | null>(null);
+  const measure = useCallback((node: HTMLDivElement | null) => {
+    if (node) setScreenPixels((known) => known ?? Math.round(node.clientWidth * (window.devicePixelRatio || 1)));
+  }, []);
+  const width = inventory && screenPixels !== null ? mapWidth(inventory.grid.bounds, inventory.grid.cellSize, screenPixels) : null;
   const mapUrl =
-    resolved && !problem
-      ? `${base}/map?${mapQuery({ variable: resolved.variable.name, resolution: resolved.resolution, date: resolved.date }, effective)}`
+    resolved && !problem && screenPixels !== null
+      ? `${base}/map?${mapQuery({ variable: resolved.variable.name, resolution: resolved.resolution, date: resolved.date }, effective, width)}`
       : null;
   const map = useOutputJson<MapAnswer>(mapUrl);
   const legend = map.data?.legend ?? null;
@@ -218,7 +226,7 @@ export function OutputCard({ source }: { source: OutputSourceRef }) {
         onReset={() => update({ ramp: null, min: null, max: null, log: null })}
       />
 
-      <div className="relative" aria-busy={map.loading}>
+      <div ref={measure} className="relative" aria-busy={map.loading}>
         <OutputMap
           grid={inventory.grid.bounds}
           image={image}
