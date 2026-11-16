@@ -1519,7 +1519,7 @@ four for each source:
 | Route | Answers |
 |---|---|
 | `GET …/output` | the inventory: files and years that exist, each variable with its units and display settings, the grid |
-| `GET …/output/map?variable&resolution&start[&bbox&width&height&ramp&min&max&log&image&encoding]` | a PNG, or with `image=webp` a lossless WebP: a north-up map of one time step, transparent where there is no data; `ramp`, `min`, `max` and `log` replace that part of the legend; `encoding=json` gives the toolkit's answer, with the image as `base64` beside the legend, value range, units, box and `mediaType`. The Output card asks for WebP at the map's on-screen width |
+| `GET …/output/map?variable&resolution&start[&bbox&width&height&ramp&min&max&log&image&projection&encoding]` | a PNG, or with `image=webp` a lossless WebP: a north-up map of one time step, transparent where there is no data, its rows in equal steps of latitude or, with `projection=mercator`, of web Mercator y so that it lies on Leaflet's tiles; `ramp`, `min`, `max` and `log` replace that part of the legend; `encoding=json` gives the toolkit's answer, with the image as `base64` beside the legend, value range, units, box and `mediaType`. The Output card asks for WebP in Mercator at the map's on-screen width |
 | `GET …/output/series?variable&resolution&point[&start&end&display]` | JSON: the values of the cell nearest `point` (`LON,LAT`) over the period |
 | `GET …/output/subset?variable&resolution[&start&end&bbox]` | a NetCDF-4 file (application/x-netcdf), as an attachment: one variable over the period and box |
 

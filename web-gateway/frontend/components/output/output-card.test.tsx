@@ -75,7 +75,7 @@ describe("the Output card", () => {
     stub();
     render(<OutputCard source={source} />);
     await waitFor(() => expect(screen.getByTestId("image").textContent).toBe("image"));
-    expect(Object.fromEntries(lastMap().searchParams)).toEqual({ variable: "runoff", resolution: "yearly", start: "2001", image: "webp" });
+    expect(Object.fromEntries(lastMap().searchParams)).toEqual({ variable: "runoff", resolution: "yearly", start: "2001", image: "webp", projection: "mercator" });
     expect(window.location.search).toBe("?ovar=runoff&ores=yearly&odate=2001");
     expect(screen.getByTestId("output-legend")).toBeTruthy();
     // Only the resolutions the variable has are tabs.
@@ -92,6 +92,7 @@ describe("the Output card", () => {
       resolution: "monthly",
       start: "2000-03",
       image: "webp",
+      projection: "mercator",
       ramp: "DarkBlue",
       min: "1",
       max: "9",

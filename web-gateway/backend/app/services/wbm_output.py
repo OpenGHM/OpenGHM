@@ -278,15 +278,19 @@ async def map_image(
     source: OutputSource, *, variable: str, resolution: str, start: str, bbox: str | None,
     width: int | None, height: int | None, ramp: str | None = None, vmin: float | None = None,
     vmax: float | None = None, log: bool | None = None, image: Literal["png", "webp"] = "png",
+    projection: Literal["lonlat", "mercator"] = "lonlat",
 ) -> dict:
     """`openghm output subset --format <image>` without `--out`: the answer carries the image as `base64`
     beside the legend, range, units and box it was drawn for. `ramp`, `vmin`, `vmax` and `log` are
-    the toolkit's `--ramp --min --max --log/--no-log`; `log=None` leaves the choice to the legend."""
+    the toolkit's `--ramp --min --max --log/--no-log`; `log=None` leaves the choice to the legend.
+    `projection="mercator"` spaces the rows as a web map (EPSG:3857) draws them, so the image lies on
+    Leaflet's tiles; the default, the grid's own equal steps of latitude, sends no flag."""
     command = _toolkit_command(
         "subset", *source.toolkit_args(), "--var", variable, "--resolution", resolution, "--format", image,
         "--start", start, *_opt("--bbox", bbox), *_opt("--width", width), *_opt("--height", height),
         *_opt("--ramp", ramp), *_opt("--min", vmin), *_opt("--max", vmax),
         *([] if log is None else ["--log" if log else "--no-log"]),
+        *(["--projection", projection] if projection != "lonlat" else []),
     )
     return await _answer(source, command, operation="output_map", timeout=SUBSET_TIMEOUT_SECONDS)
 

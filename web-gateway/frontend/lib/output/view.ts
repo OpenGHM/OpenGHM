@@ -258,7 +258,15 @@ export function mapQuery(
   s: ViewState,
   width: number | null = null
 ): string {
-  const q = new URLSearchParams({ variable: r.variable, resolution: r.resolution, start: r.date, image: "webp" });
+  // Mercator rows: the image is laid over Leaflet's web-Mercator tiles, which stretch it linearly in
+  // Mercator y, so rows in equal steps of latitude would drift from the coast lines away from the edges.
+  const q = new URLSearchParams({
+    variable: r.variable,
+    resolution: r.resolution,
+    start: r.date,
+    image: "webp",
+    projection: "mercator",
+  });
   if (width !== null) q.set("width", String(width));
   if (s.ramp) q.set("ramp", s.ramp);
   if (s.min !== null) q.set("min", String(s.min));

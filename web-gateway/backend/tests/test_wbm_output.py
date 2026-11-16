@@ -713,3 +713,13 @@ def test_a_removal_that_fails_is_logged_not_raised(anvil, monkeypatch, caplog):
 
     assert b"".join(asyncio.run(scenario())) == NC
     assert "could not remove" in caplog.text
+
+
+def test_a_mercator_map_asks_the_toolkit_for_it_and_lonlat_sends_no_flag(api, anvil):
+    anvil.next = (0, json.dumps({**MAP, "projection": "mercator"}), "")
+    assert api.get(f"{SNAP}/map?{MAP_QUERY}&projection=mercator").status_code == 200
+    cmd = anvil.toolkit_commands()[0]
+    assert cmd[cmd.index("--projection") + 1] == "mercator"
+    api.get(f"{SNAP}/map?{MAP_QUERY}&projection=lonlat&width=7")
+    assert "--projection" not in anvil.toolkit_commands()[1]
+    assert api.get(f"{SNAP}/map?{MAP_QUERY}&projection=polar").status_code == 422

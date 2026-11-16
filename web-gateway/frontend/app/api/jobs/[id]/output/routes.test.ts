@@ -25,7 +25,7 @@ describe("a job's output routes", () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ base64: "x" }));
     vi.stubGlobal("fetch", fetchMock);
     const res = await map(
-      req(`/api/jobs/${JOB}/output/map?variable=runoff&resolution=yearly&start=2000&ramp=DarkBlue&min=0&max=5&log=true&image=webp&evil=1&encoding=png`),
+      req(`/api/jobs/${JOB}/output/map?variable=runoff&resolution=yearly&start=2000&ramp=DarkBlue&min=0&max=5&log=true&image=webp&projection=mercator&evil=1&encoding=png`),
       ctx(JOB)
     );
     const [url, init] = fetchMock.mock.calls[0];
@@ -40,6 +40,7 @@ describe("a job's output routes", () => {
       max: "5",
       log: "true",
       image: "webp",
+      projection: "mercator",
       encoding: "json",
     });
     expect(init.headers).toEqual({ Authorization: "Bearer t" });

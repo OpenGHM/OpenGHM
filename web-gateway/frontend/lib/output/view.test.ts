@@ -105,15 +105,15 @@ describe("what the inventory offers", () => {
 describe("the map's request", () => {
   it("sends the style only for the parts that were set", () => {
     const r = { variable: "runoff", resolution: "yearly" as const, date: "2000" };
-    expect(mapQuery(r, EMPTY_VIEW)).toBe("variable=runoff&resolution=yearly&start=2000&image=webp");
+    expect(mapQuery(r, EMPTY_VIEW)).toBe("variable=runoff&resolution=yearly&start=2000&image=webp&projection=mercator");
     expect(mapQuery(r, { ...EMPTY_VIEW, ramp: "DarkBlue", min: 0, max: 50, log: false })).toBe(
-      "variable=runoff&resolution=yearly&start=2000&image=webp&ramp=DarkBlue&min=0&max=50&log=false"
+      "variable=runoff&resolution=yearly&start=2000&image=webp&projection=mercator&ramp=DarkBlue&min=0&max=50&log=false"
     );
   });
 
   it("asks for the map's on-screen width only when the grid is wider", () => {
     const r = { variable: "runoff", resolution: "yearly" as const, date: "2000" };
-    expect(mapQuery(r, EMPTY_VIEW, 1536)).toBe("variable=runoff&resolution=yearly&start=2000&image=webp&width=1536");
+    expect(mapQuery(r, EMPTY_VIEW, 1536)).toBe("variable=runoff&resolution=yearly&start=2000&image=webp&projection=mercator&width=1536");
     const global = { west: -180, east: 180, south: -60, north: 85 };
     expect(mapWidth(global, 1 / 12, 1400)).toBe(1536);
     expect(mapWidth(global, 1 / 12, 1536)).toBe(1536);

@@ -114,6 +114,8 @@ def _register(prefix: str, source_dep: Callable, cache: str) -> None:
         height: int | None = Query(None, ge=1, le=IMAGE_SIDE),
         encoding: Literal["png", "json"] = Query("png", description="json: the toolkit's answer, the image as base64"),
         image: Literal["png", "webp"] = Query("png", description="the image format: PNG, or lossless WebP"),
+        projection: Literal["lonlat", "mercator"] = Query(
+            "lonlat", description="rows in equal steps of latitude, or of web Mercator y (EPSG:3857) to lie on a web map's tiles"),
         ramp: str | None = Query(None, **RAMP),
         vmin: float | None = Query(None, alias="min", allow_inf_nan=False, description="legend low end"),
         vmax: float | None = Query(None, alias="max", allow_inf_nan=False, description="legend high end"),
@@ -126,7 +128,7 @@ def _register(prefix: str, source_dep: Callable, cache: str) -> None:
         _check_style(vmin, vmax, log)
         answer = await _call(wbm_output.map_image(
             source, variable=variable, resolution=resolution, start=start, bbox=bbox, width=width, height=height,
-            ramp=ramp, vmin=vmin, vmax=vmax, log=log, image=image))
+            ramp=ramp, vmin=vmin, vmax=vmax, log=log, image=image, projection=projection))
         if encoding == "json":
             return answer
         try:
