@@ -2,6 +2,7 @@ import { JobHeader } from "@/components/workspace/job-header";
 import { PageBody } from "@/components/layout/page-hero";
 import { AsideLayout } from "@/components/workspace/aside-layout";
 import { JobStatusSummary } from "@/components/workspace/job-status-summary";
+import { RunOutput } from "@/components/workspace/run-output";
 import { PublishCard } from "@/components/workspace/publish-card";
 import { RunDetailsCard } from "@/components/workspace/run-details-card";
 import { LogViewer } from "@/components/workspace/log-viewer";
@@ -98,6 +99,7 @@ export function JobDetail({
           lead={<JobStatusSummary job={job} viewerEmail={viewerEmail} preview={preview} />}
           aside={<RunDetailsCard job={job} recommended={recommended} postProcessing={postProcessing} coverage={coverage} />}
         >
+          <RunOutput jobId={job.id} preview={preview} />
           <PublishCard job={job} baseAbout={baseAbout} preview={preview} />
           <LogViewer previewLogs={previewLogs} />
           <AboutSummaryCard about={job.about} />
