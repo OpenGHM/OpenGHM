@@ -222,6 +222,42 @@ def test_a_map_is_a_png_and_its_parameters_become_the_toolkits_options(api, anvi
     assert anvil.toolkit_commands()[1][3:5] == ["--snapshot", SNAPSHOT]
 
 
+def test_a_map_style_becomes_the_toolkits_options_and_none_changes_nothing(api, anvil):
+    api.get(f"{SNAP}/map?{MAP_QUERY}")
+    api.get(f"{SNAP}/map?{MAP_QUERY}&ramp=DarkRed&min=0.5&max=50&log=true")
+    api.get(f"{SNAP}/map?{MAP_QUERY}&log=false")
+    api.get(f"{SNAP}/map?{MAP_QUERY}&min=-5")
+    base, full, nolog, only_min = anvil.toolkit_commands()
+    assert not {"--ramp", "--min", "--max", "--log", "--no-log"} & set(base)
+    assert full[:-3] == base[:-3] + ["--ramp", "DarkRed", "--min", "0.5", "--max", "50.0", "--log"]
+    assert nolog[:-3] == base[:-3] + ["--no-log"]
+    assert only_min[:-3] == base[:-3] + ["--min", "-5.0"]
+
+
+@pytest.mark.parametrize("style", ["min=5&max=5", "min=9&max=1", "log=true&min=0", "log=true&min=-1&max=4",
+                                   "ramp=Dark%20Blue", "ramp=Dark;rm", "ramp=1", "ramp=", "min=abc", "min=nan",
+                                   "max=inf", "log=maybe"])
+def test_a_map_style_that_cannot_be_drawn_is_refused_before_anything_runs(api, anvil, style):
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}&{style}")
+    assert r.status_code == 422, r.text
+    assert anvil.commands == []
+
+
+def test_a_refused_pair_says_why(api):
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}&min=3&max=2")
+    assert _detail(r) == {"code": "output_request_refused", "message": "min must be less than max."}
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}&log=true&min=0")
+    assert "log scale" in _detail(r)["message"]
+
+
+def test_a_ramp_the_toolkit_does_not_know_is_its_refusal_as_422(api, anvil):
+    anvil.next = (2, "", "openghm: 'Plasma' is not a ramp this toolkit draws; choose one of DarkBlue, DarkRed\n")
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}&ramp=Plasma")
+    assert r.status_code == 422 and _detail(r)["code"] == "output_request_refused"
+    assert "'Plasma' is not a ramp" in _detail(r)["message"]
+    assert anvil.toolkit_commands()[0][-5:-3] == ["--ramp", "Plasma"]
+
+
 def test_a_map_with_json_encoding_is_the_toolkits_answer(api):
     r = api.get(f"{SNAP}/map?{MAP_QUERY}&encoding=json")
     assert r.status_code == 200 and r.json() == MAP and r.headers["content-type"].startswith("application/json")

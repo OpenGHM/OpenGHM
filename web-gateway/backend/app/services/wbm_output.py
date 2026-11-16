@@ -214,13 +214,17 @@ async def inventory(source: OutputSource) -> dict:
 
 async def map_image(
     source: OutputSource, *, variable: str, resolution: str, start: str, bbox: str | None,
-    width: int | None, height: int | None,
+    width: int | None, height: int | None, ramp: str | None = None, vmin: float | None = None,
+    vmax: float | None = None, log: bool | None = None,
 ) -> dict:
     """`openghm output subset --format png` without `--out`: the answer carries the PNG as `base64`
-    beside the legend, range, units and box it was drawn for."""
+    beside the legend, range, units and box it was drawn for. `ramp`, `vmin`, `vmax` and `log` are
+    the toolkit's `--ramp --min --max --log/--no-log`; `log=None` leaves the choice to the legend."""
     command = _toolkit_command(
         "subset", *source.toolkit_args(), "--var", variable, "--resolution", resolution, "--format", "png",
         "--start", start, *_opt("--bbox", bbox), *_opt("--width", width), *_opt("--height", height),
+        *_opt("--ramp", ramp), *_opt("--min", vmin), *_opt("--max", vmax),
+        *([] if log is None else ["--log" if log else "--no-log"]),
     )
     return await _run_json(command, operation="output_map", timeout=SUBSET_TIMEOUT_SECONDS)
 

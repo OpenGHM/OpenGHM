@@ -43,6 +43,8 @@ VARIABLE = {"pattern": r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$", "max_length": 64}
 DATE = {"pattern": r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$", "description": "YYYY, YYYY-MM or YYYY-MM-DD"}
 BBOX = {"pattern": rf"^{_NUM}(?:,{_NUM}){{3}}$", "description": "W,S,E,N in degrees"}
 POINT = {"pattern": rf"^{_NUM},{_NUM}$", "description": "LON,LAT in degrees"}
+RAMP = {"pattern": r"^[A-Za-z]+$", "max_length": 32,
+        "description": "a ramp name (`ramps` of the inventory); the toolkit is the authority on which exist"}
 Resolution = Literal["daily", "monthly", "yearly"]
 IMAGE_SIDE = 4096
 
@@ -75,6 +77,17 @@ async def _snapshot_source(dataset_id: str) -> OutputSource:
         raise _http(exc)
 
 
+def _check_style(vmin: float | None, vmax: float | None, log: bool | None) -> None:
+    """The refusals the toolkit would make from the parameters alone, so they cost no SSH round-trip."""
+    message = None
+    if vmin is not None and vmax is not None and not vmin < vmax:
+        message = "min must be less than max."
+    elif log and vmin is not None and vmin <= 0:
+        message = "A log scale needs min above zero."
+    if message:
+        raise HTTPException(status_code=422, detail={"code": "output_request_refused", "message": message})
+
+
 async def _call(awaitable: Awaitable):
     try:
         return await awaitable
@@ -100,12 +113,19 @@ def _register(prefix: str, source_dep: Callable, cache: str) -> None:
         width: int | None = Query(None, ge=1, le=IMAGE_SIDE),
         height: int | None = Query(None, ge=1, le=IMAGE_SIDE),
         encoding: Literal["png", "json"] = Query("png", description="json: the toolkit's answer, the PNG as base64"),
+        ramp: str | None = Query(None, **RAMP),
+        vmin: float | None = Query(None, alias="min", allow_inf_nan=False, description="legend low end"),
+        vmax: float | None = Query(None, alias="max", allow_inf_nan=False, description="legend high end"),
+        log: bool | None = Query(None, description="log scale; absent: the legend's own"),
         source: OutputSource = Depends(source_dep),
     ):
         """A north-up map of one time step over the box (default: the whole grid), coloured by the
-        variable's legend, transparent where there is no data."""
+        variable's legend, transparent where there is no data. `ramp`, `min`, `max` and `log` each
+        replace that part of the legend; the answer's `legend` (with `encoding=json`) says what was drawn."""
+        _check_style(vmin, vmax, log)
         answer = await _call(wbm_output.map_image(
-            source, variable=variable, resolution=resolution, start=start, bbox=bbox, width=width, height=height))
+            source, variable=variable, resolution=resolution, start=start, bbox=bbox, width=width, height=height,
+            ramp=ramp, vmin=vmin, vmax=vmax, log=log))
         if encoding == "json":
             return answer
         try:
