@@ -25,8 +25,10 @@ import {
   SpatialCoverageSection,
 } from "@/components/repository/detail-parts";
 import { DownloadSkeleton, SnapshotDownloadSection } from "@/components/repository/download-section";
+import { OutputCard } from "@/components/output/output-card";
 import { ExecutionCard } from "@/components/repository/execution-card";
 import { OutputVariablesTable } from "@/components/repository/output-variables-table";
+import { OutputSkeleton } from "@/components/output/output-skeleton";
 import { newStepHref } from "@/lib/workspace/draft-wizard";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -143,6 +145,13 @@ export default async function DatasetDetailPage({
               west={simulation.spatialCoverage.westlimit}
               projection={simulation.spatialCoverage.projection}
             />
+
+            {/* The output on a map: read on Anvil by the toolkit (ADR 0033); the URL query holds the view */}
+            <div id="output" className="scroll-mt-24">
+              <Suspense fallback={<OutputSkeleton />}>
+                <OutputCard source={{ kind: "dataset", id: dataset.id }} />
+              </Suspense>
+            </div>
 
             {simulation.outputVariables.length > 0 && (
               <DetailSection

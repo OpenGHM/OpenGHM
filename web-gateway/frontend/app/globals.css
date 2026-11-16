@@ -255,6 +255,11 @@
   fill: var(--primary);
 }
 
+/* The Output card's map image: the cells as they are, not smoothed by the browser. */
+.output-pixelated {
+  image-rendering: pixelated;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
