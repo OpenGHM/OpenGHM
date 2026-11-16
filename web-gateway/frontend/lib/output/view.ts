@@ -258,7 +258,7 @@ export function mapQuery(
   s: ViewState,
   width: number | null = null
 ): string {
-  const q = new URLSearchParams({ variable: r.variable, resolution: r.resolution, start: r.date });
+  const q = new URLSearchParams({ variable: r.variable, resolution: r.resolution, start: r.date, image: "webp" });
   if (width !== null) q.set("width", String(width));
   if (s.ramp) q.set("ramp", s.ramp);
   if (s.min !== null) q.set("min", String(s.min));

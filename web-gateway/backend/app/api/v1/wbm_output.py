@@ -9,7 +9,7 @@ The same four routes, for two sources:
 * `/repository/datasets/{dataset_id}/output...`: a published snapshot, open to anyone like the other
   repository read routes; 404 for an id the catalogue does not hold.
 
-`.../output` is the inventory (JSON); `.../output/map` a north-up PNG of one time step (`image/png`, or with
+`.../output` is the inventory (JSON); `.../output/map` a north-up PNG or lossless WebP (`image=webp`) of one time step (`image/png`, `image/webp`, or with
 `encoding=json` the toolkit's answer, whose `base64` is the PNG, beside the legend, range, units and box it
 was drawn for); `.../output/series` a pixel's values over a period (JSON); `.../output/subset` one variable
 over a period and box as a NetCDF-4 file (`application/x-netcdf`, an attachment). The JSON bodies are the
@@ -112,7 +112,8 @@ def _register(prefix: str, source_dep: Callable, cache: str) -> None:
         bbox: str | None = Query(None, **BBOX),
         width: int | None = Query(None, ge=1, le=IMAGE_SIDE),
         height: int | None = Query(None, ge=1, le=IMAGE_SIDE),
-        encoding: Literal["png", "json"] = Query("png", description="json: the toolkit's answer, the PNG as base64"),
+        encoding: Literal["png", "json"] = Query("png", description="json: the toolkit's answer, the image as base64"),
+        image: Literal["png", "webp"] = Query("png", description="the image format: PNG, or lossless WebP"),
         ramp: str | None = Query(None, **RAMP),
         vmin: float | None = Query(None, alias="min", allow_inf_nan=False, description="legend low end"),
         vmax: float | None = Query(None, alias="max", allow_inf_nan=False, description="legend high end"),
@@ -125,14 +126,14 @@ def _register(prefix: str, source_dep: Callable, cache: str) -> None:
         _check_style(vmin, vmax, log)
         answer = await _call(wbm_output.map_image(
             source, variable=variable, resolution=resolution, start=start, bbox=bbox, width=width, height=height,
-            ramp=ramp, vmin=vmin, vmax=vmax, log=log))
+            ramp=ramp, vmin=vmin, vmax=vmax, log=log, image=image))
         if encoding == "json":
             return answer
         try:
-            png = base64.b64decode(answer["base64"], validate=True)
+            body = base64.b64decode(answer["base64"], validate=True)
         except (KeyError, TypeError, binascii.Error):
             raise _http(WbmOutputError(502, "output_failed", "The toolkit's answer was not what this gateway expects."))
-        return Response(content=png, media_type="image/png", headers={"Cache-Control": cache})
+        return Response(content=body, media_type=f"image/{image}", headers={"Cache-Control": cache})
 
     @router.get(f"{prefix}/output/series")
     async def get_output_series(

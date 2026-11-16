@@ -1519,7 +1519,7 @@ four for each source:
 | Route | Answers |
 |---|---|
 | `GET …/output` | the inventory: files and years that exist, each variable with its units and display settings, the grid |
-| `GET …/output/map?variable&resolution&start[&bbox&width&height&encoding]` | a PNG (content type image/png): a north-up map of one time step, transparent where there is no data; `encoding=json` gives the toolkit's answer, with the PNG as `base64` beside the legend, value range, units and box |
+| `GET …/output/map?variable&resolution&start[&bbox&width&height&ramp&min&max&log&image&encoding]` | a PNG, or with `image=webp` a lossless WebP: a north-up map of one time step, transparent where there is no data; `ramp`, `min`, `max` and `log` replace that part of the legend; `encoding=json` gives the toolkit's answer, with the image as `base64` beside the legend, value range, units, box and `mediaType`. The Output card asks for WebP at the map's on-screen width |
 | `GET …/output/series?variable&resolution&point[&start&end&display]` | JSON: the values of the cell nearest `point` (`LON,LAT`) over the period |
 | `GET …/output/subset?variable&resolution[&start&end&bbox]` | a NetCDF-4 file (application/x-netcdf), as an attachment: one variable over the period and box |
 
@@ -1543,6 +1543,13 @@ and what they mean is the toolkit's.
   admin routes; 503 `output_busy` is a read that found all three places
   (`MAX_CONCURRENT_READS`) taken for 15 s: the published routes are open, and each call is a
   process on a login node.
+- **A published snapshot's answers are kept** (inventory, map, series), in the backend
+  process, keyed by the toolkit command (which names the install, the snapshot and every
+  argument), at most `ANSWER_CACHE_BYTES` (64 MiB), least recently used first out. A
+  snapshot does not change (rule 1), and the deployment runs one backend process, so
+  every viewer shares it; a restart empties it. Identical calls in flight share one
+  toolkit run, and a kept answer takes no read place. A run's output, a download and an
+  error are never kept. Redis was not used, for the reason ADR 0027 gives.
 - **Download.** The toolkit writes the `nc` subset to `<uuid>.nc` under
   `ANVIL_OUTPUT_DOWNLOAD_DIR` (default `<ANVIL_REMOTE_BASE_DIR>/output-downloads`, on
   scratch), the backend streams it over SFTP on slurmly's one connection

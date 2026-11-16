@@ -40,6 +40,7 @@ interface MapAnswer {
   time: string;
   legend: Legend;
   base64: string;
+  mediaType?: string;
 }
 
 /**
@@ -97,7 +98,7 @@ export function OutputCard({ source }: { source: OutputSourceRef }) {
   const map = useOutputJson<MapAnswer>(mapUrl);
   const legend = map.data?.legend ?? null;
   const image = useMemo(
-    () => (map.data ? { url: `data:image/png;base64,${map.data.base64}`, bbox: map.data.bbox } : null),
+    () => (map.data ? { url: `data:${map.data.mediaType ?? "image/png"};base64,${map.data.base64}`, bbox: map.data.bbox } : null),
     [map.data]
   );
 

@@ -124,6 +124,9 @@ def anvil(monkeypatch, db) -> Anvil:
     monkeypatch.setattr(settings, "ANVIL_OUTPUT_DOWNLOAD_DIR", "")
     monkeypatch.setattr(wbm_output, "_last_sweep", 0.0)
     monkeypatch.setattr(wbm_output, "_slots", {})
+    monkeypatch.setattr(wbm_output, "_answers", wbm_output.collections.OrderedDict())
+    monkeypatch.setattr(wbm_output, "_answers_bytes", 0)
+    monkeypatch.setattr(wbm_output, "_flights", {})
     return fake
 
 
@@ -176,7 +179,8 @@ def test_a_published_snapshots_output_is_open_to_anyone(api, anvil, suffix, quer
     assert api.get(f"{SNAP}{suffix}?{query}", headers=OWNER_HEADERS).status_code == 200
     missing = api.get(f"/api/v1/repository/datasets/{'cd' * 32}/output{suffix}?{query}")
     assert missing.status_code == 404 and "not found" in missing.json()["detail"]
-    assert len(anvil.toolkit_commands()) == 2                      # the unknown id ran nothing
+    # the unknown id ran nothing; the second read is the first one's kept answer (not a download's)
+    assert len(anvil.toolkit_commands()) == (2 if suffix == "/subset" else 1)
 
 
 def test_a_draft_that_never_ran_has_no_output_and_a_purged_run_is_gone(api, anvil, db):
@@ -368,7 +372,7 @@ def test_reads_beyond_the_concurrency_limit_wait_then_are_503_busy(db, anvil, mo
 
     async def scenario():
         state["gate"] = release()
-        source = wbm_output.snapshot_source(SNAPSHOT)
+        source = wbm_output.OutputSource("run", WORK_DIR)
         first = asyncio.create_task(wbm_output.inventory(source))
         await asyncio.sleep(0.01)
         with pytest.raises(wbm_output.WbmOutputError) as busy:
@@ -379,6 +383,187 @@ def test_reads_beyond_the_concurrency_limit_wait_then_are_503_busy(db, anvil, mo
         assert await wbm_output.inventory(source) == INVENTORY      # the place was given back
 
     asyncio.run(scenario())
+
+
+# ---- the map's image format ---------------------------------------------------------------------
+
+
+def test_a_map_is_png_unless_webp_is_asked_for(api, anvil):
+    anvil.next = (0, json.dumps({**MAP, "format": "webp", "mediaType": "image/webp"}), "")
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}&image=webp")
+    assert r.status_code == 200 and r.content == PNG and r.headers["content-type"] == "image/webp"
+    fmt = lambda c: c[c.index("--format") + 1]
+    assert fmt(anvil.toolkit_commands()[0]) == "webp"
+    r = api.get(f"{SNAP}/map?{MAP_QUERY}")
+    assert r.headers["content-type"] == "image/png" and fmt(anvil.toolkit_commands()[1]) == "png"
+    assert api.get(f"{SNAP}/map?{MAP_QUERY}&image=gif").status_code == 422
+
+
+# ---- a snapshot's answers are kept ---------------------------------------------------------------
+
+
+def _count(anvil) -> int:
+    return len(anvil.toolkit_commands())
+
+
+def test_a_snapshots_second_identical_call_is_answered_from_memory(api, anvil):
+    first = api.get(f"{SNAP}/map?{MAP_QUERY}&encoding=json").json()
+    assert api.get(f"{SNAP}/map?{MAP_QUERY}&encoding=json").json() == first
+    api.get(SNAP)
+    api.get(SNAP)
+    api.get(f"{SNAP}/series?{SERIES_QUERY}")
+    api.get(f"{SNAP}/series?{SERIES_QUERY}")
+    assert _count(anvil) == 3
+
+
+def test_a_runs_output_is_never_kept(api, anvil):
+    api.get(JOB, headers=OWNER_HEADERS)
+    api.get(JOB, headers=OWNER_HEADERS)
+    assert _count(anvil) == 2 and not wbm_output._answers
+
+
+def test_a_call_with_other_arguments_is_another_answer(api, anvil):
+    api.get(f"{SNAP}/map?{MAP_QUERY}")
+    api.get(f"{SNAP}/map?{MAP_QUERY}&width=100")
+    api.get(f"{SNAP}/map?{MAP_QUERY}&image=webp")
+    assert _count(anvil) == 3
+
+
+def test_a_new_toolkit_install_does_not_get_the_old_answer(api, anvil, monkeypatch):
+    seen = []
+
+    async def run(command, **kw):
+        seen.append(command)
+        return SimpleNamespace(exit_status=0, stdout=json.dumps(INVENTORY), stderr="")
+
+    monkeypatch.setattr(slurm, "run_remote", run)
+    api.get(SNAP)
+    monkeypatch.setattr(settings, "ANVIL_OPENGHM_HOME", HOME + "-2")
+    api.get(SNAP)
+    assert len(seen) == 2 and HOME + "-2/bin" in seen[1]
+
+
+def test_a_download_is_never_kept(api, anvil):
+    api.get(f"{SNAP}/subset?{SUBSET_QUERY}")
+    api.get(f"{SNAP}/subset?{SUBSET_QUERY}")
+    assert _count(anvil) == 2 and not wbm_output._answers
+
+
+def test_a_failure_is_not_kept(api, anvil):
+    anvil.next = (3, "", "openghm: no output")
+    assert api.get(SNAP).status_code == 404
+    assert api.get(SNAP).status_code == 200
+    assert _count(anvil) == 2
+
+
+def test_identical_calls_at_once_share_one_toolkit_call(db, anvil, monkeypatch):
+    calls = []
+    gate = {}
+
+    async def slow(command, **kw):
+        calls.append(command)
+        await gate["go"].wait()
+        return SimpleNamespace(exit_status=0, stdout=json.dumps(INVENTORY), stderr="")
+
+    monkeypatch.setattr(slurm, "run_remote", slow)
+
+    async def scenario():
+        gate["go"] = asyncio.Event()
+        source = wbm_output.snapshot_source(SNAPSHOT)
+        tasks = [asyncio.create_task(wbm_output.inventory(source)) for _ in range(5)]
+        await asyncio.sleep(0.01)
+        gate["go"].set()
+        assert await asyncio.gather(*tasks) == [INVENTORY] * 5
+        assert await wbm_output.inventory(source) == INVENTORY
+
+    asyncio.run(scenario())
+    assert len(calls) == 1 and not wbm_output._flights
+
+
+def test_a_failure_reaches_every_waiter_and_is_not_kept(db, anvil, monkeypatch):
+    calls = []
+    gate = {}
+
+    async def failing(command, **kw):
+        calls.append(command)
+        await gate["go"].wait()
+        return SimpleNamespace(exit_status=1, stdout="", stderr="openghm: boom")
+
+    monkeypatch.setattr(slurm, "run_remote", failing)
+
+    async def scenario():
+        gate["go"] = asyncio.Event()
+        source = wbm_output.snapshot_source(SNAPSHOT)
+        tasks = [asyncio.create_task(wbm_output.inventory(source)) for _ in range(3)]
+        await asyncio.sleep(0.01)
+        gate["go"].set()
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        assert all(isinstance(r, wbm_output.WbmOutputError) and r.code == "output_failed" for r in results)
+        with pytest.raises(wbm_output.WbmOutputError):
+            await wbm_output.inventory(source)
+
+    asyncio.run(scenario())
+    assert len(calls) == 2 and not wbm_output._answers and not wbm_output._flights
+
+
+def test_a_waiter_that_leaves_does_not_end_the_call_for_the_others(db, anvil, monkeypatch):
+    calls = []
+    gate = {}
+
+    async def slow(command, **kw):
+        calls.append(command)
+        await gate["go"].wait()
+        return SimpleNamespace(exit_status=0, stdout=json.dumps(INVENTORY), stderr="")
+
+    monkeypatch.setattr(slurm, "run_remote", slow)
+
+    async def scenario():
+        gate["go"] = asyncio.Event()
+        source = wbm_output.snapshot_source(SNAPSHOT)
+        first = asyncio.create_task(wbm_output.inventory(source))
+        second = asyncio.create_task(wbm_output.inventory(source))
+        await asyncio.sleep(0.01)
+        first.cancel()
+        gate["go"].set()
+        assert await second == INVENTORY
+
+    asyncio.run(scenario())
+    assert len(calls) == 1
+
+
+def test_a_hit_takes_no_place(db, anvil, monkeypatch):
+    monkeypatch.setattr(wbm_output, "MAX_CONCURRENT_READS", 1)
+    monkeypatch.setattr(wbm_output, "BUSY_WAIT_SECONDS", 0.05)
+
+    async def scenario():
+        source = wbm_output.snapshot_source(SNAPSHOT)
+        await wbm_output.inventory(source)
+        sem = asyncio.Semaphore(0)                       # every place taken
+        wbm_output._slots[id(asyncio.get_running_loop())] = sem
+        assert await wbm_output.inventory(source) == INVENTORY
+
+    asyncio.run(scenario())
+
+
+def test_the_cache_drops_the_least_recently_used_beyond_its_byte_budget(monkeypatch):
+    monkeypatch.setattr(wbm_output, "_answers", wbm_output.collections.OrderedDict())
+    monkeypatch.setattr(wbm_output, "_answers_bytes", 0)
+    monkeypatch.setattr(wbm_output, "ANSWER_CACHE_BYTES", 100)
+    for name in "abc":
+        wbm_output._keep(name, {"k": name}, 25)         # 75 bytes
+    wbm_output._answers.move_to_end("a")
+    wbm_output._keep("d", {"k": "d"}, 25)
+    wbm_output._keep("e", {"k": "e"}, 25)               # 125: the least recent, b, goes
+    assert set(wbm_output._answers) == {"a", "c", "d", "e"} and wbm_output._answers_bytes == 100
+
+
+def test_an_entry_over_a_quarter_of_the_budget_is_not_kept(monkeypatch):
+    monkeypatch.setattr(wbm_output, "_answers", wbm_output.collections.OrderedDict())
+    monkeypatch.setattr(wbm_output, "_answers_bytes", 0)
+    monkeypatch.setattr(wbm_output, "ANSWER_CACHE_BYTES", 100)
+    wbm_output._keep("big", {}, 26)
+    wbm_output._keep("ok", {}, 25)
+    assert list(wbm_output._answers) == ["ok"] and wbm_output._answers_bytes == 25
 
 
 # ---- the download --------------------------------------------------------------------------------

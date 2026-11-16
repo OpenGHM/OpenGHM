@@ -15,7 +15,7 @@ export type OutputRoute = "inventory" | "map" | "series" | "subset";
 
 const QUERY: Record<OutputRoute, readonly string[]> = {
   inventory: [],
-  map: ["variable", "resolution", "start", "bbox", "width", "height", "ramp", "min", "max", "log"],
+  map: ["variable", "resolution", "start", "bbox", "width", "height", "image", "ramp", "min", "max", "log"],
   series: ["variable", "resolution", "point", "start", "end", "display"],
   subset: ["variable", "resolution", "start", "end", "bbox"],
 };

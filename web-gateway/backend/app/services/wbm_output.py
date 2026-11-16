@@ -30,6 +30,7 @@ a day.
 from __future__ import annotations
 
 import asyncio
+import collections
 import json
 import logging
 import posixpath
@@ -59,6 +60,9 @@ SUBSET_TIMEOUT_SECONDS = 180
 #: is a process on the shared login node.
 MAX_CONCURRENT_READS = 3
 BUSY_WAIT_SECONDS = 15
+#: A published snapshot's answers are kept in this process (see `_answer`): at most this many bytes of
+#: toolkit output, an entry over a quarter of it is not kept.
+ANSWER_CACHE_BYTES = 64 * 1024 * 1024
 #: A download file older than this is deleted by the sweep; the sweep runs at most this often.
 DOWNLOAD_MAX_AGE_MINUTES = 24 * 60
 SWEEP_INTERVAL_SECONDS = 600
@@ -176,6 +180,11 @@ def _message_of(stderr: str) -> str:
 
 async def _run_json(command: str, *, operation: str, timeout: float) -> dict:
     """The JSON object the command printed (see the module docstring for what each failure is)."""
+    return (await _run_json_sized(command, operation=operation, timeout=timeout))[0]
+
+
+async def _run_json_sized(command: str, *, operation: str, timeout: float) -> tuple[dict, int]:
+    """`_run_json`, and the length of the stdout it was parsed from."""
     async with _slot():
         try:
             result = await slurm.run_remote(command, operation=operation, retry_safe=True, timeout=timeout)
@@ -199,7 +208,60 @@ async def _run_json(command: str, *, operation: str, timeout: float) -> dict:
         raise WbmOutputError(502, "output_failed", "The toolkit's answer was not JSON.") from exc
     if not isinstance(data, dict):
         raise WbmOutputError(502, "output_failed", "The toolkit's answer was not a JSON object.")
-    return data
+    return data, len(result.stdout)
+
+
+# A published snapshot never changes (rule 1), and its routes are open to anyone, so its answers are kept
+# in this process: the gateway runs one backend replica with one worker, and nothing is persisted (rule 6).
+# The key is the toolkit command itself: it holds the toolkit's install path (its commit), the snapshot id
+# and every argument, so a new toolkit never serves an old answer. The answers are shared, not copied: no
+# caller mutates one. A failure is never kept, and callers of the same command at the same time share one
+# toolkit call (and its failure).
+_answers: "collections.OrderedDict[str, tuple[dict, int]]" = collections.OrderedDict()
+_answers_bytes = 0
+_flights: dict[tuple[int, str], asyncio.Task] = {}   # per event loop, like `_slots`
+
+
+def _keep(command: str, data: dict, size: int) -> None:
+    global _answers_bytes
+    if size > ANSWER_CACHE_BYTES // 4:
+        return
+    if command in _answers:
+        _answers_bytes -= _answers.pop(command)[1]
+    _answers[command] = (data, size)
+    _answers_bytes += size
+    while _answers_bytes > ANSWER_CACHE_BYTES:
+        _, (_, dropped) = _answers.popitem(last=False)
+        _answers_bytes -= dropped
+
+
+async def _answer(source: "OutputSource", command: str, *, operation: str, timeout: float) -> dict:
+    """The toolkit's answer to `command`; for a snapshot, kept and single-flight (see above). A cache
+    hit takes no `_slot`."""
+    if source.kind != "snapshot":
+        return await _run_json(command, operation=operation, timeout=timeout)
+    hit = _answers.get(command)
+    if hit is not None:
+        _answers.move_to_end(command)
+        logger.debug("%s: cache hit", operation)
+        return hit[0]
+    key = (id(asyncio.get_running_loop()), command)
+    flight = _flights.get(key)
+    if flight is None:
+        logger.debug("%s: cache miss", operation)
+
+        async def fly() -> dict:
+            try:
+                data, size = await _run_json_sized(command, operation=operation, timeout=timeout)
+                _keep(command, data, size)
+                return data
+            finally:
+                _flights.pop(key, None)
+
+        flight = _flights[key] = asyncio.ensure_future(fly())
+        # A waiter that left is not the flight's end, and nobody may be left to read its failure.
+        flight.add_done_callback(lambda t: t.cancelled() or t.exception())
+    return await asyncio.shield(flight)
 
 
 def _opt(flag: str, value) -> list[str]:
@@ -209,24 +271,24 @@ def _opt(flag: str, value) -> list[str]:
 async def inventory(source: OutputSource) -> dict:
     """`openghm output inventory` of the source."""
     command = _toolkit_command("inventory", *source.toolkit_args())
-    return await _run_json(command, operation="output_inventory", timeout=INVENTORY_TIMEOUT_SECONDS)
+    return await _answer(source, command, operation="output_inventory", timeout=INVENTORY_TIMEOUT_SECONDS)
 
 
 async def map_image(
     source: OutputSource, *, variable: str, resolution: str, start: str, bbox: str | None,
     width: int | None, height: int | None, ramp: str | None = None, vmin: float | None = None,
-    vmax: float | None = None, log: bool | None = None,
+    vmax: float | None = None, log: bool | None = None, image: Literal["png", "webp"] = "png",
 ) -> dict:
-    """`openghm output subset --format png` without `--out`: the answer carries the PNG as `base64`
+    """`openghm output subset --format <image>` without `--out`: the answer carries the image as `base64`
     beside the legend, range, units and box it was drawn for. `ramp`, `vmin`, `vmax` and `log` are
     the toolkit's `--ramp --min --max --log/--no-log`; `log=None` leaves the choice to the legend."""
     command = _toolkit_command(
-        "subset", *source.toolkit_args(), "--var", variable, "--resolution", resolution, "--format", "png",
+        "subset", *source.toolkit_args(), "--var", variable, "--resolution", resolution, "--format", image,
         "--start", start, *_opt("--bbox", bbox), *_opt("--width", width), *_opt("--height", height),
         *_opt("--ramp", ramp), *_opt("--min", vmin), *_opt("--max", vmax),
         *([] if log is None else ["--log" if log else "--no-log"]),
     )
-    return await _run_json(command, operation="output_map", timeout=SUBSET_TIMEOUT_SECONDS)
+    return await _answer(source, command, operation="output_map", timeout=SUBSET_TIMEOUT_SECONDS)
 
 
 async def series(
@@ -238,7 +300,7 @@ async def series(
         "subset", *source.toolkit_args(), "--var", variable, "--resolution", resolution, "--format", "json",
         "--point", point, *_opt("--start", start), *_opt("--end", end), *_opt("--display", display),
     )
-    return await _run_json(command, operation="output_series", timeout=SUBSET_TIMEOUT_SECONDS)
+    return await _answer(source, command, operation="output_series", timeout=SUBSET_TIMEOUT_SECONDS)
 
 
 @dataclass(frozen=True)
