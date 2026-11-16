@@ -109,3 +109,21 @@ def png_bytes(rgba) -> bytes:
             + _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
             + _chunk(b"IDAT", zlib.compress(raw.tobytes(), 6))
             + _chunk(b"IEND", b""))
+
+
+def webp_bytes(rgba: "np.ndarray") -> bytes:
+    """``rgba`` (height x width x 4, uint8) as a lossless WebP, transparency kept. Needs Pillow built
+    with WebP; without it an :class:`OpenghmError` says so."""
+    from ..errors import OpenghmError
+
+    try:
+        from PIL import Image, features
+    except ImportError:
+        raise OpenghmError("--format webp needs Pillow: pip install 'openghm[output]'")
+    if not features.check("webp"):
+        raise OpenghmError("--format webp needs a Pillow built with WebP support; use --format png")
+    import io
+
+    buf = io.BytesIO()
+    Image.fromarray(np.ascontiguousarray(rgba, dtype=np.uint8)).save(buf, format="WEBP", lossless=True, method=4)
+    return buf.getvalue()

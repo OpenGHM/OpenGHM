@@ -888,25 +888,25 @@ def output_inventory_cmd(source, snapshot, run, config_path, as_json) -> None:
 @_output_options
 @click.option("--var", "variable", required=True, metavar="NAME", help="the variable (a name `output inventory` lists)")
 @click.option("--resolution", type=click.Choice(["daily", "monthly", "yearly"]), required=True)
-@click.option("--format", "fmt", type=click.Choice(["nc", "png", "json"]), required=True,
-              help="nc: a NetCDF-4 file (--out); png: a north-up map of one time step; json: a pixel's series (--point)")
+@click.option("--format", "fmt", type=click.Choice(["nc", "png", "webp", "json"]), required=True,
+              help="nc: a NetCDF-4 file (--out); png: a north-up map of one time step; webp: the same map, lossless WebP; json: a pixel's series (--point)")
 @click.option("--start", default=None, metavar="DATE", help="YYYY, YYYY-MM or YYYY-MM-DD: the period's first day")
 @click.option("--end", default=None, metavar="DATE",
               help="the period's last day (default: the end of --start's own period; with neither, everything)")
 @click.option("--bbox", default=None, metavar="W,S,E,N", callback=_comma_floats(4, "W,S,E,N in degrees"),
-              help="the area, in degrees (nc, png; default: the whole grid)")
+              help="the area, in degrees (nc, png, webp; default: the whole grid)")
 @click.option("--point", default=None, metavar="LON,LAT", callback=_comma_floats(2, "LON,LAT in degrees"),
               help="the pixel, in degrees (json): its nearest cell")
-@click.option("--width", type=int, default=None, metavar="N", help="png: pixels across (default: one per cell)")
-@click.option("--height", type=int, default=None, metavar="N", help="png: pixels down")
+@click.option("--width", type=int, default=None, metavar="N", help="png/webp: pixels across (default: one per cell)")
+@click.option("--height", type=int, default=None, metavar="N", help="png/webp: pixels down")
 @click.option("--out", "out", default=None, metavar="PATH",
-              help="nc: where to write (required); png: write here instead of returning base64")
+              help="nc: where to write (required); png/webp: write here instead of returning base64")
 @click.option("--display", is_flag=True, help="json: values as the MT shows them (stored * scale + offset)")
 @click.option("--ramp", default=None, metavar="NAME",
-              help="png: colour ramp, replacing the MT's (a name `output inventory --json` lists under ramps)")
-@click.option("--min", "vmin", type=float, default=None, metavar="X", help="png: the legend's low end, replacing the MT's")
-@click.option("--max", "vmax", type=float, default=None, metavar="X", help="png: the legend's high end, replacing the MT's")
-@click.option("--log/--no-log", "log", default=None, help="png: a log scale on or off, replacing the MT's (needs min above zero)")
+              help="png/webp: colour ramp, replacing the MT's (a name `output inventory --json` lists under ramps)")
+@click.option("--min", "vmin", type=float, default=None, metavar="X", help="png/webp: the legend's low end, replacing the MT's")
+@click.option("--max", "vmax", type=float, default=None, metavar="X", help="png/webp: the legend's high end, replacing the MT's")
+@click.option("--log/--no-log", "log", default=None, help="png/webp: a log scale on or off, replacing the MT's (needs min above zero)")
 def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, resolution, fmt, start, end,
                       bbox, point, width, height, out, display, ramp, vmin, vmax, log) -> None:
     """cut one variable by period and area: a NetCDF file, a map, or a pixel's time series
@@ -916,10 +916,10 @@ def output_subset_cmd(source, snapshot, run, config_path, as_json, variable, res
     day, month or year. Every year in the period must have a file. The cells a call may read
     (whole chunks, however small the area) and an nc file's size are limited; a call over a
     limit is refused with a message before it reads anything.
-    A png takes its colours from the MT's legend; --ramp, --min, --max and --log each replace one part of
+    A png or webp takes its colours from the MT's legend; --ramp, --min, --max and --log each replace one part of
     it (an unknown --ramp is refused, exit 2), and the answer's legend says what was drawn.
     With --json: format, variable, resolution, source, period, read, and the format's own fields
-    (nc: path, bytes, rows, cols, bbox; png: width, height, bbox, legend, valueRange, path or base64;
+    (nc: path, bytes, rows, cols, bbox; png, webp: mediaType, width, height, bbox, legend, valueRange, path or base64;
     json: point, units, times, values).
     """
     from ..output import subset as sub

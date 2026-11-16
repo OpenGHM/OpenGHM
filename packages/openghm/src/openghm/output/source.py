@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import posixpath
 import re
+import threading
 from typing import Dict, List, Optional
 
 from .. import fetch
@@ -42,6 +43,75 @@ def _pick_run(runs: List[str], run: Optional[str], hint: str, where: str) -> str
     if hint in runs:
         return hint
     raise OpenghmError(f"{where} holds several runs ({', '.join(runs)}); name one with --run")
+
+
+class RangeReader:
+    """Byte ranges of one file, readable from several threads at once (:meth:`Source.range_reader`)."""
+
+    def read(self, offset: int, size: int) -> bytes:
+        """Exactly ``size`` bytes from ``offset``; an :class:`OpenghmError` when the file has fewer."""
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
+
+
+class _PreadReader(RangeReader):
+    """``os.pread`` on one descriptor: it takes its own offset, so threads do not share a position."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self.fd = os.open(path, os.O_RDONLY)
+
+    def read(self, offset: int, size: int) -> bytes:
+        parts = []
+        got = 0
+        while got < size:
+            piece = os.pread(self.fd, size - got, offset + got)
+            if not piece:
+                raise OpenghmError(f"{self.path} ends before byte {offset + size}")
+            parts.append(piece)
+            got += len(piece)
+        return b"".join(parts)
+
+    def close(self) -> None:
+        if self.fd >= 0:
+            os.close(self.fd)
+            self.fd = -1
+
+
+class _HttpReader(RangeReader):
+    """Exact ``Range`` requests, one :class:`Http` (so one connection) per thread, all closed with the reader."""
+
+    def __init__(self, url: str, like: Http) -> None:
+        self.url = url
+        self._like = like
+        self._local = threading.local()
+        self._all: List[Http] = []
+        self._lock = threading.Lock()
+
+    def _http(self) -> Http:
+        h = getattr(self._local, "http", None)
+        if h is None:
+            h = Http(timeout=self._like.timeout, attempts=self._like.attempts, backoff=self._like.backoff)
+            self._local.http = h
+            with self._lock:
+                self._all.append(h)
+        return h
+
+    def read(self, offset: int, size: int) -> bytes:
+        if size <= 0:
+            return b""
+        _, _, body = self._http().request(self.url, headers={"Range": f"bytes={offset}-{offset + size - 1}"}, ok=(206,))
+        if len(body) != size:
+            raise OpenghmError(f"{self.url}: asked for {size} bytes from {offset} and got {len(body)}")
+        return body
+
+    def close(self) -> None:
+        with self._lock:
+            for h in self._all:
+                h.close()
+            self._all.clear()
 
 
 class Source:
@@ -69,6 +139,11 @@ class Source:
 
     def close_nc(self, h5) -> None:
         h5.close()
+
+    def range_reader(self, rel: str) -> Optional[RangeReader]:
+        """A thread-safe :class:`RangeReader` of ``rel`` (the caller closes it), or None when this
+        source cannot read byte ranges, in which case the caller reads through h5py."""
+        return None
 
     def close(self) -> None:
         pass
@@ -112,6 +187,15 @@ class FolderSource(Source):
             with open(os.path.join(self.root, rel), encoding="utf-8", errors="replace") as fh:
                 return fh.read()
         except FileNotFoundError:
+            return None
+
+    def range_reader(self, rel: str) -> Optional[RangeReader]:
+        full = os.path.join(self.root, rel)
+        if not hasattr(os, "pread") or not os.path.isfile(full):
+            return None
+        try:
+            return _PreadReader(full)
+        except OSError:
             return None
 
     def open_nc(self, rel: str):
@@ -187,6 +271,9 @@ class SnapshotSource(Source):
             raise OpenghmError(f"cannot open {rel} of snapshot {self.snapshot_id}: {e}")
         h5._openghm_ranged = ranged  # closed with it
         return h5
+
+    def range_reader(self, rel: str) -> Optional[RangeReader]:
+        return _HttpReader(self._url(rel), self.http)
 
     def close_nc(self, h5) -> None:
         ranged = getattr(h5, "_openghm_ranged", None)

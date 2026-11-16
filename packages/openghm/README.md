@@ -169,7 +169,7 @@ rules, config, runtime selection, error handling, and recipes — see
 | `openghm spool prune [--dry-run]` | `myquota` | delete the least recently used years of the spool cache when scratch is nearly full (`--high`, `--low`, `--json`); `--all` deletes every unit no running simulation holds, whatever the quota says |
 | `openghm spool status [--json]` | `myquota` | print the scratch quota (files and bytes) and what the spool cache holds per variant, with the unexpired leases; deletes nothing |
 | `openghm output inventory <work dir>\|--snapshot <id>` | h5py (extra `output`) | describe a run's WBM output: the files and years that exist, each variable with its units and display settings, the grid; see [Reading output](#reading-output-openghm-output) |
-| `openghm output subset <work dir>\|--snapshot <id> --var V --resolution R --format nc\|png\|json` | h5py (extra `output`) | cut one variable by period and area: a NetCDF file, a north-up map, or a pixel's series; refuses a call over its limits |
+| `openghm output subset <work dir>\|--snapshot <id> --var V --resolution R --format nc\|png\|webp\|json` | h5py (extra `output`; Pillow for `webp`) | cut one variable by period and area: a NetCDF file, a north-up map, or a pixel's series; refuses a call over its limits |
 | `openghm sim status <id\|jobid>` | `sacct` | State / ExitCode / Elapsed |
 | `openghm sim state <work dir> [--json]` | — | whether a work directory holds a resumable WBM state (`none`, `resumable` with `saved_at`, `inconsistent`) |
 | `openghm sim list` | — | table of runs under `output_base` (reads `simulation.json` sidecars) |
@@ -516,11 +516,17 @@ climatology is listed, not cut) between `--start` and `--end` over `--bbox W,S,E
   outside the grid **transparent**. A variable the MT does not describe is drawn over its own range with `Rainbow`
   (`legend.auto` true). Written to `--out`, or returned as `base64` in the answer. Answer: `width`, `height`,
   `bbox` (the box drawn), `time`, `units` (displayed), `legend` (`ramp`, `rampUsed`, `min`, `max`, `log`, `auto`, nine
-  `colors` for a legend bar), `valueRange` (of the cells drawn, displayed), `bytes`, `path`, `base64`.
+  `colors` for a legend bar), `valueRange` (of the cells drawn, displayed), `bytes`, `path`, `base64`, `mediaType`.
+  `--ramp`, `--min`, `--max` and `--log/--no-log` each replace that part of the legend.
+- `--format webp` is the same map and answer as lossless WebP (`mediaType: image/webp`), with Pillow: about 40% smaller
+  than the PNG (a 1024 px Global map: 100 KB against 169 KB) and as fast to write.
 - `--format json` needs `--point`: the nearest cell's values over the period, `{"point": {"lon", "lat", "row", "col",
   "cellLon", "cellLat"}, "units", "valuesIn": "stored", "fill", "times": [...], "values": [...]}`, fill as `null`, each value
   the shortest decimal that reads back as the stored float32 (what `ncdump` prints). `--display` returns
-  `stored * scale + offset` in the MT's units (`valuesIn: "display"`).
+  `stored * scale + offset` in the MT's units (`valuesIn: "display"`). The cell's chunks are located in the file's
+  chunk index and fetched as exact byte ranges and inflated in `SERIES_READ_THREADS` (4) threads
+  (`openghm/output/chunks.py`); a Global daily year of one cell, 365 chunks of 580 x 1440 cells, takes 1.6 s
+  instead of 5.8 s. A layout it does not handle (a filter other than deflate) is read through h5py as before.
 
 Every answer also has `format`, `variable`, `resolution`, `source`, `period` (`first`, `last`, `steps`) and
 `read` (`cells` decoded, `limit`). Without `--json` the commands print a few lines for a person.

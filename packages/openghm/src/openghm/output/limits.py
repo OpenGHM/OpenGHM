@@ -44,3 +44,10 @@ CACHE_BLOCKS = 32
 HTTP_TIMEOUT = 60
 HTTP_ATTEMPTS = 3
 HTTP_BACKOFF = 1.0
+
+#: Threads that fetch and inflate the chunks of one cell's time series (:mod:`openghm.output.chunks`),
+#: each with its own HTTPS connection. Measured on an Anvil login node, 2026-11-16, a Global daily
+#: year of one cell (365 chunks): 4 threads 1.6 s; 8: 1.8 s; 16: 1.9 s; 1: 4.2 s (h5py's serial
+#: read: 5.8 s). More threads do not help, and the login node is shared, so the smallest of the
+#: fastest is kept.
+SERIES_READ_THREADS = 4

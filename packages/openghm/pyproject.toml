@@ -35,8 +35,10 @@ dependencies = [
 # `openghm output inventory` / `openghm output subset` (ADR 0033) read and write
 # NetCDF-4. h5py and numpy are native wheels that install on Anvil's Python 3.9
 # (h5py 3.14.0, numpy 2.0.2 checked 2026-10-09); h5netcdf writes the downloaded
-# subset as a valid NetCDF-4 file. Nothing else in the toolkit imports them.
-output = ["h5py>=3.8", "numpy>=1.24", "h5netcdf>=1.3"]
+# subset as a valid NetCDF-4 file. Pillow writes `--format webp` maps (lossless
+# WebP; imported only for that format; Pillow 12 dropped Python 3.9, hence <12).
+# Nothing else in the toolkit imports them.
+output = ["h5py>=3.8", "numpy>=1.24", "h5netcdf>=1.3", "Pillow>=10,<12"]
 dev = ["pytest>=7"]
 
 [project.scripts]

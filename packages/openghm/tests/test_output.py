@@ -12,6 +12,7 @@ Needs the optional extra (``pip install -e '.[output,dev]'``); without it the mo
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -932,3 +933,229 @@ def test_cli_nc_and_text_summaries(work, tmp_path):
     t = run_cli("subset", str(work), "--config", str(cfg), "--var", "runoff", "--resolution", "daily", "--format", "json",
                 "--start", "2000-01-03", "--end", "2000-01-04", "--point", "-99.3,42.6")
     assert t.exit_code == 0 and "2000-01-03" in t.stdout
+
+
+# ---- a cell's series read chunk by chunk ---------------------------------------------------------
+
+
+def _series_file(path: Path, **datasets) -> None:
+    """``datasets`` is ``{name: (array, create_dataset kwargs)}`` in one HDF5 file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as f:
+        for name, (data, kw) in datasets.items():
+            f.create_dataset(name, data=data, **kw)
+
+
+def _series_data(nt=7, ny=10, nx=13):
+    rng = np.random.RandomState(3)
+    return (rng.rand(nt, ny, nx) * 1000).astype("<f4")
+
+
+def _series_source(tmp_path: Path, **datasets) -> FolderSource:
+    _series_file(tmp_path / "w" / "wbm_output" / "run1" / "daily" / "s.nc", **datasets)
+    return FolderSource(str(tmp_path / "w"))
+
+
+@pytest.mark.parametrize("chunks", [(1, 4, 5), (3, 4, 5), (7, 10, 13), (2, 10, 3)])
+def test_the_chunked_series_equals_h5pys_read_with_time_extents_and_edge_chunks(tmp_path, chunks):
+    from openghm.output import chunks as ch
+
+    a = _series_data()
+    src = _series_source(tmp_path, v=(a, dict(chunks=chunks, compression="gzip", compression_opts=1)),
+                         raw=(a, dict(chunks=chunks)))
+    for name in ("v", "raw"):
+        h5 = src.open_nc("daily/s.nc")
+        try:
+            ds = h5[name]
+            assert ch.applies(ds)
+            for i0, i1 in ((0, 7), (2, 5), (6, 7), (1, 2)):
+                for r, c in ((0, 0), (9, 12), (4, 7), (8, 4)):          # corners are edge chunks: 10 and 13 are not multiples
+                    got = ch.read_cell_series(src, "daily/s.nc", ds, i0, i1, r, c)
+                    want = ds[i0:i1, r, c]
+                    assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
+        finally:
+            src.close_nc(h5)
+
+
+def test_an_unallocated_chunk_is_the_fill_value_and_a_stored_raw_chunk_is_read_raw(tmp_path):
+    from openghm.output import chunks as ch
+
+    a = _series_data()
+    src = _series_source(tmp_path, v=(None, dict(shape=a.shape, dtype="<f4", chunks=(1, 10, 13), compression="gzip",
+                                                  fillvalue=-7.5)))
+    with h5py.File(src.root + "/daily/s.nc", "r+") as f:
+        f["v"][1] = a[1]                                       # steps 0 and 2.. stay unallocated
+    h5 = src.open_nc("daily/s.nc")
+    try:
+        ds = h5["v"]
+        assert ds.id.get_chunk_info_by_coord((0, 0, 0)).byte_offset is None
+        got = ch.read_cell_series(src, "daily/s.nc", ds, 0, 4, 3, 4)
+        assert got.tolist() == [-7.5, float(a[1, 3, 4]), -7.5, -7.5] and got.tobytes() == ds[0:4, 3, 4].tobytes()
+    finally:
+        src.close_nc(h5)
+
+
+def test_a_big_endian_integer_series_is_read_as_stored(tmp_path):
+    from openghm.output import chunks as ch
+
+    a = (np.arange(4 * 6 * 6) % 251).reshape(4, 6, 6).astype(">i2")
+    src = _series_source(tmp_path, v=(a, dict(chunks=(2, 4, 4), compression="gzip")))
+    h5 = src.open_nc("daily/s.nc")
+    try:
+        got = ch.read_cell_series(src, "daily/s.nc", h5["v"], 0, 4, 5, 5)
+        assert got.dtype == np.dtype(">i2") and got.tolist() == a[:, 5, 5].tolist()
+    finally:
+        src.close_nc(h5)
+
+
+def test_other_filters_layouts_and_sources_fall_back(tmp_path):
+    from openghm.output import chunks as ch
+    from openghm.output.source import Source
+
+    a = _series_data()
+    src = _series_source(tmp_path,
+                         shuffled=(a, dict(chunks=(1, 10, 13), compression="gzip", shuffle=True)),
+                         summed=(a, dict(chunks=(1, 10, 13), fletcher32=True)),
+                         contiguous=(a, {}),
+                         ints=(a.astype("f8"), dict(chunks=(1, 10, 13), compression="lzf")),
+                         flat=(a[0], dict(chunks=(5, 5))))
+    h5 = src.open_nc("daily/s.nc")
+    try:
+        for name in ("shuffled", "summed", "contiguous", "ints", "flat"):
+            assert not ch.applies(h5[name]), name
+            assert ch.read_cell_series(src, "daily/s.nc", h5[name], 0, 3, 1, 1) is None
+        h5.close()
+        h5 = src.open_nc("daily/s.nc")
+        _series_file(tmp_path / "w" / "wbm_output" / "run1" / "daily" / "t.nc", v=(a, dict(chunks=(1, 10, 13), compression="gzip")))
+        t = src.open_nc("daily/t.nc")
+        try:
+            assert ch.read_cell_series(Source(), "daily/t.nc", t["v"], 0, 3, 1, 1) is None      # a source with no byte ranges
+        finally:
+            src.close_nc(t)
+    finally:
+        src.close_nc(h5)
+
+
+def test_a_chunk_of_the_wrong_size_is_refused(tmp_path):
+    from openghm.output import chunks as ch
+
+    a = _series_data()
+    src = _series_source(tmp_path, v=(a, dict(chunks=(1, 10, 13), compression="gzip")))
+    h5 = src.open_nc("daily/s.nc")
+    try:
+        class Short:
+            def read(self, offset, size):
+                import zlib as z
+                return z.compress(b"\0" * 8)
+
+            def close(self):
+                pass
+
+        class FakeSource(FolderSource):
+            def range_reader(self, rel):
+                return Short()
+
+        with pytest.raises(OpenghmError, match="holds 8 bytes"):
+            ch.read_cell_series(FakeSource(str(tmp_path / "w")), "daily/s.nc", h5["v"], 0, 2, 1, 1)
+    finally:
+        src.close_nc(h5)
+
+
+def test_a_snapshots_series_fetches_the_exact_chunks_in_parallel_threads(tmp_path, bucket, work, monkeypatch):
+    big = _series_data(nt=12, ny=10, nx=13)
+    p = tmp_path / "big.nc"
+    _series_file(p, v=(big, dict(chunks=(1, 5, 5), compression="gzip", compression_opts=1)))
+    key = f"snapshots/{SNAPSHOT_ID}/wbm_output/run1/daily/series.nc"
+    bucket.objects[key] = p.read_bytes()
+    from openghm.output import chunks as ch
+
+    seen = set()
+    real = ch._read
+
+    def spy(reader, ds, *a):
+        out = real(reader, ds, *a)
+        seen.add(type(reader).__name__)
+        return out
+
+    monkeypatch.setattr(ch, "_read", spy)
+    src = snapshot_source(bucket)
+    try:
+        h5 = src.open_nc("daily/series.nc")
+        try:
+            ds = h5["v"]
+            before = len(bucket.ranges)
+            got = ch.read_cell_series(src, "daily/series.nc", ds, 2, 12, 7, 8, threads=4)
+            assert got.tobytes() == ds[2:12, 7, 8].tobytes()
+            mine = [r for r in bucket.ranges[before:] if r[0] == key]
+        finally:
+            src.close_nc(h5)
+    finally:
+        src.close()
+    assert seen == {"_HttpReader"}
+    infos = []
+    with h5py.File(p, "r") as f:
+        infos = [f["v"].id.get_chunk_info_by_coord((t, 5, 5)) for t in range(2, 12)]
+    assert {(r[1], r[2]) for r in mine} >= {(i.byte_offset, i.byte_offset + i.size - 1) for i in infos}
+
+
+def test_a_json_series_over_a_snapshot_and_a_folder_agree_and_use_the_fast_path(work, bucket, monkeypatch):
+    from openghm.output import chunks as ch
+
+    calls = []
+    real = ch.read_cell_series
+    monkeypatch.setattr(ch, "read_cell_series", lambda *a, **k: calls.append(1) or real(*a, **k))
+    src = snapshot_source(bucket)
+    try:
+        a = cut(src, "runoff", "daily", "json", start="2000-01", point=cell(3, 5))
+    finally:
+        src.close()
+    b = cut(source_of(work), "runoff", "daily", "json", start="2000-01", point=cell(3, 5))
+    a.pop("source"), b.pop("source")
+    assert a == b and len(calls) == 2
+
+
+# ---- webp ----------------------------------------------------------------------------------------
+
+
+def test_a_webp_map_is_the_pngs_map_losslessly(work, tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    out = tmp_path / "m.webp"
+    w = cut(source_of(work), "runoff", "monthly", "webp", start="2000-03", out=str(out))
+    p = cut(source_of(work), "runoff", "monthly", "png", start="2000-03")
+    assert w["mediaType"] == "image/webp" and p["mediaType"] == "image/png"
+    for k in ("width", "height", "bbox", "legend", "valueRange", "units", "time"):
+        assert w[k] == p[k]
+    assert w["path"] == str(out) and out.read_bytes()[:4] == b"RIFF" and w["bytes"] == out.stat().st_size
+    im = Image.open(out)
+    assert im.size == (COLS, ROWS) and im.mode == "RGBA"
+    _, _, rgba = decode_png(base64.b64decode(p["base64"]))
+    got = np.asarray(im)
+    assert got.shape == rgba.shape and np.array_equal(got[..., 3], rgba[..., 3])
+    nodata = ROWS - 1 - 2, 3                  # the fill at lat index 2, lon index 3, north-up
+    assert got[nodata][3] == 0 and (rgba[..., 3] == 255).any()
+    seen = rgba[..., 3] > 0                   # lossless keeps the colour of every visible pixel (not of transparent ones)
+    assert np.array_equal(got[seen], rgba[seen])
+    b64 = cut(source_of(work), "runoff", "monthly", "webp", start="2000-03")
+    assert b64["base64"] and b64["path"] is None and base64.b64decode(b64["base64"]).startswith(b"RIFF")
+
+
+def test_webp_takes_the_png_options_and_refuses_what_png_refuses(work):
+    pytest.importorskip("PIL.Image")
+    a = cut(source_of(work), "runoff", "monthly", "webp", start="2000-03", bbox=(-101, 40, -99, 41.5), width=8, height=6,
+            ramp="DarkRed", vmin=1.0, vmax=90.0, log=True)
+    assert (a["width"], a["height"]) == (8, 6) and a["legend"]["rampUsed"] == "DarkRed" and a["legend"]["log"] is True
+    with pytest.raises(OpenghmError, match="one time step"):
+        cut(source_of(work), "runoff", "monthly", "webp", start="2000")
+
+
+def test_webp_without_pillow_is_a_refusal_and_the_cli_exits_2(work, tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    with pytest.raises(OpenghmError, match="needs Pillow"):
+        cut(source_of(work), "runoff", "monthly", "webp", start="2000-03")
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("")
+    r = run_cli("subset", str(work), "--config", str(cfg), "--var", "runoff", "--resolution", "monthly", "--format", "webp",
+                "--start", "2000-03")
+    assert r.exit_code == 2 and "needs Pillow" in r.stderr

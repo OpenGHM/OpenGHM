@@ -17,6 +17,8 @@ dates and over a box or a point, and answers in one of three forms:
           drawn, and ``auto`` is true only when a bound was measured from the data, that is, neither the MT nor
           the caller gave it. A ramp *name the caller gives* must exist: the Rainbow fallback is for names in an
           MT we have not met, not for a choice a person made.
+``webp``  the same map as a lossless WebP (Pillow, imported only for this format): the same options and the
+          same answer as ``png``, with ``mediaType`` ``image/webp`` in place of ``image/png``.
 ``json``  the values of the nearest cell to ``point`` over the period, as a time series.
 
 **Dates.** ``YYYY``, ``YYYY-MM`` or ``YYYY-MM-DD``. A start rounds down to the first day it names and an
@@ -48,12 +50,14 @@ from datetime import date, datetime, timezone
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from ..errors import OpenghmError
-from . import image, limits, mt, netcdf
+from . import chunks, image, limits, mt, netcdf
 from .inventory import file_path, load_mt
 from .netcdf import np
 from .source import Source
 
-FORMATS = ("nc", "png", "json")
+FORMATS = ("nc", "png", "webp", "json")
+#: The formats that draw a map.
+IMAGE_FORMATS = ("png", "webp")
 RESOLUTIONS = ("daily", "monthly", "yearly")
 _DATE = re.compile(r"^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$")
 _YEAR_FILE = re.compile(r"wbm_(\d{4})\.nc$")
@@ -81,7 +85,7 @@ class Request:
     out: Optional[str] = None
     #: ``json`` only: values as the MT shows them.
     display: bool = False
-    #: ``png`` only: the caller's style, each part overriding the same part of the MT's legend (or of the
+    #: ``png`` and ``webp`` only: the caller's style, each part overriding the same part of the MT's legend (or of the
     #: automatic one) and nothing else. ``None`` is "not given", which for ``log`` is not the same as False.
     ramp: Optional[str] = None
     vmin: Optional[float] = None
@@ -182,17 +186,17 @@ def _check(req: Request) -> None:
         if req.bbox is not None:
             raise OpenghmError("--format json takes --point, not --bbox")
         if req.out:
-            raise OpenghmError("--out is for the nc and png formats; json is printed")
+            raise OpenghmError("--out is for the nc, png and webp formats; json is printed")
     else:
         if req.point is not None:
             raise OpenghmError(f"--point is for --format json; {req.format} takes --bbox")
         if req.display:
-            raise OpenghmError("--display is for --format json (png is always shown as displayed)")
+            raise OpenghmError("--display is for --format json (png and webp are always shown as displayed)")
     if req.format == "nc":
         if not req.out:
             raise OpenghmError("--format nc needs --out PATH")
-    if req.format != "png" and (req.ramp is not None or req.vmin is not None or req.vmax is not None or req.log is not None):
-        raise OpenghmError("--ramp, --min, --max and --log are for --format png")
+    if req.format not in IMAGE_FORMATS and (req.ramp is not None or req.vmin is not None or req.vmax is not None or req.log is not None):
+        raise OpenghmError("--ramp, --min, --max and --log are for --format png or webp")
     if req.ramp is not None and not image.resolve_ramp(req.ramp)[1]:
         raise OpenghmError(f"{req.ramp!r} is not a ramp this toolkit draws; choose one of {', '.join(image.RAMPS)}")
     for name, v in (("--min", req.vmin), ("--max", req.vmax)):
@@ -202,8 +206,8 @@ def _check(req: Request) -> None:
         raise OpenghmError(f"--min must be less than --max (got {req.vmin:g} and {req.vmax:g})")
     if req.log and req.vmin is not None and req.vmin <= 0:
         raise OpenghmError(f"a log scale needs --min above zero (got {req.vmin:g})")
-    if req.format != "png" and (req.width or req.height):
-        raise OpenghmError("--width and --height are for --format png")
+    if req.format not in IMAGE_FORMATS and (req.width or req.height):
+        raise OpenghmError("--width and --height are for --format png or webp")
     for name, v in (("--width", req.width), ("--height", req.height)):
         if v is not None and not 1 <= v <= limits.MAX_IMAGE_SIDE:
             raise OpenghmError(f"{name} must be between 1 and {limits.MAX_IMAGE_SIDE}")
@@ -410,7 +414,10 @@ def _do_json(source: Source, plan: _Plan, req: Request, row: int, col: int, disp
     for p in plan.pieces:
         h5 = source.open_nc(p.rel)
         try:
-            col_values = h5[req.variable][p.i0:p.i1, row, col]
+            ds = h5[req.variable]
+            col_values = chunks.read_cell_series(source, p.rel, ds, p.i0, p.i1, row, col)
+            if col_values is None:       # a layout or source the fast path does not take
+                col_values = ds[p.i0:p.i1, row, col]
         finally:
             source.close_nc(h5)
         ok = netcdf.valid_mask(col_values, plan.fill)
@@ -524,8 +531,9 @@ def _do_png(source: Source, plan: _Plan, req: Request, geometry, display: Option
 
     lo, hi, log, requested, ramp_name, auto = _legend_drawn(display.legend if display else None, req, shown, valid)
     rgba = image.colorize(shown, valid, lo, hi, log, ramp_name)
-    data = image.png_bytes(rgba)
+    data = image.webp_bytes(rgba) if req.format == "webp" else image.png_bytes(rgba)
     answer = {
+        "mediaType": "image/webp" if req.format == "webp" else "image/png",
         "width": width, "height": height, "northUp": True,
         "bbox": {"west": box[0], "south": box[1], "east": box[2], "north": box[3]},
         "time": plan.times[0].isoformat(),
@@ -570,7 +578,7 @@ def subset(source: Source, req: Request) -> dict:
     grid = plan.grid
 
     display: Optional[mt.Display] = None
-    if req.format == "png" or req.display:
+    if req.format in IMAGE_FORMATS or req.display:
         _name, records = load_mt(source, source.list_files("", recursive=False), [])
         display = records.get((req.variable, req.resolution))
         if req.display and display is None:
@@ -579,7 +587,7 @@ def subset(source: Source, req: Request) -> dict:
 
     row = col = 0
     geometry = None
-    if req.format == "png":
+    if req.format in IMAGE_FORMATS:
         if steps != 1:
             raise OpenghmError(f"a map shows one time step; this period holds {steps} {req.resolution} steps. "
                                "Name one: a full date for daily, a month for monthly, a year for yearly.")
@@ -605,7 +613,7 @@ def subset(source: Source, req: Request) -> dict:
     cells = _check_limits(plan, steps, rows, cols, req)
     if req.format == "nc":
         body = _do_nc(source, plan, req, rows, cols)
-    elif req.format == "png":
+    elif req.format in IMAGE_FORMATS:
         body = _do_png(source, plan, req, geometry, display)
     else:
         body = _do_json(source, plan, req, row, col, display)
@@ -628,7 +636,7 @@ def describe(answer: dict) -> List[str]:
     fmt = answer["format"]
     if fmt == "nc":
         return [head, f"wrote {answer['path']} ({answer['bytes']:,} bytes, {answer['rows']} x {answer['cols']} cells, lat {answer['latOrder']})"]
-    if fmt == "png":
+    if fmt in IMAGE_FORMATS:
         lg = answer["legend"]
         where = answer["path"] or "(base64 in --json)"
         return [head, f"map {answer['width']} x {answer['height']} north-up, {answer['units'] or '-'}, "
