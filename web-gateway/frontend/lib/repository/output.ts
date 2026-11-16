@@ -27,14 +27,21 @@ export interface OutputVariable {
   longName: string | null;
   units: string | null;
   /** The resolutions the variable is written at, each with its years. */
-  resolutions: Partial<Record<OutputResolution, { years: number[] }>>;
+  resolutions: Partial<Record<OutputResolution, { years: number[] }>> & {
+    /** Climatology files the variable has, by kind (daily, monthly, yearly). */
+    climatology?: Partial<Record<OutputResolution, unknown>>;
+  };
 }
 
 export interface OutputInventory {
   grid: { bounds: OutputBounds; cellSize: number; crs?: string };
   /** Each resolution's years, and its first and last time step, `YYYY-MM-DD`. */
-  resolutions: Partial<Record<OutputResolution, { years: number[]; first: string; last: string }>>;
+  resolutions: Partial<Record<OutputResolution, { years: number[]; first: string; last: string }>> & {
+    climatology?: { kinds: OutputResolution[] };
+  };
   variables: OutputVariable[];
+  /** The ramps the toolkit can draw (`DarkBlue`, ...); absent from an older toolkit's answer. */
+  ramps?: string[];
 }
 
 // ─── The period ──────────────────────────────────────────────────────────────
