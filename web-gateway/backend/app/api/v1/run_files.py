@@ -156,3 +156,40 @@ async def post_run_archive(
         headers=headers,
         background=BackgroundTask(archive.release),
     )
+
+
+@router.get("/jobs/{job_id}/files/download")
+async def get_run_file(
+    job_id: str,
+    path: str = Query(description="File, relative to the run's output directory"),
+    user: TokenPayload = Depends(require_permission(Permission.JOB_VIEW_OWN)),
+) -> StreamingResponse:
+    """One file of the run's output as it is, streamed over SFTP with its size as
+    ``Content-Length``. Not compressed: the output is mostly NetCDF, already deflated."""
+    sim_id = await _run(job_id, user)
+    try:
+        file = await run_files.open_file(sim_id, tree_browse.validate_path(path, file=True))
+    except tree_archive.SelectionTooLarge as exc:
+        raise _error(
+            413,
+            "selection_too_large",
+            "This file is too large to download.",
+            bytes=exc.size,
+            limit_bytes=tree_browse.ARCHIVE_LIMIT_BYTES,
+        ) from exc
+    except tree_archive.ArchiveBusy as exc:
+        raise _error(
+            429, "archive_busy", "Other downloads are being prepared. Try again in a minute."
+        ) from exc
+    except _FAILURES as exc:
+        raise _failure(exc, path) from exc
+    return StreamingResponse(
+        file.stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": tree_archive.content_disposition(file.filename),
+            "Content-Length": str(file.length),
+            "Cache-Control": "private, no-store",
+        },
+        background=BackgroundTask(file.release),
+    )

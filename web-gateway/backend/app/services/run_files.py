@@ -365,3 +365,68 @@ async def _select(
         if not complete or total > limit:
             raise tree_archive.SelectionTooLarge(total)
     return entries, total
+
+
+class RawFile:
+    """One file of the run's output, ready to stream as it is (no ZIP, no compression). `release`
+    frees its place among `tree_archive.MAX_ARCHIVES`; the stream does it itself when it ends."""
+
+    def __init__(self, filename: str, obj: FolderObject, slot: tree_archive._Slot) -> None:
+        self.filename = filename
+        self.length = obj.size
+        self._obj = obj
+        self._slot = slot
+
+    async def stream(self) -> AsyncIterator[bytes]:
+        sent = 0
+        try:
+            async with framed_source([(self._obj.key, self._obj.size)])() as read:
+                async for chunk in read(self._obj):
+                    sent += len(chunk)
+                    yield chunk
+            if sent != self._obj.size:
+                raise tree_archive.ArchiveError(f"{sent} bytes read, {self._obj.size} listed")
+        except Exception as exc:
+            # The response has begun: raising is what ends the connection without a clean finish.
+            logger.warning("File download stopped at %s: %s", self._obj.key, exc)
+            raise
+        finally:
+            self._slot.release()
+
+    def release(self) -> None:
+        self._slot.release()
+
+
+async def open_file(sim_id: str, path: str) -> RawFile:
+    """The file at `path` (`validate_path`'s, not ending with `/`) of the run's output, to stream
+    as it is. Takes one of the same places as a ZIP. Raises `tree_archive.ArchiveBusy`,
+    `OutputMissing`, `PathNotFound` (not there, or a folder), `AnvilUnavailable` and
+    `tree_archive.SelectionTooLarge` when it is over the ZIP limit."""
+    folder, _, name = path.rpartition("/")
+    folder = f"{folder}/" if folder else ""
+    if not name:
+        raise PathNotFound(path)
+    slot = tree_archive.acquire()
+    try:
+
+        async def find():
+            async with _session() as sftp:
+                real = await _viewed(sftp, sim_id, folder)
+                for entry in await _entries(sftp, real):
+                    if entry.name == name and not entry.is_dir:
+                        return FolderObject(
+                            key=posixpath.join(real, name), size=entry.size, modified=entry.modified, url=""
+                        )
+                raise PathNotFound(path)
+
+        obj = await asyncio.wait_for(find(), SCAN_TIMEOUT_SECONDS)
+        if obj.size > tree_browse.ARCHIVE_LIMIT_BYTES:
+            raise tree_archive.SelectionTooLarge(obj.size)
+        await _check_remote_python()
+        return RawFile(name, obj, slot)
+    except asyncio.TimeoutError as exc:
+        slot.release()
+        raise AnvilUnavailable("anvil_unreachable", "Anvil took too long to find this file.") from exc
+    except BaseException:
+        slot.release()
+        raise

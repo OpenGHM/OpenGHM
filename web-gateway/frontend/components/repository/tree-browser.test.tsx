@@ -1,5 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+const start = vi.hoisted(() => vi.fn());
+vi.mock("@/components/download/download-provider", () => ({ useDownload: () => ({ start, busy: false }) }));
+const browserDownload = vi.hoisted(() => ({
+  headContentType: vi.fn(async (url: string) => (url.endsWith(".json") ? "application/json" : "binary/octet-stream")),
+  saveInBrowser: vi.fn(),
+}));
+vi.mock("@/lib/download/browser-download", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/download/browser-download")>()),
+  headContentType: browserDownload.headContentType,
+  saveInBrowser: browserDownload.saveInBrowser,
+}));
+beforeEach(() => {
+  start.mockReset();
+  browserDownload.saveInBrowser.mockReset();
+});
 import { FakeNavigation } from "@/lib/workspace/fake-navigation";
 
 const PATHNAME = "/repository/snap-1/files";
@@ -128,12 +144,19 @@ describe("TreeBrowser listing", () => {
     expect(cells[3].textContent).toBe("30 Sep 2026");
   });
 
-  it("gives each file a download link to its public URL and a copy-URL button", async () => {
+  it("gives each file a download button that reads it from its public URL, and a copy-URL button", async () => {
     serve({ "": [ROOT] });
     setup();
     await screen.findByText("metadata.json");
-    const link = screen.getByRole("link", { name: "Download metadata.json" });
-    expect(link.getAttribute("href")).toBe(`${BASE}metadata.json`);
+    expect(screen.queryByRole("link", { name: "Download metadata.json" })).toBeNull();
+    // JSON is what a browser would show: the page reads it and saves it.
+    fireEvent.click(screen.getByRole("button", { name: "Download metadata.json" }));
+    await waitFor(() =>
+      expect(start).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filename: "metadata.json", url: `${BASE}metadata.json`, direct: true })
+      )
+    );
+    expect(browserDownload.saveInBrowser).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Copy URL of metadata.json" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${BASE}metadata.json`);
     await screen.findByTitle("Copied");
@@ -374,7 +397,7 @@ describe("TreeBrowser selection", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("totals what is ticked, files at their listed size and a folder by its summary, and posts them as one form", async () => {
+  it("totals what is ticked, files at their listed size and a folder by its summary, and starts them as one ZIP", async () => {
     fetchMock.mockImplementation(async () =>
       Response.json({ path: "wbm_init/", url: `${BASE}wbm_init/`, files: 3, bytes: 4096, limit_bytes: 500 * 1024 ** 2, fits: true, complete: true })
     );
@@ -385,10 +408,18 @@ describe("TreeBrowser selection", () => {
     fireEvent.click(box("Select wbm_init/"));
     expect(fetchMock).toHaveBeenCalledWith("/api/repository/datasets/snap-1/files/folder?path=wbm_init/");
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("2 selected · 6.0 KB"));
-    const form = screen.getByRole("button", { name: "Download ZIP" }).closest("form") as HTMLFormElement;
-    expect(form.getAttribute("action")).toBe("/api/repository/datasets/snap-1/files/archive");
-    const data = new FormData(form);
-    expect([data.get("folder"), ...data.getAll("names")]).toEqual(["", "metadata.json", "wbm_init/"]);
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/repository/datasets/snap-1/files/archive",
+        method: "POST",
+        fields: [
+          ["folder", ""],
+          ["names", "metadata.json"],
+          ["names", "wbm_init/"],
+        ],
+      })
+    );
   });
 
   it("says a selection over the limit is, at once, and clears when another folder is opened", async () => {

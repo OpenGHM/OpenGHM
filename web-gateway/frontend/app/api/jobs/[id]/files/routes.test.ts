@@ -12,6 +12,7 @@ vi.mock("@/lib/archive-fetch", async (importOriginal) => {
 import { GET as list } from "./route";
 import { POST as archive } from "./archive/route";
 import { GET as folder } from "./folder/route";
+import { GET as download } from "./download/route";
 
 const params = (id = "job 1") => ({ params: Promise.resolve({ id }) });
 
@@ -160,5 +161,38 @@ describe("a run's file routes (ADR 0040)", () => {
     const res = await list(new Request("http://app.test/x"), params());
     expect(res.status).toBe(502);
     expect((await res.json()).code).toBe("gateway_unreachable");
+  });
+});
+
+describe("a run's single file route", () => {
+  it("passes the path on, and streams the file with its name and length", async () => {
+    const upstream = new Response("bytes", {
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-disposition": 'attachment; filename="wbm_2001.nc"',
+        "content-length": "5",
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(upstream);
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await download(new Request("http://app.test/x?path=daily/wbm_2001.nc&evil=1"), params());
+    expect(fetchMock.mock.calls[0][0]).toBe("http://backend.test/api/v1/jobs/job%201/files/download?path=daily%2Fwbm_2001.nc");
+    expect(res.headers.get("content-disposition")).toBe('attachment; filename="wbm_2001.nc"');
+    expect(res.headers.get("content-length")).toBe("5");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.body).toBe(upstream.body);
+  });
+
+  it("sets the cookie a browser-taken download is told by, for a sane token only, and not on a refusal", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("b", { headers: { "content-length": "1" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const ok = await download(new Request("http://app.test/x?path=a.nc&dl=abc123"), params());
+    expect(ok.headers.get("set-cookie")).toBe("ghm-dl=abc123; Path=/; Max-Age=120; SameSite=Lax");
+    const bad = await download(new Request("http://app.test/x?path=a.nc&dl=a;b"), params());
+    expect(bad.headers.get("set-cookie")).toBeNull();
+    fetchMock.mockResolvedValue(Response.json({ detail: {} }, { status: 404 }));
+    const refused = await download(new Request("http://app.test/x?path=a.nc&dl=abc123"), params());
+    expect(refused.status).toBe(404);
+    expect(refused.headers.get("set-cookie")).toBeNull();
   });
 });

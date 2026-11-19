@@ -18,7 +18,7 @@ function knownId(kind: TreeKind, id: string): boolean {
   return (kind === "snapshot" ? SNAPSHOT_ID : MODEL_INPUT_ID).test(id);
 }
 
-export function relay(upstream: Response, download: boolean): Response {
+export function relay(upstream: Response, download: boolean, token?: string | null): Response {
   const out = new Headers();
   const contentType = upstream.headers.get("content-type");
   if (contentType) out.set("Content-Type", contentType);
@@ -29,6 +29,10 @@ export function relay(upstream: Response, download: boolean): Response {
     }
   }
   out.set("Cache-Control", "no-store");
+  // A download the browser takes itself (lib/download/engine, "native") learns it started from this.
+  if (upstream.ok && download && token && /^[A-Za-z0-9]{1,40}$/.test(token)) {
+    out.append("Set-Cookie", `ghm-dl=${token}; Path=/; Max-Age=120; SameSite=Lax`);
+  }
   // The body is the backend's own stream, passed on as it arrives: never buffered here.
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
@@ -94,7 +98,8 @@ export async function proxyArchive(request: Request, kind: TreeKind, id: string)
         // The browser leaving cancels the backend's reads of the bucket.
         signal: request.signal,
       }),
-      true
+      true,
+      new URL(request.url).searchParams.get("dl")
     );
   } catch {
     return proxyRefusal(502, "gateway_unreachable", UNREACHABLE);

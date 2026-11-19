@@ -7,6 +7,7 @@ import {
   describeProblem,
   downloadOptions,
   filterSeries,
+  publishedFileUrl,
   mapQuery,
   mapWidth,
   niceTicks,
@@ -193,5 +194,36 @@ describe("the words for a refusal", () => {
   it("names an unreachable Anvil and falls back for the rest", () => {
     expect(describeProblem(503, { detail: { code: "anvil_unreachable", message: "x" } }).message).toMatch(/Anvil could not be reached/);
     expect(describeProblem(500, null)).toEqual({ kind: "error", message: "The output could not be read. Try again." });
+  });
+});
+
+describe("publishedFileUrl", () => {
+  const published = { treeUrl: "https://s3.example/openghm/snapshots/abc/", runs: ["Global_tracking"] };
+  const years = [2000, 2001, 2002];
+
+  it("is the yearly file for a yearly variable's year", () => {
+    const [step] = downloadOptions("yearly", "2001", years);
+    expect(publishedFileUrl(published, "runoff", "yearly", step)).toBe(
+      "https://s3.example/openghm/snapshots/abc/wbm_output/Global_tracking/yearly/runoff/wbm_2001.nc"
+    );
+  });
+
+  it("is the monthly file for a monthly variable's whole year, and nothing for one month", () => {
+    const [step, year] = downloadOptions("monthly", "2001-03", years);
+    expect(publishedFileUrl(published, "runoff", "monthly", year)).toBe(
+      "https://s3.example/openghm/snapshots/abc/wbm_output/Global_tracking/monthly/runoff/wbm_2001.nc"
+    );
+    expect(publishedFileUrl(published, "runoff", "monthly", step)).toBeNull();
+  });
+
+  it("is nothing for daily data, a run of years, a run's output, or a snapshot of several runs", () => {
+    for (const option of downloadOptions("daily", "2001-03-04", years)) {
+      expect(publishedFileUrl(published, "runoff", "daily", option)).toBeNull();
+    }
+    const all = downloadOptions("yearly", "2001", years).find((o) => o.scope === "all")!;
+    expect(publishedFileUrl(published, "runoff", "yearly", all)).toBeNull();
+    const [step] = downloadOptions("yearly", "2001", years);
+    expect(publishedFileUrl(undefined, "runoff", "yearly", step)).toBeNull();
+    expect(publishedFileUrl({ ...published, runs: ["a", "b"] }, "runoff", "yearly", step)).toBeNull();
   });
 });

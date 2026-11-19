@@ -3,11 +3,11 @@
 import { File as FileIcon, FileText, Folder } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CopyUrlButton, DownloadLink } from "@/components/repository/tree-file-actions";
+import { CopyUrlButton, FileDownloadButton } from "@/components/repository/tree-file-actions";
 import type { TreeSelection } from "@/components/repository/use-tree-selection";
 import { pushOnPlainClick } from "@/components/workspace/my-data-kind-tabs";
 import { treeHref } from "@/lib/repository/tree-browse";
-import type { ListedFile, TreeFolder } from "@/lib/repository/types";
+import type { FileSource, ListedFile, TreeFolder } from "@/lib/repository/types";
 import { formatBytes } from "@/lib/workspace/format";
 import { formatUtcDate, formatUtcDateTime } from "@/lib/workspace/time";
 
@@ -22,8 +22,10 @@ const FOLDER_CLASS =
  * `onOpenFolder` (a browser inside a dialog, which keeps its folder in state),
  * a folder is a button that calls it and a file is not opened for preview.
  *
- * A file with no public URL (a run's, ADR 0040) has no link actions: it comes down
- * in the ZIP of what is ticked.
+ * Given `source`, a file's row has a download button: the file as it is, saved through the
+ * download dialog (ADR 0043), a published one read from its S3 URL. A published file also has
+ * Copy URL; a run's (ADR 0040) has no public URL. A published file also has Copy URL; a run's (ADR 0040) has no
+ * public URL.
  *
  * Given `selection`, each row starts with a checkbox, and the header's ticks or
  * clears every row loaded so far (a dash when only some are ticked). An entry is
@@ -36,6 +38,7 @@ export function TreeBrowserTable({
   files,
   onOpenFolder,
   selection,
+  source,
 }: {
   pathname: string;
   /** The folder listed, as in `?path=`. */
@@ -44,6 +47,8 @@ export function TreeBrowserTable({
   files: ListedFile[];
   onOpenFolder?: (path: string) => void;
   selection?: Pick<TreeSelection, "names" | "toggle" | "setAll" | "clear">;
+  /** Whose files these are, for a file's own download. */
+  source?: { kind: FileSource; id: string };
 }) {
   const everyName = [...folders.map((f) => `${f.name}/`), ...files.map((f) => f.name)];
   const ticked = selection ? everyName.filter((n) => selection.names.includes(n)).length : 0;
@@ -140,12 +145,12 @@ export function TreeBrowserTable({
                 {formatUtcDate(f.lastModified)}
               </TableCell>
               <TableCell className="pr-6">
-                {f.url && (
-                  <div className="flex justify-end gap-0.5">
-                    <DownloadLink url={f.url} label={f.name} />
-                    <CopyUrlButton url={f.url} label={f.name} />
-                  </div>
-                )}
+                <div className="flex justify-end gap-0.5">
+                  {source && (
+                    <FileDownloadButton kind={source.kind} id={source.id} folder={folder} name={f.name} size={f.size} url={f.url} />
+                  )}
+                  {f.url && <CopyUrlButton url={f.url} label={f.name} />}
+                </div>
               </TableCell>
             </TableRow>
           );

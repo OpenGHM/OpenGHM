@@ -43,6 +43,11 @@ export function archiveRoute(kind: FileSource, id: string): string {
   return `${filesApi(kind, id)}/archive`;
 }
 
+/** `GET`: one file of a run's output as it is, with its size, as an attachment (ADR 0043). */
+export function runFileRoute(jobId: string, path: string): string {
+  return `${filesApi("run", jobId)}/download?path=${encodeURIComponent(path).replaceAll("%2F", "/")}`;
+}
+
 /** A folder as the listing route names it: `""` for the root, else ending with `/`. */
 export function normalizeFolder(raw: string | null | undefined): string {
   if (!raw) return "";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import {
   AlertDialog,
@@ -14,26 +14,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CONFIRM_BYTES, limitLabel, selectionS3Command, selectionTotals } from "@/lib/repository/selection";
 import { S3Command } from "@/components/repository/s3-command";
+import { useDownload } from "@/components/download/download-provider";
+import type { DownloadJob } from "@/lib/download/engine";
 import { archiveRoute } from "@/lib/repository/tree-browse";
+import { useFileDownload } from "@/components/repository/tree-file-actions";
 import type { FileSource, ListedFile } from "@/lib/repository/types";
 import type { TreeSelection } from "@/components/repository/use-tree-selection";
 import { formatBytes } from "@/lib/workspace/format";
 import { cn } from "@/lib/utils";
 
 const FOCUS = "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
-
-/** The message of a refusal the hidden frame loaded in place of a download, if that is what it holds. */
-function refusalIn(frame: HTMLIFrameElement): string | null {
-  try {
-    const text = frame.contentDocument?.body?.textContent;
-    if (!text) return null;
-    const body = JSON.parse(text) as { detail?: { message?: unknown }; message?: unknown };
-    const message = body.detail?.message ?? body.message;
-    return typeof message === "string" ? message : "The ZIP could not be prepared.";
-  } catch {
-    return null;
-  }
-}
 
 /**
  * The bar over a folder's table while anything is ticked: how many entries and
@@ -48,11 +38,10 @@ function refusalIn(frame: HTMLIFrameElement): string | null {
  * From `CONFIRM_BYTES` (1 GB) the click first opens a dialog that says how big the ZIP is and
  * that an interrupted one starts over; the form is submitted when it is confirmed.
  *
- * The download is a hidden form POSTed to the gateway, so the browser itself
- * takes the response to disk as it arrives (no `fetch`, no blob in memory) and
- * any number of names can go. It targets a hidden frame, so that a refusal the
- * backend still gives (another download's turn, a listing that changed) is read
- * there and shown here instead of replacing the page with JSON.
+ * The download goes through the shared download dialog (`useDownload`): it opens when the
+ * button is pressed, says the ZIP is being prepared, then shows its progress. A single
+ * ticked file is not zipped: it comes as it is, a published one from its S3 URL (CORS), a run's
+ * from the gateway.
  */
 export function SelectionBar({
   kind,
@@ -71,16 +60,31 @@ export function SelectionBar({
   selection: TreeSelection;
   className?: string;
 }) {
-  const frame = useId();
-  const [refusal, setRefusal] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const form = useRef<HTMLFormElement>(null);
-  // Set by the dialog's button, so the submit it triggers is not asked about again.
-  const confirmed = useRef(false);
+  const { start } = useDownload();
+  const downloadFile = useFileDownload();
   const { names, sizes, clear, retry } = selection;
   if (names.length === 0) return null;
 
   const totals = selectionTotals(names, files, sizes);
+  const onlyName = names.length === 1 && !names[0].endsWith("/") ? names[0] : null;
+  const onlyFile = onlyName ? (files.find((f) => f.name === onlyName) ?? null) : null;
+  const begin = () => {
+    if (onlyFile) {
+      downloadFile(kind, id, folder, onlyFile);
+      return;
+    }
+    const job: DownloadJob = {
+      title: `${names.length.toLocaleString("en-US")} ${names.length === 1 ? "entry" : "entries"} · ${formatBytes(totals.bytes)} as one ZIP`,
+      filename: `${id}-${names.length === 1 ? names[0].replace(/\/$/, "") : "files"}.zip`,
+      url: archiveRoute(kind, id),
+      method: "POST",
+      fields: [["folder", folder], ...names.map((name): [string, string] => ["names", name])],
+      expectedBytes: totals.bytes,
+      native: true,
+    };
+    start(job);
+  };
   const limit = limitLabel(totals.limit);
   const size = formatBytes(totals.bytes);
   const tooBig = totals.status === "incomplete" || totals.status === "over";
@@ -108,49 +112,32 @@ export function SelectionBar({
             {totals.status === "checking" ? "checking size…" : totals.status === "incomplete" ? "too many files" : size}
           </span>
         </span>
-        <form
-          ref={form}
-          method="POST"
-          action={archiveRoute(kind, id)}
-          target={frame}
-          onSubmit={(event) => {
-            if (totals.bytes >= CONFIRM_BYTES && !confirmed.current) {
-              event.preventDefault();
-              setConfirming(true);
-              return;
-            }
-            confirmed.current = false;
-            setRefusal(null);
-          }}
-          className="flex items-center gap-2"
+        <button
+          type="button"
+          onClick={() => (totals.bytes >= CONFIRM_BYTES && !onlyFile ? setConfirming(true) : begin())}
+          disabled={totals.status !== "ok"}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[13px] font-semibold transition-colors",
+            FOCUS,
+            totals.status === "ok"
+              ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+              : "cursor-not-allowed bg-muted text-muted-foreground",
+          )}
         >
-          <input type="hidden" name="folder" value={folder} />
-          {names.map((name) => (
-            <input key={name} type="hidden" name="names" value={name} />
-          ))}
-          <button
-            type="submit"
-            disabled={totals.status !== "ok"}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[13px] font-semibold transition-colors",
-              FOCUS,
-              totals.status === "ok"
-                ? "bg-primary text-primary-foreground hover:bg-primary-hover"
-                : "cursor-not-allowed bg-muted text-muted-foreground"
-            )}
-          >
-            {totals.status === "checking" ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Download className="size-3.5" aria-hidden="true" />
-            )}
-            Download ZIP
-          </button>
-        </form>
+          {totals.status === "checking" ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Download className="size-3.5" aria-hidden="true" />
+          )}
+          {onlyFile ? "Download" : "Download ZIP"}
+        </button>
         <button
           type="button"
           onClick={clear}
-          className={cn("rounded px-1 text-[13px] font-semibold text-primary hover:text-primary-hover hover:underline", FOCUS)}
+          className={cn(
+            "rounded px-1 text-[13px] font-semibold text-primary hover:text-primary-hover hover:underline",
+            FOCUS,
+          )}
         >
           Clear
         </button>
@@ -170,38 +157,22 @@ export function SelectionBar({
             </button>
           </p>
         ))}
-      {refusal && <p className="text-[13px] text-pretty text-muted-foreground">{refusal}</p>}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Download a {size} ZIP?</AlertDialogTitle>
             <AlertDialogDescription>
-              It comes as one file and cannot be resumed: if the connection drops, the download starts over.
-              Only a few ZIPs are prepared at a time, so it can be refused while others are downloading.
+              It comes as one file and cannot be resumed: if the connection drops, the download starts over. Only a few
+              ZIPs are prepared at a time, so it can be refused while others are downloading.
               {kind !== "run" && " To resume an interrupted download, use an S3 tool such as aws s3 sync."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                confirmed.current = true;
-                form.current?.requestSubmit();
-              }}
-            >
-              Download ZIP
-            </AlertDialogAction>
+            <AlertDialogAction onClick={begin}>Download ZIP</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <iframe
-        name={frame}
-        title="ZIP download"
-        aria-hidden="true"
-        tabIndex={-1}
-        className="hidden"
-        onLoad={(e) => setRefusal(refusalIn(e.currentTarget))}
-      />
     </div>
   );
 }

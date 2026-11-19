@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+const start = vi.hoisted(() => vi.fn());
+vi.mock("@/components/download/download-provider", () => ({ useDownload: () => ({ start, busy: false }) }));
+beforeEach(() => start.mockReset());
+
 let search = "";
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search),
@@ -189,5 +193,11 @@ describe("the Output card", () => {
     await waitFor(() => expect(screen.getByTestId("image").textContent).toBe("image"));
     expect(screen.getByRole("button", { name: "Download NetCDF" })).toBeTruthy();
     expect(screen.getByText(/runoff, yearly, whole grid · 1 time step · up to/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download NetCDF" }));
+    expect(start).toHaveBeenCalledTimes(1);
+    const job = start.mock.calls[0][0];
+    expect(job.url).toContain("/subset?");
+    expect(job.filename).toMatch(/^runoff_yearly.*\.nc$/);
+    expect(job.expectedBytes).toBeGreaterThan(0);
   });
 });

@@ -1,5 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+const start = vi.hoisted(() => vi.fn());
+vi.mock("@/components/download/download-provider", () => ({ useDownload: () => ({ start, busy: false }) }));
+const browserDownload = vi.hoisted(() => ({
+  headContentType: vi.fn(async (url: string) => (url.endsWith(".json") ? "application/json" : "binary/octet-stream")),
+  saveInBrowser: vi.fn(),
+}));
+vi.mock("@/lib/download/browser-download", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/download/browser-download")>()),
+  headContentType: browserDownload.headContentType,
+  saveInBrowser: browserDownload.saveInBrowser,
+}));
+beforeEach(() => {
+  start.mockReset();
+  browserDownload.saveInBrowser.mockReset();
+});
 import { SelectionBar } from "./selection-bar";
 import { TreeBrowserTable } from "./tree-browser-table";
 import { useTreeSelection } from "./use-tree-selection";
@@ -241,50 +257,62 @@ describe("the selection bar", () => {
 });
 
 describe("the download", () => {
-  it("is a hidden form POSTed to the gateway with the folder and each name, aimed at a hidden frame", () => {
+  it("starts the shared download as a POST with the folder and each name, in the order ticked", async () => {
+    answer({ "d/deep/": summary(1024) });
     render(<Harness />);
     tick("Select deep/");
     tick("Select b.nc");
     tick("Select a.nc");
-    const form = download().closest("form") as HTMLFormElement;
-    expect(form.getAttribute("method")?.toUpperCase()).toBe("POST");
-    expect(form.getAttribute("action")).toBe("/api/repository/datasets/snap-1/files/archive");
-    const data = new FormData(form);
-    expect(data.get("folder")).toBe("d/");
-    expect(data.getAll("names")).toEqual(["deep/", "b.nc", "a.nc"]); // in the order ticked
-    const frame = document.querySelector(`iframe[name="${form.getAttribute("target")}"]`);
-    expect(frame).toBeTruthy();
-    expect(frame?.className).toContain("hidden");
+    await waitFor(() => expect(download().disabled).toBe(false));
+    expect(download().closest("form")).toBeNull();
+    fireEvent.click(download());
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/repository/datasets/snap-1/files/archive",
+        method: "POST",
+        fields: [
+          ["folder", "d/"],
+          ["names", "deep/"],
+          ["names", "b.nc"],
+          ["names", "a.nc"],
+        ],
+        native: true,
+      })
+    );
   });
 
   it("is not fetched: the page never calls the archive route from script", () => {
-    answer({});
     render(<Harness />);
     tick("Select a.nc");
+    tick("Select b.nc");
+    fireEvent.click(download());
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/archive"))).toBe(false);
   });
 
-  it("shows what the frame loaded when it is a refusal, and forgets it on the next submit", () => {
+  it("passes the total as the size to expect", () => {
     render(<Harness />);
     tick("Select a.nc");
-    const form = download().closest("form") as HTMLFormElement;
-    const frame = document.querySelector(`iframe[name="${form.getAttribute("target")}"]`) as HTMLIFrameElement;
-    frame.contentDocument!.body.textContent = JSON.stringify({
-      detail: { code: "archive_busy", message: "Other downloads are being prepared. Try again in a minute." },
-    });
-    fireEvent.load(frame);
-    expect(screen.getByText("Other downloads are being prepared. Try again in a minute.")).toBeTruthy();
-    fireEvent.submit(form);
-    expect(screen.queryByText(/Other downloads/)).toBeNull();
+    tick("Select b.nc");
+    fireEvent.click(download());
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ expectedBytes: 3072 }));
   });
 
-  it("shows nothing for a frame that loaded nothing", () => {
+  it("reads Download, not Download ZIP, for one ticked file, and lets the browser save a binary published file", async () => {
     render(<Harness />);
     tick("Select a.nc");
-    const form = download().closest("form") as HTMLFormElement;
-    const frame = document.querySelector(`iframe[name="${form.getAttribute("target")}"]`) as HTMLIFrameElement;
-    fireEvent.load(frame);
-    expect(within(form.parentElement as HTMLElement).queryByText(/could not be prepared/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    await waitFor(() =>
+      expect(browserDownload.saveInBrowser).toHaveBeenCalledWith("https://s3.example/openghm/snapshots/abc/d/a.nc")
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("still says ZIP for one ticked folder", () => {
+    render(<Harness />);
+    tick("Select deep/");
+    expect(screen.getByRole("button", { name: "Download ZIP" })).toBeTruthy();
   });
 });
 
@@ -292,25 +320,13 @@ describe("a large ZIP is asked about first", () => {
   const GB = 1024 ** 3;
   const big = (bytes: number) => summary(bytes, { limit_bytes: 10 * GB });
 
-  /** `requestSubmit` as a browser would run it: the submit event, and whether anything stopped it. */
-  function spyOnRequestSubmit() {
-    const went: boolean[] = [];
-    vi.spyOn(HTMLFormElement.prototype, "requestSubmit").mockImplementation(function (this: HTMLFormElement) {
-      const event = new Event("submit", { bubbles: true, cancelable: true });
-      this.dispatchEvent(event);
-      went.push(!event.defaultPrevented);
-    });
-    return went;
-  }
-
-  afterEach(() => vi.restoreAllMocks());
-
   it("goes at once below 1 GB, with no question", () => {
     render(<Harness />);
     tick("Select a.nc");
-    const form = download().closest("form") as HTMLFormElement;
-    expect(fireEvent.submit(form)).toBe(true);
+    tick("Select b.nc");
+    fireEvent.click(download());
     expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(start).toHaveBeenCalledTimes(1);
   });
 
   it("stops at 1 GB and says how big it is, that it cannot be resumed, and what to use instead", async () => {
@@ -318,30 +334,29 @@ describe("a large ZIP is asked about first", () => {
     render(<Harness />);
     tick("Select deep/");
     await screen.findByText(/3\.0 GB/);
-    const form = download().closest("form") as HTMLFormElement;
-    expect(fireEvent.submit(form)).toBe(false); // the page did not go on
+    fireEvent.click(download());
+    expect(start).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("Download a 3.0 GB ZIP?")).toBeTruthy();
     expect(within(dialog).getByText(/cannot be resumed/)).toBeTruthy();
     expect(within(dialog).getByText(/aws s3 sync/)).toBeTruthy();
   });
 
-  it("sends nothing on Cancel, and submits the form once on confirm, without asking again", async () => {
+  it("sends nothing on Cancel, and starts the download once on confirm, without asking again", async () => {
     answer({ "d/deep/": big(3 * GB) });
-    const went = spyOnRequestSubmit();
     render(<Harness />);
     tick("Select deep/");
     await screen.findByText(/3\.0 GB/);
-    const form = download().closest("form") as HTMLFormElement;
-    fireEvent.submit(form);
+    fireEvent.click(download());
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(went).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
 
-    fireEvent.submit(form);
+    fireEvent.click(download());
     const dialog = await screen.findByRole("alertdialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Download ZIP" }));
-    expect(went).toEqual([true]); // the submit the dialog made was not stopped
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", expectedBytes: 3 * GB }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 });
@@ -365,18 +380,42 @@ describe("for a run's output on Anvil scratch (ADR 0040)", () => {
     );
   }
 
-  it("asks the job's route for a folder's size and posts the ZIP form to the job's archive route", async () => {
+  it("asks the job's route for a folder's size and starts the ZIP at the job's archive route", async () => {
     answer({ "daily/deep/": summary(5 * 1024 ** 2) });
-    const { container } = render(<RunHarness />);
+    render(<RunHarness />);
     tick("Select a.nc");
     tick("Select deep/");
     expect(fetchMock).toHaveBeenCalledWith("/api/jobs/job-1/files/folder?path=daily/deep/");
     await waitFor(() => expect(download().disabled).toBe(false));
-    const form = container.querySelector("form")!;
-    expect(form.getAttribute("action")).toBe("/api/jobs/job-1/files/archive");
-    expect(form.getAttribute("method")?.toLowerCase()).toBe("post");
-    expect(form.querySelector<HTMLInputElement>("input[name=folder]")!.value).toBe("daily/");
-    expect([...form.querySelectorAll<HTMLInputElement>("input[name=names]")].map((i) => i.value)).toEqual(["a.nc", "deep/"]);
+    fireEvent.click(download());
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/jobs/job-1/files/archive",
+        method: "POST",
+        fields: [
+          ["folder", "daily/"],
+          ["names", "a.nc"],
+          ["names", "deep/"],
+        ],
+      })
+    );
+  });
+
+  it("downloads one ticked file as it is, from the job's file route", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<RunHarness />);
+    tick("Select b.nc");
+    expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(start).toHaveBeenCalledTimes(1);
+    const job = start.mock.calls[0][0];
+    expect(job).toEqual(expect.objectContaining({ filename: "b.nc", expectedBytes: 2048 }));
+    expect(job.method).toBeUndefined();
+    const url = new URL(job.url, "http://app.test");
+    expect(url.pathname).toBe("/api/jobs/job-1/files/download");
+    expect(url.searchParams.get("path")).toBe("daily/b.nc");
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
   it("over the limit says so and says nothing of S3, which does not hold a run's output", async () => {

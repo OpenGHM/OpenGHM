@@ -721,3 +721,30 @@ def test_the_check_runs_after_the_listing_so_a_refused_selection_never_reaches_i
 
 def test_the_limit_is_the_published_trees_limit():
     assert tree_browse.ARCHIVE_LIMIT_BYTES == 10 * 1024**3
+
+
+# ---- one file as it is ------------------------------------------------------------------------
+
+FILE = "/api/v1/jobs/job-1/files/download"
+
+
+def test_one_file_comes_down_as_it_is_with_its_size(api, sftp):
+    r = api.get(FILE, params={"path": "daily/wbm_2001.nc"}, headers=OWNER_HEADERS)
+    assert r.status_code == 200 and r.content == DAILY["daily/wbm_2001.nc"]
+    assert r.headers["content-disposition"] == 'attachment; filename="wbm_2001.nc"'
+    assert int(r.headers["content-length"]) == len(r.content)
+    assert tree_archive._active == 0 and sftp.stream_open == 0
+
+
+def test_a_missing_file_a_folder_and_a_bad_path_are_refused(api, sftp):
+    for path in ("daily/nope.nc", "daily", "nope/wbm_2000.nc"):
+        r = api.get(FILE, params={"path": path}, headers=OWNER_HEADERS)
+        assert r.status_code == 404, path
+    assert api.get(FILE, params={"path": "../x"}, headers=OWNER_HEADERS).status_code in (400, 422)
+    assert api.get(FILE, params={"path": "daily/"}, headers=OWNER_HEADERS).status_code in (400, 422)
+    assert tree_archive._active == 0 and sftp.opened == []
+
+
+def test_another_users_run_has_no_file_to_download(api):
+    r = api.get("/api/v1/jobs/nope/files/download", params={"path": "wbm_test.MT.csv"}, headers=token_for("other"))
+    assert r.status_code == 404

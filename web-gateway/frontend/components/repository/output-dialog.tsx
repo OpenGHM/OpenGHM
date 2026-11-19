@@ -6,6 +6,7 @@ import { Tabs as TabsPrimitive } from "radix-ui";
 import { SWATCHES } from "@/components/repository/output-variables-table";
 import { useFolderListing } from "@/components/repository/tree-browser";
 import { CopyButton, S3Command } from "@/components/repository/s3-command";
+import { useDownload } from "@/components/download/download-provider";
 import { SelectionBar } from "@/components/repository/selection-bar";
 import { TreeBrowserTable } from "@/components/repository/tree-browser-table";
 import { useTreeSelection } from "@/components/repository/use-tree-selection";
@@ -241,13 +242,6 @@ async function readInventory(snapshotId: string): Promise<Load> {
   }
 }
 
-type Fetch =
-  | { state: "idle" }
-  | { state: "preparing" }
-  | { state: "downloading"; received: number; total: number | null }
-  | { state: "done" }
-  | { state: "failed"; message: string };
-
 type BoxFields = Record<keyof OutputBounds, string>;
 
 function firstResolution(available: Partial<Record<OutputResolution, unknown>>): OutputResolution {
@@ -298,24 +292,16 @@ function SubsetForm({
     const b = middleBox(grid);
     return { north: String(b.north), south: String(b.south), west: String(b.west), east: String(b.east) };
   });
-  const [fetchState, setFetchState] = useState<Fetch>({ state: "idle" });
-  const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
-
-  const reset = () => {
-    if (fetchState.state === "failed" || fetchState.state === "done") setFetchState({ state: "idle" });
-  };
+  const { start, busy } = useDownload();
   const chooseResolution = (next: OutputResolution, forVariable = variable) => {
     setResolution(next);
     setPeriod(defaultPeriod(forVariable.resolutions[next]?.years ?? [], next));
     setWaiting(null);
-    reset();
   };
   const chooseVariable = (name: string) => {
     const next = options.find((v) => v.name === name);
     setVariableName(name);
     if (next && !(resolution in next.resolutions)) chooseResolution(firstResolution(next.resolutions), next);
-    reset();
   };
 
   const isBox = region === "box";
@@ -334,7 +320,6 @@ function SubsetForm({
   const estimate = ok ? maxSubsetBytes(periodSteps(resolution, period), area, cell) : null;
   const filename = subsetFilename(variable.name, resolution, period, isBox);
   const command = subsetCommand({ snapshotId, variable: variable.name, resolution, period, box: sentBox, filename });
-  const busy = fetchState.state === "preparing" || fetchState.state === "downloading";
 
   const q = query.trim().toLowerCase();
   const shown = options.filter((v) => !q || `${v.name} ${v.description}`.toLowerCase().includes(q));
@@ -343,58 +328,22 @@ function SubsetForm({
     const next = pickRange({ from: period.from, to: period.to }, y, waiting === "years");
     setPeriod((p) => ({ ...p, from: next.from, to: next.to }));
     setWaiting(next.waiting ? "years" : null);
-    reset();
   };
   const pickMonth = (m: number) => {
     const next = pickRange({ from: period.monthFrom, to: period.monthTo }, m, waiting === "months");
     setPeriod((p) => ({ ...p, monthFrom: next.from, monthTo: next.to }));
     setWaiting(next.waiting ? "months" : null);
-    reset();
   };
 
-  const download = async () => {
+  const download = () => {
     if (!ok || busy) return;
-    const controller = new AbortController();
-    abort.current = controller;
-    setFetchState({ state: "preparing" });
-    try {
-      const response = await fetch(
-        `/api/repository/datasets/${snapshotId}/output/subset?${subsetQuery({ variable: variable.name, resolution, period, box: sentBox })}`,
-        { signal: controller.signal }
-      );
-      if (!response.ok || !response.body) {
-        const body: unknown = await response.json().catch(() => null);
-        setFetchState({ state: "failed", message: refusalMessage(body) ?? "The file could not be made. Try again." });
-        return;
-      }
-      const total = Number(response.headers.get("content-length")) || null;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      setFetchState({ state: "downloading", received, total });
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        setFetchState({ state: "downloading", received, total });
-      }
-      const url = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: "application/x-netcdf" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setFetchState({ state: "done" });
-    } catch (error) {
-      if ((error as { name?: string }).name === "AbortError") {
-        setFetchState({ state: "idle" });
-        return;
-      }
-      setFetchState({ state: "failed", message: "The download stopped before it finished. Try again." });
-    }
+    start({
+      title: `${variable.name}, ${resolution}, ${isBox ? "box" : "whole grid"}`,
+      filename,
+      url: `/api/repository/datasets/${snapshotId}/output/subset?${subsetQuery({ variable: variable.name, resolution, period, box: sentBox })}`,
+      expectedBytes: estimate,
+      note: "Anvil is cutting the file from the output first. This can take a few minutes. Keep this page open.",
+    });
   };
 
   const monthsShown = resolution !== "yearly";
@@ -524,7 +473,6 @@ function SubsetForm({
                 onClick={() => {
                   setPeriod((p) => ({ ...p, from: years[0], to: years[years.length - 1], monthFrom: 1, monthTo: 12 }));
                   setWaiting(null);
-                  reset();
                 }}
                 className={cn("rounded-lg px-[9px] py-[5px] text-[12.5px] font-semibold text-primary hover:bg-secondary", FOCUS)}
               >
@@ -583,7 +531,6 @@ function SubsetForm({
                 disabled={busy}
                 onClick={() => {
                   setRegion(value);
-                  reset();
                 }}
                 className={cn(
                   "rounded-lg px-3.5 py-[7px] text-[13px] font-semibold transition-colors",
@@ -609,7 +556,6 @@ function SubsetForm({
                     onChange={(e) => {
                       const value = e.target.value;
                       setFields((f) => ({ ...f, [edge]: value }));
-                      reset();
                     }}
                     className="w-full rounded-[9px] border border-input bg-card px-2.5 py-[9px] font-mono text-[13px] outline-none focus:border-primary aria-invalid:border-destructive"
                   />
@@ -642,18 +588,13 @@ function SubsetForm({
             <dd className="text-2xl font-semibold tracking-[-0.02em]">{estimate === null ? "—" : formatBytes(estimate)}</dd>
           </div>
         </dl>
-        {estimate !== null && estimate > SUBSET_LIMIT_BYTES && fetchState.state !== "failed" && (
+        {estimate !== null && estimate > SUBSET_LIMIT_BYTES && (
           <p className="rounded-[10px] bg-warning/10 px-3 py-2.5 text-[12.5px] leading-normal text-pretty text-warning">
             Over 1 GB before compression, more than one download may hold. Choose a shorter period, a box, or a
             coarser time step.
           </p>
         )}
-        {fetchState.state === "failed" && (
-          <p role="alert" className="rounded-[10px] bg-destructive/10 px-3 py-2.5 text-[12.5px] leading-normal text-pretty text-destructive">
-            {fetchState.message}
-          </p>
-        )}
-        <DownloadButton state={fetchState} ok={ok} onClick={download} onStop={() => abort.current?.abort()} />
+        <DownloadButton busy={busy} ok={ok} onClick={download} />
         <div className="flex flex-col gap-2 border-t border-border pt-3.5">
           <div className="flex items-center justify-between gap-2">
             <span className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
@@ -786,60 +727,20 @@ function GridPreview({ grid, box }: { grid: OutputBounds; box: OutputBounds | nu
   );
 }
 
-function DownloadButton({
-  state,
-  ok,
-  onClick,
-  onStop,
-}: {
-  state: Fetch;
-  ok: boolean;
-  onClick: () => void;
-  onStop: () => void;
-}) {
-  const busy = state.state === "preparing" || state.state === "downloading";
-  const percent =
-    state.state === "downloading" && state.total ? Math.min(100, Math.round((state.received / state.total) * 100)) : null;
-  const label = !ok
-    ? "Fix the box to download"
-    : state.state === "preparing"
-      ? "Cutting the file…"
-      : state.state === "downloading"
-        ? `Downloading${percent !== null ? ` ${percent}%` : ` ${formatBytes(state.received)}`}`
-        : state.state === "done"
-          ? "Saved ✓"
-          : "Download NetCDF";
+function DownloadButton({ busy, ok, onClick }: { busy: boolean; ok: boolean; onClick: () => void }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!ok || busy}
-        aria-live="polite"
-        className={cn(
-          "relative overflow-hidden rounded-xl px-4 py-[13px] text-[14.5px] font-semibold text-primary-foreground transition-[filter] hover:brightness-[0.92] disabled:cursor-not-allowed",
-          FOCUS,
-          !ok ? "bg-muted-foreground/50" : state.state === "done" ? "bg-success" : "bg-primary"
-        )}
-      >
-        {percent !== null && (
-          <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-white/15" style={{ width: `${percent}%` }} />
-        )}
-        <span className="relative">{label}</span>
-      </button>
-      {busy && (
-        <button
-          type="button"
-          onClick={onStop}
-          className={cn("self-center rounded-md px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground", FOCUS)}
-        >
-          Stop
-        </button>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!ok || busy}
+      className={cn(
+        "rounded-xl px-4 py-[13px] text-[14.5px] font-semibold text-primary-foreground transition-[filter] hover:brightness-[0.92] disabled:cursor-not-allowed",
+        FOCUS,
+        !ok ? "bg-muted-foreground/50" : "bg-primary"
       )}
-      {state.state === "preparing" && (
-        <span className="text-center text-xs text-muted-foreground">Anvil cuts it from the output first. This can take a few minutes.</span>
-      )}
-    </div>
+    >
+      {!ok ? "Fix the box to download" : busy ? "Another download is running…" : "Download NetCDF"}
+    </button>
   );
 }
 
@@ -1041,6 +942,7 @@ function FolderBrowser({
               files={view.listing.files}
               onOpenFolder={onOpen}
               selection={selection}
+              source={{ kind: "snapshot", id: snapshotId }}
             />
           )}
           {view.listing.nextCursor !== null && (

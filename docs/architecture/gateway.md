@@ -771,8 +771,11 @@ anonymously with plain `httpx`, and only in small pieces:
   delimiter, `tree_browse.output_folders`), both kept since a published
   object never changes.
 
-The bucket sends no CORS headers (a preflight is `403`),
-so the browser cannot list or read it from script; it can only follow a link.
+The bucket allows `GET` and `HEAD` by CORS from this site's origins only (set 2026-11-20,
+[ADR 0043](../decisions/0043-prepared-downloads-share-one-dialog-and-a-run-file-comes-down-as-it-is.md)),
+so a page of the gateway can read a published object from script, which is how a single file is
+saved; listing, sizing and ZIPs still go through the backend. A page of any other origin can only
+follow a link.
 
 Two read routes return those strings for a published artifact:
 `GET /api/v1/repository/datasets/{id}/links` and
@@ -876,9 +879,15 @@ table totals what is ticked: files at their listed size, a ticked folder by its
 anonymous `aws s3 sync` that copies the ticked entries instead: the folder
 itself when one folder is ticked, else the viewed folder with an
 `--exclude "*"` and one `--include` per entry, so the tree is kept. Otherwise, from 1 GiB, it first asks in a dialog (the size, that an interrupted
-ZIP starts over, and for a published tree the `aws s3 sync` that can resume), and then it submits
-a hidden form to the archive route, aimed at a hidden frame in which a refusal
-the backend still gives is read and shown in the bar.
+ZIP starts over, and for a published tree the `aws s3 sync` that can resume), and then it starts the
+download through the shared download dialog
+([ADR 0043](../decisions/0043-prepared-downloads-share-one-dialog-and-a-run-file-comes-down-as-it-is.md)):
+the dialog opens at once, says the ZIP is being prepared, then shows progress, and shows a
+refusal the backend still gives. A single ticked file is not zipped, and each file row has a
+download button. A published file comes from its S3 URL: the page asks its `Content-Type` (`HEAD`,
+allowed by the bucket's CORS) and hands one the browser would save to the browser itself, and reads
+and saves one it would show (text, JSON). A run's comes from `GET /jobs/{id}/files/download?path=`
+as it is, over SFTP, through the same dialog.
 
 An unknown id is `404`. A path that is absolute, has an empty, `.` or `..`
 segment, a backslash or a control character, or is over 900 characters is

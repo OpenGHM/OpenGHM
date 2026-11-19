@@ -1,5 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+
+const start = vi.hoisted(() => vi.fn());
+vi.mock("@/components/download/download-provider", () => ({ useDownload: () => ({ start, busy: false }) }));
+const browserDownload = vi.hoisted(() => ({
+  headContentType: vi.fn(async (url: string) => (url.endsWith(".json") ? "application/json" : "binary/octet-stream")),
+  saveInBrowser: vi.fn(),
+}));
+vi.mock("@/lib/download/browser-download", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/download/browser-download")>()),
+  headContentType: browserDownload.headContentType,
+  saveInBrowser: browserDownload.saveInBrowser,
+}));
+beforeEach(() => {
+  start.mockReset();
+  browserDownload.saveInBrowser.mockReset();
+});
 const { fetchTreeListing } = vi.hoisted(() => ({ fetchTreeListing: vi.fn() }));
 vi.mock("@/lib/repository/actions", () => ({ fetchTreeListing, fetchTreePreview: vi.fn() }));
 
@@ -39,7 +55,6 @@ beforeEach(() => {
     return new Response("netcdf!", { headers: { "content-length": "7" } });
   });
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
-  Object.assign(URL, { createObjectURL: vi.fn(() => "blob:x"), revokeObjectURL: vi.fn() });
 });
 afterEach(() => {
   cleanup();
@@ -154,8 +169,10 @@ describe("the subset tab", () => {
     expect(command).toContain("--out runoff_yearly_2000_2001_box.nc");
 
     fireEvent.click(screen.getByRole("button", { name: "Download NetCDF" }));
-    expect(await screen.findByRole("button", { name: "Saved ✓" })).toBeTruthy();
-    const url = new URL(fetchMock.mock.calls[1][0], "http://x");
+    expect(start).toHaveBeenCalledTimes(1);
+    const job = start.mock.calls[0][0];
+    expect(job).toEqual(expect.objectContaining({ filename: "runoff_yearly_2000_2001_box.nc", expectedBytes: 54 * 1024 }));
+    const url = new URL(job.url, "http://x");
     expect(url.pathname).toBe(`/api/repository/datasets/${id()}/output/subset`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
       variable: "runoff",
@@ -164,7 +181,8 @@ describe("the subset tab", () => {
       end: "2001",
       bbox: "-112,40,-104,46",
     });
-    expect(URL.createObjectURL).toHaveBeenCalled();
+    // The page itself no longer fetches the file.
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/subset"))).toBe(false);
   });
 
   it("will not download a box that is not one, and warns of a file too large for one download", async () => {
@@ -183,21 +201,6 @@ describe("the subset tab", () => {
     fireEvent.click(within(months).getByRole("button", { name: "Jan" }));
     fireEvent.click(within(months).getByRole("button", { name: "Dec" }));
     expect(screen.getByText(/Over 1 GB before compression/)).toBeTruthy();
-  });
-
-  it("shows a refusal in the toolkit's words", async () => {
-    fetchMock.mockImplementation(async (url: string) =>
-      url.endsWith("/output")
-        ? Response.json(INVENTORY)
-        : Response.json(
-            { detail: { code: "output_request_refused", message: "this request reads 910 million cells. Ask for less." } },
-            { status: 422 }
-          )
-    );
-    open();
-    await screen.findByRole("radiogroup", { name: "Variable" });
-    fireEvent.click(screen.getByRole("button", { name: "Download NetCDF" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("This request reads 910 million cells. Ask for less.");
   });
 
   it("says when the output cannot be read, and tries again", async () => {
@@ -257,7 +260,10 @@ describe("browsing the output inside the dialog", () => {
     fireEvent.click(await screen.findByRole("button", { name: "runoff/" }));
     expect(await screen.findByText("wbm_2000.nc")).toBeTruthy();
     expect(fetchTreeListing).toHaveBeenLastCalledWith("snapshot", id(), "wbm_output/G/yearly/runoff/");
-    expect(screen.getByRole("link", { name: "Download wbm_2000.nc" }).getAttribute("href")).toBe("https://s3.example/wbm_2000.nc");
+    // A NetCDF file the bucket sends as binary is the browser's own download, at its S3 URL.
+    fireEvent.click(screen.getByRole("button", { name: "Download wbm_2000.nc" }));
+    await waitFor(() => expect(browserDownload.saveInBrowser).toHaveBeenCalledWith("https://s3.example/wbm_2000.nc"));
+    expect(start).not.toHaveBeenCalled();
     const crumbs = within(screen.getByRole("navigation", { name: "Output folders" }));
     expect(crumbs.getByText("runoff").getAttribute("aria-current")).toBe("page");
     fireEvent.click(crumbs.getByRole("button", { name: "yearly" }));
@@ -277,6 +283,7 @@ describe("browsing the output inside the dialog", () => {
         folders: [{ name: "runoff", path: "wbm_output/G/yearly/runoff/" }],
         files: [
           { name: "a.nc", path: "wbm_output/G/yearly/a.nc", size: 2048, lastModified: "2026-09-26T00:00:00Z", url: "https://s3.example/a.nc", previewable: false },
+          { name: "b.nc", path: "wbm_output/G/yearly/b.nc", size: 1024, lastModified: "2026-09-26T00:00:00Z", url: "https://s3.example/b.nc", previewable: false },
         ],
         nextCursor: null,
       },
@@ -285,10 +292,21 @@ describe("browsing the output inside the dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Browse Yearly output" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select a.nc" }));
     expect((await screen.findByRole("status", { name: "" })).textContent).toBe("1 selected · 2.0 KB");
-    const form = screen.getByRole("button", { name: "Download ZIP" }).closest("form") as HTMLFormElement;
-    expect(form.getAttribute("action")).toBe(`/api/repository/datasets/${id()}/files/archive`);
-    const data = new FormData(form);
-    expect([data.get("folder"), ...data.getAll("names")]).toEqual(["wbm_output/G/yearly/", "a.nc"]);
+    expect(screen.queryByRole("button", { name: "Download ZIP" })).toBeNull(); // one file is not zipped
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select b.nc" }));
+    await waitFor(() => expect(screen.getByRole("status", { name: "" }).textContent).toBe("2 selected · 3.0 KB"));
+    fireEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `/api/repository/datasets/${id()}/files/archive`,
+        method: "POST",
+        fields: [
+          ["folder", "wbm_output/G/yearly/"],
+          ["names", "a.nc"],
+          ["names", "b.nc"],
+        ],
+      })
+    );
 
     fetchMock.mockImplementation(async () => Response.json({ ...FOLDER, bytes: 4 * 1024 ** 3, fits: false }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select runoff/" }));

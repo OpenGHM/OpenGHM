@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+const start = vi.hoisted(() => vi.fn());
+vi.mock("@/components/download/download-provider", () => ({ useDownload: () => ({ start, busy: false }) }));
+beforeEach(() => start.mockReset());
 import { RunFileBrowser, RunFiles } from "./run-file-browser";
 import type { FolderTotal, RunListing } from "@/lib/repository/types";
 
@@ -92,20 +96,39 @@ describe("the run's file browser", () => {
       "/api/jobs/job-1/files?path=": json(ROOT),
       "/api/jobs/job-1/files/folder?path=daily/": json(total("daily/", 5 * 1024 ** 2)),
     });
-    const { container } = render(<RunFileBrowser jobId="job-1" />);
+    render(<RunFileBrowser jobId="job-1" />);
     await screen.findByRole("button", { name: "daily/" });
     fireEvent.click(screen.getByLabelText("Select wbm_test.MT.csv"));
     fireEvent.click(screen.getByLabelText("Select daily/"));
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("2 selected · 5.0 MB"));
     const button = screen.getByRole("button", { name: "Download ZIP" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
-    const form = container.querySelector("form")!;
-    expect(form.getAttribute("action")).toBe("/api/jobs/job-1/files/archive");
-    expect(form.querySelector<HTMLInputElement>("input[name=folder]")!.value).toBe("");
-    expect([...form.querySelectorAll<HTMLInputElement>("input[name=names]")].map((i) => i.value)).toEqual([
-      "wbm_test.MT.csv",
-      "daily/",
-    ]);
+    fireEvent.click(button);
+    expect(start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/jobs/job-1/files/archive",
+        method: "POST",
+        fields: [
+          ["folder", ""],
+          ["names", "wbm_test.MT.csv"],
+          ["names", "daily/"],
+        ],
+      })
+    );
+  });
+
+  it("gives a file its own download button, which starts the file from the job's route", async () => {
+    routes({ "/api/jobs/job-1/files?path=": json(ROOT) });
+    render(<RunFileBrowser jobId="job-1" />);
+    await screen.findByRole("button", { name: "daily/" });
+    fireEvent.click(screen.getByRole("button", { name: "Download wbm_test.MT.csv" }));
+    expect(start).toHaveBeenCalledTimes(1);
+    const job = start.mock.calls[0][0];
+    expect(job).toEqual(expect.objectContaining({ filename: "wbm_test.MT.csv" }));
+    expect(job.method).toBeUndefined();
+    const url = new URL(job.url, "http://app.test");
+    expect(url.pathname).toBe("/api/jobs/job-1/files/download");
+    expect(url.searchParams.get("path")).toBe("wbm_test.MT.csv");
   });
 
   it("marks a selection over 10 GB before anyone clicks, in words that offer no other way", async () => {

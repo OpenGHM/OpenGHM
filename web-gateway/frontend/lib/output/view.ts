@@ -406,6 +406,37 @@ export function downloadOptions(resolution: OutputResolution, date: string, year
   return options;
 }
 
+/**
+ * Where a published snapshot keeps its output, for "Download NetCDF" to hand over a file that
+ * is already there instead of cutting one: the tree's URL (`…/snapshots/<id>/`) and the runs
+ * under its `wbm_output/`.
+ */
+export interface PublishedOutput {
+  treeUrl: string;
+  runs: string[];
+}
+
+/**
+ * The published file that is exactly the download asked for, if there is one: a yearly
+ * variable's year is `yearly/<variable>/wbm_<year>.nc`, a monthly variable's whole year
+ * `monthly/<variable>/wbm_<year>.nc`. Anything else (a month, daily data, which is one file of
+ * every variable, a run of years) has to be cut. Only for a snapshot with one run.
+ */
+export function publishedFileUrl(
+  published: PublishedOutput | undefined,
+  variable: string,
+  resolution: OutputResolution,
+  option: DownloadOption
+): string | null {
+  if (!published || published.runs.length !== 1) return null;
+  const whole =
+    (resolution === "yearly" && option.scope === "step") || (resolution === "monthly" && option.scope === "year");
+  if (!whole || option.period.from !== option.period.to) return null;
+  const base = published.treeUrl.endsWith("/") ? published.treeUrl : `${published.treeUrl}/`;
+  const parts = ["wbm_output", published.runs[0], resolution, variable, `wbm_${option.period.from}.nc`];
+  return base + parts.map(encodeURIComponent).join("/");
+}
+
 // ─── Refusals ────────────────────────────────────────────────────────────────
 
 export type OutputProblem =

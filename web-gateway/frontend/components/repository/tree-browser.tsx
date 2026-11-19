@@ -142,6 +142,7 @@ export function TreeBrowser({
                     folders={view.listing.folders}
                     files={view.listing.files}
                     selection={selection}
+                    source={{ kind, id }}
                   />
                 </>
               )}

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getDataset, getModelInput } from "@/lib/repository/detail-data";
-import { fetchWbmCode } from "@/lib/repository/actions";
+import { fetchDatasetLinks, fetchWbmCode } from "@/lib/repository/actions";
 import { startsNewDraft } from "@/lib/repository/wbm-code";
 import { PageBody } from "@/components/layout/page-hero";
 import { Footer } from "@/components/landing/footer";
@@ -149,7 +149,7 @@ export default async function DatasetDetailPage({
             {/* The output on a map: read on Anvil by the toolkit (ADR 0033); the URL query holds the view */}
             <div id="output" className="scroll-mt-24">
               <Suspense fallback={<OutputSkeleton />}>
-                <OutputCard source={{ kind: "dataset", id: dataset.id }} />
+                <SnapshotOutputCard id={dataset.id} />
               </Suspense>
             </div>
 
@@ -235,5 +235,21 @@ export default async function DatasetDetailPage({
 
       <Footer />
     </>
+  );
+}
+
+/**
+ * The Output card of a published snapshot, told where its output is in S3 (the tree's URL and its
+ * runs), so that "Download NetCDF" can hand over a file that is already published instead of
+ * cutting one. Without the links (they could not be read) it cuts every download.
+ */
+async function SnapshotOutputCard({ id }: { id: string }) {
+  const links = await fetchDatasetLinks(id).catch(() => null);
+  const runs = links ? [...new Set(links.output.map((f) => f.run))] : [];
+  return (
+    <OutputCard
+      source={{ kind: "dataset", id }}
+      published={links && runs.length > 0 ? { treeUrl: links.treeUrl, runs } : undefined}
+    />
   );
 }

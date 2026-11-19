@@ -214,6 +214,7 @@ export function RunFileBrowser({ jobId }: { jobId: string }) {
                   files={listing.files}
                   onOpenFolder={setFolder}
                   selection={selection}
+                  source={{ kind: "run", id: jobId }}
                 />
               </div>
             </>

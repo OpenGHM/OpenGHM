@@ -12,9 +12,9 @@ import { readSelection, relay, SELECTION_MESSAGE, UNREACHABLE } from "@/lib/repo
  * 429 `archive_busy`, 503) comes back unchanged, status and JSON.
  */
 
-type Route = "list" | "folder" | "archive";
+type Route = "list" | "folder" | "archive" | "download";
 
-const QUERY: Record<Route, string[]> = { list: ["path", "cursor"], folder: ["path"], archive: [] };
+const QUERY: Record<Route, string[]> = { list: ["path", "cursor"], folder: ["path"], archive: [], download: ["path"] };
 
 /** The backend's address for the run's files, for the job `id` and `route`. */
 function target(id: string, route: Route, from: URLSearchParams): string {
@@ -45,7 +45,8 @@ export async function proxyRunFiles(request: Request, id: string, route: Route):
     const url = target(id, route, new URL(request.url).searchParams);
     // A busy backend pod's refusal of a ZIP is tried again before it is passed on.
     const upstream = route === "archive" ? await fetchArchive(url, init) : await fetch(url, init);
-    return relay(upstream, route === "archive");
+    const download = route === "archive" || route === "download";
+    return relay(upstream, download, download ? new URL(request.url).searchParams.get("dl") : null);
   } catch {
     return proxyRefusal(502, "gateway_unreachable", UNREACHABLE);
   }

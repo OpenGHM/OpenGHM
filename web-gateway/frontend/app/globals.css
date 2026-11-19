@@ -248,6 +248,12 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* A Leaflet map's own layers (panes 200–700, controls 800–1000) stay inside the map: its own
+   stacking context, so a dialog (z-50) and its overlay cover the map like the rest of the page. */
+.leaflet-container {
+  isolation: isolate;
+}
+
 /* The coverage box of the bounding-box map (react-leaflet's pathOptions take a
    colour string, not a token, so the rectangle is styled here). */
 .bbox-rect {
@@ -309,6 +315,25 @@
 
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 0s;
+  }
+}
+
+/* The indeterminate bar of the download dialog (components/download). */
+@keyframes download-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes download-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
   }
 }
 

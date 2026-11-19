@@ -24,6 +24,7 @@ import {
   styleProblem,
   writeView,
   type OutputSourceRef,
+  type PublishedOutput,
   type Series,
   type ViewState,
 } from "@/lib/output/view";
@@ -50,7 +51,7 @@ interface MapAnswer {
  * so a link reopens it. Used on a snapshot's page (`kind: "dataset"`) and on
  * a finished run's (`kind: "job"`); the two differ only in the routes asked.
  */
-export function OutputCard({ source }: { source: OutputSourceRef }) {
+export function OutputCard({ source, published }: { source: OutputSourceRef; published?: PublishedOutput }) {
   const base = outputBase(source);
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -362,7 +363,13 @@ export function OutputCard({ source }: { source: OutputSourceRef }) {
         )}
       </section>
 
-      <DownloadNetcdf key={`${variable.name}-${resolution}`} source={source} inventory={inventory} resolved={resolved} />
+      <DownloadNetcdf
+        key={`${variable.name}-${resolution}`}
+        source={source}
+        published={published}
+        inventory={inventory}
+        resolved={resolved}
+      />
     </DetailSection>
   );
 }
